@@ -1,0 +1,17 @@
+# 敏感信息
+config/keys.json
+config/keys.local.json
+.env
+.env.local
+
+# 本地逆向笔记（不进公开仓库）
+project.md
+notes/
+
+# 依赖
+node_modules/
+
+# 系统
+.DS_Store
+Thumbs.db
+*.log
