@@ -41,7 +41,7 @@ https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/<
 
 | 插件 | 功能 | 状态 |
 |---|---|---|
-| 初见哔哩净化 | Web端/App端均剥离整条Cookie + 删除画像请求头，匿名热门流，效果立竿见影 | 🧪 待验证 |
+| 初见哔哩净化 | Web端剥离整条Cookie/App端删除账号字段+保留设备指纹，破信息茧房 | 🧪 待验证 |
 
 ---
 
