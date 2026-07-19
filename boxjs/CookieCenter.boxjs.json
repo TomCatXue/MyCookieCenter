@@ -1,23 +1,18 @@
 {
-  "id": "mycookiecenter",
-  "name": "CookieCenter",
-  "desc": "\u96c6\u4e2d\u7ba1\u7406\u54d4\u54e9\u54d4\u54e9 Cookie \u4e0e\u7b7e\u5230\u53c2\u6570",
+  "id": "mycookiecenter.app.sub",
+  "name": "MyCookieCenter \u5e94\u7528\u8ba2\u9605",
   "author": "@MyCookieCenter",
   "icon": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/loon/icon.png",
   "repo": "https://github.com/TomCatXue/MyCookieCenter",
-  "version": "0.3.0",
-  "categories": [
-    "Cookie"
-  ],
   "apps": [
     {
       "id": "bilibili",
       "name": "\u54d4\u54e9\u54d4\u54e9",
-      "desc": "\u6293\u53d6 Cookie\uff0c\u5e76\u4fdd\u5b58\u7b7e\u5230\u4e0e\u8c03\u8bd5\u53c2\u6570",
-      "author": "@MyCookieCenter",
-      "icon": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/bilibili/bilibili.png",
-      "repo": "https://github.com/TomCatXue/MyCookieCenter",
-      "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/bilibili/bilibili.js",
+      "descs_html": [
+        "\u70b9\u6b64\u76f4\u8fbe\u3010<a href=\"https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/bilibili/bilibili.js\">\u811a\u672c\u5730\u5740</a>\u3011",
+        "\u652f\u6301\u6293 Cookie \u548c\u6bcf\u65e5\u7b7e\u5230\u3002",
+        "\u5982\u679c\u8981\u6539\u7b7e\u5230\u65f6\u95f4\uff0c\u8bf7\u5728 BoxJS \u91cc\u4fee\u6539 `bilibili_sign_time`\u3002"
+      ],
       "keys": [
         "bilibili_data",
         "bilibili_clear",
@@ -28,30 +23,48 @@
         {
           "id": "bilibili_data",
           "name": "\u54d4\u54e9\u54d4\u54e9 Cookie",
-          "type": "text",
+          "val": "",
           "placeholder": "\u81ea\u52a8\u6293\u83b7\uff0c\u4e5f\u53ef\u624b\u52a8\u7c98\u8d34",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 2,
           "desc": "\u54d4\u54e9\u54d4\u54e9\u767b\u5f55 Cookie\uff08\u542b SESSDATA / bili_jct\uff09"
         },
         {
           "id": "bilibili_clear",
           "name": "\u6e05\u9664\u54d4\u54e9\u54d4\u54e9 Cookie",
-          "type": "boolean",
           "val": false,
+          "type": "boolean",
           "desc": "\u5f00\u542f\u540e\u4e0b\u6b21\u8fd0\u884c\u4f1a\u6e05\u7a7a\u5df2\u5b58 Cookie\uff0c\u5f3a\u5236\u91cd\u65b0\u6293\u53d6"
         },
         {
           "id": "bilibili_debug",
           "name": "\u54d4\u54e9\u54d4\u54e9\u8c03\u8bd5",
-          "type": "boolean",
           "val": false,
+          "type": "boolean",
           "desc": "\u6253\u5370\u5b8c\u6574 headers / body \u5230\u63a7\u5236\u53f0"
         },
         {
           "id": "bilibili_sign_time",
           "name": "\u54d4\u54e9\u54d4\u54e9\u7b7e\u5230\u65f6\u95f4",
-          "type": "text",
+          "val": "30 7 * * *",
           "placeholder": "30 7 * * *",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 1,
           "desc": "Cron \u8868\u8fbe\u5f0f\uff0c\u4ec5\u4f5c\u4e3a BoxJS \u91cc\u7684\u7b7e\u5230\u65f6\u95f4\u8bb0\u5f55"
+        }
+      ],
+      "author": "@MyCookieCenter",
+      "repo": "https://github.com/TomCatXue/MyCookieCenter/tree/main/app/bilibili",
+      "icons": [
+        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/bilibili/bilibili.png",
+        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/loon/icon.png"
+      ],
+      "scripts": [
+        {
+          "name": "\u6267\u884c\u54d4\u54e9\u54d4\u54e9\u7b7e\u5230",
+          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/bilibili/bilibili.js"
         }
       ]
     }
