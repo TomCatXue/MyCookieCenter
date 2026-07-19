@@ -1,5 +1,5 @@
 #!name = 初见哔哩净化 (TabulaBili)
-#!desc = 剥离B站首页推荐流Cookie，下发大盘默认热门流，打破信息茧房
+#!desc = Web端剥离整条Cookie(匿名热门流)/App端剥离buvid3(保留登录态)
 #!author = MyCookieCenter
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/loon/icon.png
@@ -12,9 +12,12 @@
 # ===== MITM 证书配置 =====
 
 [MITM]
-hostname = api.bilibili.com
+hostname = api.bilibili.com, app.bilibili.com
 
 # ===== 脚本规则 =====
 
 [Script]
 http-request ^https?:\/\/api\.bilibili\.com\/x\/web-interface.*index\/top.*rcmd tag=初见哔哩净化, script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/tabulabili/tabulabili.js, requires-body=false, enable=true
+
+# App 端：app.bilibili.com 首页推荐流 → 只删 buvid3，保留 SESSDATA
+http-request ^https?:\/\/app\.bilibili\.com\/x\/v2\/feed\/timeline tag=初见哔哩净化, script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/tabulabili/tabulabili.js, requires-body=false, enable=true

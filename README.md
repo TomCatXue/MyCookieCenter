@@ -41,7 +41,7 @@ https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/<
 
 | 插件 | 功能 | 状态 |
 |---|---|---|
-| 初见哔哩净化 | 剥离 B 站首页推荐流 Cookie，下发大盘热门流，打破信息茧房 | 🧪 待验证 |
+| 初见哔哩净化 | Web 端剥离整条 Cookie(匿名热门流)/App 端剥离 buvid3(保留登录态)，打破信息茧房 | 🧪 待验证 |
 
 ---
 
