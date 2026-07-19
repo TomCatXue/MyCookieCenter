@@ -4,46 +4,48 @@
 
 # 哔哩哔哩
 
-每日签到 / 观看 / 分享 / 投币 / 银瓜子兑换。
+每日签到 / 领取直播银瓜子。
 
 ## 文件
 
-- `bilibili.js`：同一个脚本同时负责抓 Cookie 和 cron 签到
+- `bilibili.js` — 既是重写抓 Cookie 也是 cron 签到，根据 `$request` 是否存在区分
 
 ## 使用步骤
 
-1. 在 Loon / Surge / Quantumult X / Stash 中按下方配置开启抓取和签到规则
-2. 打开哔哩哔哩 App 首页，触发 `fingerprint` 请求
-3. 收到 `✅ 哔哩哔哩 Cookie 获取成功` 通知后，Cookie 会自动保存到 BoxJS
-4. 定时任务会按配置的 cron 表达式执行
+1. 按下方对应平台配置，开启重写脚本 + cron
+2. 打开哔哩哔哩 App → 首页，触发 nav 接口
+3. 收到 `✅ 哔哩哔哩 Cookie 获取成功` 通知即抓取成功
+4. cron 会按计划自动签到
 
 ## BoxJS 参数
 
 | key | 类型 | 说明 |
 |---|---|---|
-| `bilibili_data` | text | Cookie，自动捕获，也可手动粘贴 |
-| `bilibili_clear` | bool | 开启后下次运行会清空已存 Cookie，强制重新抓取 |
-| `bilibili_sign_time` | text | 签到 cron 表达式，默认 `30 7 * * *` |
+| `bilibili_data` | text | Cookie（自动捕获，也可手动粘贴） |
+| `bilibili_clear` | bool | 开启后下次跑会清空已存 Cookie（强制重抓） |
+| `bilibili_debug` | bool | 打印完整 headers/body 到 console |
 
 ## Loon
 
 ```ini
 [MITM]
-hostname = app.bilibili.com
+hostname = api.bilibili.com
 
 [Script]
-http-request ^https?:\/\/app\.bilibili\.com\/x\/resource\/fingerprint\? tag=哔哩哔哩 Cookie, script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/bilibili/bilibili.js, requires-body=false
-cron "{bilibili_sign_time}" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/bilibili/bilibili.js, tag=哔哩哔哩签到, enable=true
+http-request ^https?:\/\/api\.bilibili\.com\/x\/web-interface\/nav tag=哔哩哔哩 Cookie, script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/bilibili/bilibili.js, requires-body=false
+
+cron "30 7 * * *" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/bilibili/bilibili.js, tag=哔哩哔哩签到, enable=true
 ```
 
 ## Surge
 
 ```ini
 [MITM]
-hostname = app.bilibili.com
+hostname = api.bilibili.com
 
 [Script]
-哔哩哔哩 Cookie = type=http-request,pattern=^https?:\/\/app\.bilibili\.com\/x\/resource\/fingerprint\?,requires-body=false,max-size=0,script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/bilibili/bilibili.js
+哔哩哔哩 Cookie = type=http-request,pattern=^https?:\/\/api\.bilibili\.com\/x\/web-interface\/nav,requires-body=false,max-size=0,script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/bilibili/bilibili.js
+
 哔哩哔哩签到 = type=cron,cronexp=30 7 * * *,timeout=60,script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/bilibili/bilibili.js
 ```
 
@@ -51,10 +53,10 @@ hostname = app.bilibili.com
 
 ```ini
 [MITM]
-hostname = app.bilibili.com
+hostname = api.bilibili.com
 
 [rewrite_local]
-^https?:\/\/app\.bilibili\.com\/x\/resource\/fingerprint\? url script-request-header https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/bilibili/bilibili.js
+^https?:\/\/api\.bilibili\.com\/x\/web-interface\/nav url script-request-header https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/bilibili/bilibili.js
 
 [task_local]
 30 7 * * * https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/bilibili/bilibili.js, tag=哔哩哔哩签到, enabled=true
@@ -71,9 +73,9 @@ cron:
 
 http:
   mitm:
-    - "app.bilibili.com"
+    - "api.bilibili.com"
   script:
-    - match: ^https?:\/\/app\.bilibili\.com\/x\/resource\/fingerprint\?
+    - match: ^https?:\/\/api\.bilibili\.com\/x\/web-interface\/nav
       name: 哔哩哔哩 Cookie
       type: request
       require-body: false
@@ -84,7 +86,13 @@ script-providers:
     interval: 86400
 ```
 
+## 维护记录
+
+| 日期 | 变更 |
+|---|---|
+| 2026-07-18 | 初版，骨架接入（签到接口待替换为真实） |
+
 ## 已知限制
 
-- `bilibili_sign_time` 需要和 Loon 插件里的签到时间保持一致
-- `SESSDATA` 时效较短，过期后需要重新抓取
+- 签到接口为示例占位，需抓包替换为真实接口与成功判断
+- SESSDATA 时效较短，过期后需在 BoxJS 打开 `bilibili_clear` 重新抓取
