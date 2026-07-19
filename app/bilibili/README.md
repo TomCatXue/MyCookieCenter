@@ -24,6 +24,7 @@
 | `bilibili_data` | text | Cookie（自动捕获，也可手动粘贴） |
 | `bilibili_clear` | bool | 开启后下次跑会清空已存 Cookie（强制重抓） |
 | `bilibili_debug` | bool | 打印完整 headers/body 到 console |
+| `bilibili_sign_time` | text | 签到时间记录，格式示例 `30 7 * * *` |
 
 ## Loon
 
