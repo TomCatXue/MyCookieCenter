@@ -1,32 +1,26 @@
-#!name = CookieCenter 汇总插件
-#!desc = 集中管理多平台 Cookie（哔哩哔哩 / 微博 / WPS），自动捕获并自动签到
-#!author = MyCookieCenter
-#!homepage = https://github.com/<owner>/<repo>
-#!icon = https://raw.githubusercontent.com/<owner>/<repo>/refs/heads/main/loon/icon.png
+#!name = CookieCenter · Cookie 抓取与签到合集
+#!desc = 一键管理哔哩哔哩的 Cookie 抓取与定时签到，每个脚本一个独立开关（默认全关，按需打开）。抓取开关打开后，进入哔哩哔哩 App 触发指纹接口即可，收到「✅ <名称> Cookie 获取成功」通知即成功；签到开关打开后，将按设定时间自动执行 cron 任务。
+#!author = TomCatXue
+#!homepage = https://github.com/TomCatXue/MyCookieCenter
+#!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/loon/icon.png
+#!tag = 签到, Cookie
 
 # ============================================================
 # CookieCenter.plugin
 # 汇总插件：聚合 app/ 下所有脚本的 MITM + cron 规则。
+# 每条规则均带独立开关（默认全关），按需在 [Argument] 中打开。
 # 各脚本亦可单独按其 README 配置，本插件用于一键启用全部。
-# script-path 统一用 refs/heads/main/，发布前请替换 <owner>/<repo>。
+# script-path 统一用 refs/heads/main/
 # ============================================================
 
+[Argument]
+bilibili_capture = switch,false,tag=哔哩哔哩抓取,desc=打开哔哩哔哩 App 触发指纹接口抓取 Cookie(详见 README)
+bilibili_sign = switch,false,tag=哔哩哔哩签到,desc=每日 07:30 执行登录/观看/分享/投币/银瓜子兑换
+
 [MITM]
-hostname = %APPEND% api.bilibili.com, *.weibo.cn, *.wps.cn
+hostname = %APPEND% app.bilibili.com
 
 [Script]
 # 哔哩哔哩
-http-request ^https?:\/\/api\.bilibili\.com\/x\/web-interface\/nav tag=哔哩哔哩 Cookie, script-path=https://raw.githubusercontent.com/<owner>/<repo>/refs/heads/main/app/bilibili/bilibili.js, requires-body=false
-
-# 微博
-http-request ^https?:\/\/[a-z]*\.weibo\.cn\/(user|my) tag=微博 Cookie, script-path=https://raw.githubusercontent.com/<owner>/<repo>/refs/heads/main/app/weibo/weibo.js, requires-body=false
-
-# WPS
-http-request ^https?:\/\/[a-z]*\.wps\.cn\/v1mobile tag=WPS Cookie, script-path=https://raw.githubusercontent.com/<owner>/<repo>/refs/heads/main/app/wps/wps.js, requires-body=false
-
-# ------------------------------------------------------------
-# Task：定时签到
-# ------------------------------------------------------------
-cron "0 9 * * *" script-path=https://raw.githubusercontent.com/<owner>/<repo>/refs/heads/main/app/bilibili/bilibili.js, tag=哔哩哔哩签到, enable=true
-cron "10 9 * * *" script-path=https://raw.githubusercontent.com/<owner>/<repo>/refs/heads/main/app/weibo/weibo.js, tag=微博签到, enable=true
-cron "20 9 * * *" script-path=https://raw.githubusercontent.com/<owner>/<repo>/refs/heads/main/app/wps/wps.js, tag=WPS签到, enable=true
+http-request ^https?:\/\/app\.bilibili\.com\/x\/resource\/fingerprint\? tag=哔哩哔哩 Cookie, script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/bilibili/bilibili.js, requires-body=false, enable={bilibili_capture}
+cron "30 7 * * *" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/bilibili/bilibili.js, tag=哔哩哔哩签到, enable={bilibili_sign}

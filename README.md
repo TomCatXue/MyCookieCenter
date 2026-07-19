@@ -22,10 +22,8 @@
 所有脚本均通过 GitHub Raw URL 引用，格式：
 
 ```
-https://raw.githubusercontent.com/<owner>/<repo>/refs/heads/main/app/<脚本名>/<脚本名>.js
+https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/<脚本名>/<脚本名>.js
 ```
-
-> 仓库地址待定，使用前请全局替换 `<owner>/<repo>` 为实际地址。
 
 具体每个脚本的重写规则与 cron 配置，请进入对应子目录的 README 查看。
 
