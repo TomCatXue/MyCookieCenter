@@ -4,12 +4,17 @@
  * 功能：
  *   - Web 端：拦截首页推荐接口，删除整条 Cookie 字段，
  *            让后端识别为"全新匿名访客"，下发大盘默认热门流。
- *   - App 端：拦截推荐流接口，同时删除 4 类用户画像标识：
- *       1. Cookie 中的 buvid3 / Buvid / buvid_fp 等
+ *   - App 端：拦截推荐流接口，同时删除：
+ *       1. 整条 Cookie（包括 SESSDATA / DedeUserID 等）
  *       2. x-bili-mid 请求头（暴露用户 mid）
  *       3. x-bili-ticket 请求头（JWT，内含 buvid）
  *       4. buvid 请求头
- *      保留 SESSDATA / bili_jct / DedeUserID，维持登录态。
+ *      效果：后端无法识别用户身份，返回匿名热门/默认内容。
+ *
+ * 策略说明（v4）：
+ *   早期版本只删除 buvid 系字段但保留 SESSDATA/DedeUserID，
+ *   测试证明后台仍可通过 SESSDATA 识别用户，推荐内容变化不明显。
+ *   v4 改为整条删除 Cookie（与 Web 端一致），效果立竿见影。
  *
  * 作用域：仅首页推荐流接口，不影响视频播放页 / playurl / 用户中心等。
  *
@@ -54,7 +59,7 @@
  *     interval: 86400
  */
 
-const SCRIPT_VERSION = "2026-07-19.r3";
+const SCRIPT_VERSION = "2026-07-19.r4";
 
 // Web 端：api.bilibili.com 的首页推荐流接口
 const WEB_RCMD_RE = /api\.bilibili\.com\/x\/web-interface.*index\/top.*rcmd/i;
@@ -76,10 +81,8 @@ const APP_DELETE_COOKIE_FIELDS = [/buvid3/i, /^buvid$/i, /buvid_fp/i];
  *
  * 策略：
  *   - Web 端（api.bilibili.com）：整条删除 Cookie，下发匿名热门流。
- *   - App 端（app.bilibili.com）：删除 4 类画像标识：
- *       1. x-bili-mid / x-bili-ticket / buvid 请求头
- *       2. Cookie 中的 buvid3 / Buvid / buvid_fp
- *      保留 SESSDATA / bili_jct / DedeUserID，维持登录态。
+ *   - App 端（app.bilibili.com）：整条删除 Cookie + 删除画像请求头，
+ *      后端无法识别用户身份，返回匿名内容。
  *
  * 兼容 Loon / Surge / Stash / Quantumult X：
  * - $request.headers 是对象，键大小写不固定
@@ -109,18 +112,14 @@ function purifyHeaders() {
                 continue;
             }
 
-            // App 端：删除指定的画像请求头
-            if (APP_FEED_RE.test(url) && APP_DELETE_HEADERS.includes(keyLower)) {
+            // App 端：整条删除 Cookie，后端无法识别用户
+            if (APP_FEED_RE.test(url) && keyLower === "cookie") {
                 appRemoved++;
                 continue;
             }
 
-            // App 端：从 Cookie 中删除用户画像字段
-            if (APP_FEED_RE.test(url) && keyLower === "cookie") {
-                const newCookie = removeAppBuvidFields(headers[key]);
-                if (newCookie) {
-                    cleaned[key] = newCookie;
-                }
+            // App 端：删除指定的画像请求头
+            if (APP_FEED_RE.test(url) && APP_DELETE_HEADERS.includes(keyLower)) {
                 appRemoved++;
                 continue;
             }
@@ -131,10 +130,10 @@ function purifyHeaders() {
     }
 
     if (webRemoved) {
-        console.log(`[TabulaBili] Web端已剥离Cookie → ${url.slice(0, 120)}`);
+        console.log(`[TabulaBili] Web端已剥离整条Cookie → ${url.slice(0, 120)}`);
     }
     if (appRemoved > 0) {
-        console.log(`[TabulaBili] App端已剥离${appRemoved}项画像标识 → ${url.slice(0, 120)}`);
+        console.log(`[TabulaBili] App端已剥离${appRemoved}项（Cookie + x-bili-mid + x-bili-ticket + buvid）→ ${url.slice(0, 120)}`);
     }
     $done({ headers: cleaned });
 }
@@ -142,6 +141,8 @@ function purifyHeaders() {
 /**
  * 从 Cookie 中移除 App 端的用户画像字段。
  * 处理分号分隔的多字段 Cookie，删除 buvid3 / Buvid / buvid_fp。
+ * ⚠️ 已弃用：App 端现采用整条删除 Cookie 策略，效果更明显。
+ * 保留此函数以兼容可能的后续策略调整。
  */
 function removeAppBuvidFields(cookie) {
     if (!cookie) return "";

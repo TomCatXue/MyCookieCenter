@@ -1,5 +1,5 @@
 #!name = 初见哔哩净化 (TabulaBili)
-#!desc = Web端剥离整条Cookie(匿名热门流)/App端剥离4类画像标识(保留登录态)
+#!desc = Web端/App端均剥离整条Cookie(匿名热门流)，效果立竿见影
 #!author = MyCookieCenter
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/loon/icon.png
@@ -20,5 +20,5 @@ hostname = api.bilibili.com, app.bilibili.com
 [Script]
 http-request ^https?:\/\/api\.bilibili\.com\/x\/web-interface.*index\/top.*rcmd tag=初见哔哩净化, script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/tabulabili/tabulabili.js, requires-body=false, enable=true
 
-# App 端：app.bilibili.com 首页推荐流 → 删除4类画像标识(x-bili-mid/x-bili-ticket/buvid/buvid3)
+# App 端：app.bilibili.com 首页推荐流 → 整条删除Cookie + 删除x-bili-mid/x-bili-ticket/buvid
 http-request ^https?:\/\/app\.bilibili\.com\/x\/v2\/feed\/index tag=初见哔哩净化, script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/tabulabili/tabulabili.js, requires-body=false, enable=true
