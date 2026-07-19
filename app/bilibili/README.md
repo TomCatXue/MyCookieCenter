@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/<owner>/<repo>/refs/heads/main/app/bilibili/bilibili.png" width="80" alt="哔哩哔哩" />
+  <img src="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/bilibili/bilibili.png" width="80" alt="哔哩哔哩" />
 </p>
 
 # 哔哩哔哩
@@ -32,9 +32,9 @@
 hostname = api.bilibili.com
 
 [Script]
-http-request ^https?:\/\/api\.bilibili\.com\/x\/web-interface\/nav tag=哔哩哔哩 Cookie, script-path=https://raw.githubusercontent.com/<owner>/<repo>/refs/heads/main/app/bilibili/bilibili.js, requires-body=false
+http-request ^https?:\/\/api\.bilibili\.com\/x\/web-interface\/nav tag=哔哩哔哩 Cookie, script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/bilibili/bilibili.js, requires-body=false
 
-cron "0 9 * * *" script-path=https://raw.githubusercontent.com/<owner>/<repo>/refs/heads/main/app/bilibili/bilibili.js, tag=哔哩哔哩签到, enable=true
+cron "30 7 * * *" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/bilibili/bilibili.js, tag=哔哩哔哩签到, enable=true
 ```
 
 ## Surge
@@ -44,9 +44,9 @@ cron "0 9 * * *" script-path=https://raw.githubusercontent.com/<owner>/<repo>/re
 hostname = api.bilibili.com
 
 [Script]
-哔哩哔哩 Cookie = type=http-request,pattern=^https?:\/\/api\.bilibili\.com\/x\/web-interface\/nav,requires-body=false,max-size=0,script-path=https://raw.githubusercontent.com/<owner>/<repo>/refs/heads/main/app/bilibili/bilibili.js
+哔哩哔哩 Cookie = type=http-request,pattern=^https?:\/\/api\.bilibili\.com\/x\/web-interface\/nav,requires-body=false,max-size=0,script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/bilibili/bilibili.js
 
-哔哩哔哩签到 = type=cron,cronexp=0 9 * * *,timeout=60,script-path=https://raw.githubusercontent.com/<owner>/<repo>/refs/heads/main/app/bilibili/bilibili.js
+哔哩哔哩签到 = type=cron,cronexp=30 7 * * *,timeout=60,script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/bilibili/bilibili.js
 ```
 
 ## Quantumult X
@@ -56,10 +56,10 @@ hostname = api.bilibili.com
 hostname = api.bilibili.com
 
 [rewrite_local]
-^https?:\/\/api\.bilibili\.com\/x\/web-interface\/nav url script-request-header https://raw.githubusercontent.com/<owner>/<repo>/refs/heads/main/app/bilibili/bilibili.js
+^https?:\/\/api\.bilibili\.com\/x\/web-interface\/nav url script-request-header https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/bilibili/bilibili.js
 
 [task_local]
-0 9 * * * https://raw.githubusercontent.com/<owner>/<repo>/refs/heads/main/app/bilibili/bilibili.js, tag=哔哩哔哩签到, enabled=true
+30 7 * * * https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/bilibili/bilibili.js, tag=哔哩哔哩签到, enabled=true
 ```
 
 ## Stash
@@ -68,7 +68,7 @@ hostname = api.bilibili.com
 cron:
   script:
     - name: 哔哩哔哩签到
-      cron: '0 9 * * *'
+      cron: '30 7 * * *'
       timeout: 60
 
 http:
@@ -82,7 +82,7 @@ http:
 
 script-providers:
   哔哩哔哩签到:
-    url: https://raw.githubusercontent.com/<owner>/<repo>/refs/heads/main/app/bilibili/bilibili.js
+    url: https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/bilibili/bilibili.js
     interval: 86400
 ```
 
