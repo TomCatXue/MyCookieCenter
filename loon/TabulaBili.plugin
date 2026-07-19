@@ -2,7 +2,7 @@
 #!desc = Web端/App端均剥离整条Cookie(匿名热门流)，效果立竿见影
 #!author = MyCookieCenter
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
-#!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/loon/icon.png
+#!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/bili_icon.png
 #!tag = bilibili;首页净化;信息茧房;推荐流;初见
 
 # ===== 参数开关 =====

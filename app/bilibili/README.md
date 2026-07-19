@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/bilibili/bilibili.png" width="80" alt="哔哩哔哩" />
+  <img src="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/bili_icon.png" width="80" alt="哔哩哔哩" />
 </p>
 
 # 哔哩哔哩

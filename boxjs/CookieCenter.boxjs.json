@@ -2,7 +2,7 @@
   "id": "mycookiecenter.app.sub",
   "name": "MyCookieCenter \u5e94\u7528\u8ba2\u9605",
   "author": "@MyCookieCenter",
-  "icon": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/loon/icon.png",
+  "icon": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/icon.png",
   "repo": "https://github.com/TomCatXue/MyCookieCenter",
   "apps": [
     {
@@ -58,8 +58,8 @@
       "author": "@MyCookieCenter",
       "repo": "https://github.com/TomCatXue/MyCookieCenter/tree/main/app/bilibili",
       "icons": [
-        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/bilibili/bilibili.png",
-        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/loon/icon.png"
+        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/bili_icon.png",
+        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/icon.png"
       ],
       "scripts": [
         {

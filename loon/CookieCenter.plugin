@@ -2,7 +2,7 @@
 #!desc = 一键管理哔哩哔哩的 Cookie 抓取与定时签到，每个脚本一个独立开关（默认全关，按需打开）。抓取开关打开后，进入哔哩哔哩 App 触发指纹接口即可，收到「✅ <名称> Cookie 获取成功」通知即成功；签到开关打开后，将按设定时间自动执行 cron 任务。
 #!author = TomCatXue
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
-#!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/loon/icon.png
+#!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/icon.png
 #!tag = 签到, Cookie
 
 # ============================================================
