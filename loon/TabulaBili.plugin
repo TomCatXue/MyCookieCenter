@@ -1,0 +1,20 @@
+#!name = 初见哔哩净化 (TabulaBili)
+#!desc = 剥离B站首页推荐流Cookie，下发大盘默认热门流，打破信息茧房
+#!author = MyCookieCenter
+#!homepage = https://github.com/TomCatXue/MyCookieCenter
+#!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/loon/icon.png
+#!tag = bilibili;首页净化;信息茧房;推荐流;初见
+
+# ===== 参数开关 =====
+
+#!switch = tb_pure,初见哔哩净化 (TabulaBili)
+
+# ===== MITM 证书配置 =====
+
+[MITM]
+hostname = api.bilibili.com
+
+# ===== 脚本规则 =====
+
+[Script]
+http-request ^https?:\/\/api\.bilibili\.com\/x\/web-interface.*index\/top.*rcmd tag=初见哔哩净化, script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/tabulabili/tabulabili.js, requires-body=false, enable=true

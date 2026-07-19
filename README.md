@@ -10,7 +10,8 @@
 
 | 目录 | 内容 | 索引 |
 |---|---|---|
-| [`app/`](./app/) | 原生 App 签到、自动化脚本 | [查看](./app/README.md) |
+| [`app/`](./app/) | 原生 App 签到、自动化脚本（抓 Cookie + cron） | [查看](./app/README.md) |
+| [`plugins/`](./plugins/) | 特殊功能插件（首页净化、请求改写等，与签到体系独立） | [查看](./plugins/README.md) |
 | [`loon/`](./loon/) | Loon 专用 `.plugin` 汇总 | - |
 | [`boxjs/`](./boxjs/) | BoxJS 面板配置 | - |
 | [`docs/`](./docs/) | 通用文档（抓包、接入指南） | - |
@@ -35,6 +36,12 @@ https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/<
 |---|---|---|
 | 哔哩哔哩 | [`app/bilibili/`](./app/bilibili/) | 🧪 待验证 |
 | 示例模板 | [`app/example/`](./app/example/) | 💎 规划中 |
+
+## 特殊功能插件
+
+| 插件 | 功能 | 状态 |
+|---|---|---|
+| 初见哔哩净化 | 剥离 B 站首页推荐流 Cookie，下发大盘热门流，打破信息茧房 | 🧪 待验证 |
 
 ---
 
