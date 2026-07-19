@@ -1,9 +1,9 @@
 {
     "id": "mycookiecenter",
     "name": "CookieCenter",
-    "desc": "集中管理多平台 Cookie（哔哩哔哩 / 微博 / WPS）",
+    "desc": "集中管理哔哩哔哩 Cookie",
     "author": "@MyCookieCenter",
-    "icon": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/boxjs/icon.png",
+    "icon": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/loon/icon.png",
     "repo": "https://github.com/TomCatXue/MyCookieCenter",
     "version": "0.2.0",
     "categories": [
@@ -20,34 +20,6 @@
         {
             "id": "bilibili_clear",
             "name": "清除哔哩哔哩 Cookie",
-            "type": "boolean",
-            "val": false,
-            "desc": "开启后下次运行会清空已存 Cookie，强制重新抓取"
-        },
-        {
-            "id": "weibo_data",
-            "name": "微博 Cookie",
-            "type": "text",
-            "placeholder": "自动捕获，也可手动粘贴",
-            "desc": "微博登录 Cookie（含 SUB）"
-        },
-        {
-            "id": "weibo_clear",
-            "name": "清除微博 Cookie",
-            "type": "boolean",
-            "val": false,
-            "desc": "开启后下次运行会清空已存 Cookie，强制重新抓取"
-        },
-        {
-            "id": "wps_data",
-            "name": "WPS Cookie",
-            "type": "text",
-            "placeholder": "自动捕获，也可手动粘贴",
-            "desc": "WPS 登录 Cookie（含 wps_sid/sid）"
-        },
-        {
-            "id": "wps_clear",
-            "name": "清除 WPS Cookie",
             "type": "boolean",
             "val": false,
             "desc": "开启后下次运行会清空已存 Cookie，强制重新抓取"
