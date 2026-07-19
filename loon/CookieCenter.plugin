@@ -1,26 +1,24 @@
-#!name = CookieCenter · Cookie 抓取与签到合集
-#!desc = 一键管理哔哩哔哩的 Cookie 抓取与定时签到，每个脚本一个独立开关（默认全关，按需打开）。抓取开关打开后，进入哔哩哔哩 App 触发指纹接口即可，收到「✅ <名称> Cookie 获取成功」通知即成功；签到开关打开后，将按设定时间自动执行 cron 任务。
+#!name = CookieCenter - Cookie Capture & Sign-in
+#!desc = Manage Cookie capture and cron sign-in for supported apps. Enable per-app rules as needed.
 #!author = TomCatXue
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/loon/icon.png
-#!tag = 签到, Cookie
+#!tag = Sign-in, Cookie
 
 # ============================================================
 # CookieCenter.plugin
-# 汇总插件：聚合 app/ 下所有脚本的 MITM + cron 规则。
-# 每条规则均带独立开关（默认全关），按需在 [Argument] 中打开。
-# 各脚本亦可单独按其 README 配置，本插件用于一键启用全部。
-# script-path 统一用 refs/heads/main/
+# Aggregate MITM + cron rules for app scripts.
+# Each rule has an independent switch in [Argument].
 # ============================================================
 
 [Argument]
-bilibili_capture = switch,false,tag=哔哩哔哩抓取,desc=打开哔哩哔哩 App 触发指纹接口抓取 Cookie(详见 README)
-bilibili_sign = switch,false,tag=哔哩哔哩签到,desc=每日 07:30 执行登录/观看/分享/投币/银瓜子兑换
+bilibili_capture = switch,false,tag=哔哩哔哩抓取,desc=打开哔哩哔哩 App 并触发 fingerprint 接口以抓取 Cookie
+bilibili_sign = switch,false,tag=哔哩哔哩签到,desc=执行登录 / 观看 / 分享 / 投币 / 银瓜子兑换任务
+bilibili_sign_time = text,30 7 * * *,tag=哔哩哔哩签到时间,desc=cron 表达式，按你的需要修改
 
 [MITM]
 hostname = %APPEND% app.bilibili.com
 
 [Script]
-# 哔哩哔哩
 http-request ^https?:\/\/app\.bilibili\.com\/x\/resource\/fingerprint\? tag=哔哩哔哩 Cookie, script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/bilibili/bilibili.js, requires-body=false, enable={bilibili_capture}
-cron "30 7 * * *" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/bilibili/bilibili.js, tag=哔哩哔哩签到, enable={bilibili_sign}
+cron "{bilibili_sign_time}" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/bilibili/bilibili.js, tag=哔哩哔哩签到, enable={bilibili_sign}
