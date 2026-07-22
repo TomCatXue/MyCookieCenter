@@ -24,6 +24,7 @@
 | 目录 | 名称 | 功能 | 状态 |
 |---|---|---|---|
 | [`tabulabili/`](./tabulabili/) | 初见哔哩 | 剥离 B 站首页推荐流请求的 Cookie，强制大盘纯净热门流，打破信息茧房 | 🧪 待验证 |
+| [`adapty/`](./adapty/) | Adapty 合集解锁 | 修改 Adapty SDK 响应，解锁 15 个 App 会员(Yomu/Luminar/Genie 等) | 🧪 待验证 |
 
 ---
 

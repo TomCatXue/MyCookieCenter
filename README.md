@@ -42,6 +42,7 @@ https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/<
 | 插件 | 功能 | 状态 |
 |---|---|---|
 | 初见哔哩净化 | Web端剥离整条Cookie/App端删除账号字段+保留设备指纹，破信息茧房 | 🧪 待验证 |
+| Adapty 合集解锁 | 修改 Adapty SDK 响应，解锁 15 个 App 会员(Yomu/Luminar/Genie/FlightTracker 等) | 🧪 待验证 |
 
 ---
 

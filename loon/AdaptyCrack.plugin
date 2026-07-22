@@ -1,6 +1,6 @@
 #!name = Adapty 合集解锁 (AdaptyCrack)
-#!desc = 通过修改 Adapty SDK 响应,解锁 20+ App 的会员/订阅(含 Yomu、Luminar、Genie、FlightTracker 等)。基于 chxm1023/Rewrite 迁移适配。
-#!author = chxm1023 (原作者) / MyCookieCenter (Loon 迁移) 
+#!desc = 修改 Adapty SDK 响应,解锁 15 个 App 会员(Yomu/Luminar/Genie/FlightTracker 等)。已去混淆重写为 Loon 原生兼容版。
+#!author = chxm1023 (原作者) / MyCookieCenter (Loon 重写)
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://raw.githubusercontent.com/deezertidal/private/main/icons/adapty.png
 #!tag = 解锁, 会员, Adapty, 订阅
@@ -17,8 +17,7 @@ hostname = api.adapty.io
 
 # ===== 脚本规则 =====
 # 匹配 Adapty SDK 三个核心接口, http-response 类型需带 requires-body=1
-# 脚本由原作者 chxm1023 维护, 本站仅提供 Loon 配置包装
-# 原脚本已内置 $persistentStore / $notification.post 兼容 Loon
+# 本版已去混淆重写, 纯 Loon 原生 API, 无需 BoxJS 开关
 
 [Script]
-http-response ^https?:\/\/api\.adapty\.io\/api\/v\d\/sdk\/(analytics\/profiles|in-apps\/(apple\/receipt\/validate|purchase-containers)|purchase\/app-store) script-path=https://raw.githubusercontent.com/chxm1023/Rewrite/main/adapty.js, requires-body=true, tag=Adapty 合集解锁, enable=true
+http-response ^https?:\/\/api\.adapty\.io\/api\/v\d\/sdk\/(analytics\/profiles|in-apps\/(apple\/receipt\/validate|purchase-containers)|purchase\/app-store) script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/adapty/adapty.js, requires-body=true, tag=Adapty 合集解锁, enable=true
