@@ -165,6 +165,7 @@ async function addBook(bookId, shouldCleanBuiltin) {
         if (!info.available) {
             const label = info.title ? `《${info.title}》` : `ID: ${bookId}`;
             $.msg($.name, "📕 暂未上架", `${label}（字数 0，从未上架）`);
+            return;
         }
 
         // 2. 查询辅助凑数的书 (490081) 原本是否在书架上
@@ -192,7 +193,7 @@ async function addBook(bookId, shouldCleanBuiltin) {
         $.msg($.name, "⚠️ 脚本错误", e.message || e);
     })
     .finally(() => {
-        $.done({ ok: 1 });
+        $.done();
     });
 
 // =================== 通用框架：Request + Env ===================
@@ -226,9 +227,10 @@ async function Request(t) {
             timeout: i,
         };
 
-        const m = $.http[p.toLowerCase()](l).then((t) =>
-            "data" == u ? $.toObj(t.body) || t.body : $.toObj(t) || t
-        );
+        const m = $.http[p.toLowerCase()](l).then((t) => {
+            const rawBody = t && typeof t.body !== "undefined" ? t.body : t;
+            return "data" == u ? ($.toObj(rawBody) || rawBody) : $.toObj(t) || t;
+        });
 
         return Promise.race([
             new Promise((_, reject) => setTimeout(() => reject("当前请求已超时"), i)),
@@ -250,10 +252,11 @@ function Env(t, e) {
             const method = e.toLowerCase();
             return new Promise((resolve, reject) => {
                 if (typeof $httpClient !== "undefined") {
-                    // Loon / Surge / Stash
-                    $httpClient[method](t, (err, resp) => {
+                    // Loon / Surge / Stash — 兼容 resp.body 与 data 两种返回值
+                    $httpClient[method](t, (err, resp, data) => {
                         if (err) return reject(err);
-                        resolve(resp);
+                        // resp.body 可能缺失，用 data 兜底
+                        resolve(resp && typeof resp.body !== "undefined" ? resp : { body: data || "" });
                     });
                 } else if (typeof $task !== "undefined") {
                     // Quantumult X

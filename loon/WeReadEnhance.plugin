@@ -16,4 +16,6 @@ hostname = %APPEND% i.weread.qq.com, weread.qq.com
 # 规则
 [Script]
 # 轻触订阅人数 → 自动收录入架
+# 如果 GitHub Raw 不可达，可将 script-path 换为 jsDelivr CDN：
+#   script-path=https://cdn.jsdelivr.net/gh/TomCatXue/MyCookieCenter@main/plugins/wxread/wxread.js
 http-request ^https:\/\/i\.weread\.qq\.com\/subscription\/users\?bookId=.+ tag=微信读书收录, script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/wxread/wxread.js, requires-body=true, timeout=60, enable={wxread_enhance}
