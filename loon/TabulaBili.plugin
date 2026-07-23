@@ -5,9 +5,10 @@
 #!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/bili_icon.png
 #!tag = bilibili;首页净化;信息茧房;推荐流;初见
 
-# ===== 参数开关 =====
+# ===== 独立开关 =====
 
-#!switch = tb_pure,初见哔哩净化 (TabulaBili)
+[Argument]
+tb_pure = switch,false,tag=初见哔哩,desc=剥离 B 站首页推荐流 Cookie，打破信息茧房
 
 # ===== MITM 证书配置 =====
 
@@ -18,7 +19,7 @@ hostname = api.bilibili.com, app.bilibili.com
 # Web 端：api.bilibili.com 首页推荐流 → 整条删除 Cookie
 
 [Script]
-http-request ^https?:\/\/api\.bilibili\.com\/x\/web-interface.*index\/top.*rcmd tag=初见哔哩净化, script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/tabulabili/tabulabili.js, requires-body=false, enable=true
+http-request ^https?:\/\/api\.bilibili\.com\/x\/web-interface.*index\/top.*rcmd tag=初见哔哩净化, script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/tabulabili/tabulabili.js, requires-body=false, enable={tb_pure}
 
 # App 端：app.bilibili.com 首页推荐流 → 删账号Cookie(SESSDATA等) + 删x-bili-mid/x-bili-ticket/buvid，保留设备指纹
-http-request ^https?:\/\/app\.bilibili\.com\/x\/v2\/feed\/index tag=初见哔哩净化, script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/tabulabili/tabulabili.js, requires-body=false, enable=true
+http-request ^https?:\/\/app\.bilibili\.com\/x\/v2\/feed\/index tag=初见哔哩净化, script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/tabulabili/tabulabili.js, requires-body=false, enable={tb_pure}

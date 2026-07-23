@@ -25,10 +25,8 @@
 | 目录 | 名称 | 功能 | Loon 插件 | 状态 |
 |---|---|---|---|---|
 | [`tabulabili/`](./tabulabili/) | 初见哔哩 | 剥离 B 站首页推荐流 Cookie，强制大盘纯净热门流，打破信息茧房 | [`loon/TabulaBili.plugin`](../loon/TabulaBili.plugin) | 🧪 待验证 |
-| [`adapty/`](./adapty/) | Adapty 合集解锁 | 修改 Adapty SDK 响应，解锁 15 个 App 会员(Yomu/Luminar/Genie 等) | [`loon/AdaptyCrack.plugin`](../loon/AdaptyCrack.plugin) | 🧪 待验证 |
+| — | QQ空间广告屏蔽 | 域名 REJECT + URL 重写，屏蔽 QQ 空间广告（纯规则型，无需脚本） | [`loon/QzoneAdBlock.plugin`](../loon/QzoneAdBlock.plugin) | ✅ 已验证 |
 | [`wxread/`](./wxread/) | 微信读书增强 | 点击订阅人数自动获取 bookId 并加入书架 | [`loon/WeReadEnhance.plugin`](../loon/WeReadEnhance.plugin) | ✅ 已验证 |
-
-> ⚠️ **QQ 空间广告屏蔽** 为纯规则型插件，无脚本，直接位于 [`loon/QzoneAdBlock.plugin`](../loon/QzoneAdBlock.plugin)，不需要 `plugins/` 子目录。
 
 ---
 
@@ -52,3 +50,5 @@ feat(plugins): 新增 <插件名> 插件(<一句话功能>)
 ## 致谢
 
 - `tabulabili/` 灵感与原始 DNR 规则源自 [wangdaodaodao/TabulaBili](https://github.com/wangdaodaodao/TabulaBili)（MIT License）
+- `qzone/` 广告屏蔽规则源自 [zqzess/rule_for_quantumultX](https://github.com/zqzess/rule_for_quantumultX)（MIT License）
+- `wxread/` 微信读书脚本基于社区脚本重构整合

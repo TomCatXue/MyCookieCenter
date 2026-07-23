@@ -22,8 +22,7 @@
 | 文件 | 说明 | 对应脚本 | 类型 |
 |---|---|---|---|
 | [`TabulaBili.plugin`](./TabulaBili.plugin) | 初见哔哩净化 — 剥离 B 站推荐流 Cookie，打破信息茧房 | [`plugins/tabulabili/`](../plugins/tabulabili/) | 脚本型 |
-| [`AdaptyCrack.plugin`](./AdaptyCrack.plugin) | Adapty 合集解锁 — 修改 SDK 响应，解锁 15 个 App 会员 | [`plugins/adapty/`](../plugins/adapty/) | 脚本型 |
-| [`QzoneAdBlock.plugin`](./QzoneAdBlock.plugin) | QQ 空间广告屏蔽 — 域名 REJECT + URL 重写 | 无（纯规则） | 规则型 |
+| [`QzoneAdBlock.plugin`](./QzoneAdBlock.plugin) | QQ 空间广告屏蔽 — 域名 REJECT + URL 重写 | [`plugins/qzone/`](../plugins/qzone/) | 规则型 |
 | [`WeReadEnhance.plugin`](./WeReadEnhance.plugin) | 微信读书增强 — 点击订阅人数自动加入书架 | [`plugins/wxread/`](../plugins/wxread/) | 脚本型 |
 
 ---

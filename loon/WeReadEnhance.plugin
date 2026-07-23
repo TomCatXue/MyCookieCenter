@@ -2,7 +2,7 @@
 #!desc = 点击订阅人数自动获取 bookId 并加入书架，规则来自社区脚本，已整合至本项目仓库。
 #!author = TomCatXue
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
-#!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/icon.png
+#!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/weread.png
 #!tag = 微信读书,我的书架,增强
 
 # 独立开关
