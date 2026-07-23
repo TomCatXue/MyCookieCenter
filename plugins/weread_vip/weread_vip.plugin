@@ -1,0 +1,26 @@
+# ============================================
+# 微信读书 VIP 解锁 - Loon 插件配置
+# 导入方法: Loon > 配置 > 插件 > 导入
+# ============================================
+
+# 1. MITM 配置 - 必须添加到 Loon 的 MITM 主机列表
+[MITM]
+hostname = *.unipay.qq.com, *.pay.qq.com
+
+# 2. 脚本规则 - 拦截 Midas API 响应
+[Script]
+# Midas v1 收据验证接口 (生产环境)
+http-response ^https://api\.unipay\.qq\.com/v1/r/ script-path=weread_vip.js
+
+# Midas v1 收据验证接口 (沙箱环境, HTTP 明文, 更容易拦截)
+http-response ^http://sandbox\.api\.unipay\.qq\.com/v1/r/ script-path=weread_vip.js
+
+# Midas 海外服务器
+http-response ^https://hk\.api\.unipay\.qq\.com/v1/r/ script-path=weread_vip.js
+http-response ^https://ca\.api\.unipay\.qq\.com/v1/r/ script-path=weread_vip.js
+http-response ^https://ms\.singaporepaya\.com/v1/r/ script-path=weread_vip.js
+http-response ^https://guigu\.singaporepaya\.com/v1/r/ script-path=weread_vip.js
+http-response ^https://pay\.igamecj\.com/v1/r/ script-path=weread_vip.js
+
+# Midas 日志上报 (非必须, 但顺手拦截避免异常)
+http-response ^https://szmg\.qq\.com/cgi-bin/log_data\.fcg script-path=weread_vip.js
