@@ -1,13 +1,13 @@
 #!name = 微信读书增强
-#!desc = 点击订阅人数自动获取 bookId 并加入书架，规则来自社区脚本，已整合至本项目仓库。
+#!desc = 轻触订阅人数，好书即刻入架
 #!author = TomCatXue
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/weread.png
-#!tag = 微信读书,我的书架,增强
+#!tag = 微信读书,书架收录,优雅工具
 
 # 独立开关
 [Argument]
-wxread_enhance = switch,false,tag=微信读书,desc=点击订阅人数自动加入书架
+wxread_enhance = switch,false,tag=微信读书,desc=开启后点击任意书籍订阅人数可自动收藏
 
 # MITM 主机
 [MITM]
@@ -15,5 +15,5 @@ hostname = %APPEND% i.weread.qq.com, weread.qq.com
 
 # 规则
 [Script]
-# 点击订阅人数 → 自动加入书架
-http-request ^https:\/\/i\.weread\.qq\.com\/subscription\/users\?bookId=.+ tag=微信读书获取书籍, script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/wxread/wxread.js, requires-body=true, timeout=60, enable={wxread_enhance}
+# 轻触订阅人数 → 自动收录入架
+http-request ^https:\/\/i\.weread\.qq\.com\/subscription\/users\?bookId=.+ tag=微信读书收录, script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/wxread/wxread.js, requires-body=true, timeout=60, enable={wxread_enhance}

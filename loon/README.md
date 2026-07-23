@@ -22,8 +22,8 @@
 | 文件 | 说明 | 对应脚本 | 类型 |
 |---|---|---|---|
 | [`TabulaBili.plugin`](./TabulaBili.plugin) | 初见哔哩净化 — 剥离 B 站推荐流 Cookie，打破信息茧房 | [`plugins/tabulabili/`](../plugins/tabulabili/) | 脚本型 |
-| [`QzoneAdBlock.plugin`](./QzoneAdBlock.plugin) | QQ 空间广告屏蔽 — 域名 REJECT + URL 重写 | [`plugins/qzone/`](../plugins/qzone/) | 规则型 |
-| [`WeReadEnhance.plugin`](./WeReadEnhance.plugin) | 微信读书增强 — 点击订阅人数自动加入书架 | [`plugins/wxread/`](../plugins/wxread/) | 脚本型 |
+| [`QzoneAdBlock.plugin`](./QzoneAdBlock.plugin) | QQ空间·清净 — 广告退散，空间清净 | [`plugins/qzone/`](../plugins/qzone/) | 规则型 |
+| [`WeReadEnhance.plugin`](./WeReadEnhance.plugin) | 微信读书·优雅收录 — 轻触订阅人数，好书即刻入架 | [`plugins/wxread/`](../plugins/wxread/) | 脚本型 |
 
 ---
 

@@ -1,9 +1,9 @@
 #!name = QQ空间广告屏蔽
-#!desc = 屏蔽QQ空间广告，规则来自 zqzess/rule_for_quantumultX，已整合至本项目仓库。
+#!desc = 广告退散，空间清净
 #!author = zqzess / TomCatXue
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/qq.png
-#!tag = 广告屏蔽,QQ空间
+#!tag = QQ空间,广告屏蔽,清净浏览
 
 # 域名规则 — 直接 REJECT
 [Rule]
