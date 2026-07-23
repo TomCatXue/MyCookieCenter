@@ -85,13 +85,13 @@ async function getBookInfo(bookId) {
 async function isBookOnShelf(bookId) {
     try {
         const opts = {
-            url: `https://weread.qq.com/web/shelf/bookIds?bookIds=${bookId}`,
+            url: `https://i.weread.qq.com/shelf/get?bookIds=${bookId}`,
             type: "get",
             headers: buildHeaders(),
         };
         const res = await Request(opts);
+        // 返回格式: { succ: 1, data: [{ bookId: "xxx", onShelf: 1 }] }
         if (res && res.data && res.data.length > 0) {
-            // { bookId: "490081", onShelf: 1 }  → onShelf=1 表示在书架上
             return res.data[0].onShelf === 1;
         }
         return false;
