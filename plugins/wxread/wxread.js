@@ -9,6 +9,9 @@
 用法：开启插件开关，进入微信读书，点按即用
 */
 
+// 如果 Loon 日志里连这行都没有，说明脚本没从 GitHub 下载成功
+console.log("\u2705 [微信读书] 脚本已加载，等待触发...");
+
 const $ = new Env("微信读书");
 
 // =================== 工具函数 ===================
@@ -156,15 +159,15 @@ async function addBook(bookId, shouldCleanBuiltin) {
 
         const bookId = getQueries($request.url)?.bookId;
         if (!bookId) {
-            $.msg($.name, "❌ 解析失败", "未从请求 URL 中找到 bookId");
+            $.msg($.name, "\u274c 解析失败", "未从请求 URL 中找到 bookId");
             return;
         }
 
         // 1. 先查询书籍信息，验证是否从未上架
         const info = await getBookInfo(bookId);
         if (!info.available) {
-            const label = info.title ? `《${info.title}》` : `ID: ${bookId}`;
-            $.msg($.name, "📕 暂未上架", `${label}（字数 0，从未上架）`);
+            const label = info.title ? `\u300a${info.title}\u300b` : `ID: ${bookId}`;
+            $.msg($.name, "\ud83d\udcd5 暂未上架", `${label}\uff08字数 0，从未上架\uff09`);
             return;
         }
 
@@ -177,23 +180,24 @@ async function addBook(bookId, shouldCleanBuiltin) {
         const res = await addBook(bookId, shouldCleanBuiltin);
 
         if (res && res.succ) {
-            const label = info.title ? `《${info.title}》` : `ID: ${bookId}`;
+            const label = info.title ? `\u300a${info.title}\u300b` : `ID: ${bookId}`;
             const authorPart = info.author ? ` / ${info.author}` : "";
-            $.msg($.name, "📖 已加入书架", `${label}${authorPart}`);
+            $.msg($.name, "\ud83d\udcd6 已加入书架", `${label}${authorPart}`);
         } else {
-            $.msg($.name, "❌ 添加失败", `请尝试其它书籍\n${JSON.stringify(res)}`);
+            $.msg($.name, "\u274c 添加失败", `请尝试其它书籍\n${JSON.stringify(res)}`);
         }
     } catch (e) {
         $.logErr(e);
-        $.msg($.name, "⚠️ 脚本错误", e.message || e);
+        $.msg($.name, "\u26a0\ufe0f 脚本错误", e.message || e);
     }
 })()
     .catch((e) => {
         $.logErr(e);
-        $.msg($.name, "⚠️ 脚本错误", e.message || e);
+        $.msg($.name, "\u26a0\ufe0f 脚本错误", e.message || e);
     })
     .finally(() => {
-        $.done();
+        // Loon: $done() 无参 = 放行原始请求（与 QX script-request-header 行为一致）
+        $done();
     });
 
 // =================== 通用框架：Request + Env ===================
@@ -283,7 +287,7 @@ function Env(t, e) {
             this.http = new s(this);
             this.notifyMsg = [];
             this.startTime = new Date().getTime();
-            this.log("\n🔔", `${this.name}, 开始!`);
+            this.log("\n\uD83D\uDD14", `${this.name}, 开始!`);
         }
 
         getEnv() {
@@ -348,20 +352,25 @@ function Env(t, e) {
             } else if (typeof $notify !== "undefined") {
                 $notify(title, subtitle, body, payload());
             }
-            this.log("", `📣 ${title}\n${subtitle}\n${body}`);
+            this.log("", `\uD83D\uDCE3 ${title}\n${subtitle}\n${body}`);
         }
 
         log(...args) {
             console.log(args.map((a) => a ?? "").join("\n"));
         }
         logErr(e) {
-            this.log("", `❗️ ${this.name}, 错误!`, e.message || e, e.stack || "");
+            this.log("", `\u2757\ufe0f ${this.name}, 错误!`, e.message || e, e.stack || "");
         }
 
-        done(data = {}) {
+        done(data) {
             const elapsed = ((new Date()).getTime() - this.startTime) / 1000;
-            this.log("", `🔔 ${this.name}, 结束! 🕛 ${elapsed.toFixed(2)} 秒\n`);
-            $done(data);
+            this.log("", `\uD83D\uDD14 ${this.name}, 结束! \uD83D\uDD5B ${elapsed.toFixed(2)} 秒\n`);
+            // Loon / QX: $done() 无参表示放行原始请求
+            if (data !== undefined) {
+                $done(data);
+            } else {
+                $done();
+            }
         }
     }(t, e);
 }

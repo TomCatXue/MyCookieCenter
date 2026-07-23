@@ -9,13 +9,12 @@
 [Argument]
 wxread_enhance = switch,false,tag=微信读书,desc=开启后点击任意书籍订阅人数可自动收藏
 
-# MITM 主机
+# MITM 主机（必须安装并信任 Loon 的 CA 证书，否则规则无法触发）
 [MITM]
 hostname = %APPEND% i.weread.qq.com, weread.qq.com
 
 # 规则
 [Script]
 # 轻触订阅人数 → 自动收录入架
-# 如果 GitHub Raw 不可达，可将 script-path 换为 jsDelivr CDN：
-#   script-path=https://cdn.jsdelivr.net/gh/TomCatXue/MyCookieCenter@main/plugins/wxread/wxread.js
-http-request ^https:\/\/i\.weread\.qq\.com\/subscription\/users\?bookId=.+ tag=微信读书收录, script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/wxread/wxread.js, requires-body=true, timeout=60, enable={wxread_enhance}
+# 匹配订阅接口的任意 GET/POST，bookId 参数位置不限
+http-request ^https?:\/\/i\.weread\.qq\.com\/subscription\/users\?.*bookId= tag=微信读书收录, script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/wxread/wxread.js, requires-body=true, enable={wxread_enhance}
