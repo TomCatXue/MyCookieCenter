@@ -26,6 +26,9 @@
 |---|---|---|---|---|
 | [`tabulabili/`](./tabulabili/) | 初见哔哩 | 剥离 B 站首页推荐流 Cookie，强制大盘纯净热门流，打破信息茧房 | [`loon/TabulaBili.plugin`](../loon/TabulaBili.plugin) | 🧪 待验证 |
 | [`adapty/`](./adapty/) | Adapty 合集解锁 | 修改 Adapty SDK 响应，解锁 15 个 App 会员(Yomu/Luminar/Genie 等) | [`loon/AdaptyCrack.plugin`](../loon/AdaptyCrack.plugin) | 🧪 待验证 |
+| [`wxread/`](./wxread/) | 微信读书增强 | 点击订阅人数自动获取 bookId 并加入书架 | [`loon/WeReadEnhance.plugin`](../loon/WeReadEnhance.plugin) | ✅ 已验证 |
+
+> ⚠️ **QQ 空间广告屏蔽** 为纯规则型插件，无脚本，直接位于 [`loon/QzoneAdBlock.plugin`](../loon/QzoneAdBlock.plugin)，不需要 `plugins/` 子目录。
 
 ---
 
