@@ -122,6 +122,15 @@ async function addBook(bookId, shouldCleanBuiltin) {
         const res = await Request(opts);
         $.log(`[INFO] 服务器返回结果: ${JSON.stringify(res)}\n`);
 
+        // errcode === -2449 表示书籍被限制/下架，强制当作成功处理
+        if (res && res.errcode === -2449) {
+            $.log(`[INFO] 书籍[${bookId}]受限制(errcode=-2449)，强制返回成功`);
+            if (shouldCleanBuiltin) {
+                await cleanBuiltinBook();
+            }
+            return { succ: true };
+        }
+
         if (res && res.succ && shouldCleanBuiltin) {
             await cleanBuiltinBook();
         }
