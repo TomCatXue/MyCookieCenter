@@ -1,6 +1,7 @@
 # 敏感信息
 config/keys.json
 config/keys.local.json
+keys.local.json
 .env
 .env.local
 

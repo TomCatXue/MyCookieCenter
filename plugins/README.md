@@ -1,30 +1,31 @@
 # 特殊功能插件
 
-本目录收录 **非签到类** 的代理工具插件（如请求净化、内容改写、去广告、解锁限制等），与 [`app/`](../app/) 的签到体系完全独立。
+本目录收录**解锁会员、首页净化、请求改写**等非签到类脚本，与 [`app/`](../app/) 签到体系完全独立。
 
-> 签到体系（`app/`）：抓 Cookie + cron 执行，需要持久化、跨平台运行框架。
-> 插件体系（`plugins/`）：通常无状态、被动拦截请求头/响应体，每个插件一个独立 `.plugin` 文件，单独开关。
+> **签到体系**（`app/`）：抓 Cookie + cron 执行，需持久化、跨平台运行框架。
+> **功能插件**（`plugins/`）：通常无状态、被动拦截请求头/响应体，每个插件独立开关，实时生效。
 
 ---
 
 ## 与 `app/` 的区别
 
-| 维度 | `app/`（签到体系） | `plugins/`（特殊功能插件） |
+| 维度 | `app/`（签到体系） | `plugins/`（功能插件） |
 |---|---|---|
 | 目的 | 抓 Cookie + 定时签到 | 改写请求/响应，实时生效 |
 | 触发 | `http-request` 抓取 + `cron` 签到 | 仅 `http-request` 或 `http-response` 被动拦截 |
-| 状态 | 需要 BoxJS / `$persistentStore` 持久化 | 一般无状态 |
-| 平台汇总 | `loon/CookieCenter.plugin` 聚合 | 每个插件一个独立 `loon/<Name>.plugin` |
+| 状态 | 需 BoxJS / `$persistentStore` 持久化 | 一般无状态 |
+| Loon 插件 | `loon/CookieCenter.plugin` 聚合 | 每插件独立 `loon/<Name>.plugin` |
+| BoxJS | ✅ 纳入 `boxjs/` 订阅 | ❌ 不纳入，通过插件自身 `#!switch` 管理 |
 | 开关粒度 | 每脚本 capture + sign 双开关 | 每插件单开关 |
 
 ---
 
 ## 插件清单
 
-| 目录 | 名称 | 功能 | 状态 |
-|---|---|---|---|
-| [`tabulabili/`](./tabulabili/) | 初见哔哩 | 剥离 B 站首页推荐流请求的 Cookie，强制大盘纯净热门流，打破信息茧房 | 🧪 待验证 |
-| [`adapty/`](./adapty/) | Adapty 合集解锁 | 修改 Adapty SDK 响应，解锁 15 个 App 会员(Yomu/Luminar/Genie 等) | 🧪 待验证 |
+| 目录 | 名称 | 功能 | Loon 插件 | 状态 |
+|---|---|---|---|---|
+| [`tabulabili/`](./tabulabili/) | 初见哔哩 | 剥离 B 站首页推荐流 Cookie，强制大盘纯净热门流，打破信息茧房 | [`loon/TabulaBili.plugin`](../loon/TabulaBili.plugin) | 🧪 待验证 |
+| [`adapty/`](./adapty/) | Adapty 合集解锁 | 修改 Adapty SDK 响应，解锁 15 个 App 会员(Yomu/Luminar/Genie 等) | [`loon/AdaptyCrack.plugin`](../loon/AdaptyCrack.plugin) | 🧪 待验证 |
 
 ---
 
