@@ -16,5 +16,4 @@ hostname = %APPEND% i.weread.qq.com, weread.qq.com
 # 规则
 [Script]
 # 轻触订阅人数 → 自动收录入架
-# 匹配订阅接口的任意 GET/POST，bookId 参数位置不限
-http-request ^https?:\/\/i\.weread\.qq\.com\/subscription\/users\?.*bookId= tag=微信读书收录, script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/wxread/wxread.js, requires-body=true, enable={wxread_enhance}
+http-request ^https:\/\/i\.weread\.qq\.com\/subscription\/users script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/wxread/wxread.js, tag=微信读书收录, enable={wxread_enhance}

@@ -65,10 +65,12 @@ async function getBookInfo(bookId) {
         };
         $.log(`\n[INFO] 正在查询书籍[${bookId}]的基础信息...`);
         const res = await Request(opts);
-        const title = res?.title || "";
-        const author = res?.author || "";
+        // 微信读书 API 返回结构可能嵌套在 bookInfo 下
+        const data = res?.bookInfo || res;
+        const title = data?.title || "";
+        const author = data?.author || "";
 
-        if (res && res.totalWords === 0) {
+        if (data && data.totalWords === 0) {
             $.log(`[INFO] 书籍[${bookId}](${title})的 totalWords 为 0，说明该书籍从未上架。`);
             return { available: false, title, author };
         }
@@ -167,7 +169,7 @@ async function addBook(bookId, shouldCleanBuiltin) {
         const info = await getBookInfo(bookId);
         if (!info.available) {
             const label = info.title ? `\u300a${info.title}\u300b` : `ID: ${bookId}`;
-            $.msg($.name, "\ud83d\udcd5 暂未上架", `${label}\uff08字数 0，从未上架\uff09`);
+            $.msg($.name, "\ud83d\udcd5 暂未上架", `${label}（字数 0，从未上架）`);
             return;
         }
 
@@ -287,7 +289,7 @@ function Env(t, e) {
             this.http = new s(this);
             this.notifyMsg = [];
             this.startTime = new Date().getTime();
-            this.log("\n\uD83D\uDD14", `${this.name}, 开始!`);
+            this.log("\n\uD83D\uDD14", `${this.name}, 开始`);
         }
 
         getEnv() {
