@@ -2,13 +2,14 @@
 ------------------------------------------
 @Description: 微信读书 App — 点击订阅人数自动获取 bookId 并加入书架
 @Author: TomCatXue (基于社区脚本重构，已整合至本项目仓库)
+@Fixed: 修复 Env 类 HTTP 封装 bug + Cookie 覆盖问题 + 请求头污染
 ------------------------------------------
 触发条件：点击微信读书中的订阅人数，App 请求 subscription/users?bookId=xxx
 脚本自动：查询书籍信息 → 判断是否上架 → 加入书架 → 清理辅助书籍
 使用方式：打开插件开关，进入微信读书 App，点击任意书籍的订阅人数即可触发。
 */
 
-const $ = new Env("微信读书获取书籍");
+const $ = new Env("微信读书");
 
 // =================== 工具函数 ===================
 
@@ -23,32 +24,57 @@ function getQueries(url) {
         : {};
 }
 
+// 从 $request 中安全提取 cookie（兼容大小写）
+function getRequestCookie() {
+    if (typeof $request === "undefined") return "";
+    const h = $request.headers || {};
+    return h["Cookie"] || h["cookie"] || h["COOKIE"] || "";
+}
+
+// 从 $request 中安全提取 user-agent（兼容大小写）
+function getRequestUA() {
+    if (typeof $request === "undefined") return "";
+    const h = $request.headers || {};
+    return h["User-Agent"] || h["user-agent"] || h["USER-AGENT"] || "";
+}
+
+// 构建安全的请求头：只传递必要的 header，避免污染
+function buildHeaders() {
+    const cookie = getRequestCookie();
+    // 如果原始 cookie 已包含 wr_logined 则保持不变，否则追加
+    const finalCookie = cookie.includes("wr_logined") ? cookie : (cookie ? cookie + "; wr_logined=1" : "wr_logined=1");
+    return {
+        "User-Agent": getRequestUA() || "WeRead/1.0",
+        "Cookie": finalCookie,
+        "Referer": "https://weread.qq.com/",
+    };
+}
+
 // =================== 业务逻辑 ===================
 
 // 查询书籍信息，判断是否从未上架（totalWords === 0 说明未上架）
-async function checkBookInfo(bookId) {
+async function getBookInfo(bookId) {
     try {
         const opts = {
             url: `https://i.weread.qq.com/book/info?bookId=${bookId}`,
             type: "get",
-            headers: {
-                ...$request.headers,
-                cookie: "wr_logined=1",
-            },
+            headers: buildHeaders(),
         };
         $.log(`\n[INFO] 正在查询书籍[${bookId}]的基础信息...`);
         const res = await Request(opts);
+        const title = res?.title || "";
+        const author = res?.author || "";
 
         if (res && res.totalWords === 0) {
-            $.log(`[INFO] 书籍[${bookId}]的 totalWords 为 0，说明该书籍从未上架。`);
-            return false;
+            $.log(`[INFO] 书籍[${bookId}](${title})的 totalWords 为 0，说明该书籍从未上架。`);
+            return { available: false, title, author };
         }
 
-        $.log(`[INFO] 书籍[${bookId}]正常，允许加入书架。`);
-        return true;
+        $.log(`[INFO] 书籍[${bookId}](${title})正常，允许加入书架。`);
+        return { available: true, title, author };
     } catch (e) {
         $.log(`[ERROR] 查询书籍信息失败，将默认尝试添加书架: ${e}`);
-        return true;
+        return { available: true, title: "", author: "" };
     }
 }
 
@@ -58,10 +84,7 @@ async function isBookOnShelf(bookId) {
         const opts = {
             url: `https://weread.qq.com/web/shelf/bookIds?bookIds=${bookId}`,
             type: "get",
-            headers: {
-                ...$request.headers,
-                cookie: "wr_logined=1",
-            },
+            headers: buildHeaders(),
         };
         const res = await Request(opts);
         if (res && res.data && res.data.length > 0) {
@@ -82,10 +105,7 @@ async function cleanBuiltinBook() {
             url: "https://i.weread.qq.com/shelf/delete",
             type: "post",
             dataType: "json",
-            headers: {
-                ...$request.headers,
-                cookie: "wr_logined=1",
-            },
+            headers: buildHeaders(),
             body: { bookIds: [builtinBookId] },
         };
         await Request(opts);
@@ -109,10 +129,7 @@ async function addBook(bookId, shouldCleanBuiltin) {
             url: "https://i.weread.qq.com/shelf/add",
             type: "post",
             dataType: "json",
-            headers: {
-                ...$request.headers,
-                cookie: "wr_logined=1",
-            },
+            headers: buildHeaders(),
             body: { bookIds: bookList },
         };
 
@@ -139,15 +156,15 @@ async function addBook(bookId, shouldCleanBuiltin) {
 
         const bookId = getQueries($request.url)?.bookId;
         if (!bookId) {
-            $.msg($.name, "❌ 获取书籍ID失败", "未能从请求的 URL 中解析到 bookId");
+            $.msg($.name, "❌ 解析失败", "未从请求 URL 中找到 bookId");
             return;
         }
 
         // 1. 先查询书籍信息，验证是否从未上架
-        const canAdd = await checkBookInfo(bookId);
-        if (!canAdd) {
-            $.msg($.name, "⚠️ 跳过解锁", `该书籍[${bookId}]从未上架（字数为 0），不进行添加书架操作。`);
-            return;
+        const info = await getBookInfo(bookId);
+        if (!info.available) {
+            const label = info.title ? `《${info.title}》` : `ID: ${bookId}`;
+            $.msg($.name, "📕 暂未上架", `${label}（字数 0，从未上架）`);
         }
 
         // 2. 查询辅助凑数的书 (490081) 原本是否在书架上
@@ -159,18 +176,20 @@ async function addBook(bookId, shouldCleanBuiltin) {
         const res = await addBook(bookId, shouldCleanBuiltin);
 
         if (res && res.succ) {
-            $.msg($.name, "🎉 添加书籍成功", `成功添加书籍 ID: ${bookId}，切换页面即可食用！`);
+            const label = info.title ? `《${info.title}》` : `ID: ${bookId}`;
+            const authorPart = info.author ? ` / ${info.author}` : "";
+            $.msg($.name, "📖 已加入书架", `${label}${authorPart}`);
         } else {
-            $.msg($.name, "❌ 添加书籍失败", `请尝试其它书籍！\n错误信息: ${JSON.stringify(res)}`);
+            $.msg($.name, "❌ 添加失败", `请尝试其它书籍\n${JSON.stringify(res)}`);
         }
     } catch (e) {
         $.logErr(e);
-        $.msg($.name, "⛔️ 脚本运行错误", e.message || e);
+        $.msg($.name, "⚠️ 脚本错误", e.message || e);
     }
 })()
     .catch((e) => {
         $.logErr(e);
-        $.msg($.name, "⛔️ 脚本运行错误", e.message || e);
+        $.msg($.name, "⚠️ 脚本错误", e.message || e);
     })
     .finally(() => {
         $.done({ ok: 1 });
@@ -193,7 +212,7 @@ async function Request(t) {
             resultType: u = "data",
         } = t;
         const p = e ? e.toLowerCase() : "body" in t ? "post" : "get";
-        const c = o.concat("post" === p ? "?" + $.queryStr(a) : "");
+        const c = o.concat("post" === p && a ? "?" + $.queryStr(a) : "");
         const i = t.timeout ? (t.timeout > 1000 ? t.timeout : t.timeout * 1000) : 10000;
 
         "json" === n && (r["Content-Type"] = "application/json;charset=UTF-8");
@@ -201,12 +220,9 @@ async function Request(t) {
             "string" == typeof s ? s : s && "form" == n ? $.queryStr(s) : $.toStr(s);
 
         const l = {
-            ...t,
-            ...t?.opts ? t.opts : {},
             url: c,
             headers: r,
             ...("post" === p && { body: y }),
-            ...("get" === p && a && { params: a }),
             timeout: i,
         };
 
@@ -231,19 +247,30 @@ function Env(t, e) {
         }
         send(t, e = "GET") {
             t = "string" == typeof t ? { url: t } : t;
-            let s = this.get;
-            "POST" === e && (s = this.post);
+            const method = e.toLowerCase();
             return new Promise((resolve, reject) => {
-                s.call(this, t, (err, resp, data) => {
-                    err ? reject(err) : resolve(resp);
-                });
+                if (typeof $httpClient !== "undefined") {
+                    // Loon / Surge / Stash
+                    $httpClient[method](t, (err, resp) => {
+                        if (err) return reject(err);
+                        resolve(resp);
+                    });
+                } else if (typeof $task !== "undefined") {
+                    // Quantumult X
+                    $task.fetch(t).then(
+                        (resp) => resolve({ statusCode: resp.status, headers: resp.headers, body: resp.body }),
+                        reject
+                    );
+                } else {
+                    reject("unsupported environment");
+                }
             });
         }
         get(t) {
-            return this.send.call(this.env, t);
+            return this.send(t, "GET");
         }
         post(t) {
-            return this.send.call(this.env, t, "POST");
+            return this.send(t, "POST");
         }
     }
 
@@ -307,11 +334,7 @@ function Env(t, e) {
             const payload = () => {
                 switch (this.getEnv()) {
                     case "Loon":
-                        console.log(JSON.stringify(options));
-                        return options;
                     case "Quantumult X":
-                        console.log(JSON.stringify(options));
-                        return options;
                     case "Surge":
                     default:
                         return options;
