@@ -6,17 +6,15 @@
 ------------------------------------------
 触发：在微信读书中，点击任意书籍的「订阅人数」
 流程：查书籍信息 → 校验上架 → 加入书架 → 清理辅助书
-用法：开启插件开关，进入微信读书，点按即用
+用法：安装插件，进入微信读书，点按即用
 */
 
-// 如果 Loon 日志里连这行都没有，说明脚本没从 GitHub 下载成功
 console.log("\u2705 [微信读书] 脚本已加载，等待触发...");
 
 const $ = new Env("微信读书");
 
 // =================== 工具函数 ===================
 
-// 解析请求 URL 中的查询参数
 function getQueries(url) {
     const [, qs] = (url || "").split("?");
     return qs
@@ -27,35 +25,23 @@ function getQueries(url) {
         : {};
 }
 
-// 从 $request 中安全提取 cookie（兼容大小写）
-function getRequestCookie() {
-    if (typeof $request === "undefined") return "";
-    const h = $request.headers || {};
-    return h["Cookie"] || h["cookie"] || h["COOKIE"] || "";
-}
-
-// 从 $request 中安全提取 user-agent（兼容大小写）
-function getRequestUA() {
-    if (typeof $request === "undefined") return "";
-    const h = $request.headers || {};
-    return h["User-Agent"] || h["user-agent"] || h["USER-AGENT"] || "";
-}
-
-// 构建安全的请求头：只传递必要的 header，避免污染
+// 构建请求头：以原始请求头为基础，只覆盖必要字段
 function buildHeaders() {
-    const cookie = getRequestCookie();
-    // 如果原始 cookie 已包含 wr_logined 则保持不变，否则追加
+    if (typeof $request === "undefined") return {};
+    const orig = $request.headers || {};
+    const cookie = orig["Cookie"] || orig["cookie"] || orig["COOKIE"] || "";
     const finalCookie = cookie.includes("wr_logined") ? cookie : (cookie ? cookie + "; wr_logined=1" : "wr_logined=1");
+    // 保留原始 header，只覆写必须的
     return {
-        "User-Agent": getRequestUA() || "WeRead/1.0",
+        ...orig,
         "Cookie": finalCookie,
         "Referer": "https://weread.qq.com/",
+        "User-Agent": orig["User-Agent"] || orig["user-agent"] || orig["USER-AGENT"] || "WeRead/1.0",
     };
 }
 
 // =================== 业务逻辑 ===================
 
-// 查询书籍信息，判断是否从未上架（totalWords === 0 说明未上架）
 async function getBookInfo(bookId) {
     try {
         const opts = {
@@ -65,7 +51,6 @@ async function getBookInfo(bookId) {
         };
         $.log(`\n[INFO] 正在查询书籍[${bookId}]的基础信息...`);
         const res = await Request(opts);
-        // 微信读书 API 返回结构可能嵌套在 bookInfo 下
         const data = res?.bookInfo || res;
         const title = data?.title || "";
         const author = data?.author || "";
@@ -83,7 +68,6 @@ async function getBookInfo(bookId) {
     }
 }
 
-// 查询某本书原本是否在书架上
 async function isBookOnShelf(bookId) {
     try {
         const opts = {
@@ -92,7 +76,6 @@ async function isBookOnShelf(bookId) {
             headers: buildHeaders(),
         };
         const res = await Request(opts);
-        // 返回格式: { succ: 1, data: [{ bookId: "xxx", onShelf: 1 }] }
         if (res && res.data && res.data.length > 0) {
             return res.data[0].onShelf === 1;
         }
@@ -102,7 +85,6 @@ async function isBookOnShelf(bookId) {
     }
 }
 
-// 静默移除内置辅助书籍（无日志、无通知）
 async function cleanBuiltinBook() {
     const builtinBookId = "490081";
     try {
@@ -119,12 +101,10 @@ async function cleanBuiltinBook() {
     }
 }
 
-// 加入书架
 async function addBook(bookId, shouldCleanBuiltin) {
     const builtinBookId = "490081";
     const bookList = [builtinBookId];
 
-    // 如果获取到的 ID 有效且不同于内置 ID，则加入
     if (bookId && bookId.toString() !== builtinBookId) {
         bookList.push(bookId.toString());
     }
@@ -142,7 +122,6 @@ async function addBook(bookId, shouldCleanBuiltin) {
         const res = await Request(opts);
         $.log(`[INFO] 服务器返回结果: ${JSON.stringify(res)}\n`);
 
-        // 添加成功后，如果辅助书原本不在书架上，则清理掉它
         if (res && res.succ && shouldCleanBuiltin) {
             await cleanBuiltinBook();
         }
@@ -165,7 +144,6 @@ async function addBook(bookId, shouldCleanBuiltin) {
             return;
         }
 
-        // 1. 先查询书籍信息，验证是否从未上架
         const info = await getBookInfo(bookId);
         if (!info.available) {
             const label = info.title ? `\u300a${info.title}\u300b` : `ID: ${bookId}`;
@@ -173,12 +151,10 @@ async function addBook(bookId, shouldCleanBuiltin) {
             return;
         }
 
-        // 2. 查询辅助凑数的书 (490081) 原本是否在书架上
         const builtinBookId = "490081";
         const builtinOnShelf = await isBookOnShelf(builtinBookId);
         const shouldCleanBuiltin = !builtinOnShelf;
 
-        // 3. 加入书架
         const res = await addBook(bookId, shouldCleanBuiltin);
 
         if (res && res.succ) {
@@ -198,13 +174,11 @@ async function addBook(bookId, shouldCleanBuiltin) {
         $.msg($.name, "\u26a0\ufe0f 脚本错误", e.message || e);
     })
     .finally(() => {
-        // Loon: $done() 无参 = 放行原始请求（与 QX script-request-header 行为一致）
         $done();
     });
 
 // =================== 通用框架：Request + Env ===================
 
-// HTTP 请求封装
 async function Request(t) {
     "string" == typeof t && (t = { url: t });
     try {
@@ -247,7 +221,6 @@ async function Request(t) {
     }
 }
 
-// 环境判断与工具类
 function Env(t, e) {
     class s {
         constructor(t) {
@@ -258,14 +231,11 @@ function Env(t, e) {
             const method = e.toLowerCase();
             return new Promise((resolve, reject) => {
                 if (typeof $httpClient !== "undefined") {
-                    // Loon / Surge / Stash — 兼容 resp.body 与 data 两种返回值
                     $httpClient[method](t, (err, resp, data) => {
                         if (err) return reject(err);
-                        // resp.body 可能缺失，用 data 兜底
                         resolve(resp && typeof resp.body !== "undefined" ? resp : { body: data || "" });
                     });
                 } else if (typeof $task !== "undefined") {
-                    // Quantumult X
                     $task.fetch(t).then(
                         (resp) => resolve({ statusCode: resp.status, headers: resp.headers, body: resp.body }),
                         reject
@@ -275,12 +245,8 @@ function Env(t, e) {
                 }
             });
         }
-        get(t) {
-            return this.send(t, "GET");
-        }
-        post(t) {
-            return this.send(t, "POST");
-        }
+        get(t) { return this.send(t, "GET"); }
+        post(t) { return this.send(t, "POST"); }
     }
 
     return new class {
@@ -291,7 +257,6 @@ function Env(t, e) {
             this.startTime = new Date().getTime();
             this.log("\n\uD83D\uDD14", `${this.name}, 开始`);
         }
-
         getEnv() {
             if (typeof $environment !== "undefined") {
                 if ($environment["surge-version"]) return "Surge";
@@ -303,30 +268,8 @@ function Env(t, e) {
             if (typeof $rocket !== "undefined") return "Shadowrocket";
             return void 0;
         }
-        isLoon() {
-            return "Loon" === this.getEnv();
-        }
-        isQuanX() {
-            return "Quantumult X" === this.getEnv();
-        }
-        isSurge() {
-            return "Surge" === this.getEnv();
-        }
-
-        toObj(t, e = null) {
-            try {
-                return JSON.parse(t);
-            } catch {
-                return e;
-            }
-        }
-        toStr(t, e = null) {
-            try {
-                return JSON.stringify(t);
-            } catch {
-                return e;
-            }
-        }
+        toObj(t, e = null) { try { return JSON.parse(t); } catch { return e; } }
+        toStr(t, e = null) { try { return JSON.stringify(t); } catch { return e; } }
         queryStr(t) {
             let s = "";
             for (const k in t) {
@@ -338,17 +281,8 @@ function Env(t, e) {
             }
             return s.substring(0, s.length - 1);
         }
-
         msg(title = this.name, subtitle = "", body = "", options = {}) {
-            const payload = () => {
-                switch (this.getEnv()) {
-                    case "Loon":
-                    case "Quantumult X":
-                    case "Surge":
-                    default:
-                        return options;
-                }
-            };
+            const payload = () => { return options; };
             if (typeof $notification !== "undefined") {
                 $notification.post(title, subtitle, body, payload());
             } else if (typeof $notify !== "undefined") {
@@ -356,23 +290,12 @@ function Env(t, e) {
             }
             this.log("", `\uD83D\uDCE3 ${title}\n${subtitle}\n${body}`);
         }
-
-        log(...args) {
-            console.log(args.map((a) => a ?? "").join("\n"));
-        }
-        logErr(e) {
-            this.log("", `\u2757\ufe0f ${this.name}, 错误!`, e.message || e, e.stack || "");
-        }
-
+        log(...args) { console.log(args.map((a) => a ?? "").join("\n")); }
+        logErr(e) { this.log("", `\u2757\ufe0f ${this.name}, 错误!`, e.message || e, e.stack || ""); }
         done(data) {
             const elapsed = ((new Date()).getTime() - this.startTime) / 1000;
             this.log("", `\uD83D\uDD14 ${this.name}, 结束! \uD83D\uDD5B ${elapsed.toFixed(2)} 秒\n`);
-            // Loon / QX: $done() 无参表示放行原始请求
-            if (data !== undefined) {
-                $done(data);
-            } else {
-                $done();
-            }
+            if (data !== undefined) { $done(data); } else { $done(); }
         }
     }(t, e);
 }
