@@ -5,15 +5,11 @@
 #!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/weread.png
 #!tag = 微信读书,书架收录,优雅工具
 
-# 独立开关
-[Argument]
-wxread_enhance = switch,false,tag=微信读书,desc=开启后点击任意书籍订阅人数可自动收藏
-
 # MITM 主机（必须安装并信任 Loon 的 CA 证书，否则规则无法触发）
 [MITM]
-hostname = %APPEND% i.weread.qq.com, weread.qq.com
+hostname = i.weread.qq.com
 
 # 规则
 [Script]
 # 轻触订阅人数 → 自动收录入架
-http-request ^https:\/\/i\.weread\.qq\.com\/subscription\/users script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/wxread/wxread.js, tag=微信读书收录, enable={wxread_enhance}
+http-request ^https:\/\/i\.weread\.qq\.com\/subscription\/users script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/wxread/wxread.js, tag=微信读书收录, enable=true
