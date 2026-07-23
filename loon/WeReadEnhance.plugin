@@ -1,6 +1,6 @@
 #!name = 微信读书增强
 #!desc = 轻触订阅人数，好书即刻入架
-#!author = TomCatXue
+#!author = 水君 (原作) + TomCatXue (重构)
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/weread.png
 #!tag = 微信读书,书架收录,优雅工具
