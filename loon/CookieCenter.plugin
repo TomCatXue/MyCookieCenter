@@ -5,20 +5,22 @@
 #!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/icon.png
 #!tag = Cookie,签到,哔哩哔哩
 
-# =================== 开关 ===================
+# =================== 独立开关 ===================
 
-# 哔哩哔哩 - Cookie 抓取（打开后，进 App 触发即可）
-bilibili_capture = switch,false,tag=哔哩哔哩,desc=获取哔哩哔哩 Cookie
+[Argument]
+bilibili_capture = switch,false,tag=哔哩哔哩抓取,desc=打开哔哩哔哩 App 触发指纹接口抓取 Cookie
+bilibili_sign = switch,false,tag=哔哩哔哩签到,desc=每日 07:30 执行登录/观看/分享/投币/领银瓜子
 
-# 哔哩哔哩 - 每日签到（定时 7:30 自动执行）
-bilibili_sign = switch,false,tag=哔哩哔哩,desc=每日签到/看视频/分享/投币/领银瓜子
+# =================== MITM ===================
 
-# =================== Cookie 抓取 ===================
+[MITM]
+hostname = %APPEND% app.bilibili.com
 
+# =================== 规则 ===================
+
+[Script]
 # 哔哩哔哩 Cookie - 打开 App 触发指纹接口
-http-request ^https?://(?:www\.)?bilibili\.com/x/resource/fingerprint url script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/bilibili/bilibili.js,requires-body=1,tag=哔哩哔哩Cookie
-
-# =================== 定时签到 ===================
+http-request ^https?:\/\/app\.bilibili\.com\/x\/resource\/fingerprint\? tag=哔哩哔哩Cookie, script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/bilibili/bilibili.js, requires-body=false, enable={bilibili_capture}
 
 # 哔哩哔哩每日签到
-cron "30 7 * * *" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/bilibili/bilibili.js,timeout=60,tag=哔哩哔哩签到
+cron "30 7 * * *" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/bilibili/bilibili.js, tag=哔哩哔哩签到, enable={bilibili_sign}
