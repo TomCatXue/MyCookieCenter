@@ -5,6 +5,13 @@
 #!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/weread.png
 #!tag = 微信读书,会员解锁,VIP
 
+# ===== 独立开关 =====
+
+[Argument]
+vip_unlock = switch,true,tag=会员卡VIP,desc=修改会员状态，解锁会员显示
+balance_fix = switch,true,tag=余额修改,desc=修改充值币/书币余额显示
+one_patch = switch,false,tag=OnePatch补丁,desc=注入原生验证绕过(实验性)
+
 # ===== MITM =====
 
 [MITM]
@@ -13,12 +20,14 @@ hostname = i.weread.qq.com, weread.qq.com, api.unipay.qq.com
 # ===== 脚本规则 =====
 
 [Script]
-# VIP会员 + 充值币 + 支付回调
-http-response ^https://i\.weread\.qq\.com/(login|pay/|user/) tag=VIP解锁, script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/weread_vip/weread_vip.js, requires-body=true, enable=true
-http-response ^https://api\.unipay\.qq\.com/v1/r/ tag=Midas支付, script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/weread_vip/weread_vip.js, requires-body=true, enable=true
+# 会员卡VIP解锁
+http-response ^https://i\.weread\.qq\.com/(login|pay/memberCard) tag=会员卡VIP, script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/weread_vip/weread_vip.js, requires-body=true, enable={vip_unlock}
+
+# 余额/充值币修改
+http-response ^https://i\.weread\.qq\.com/(user/profile|pay/balance|pay/present) tag=余额修改, script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/weread_vip/weread_vip.js, requires-body=true, enable={balance_fix}
+
+# Midas支付回调
+http-response ^https://api\.unipay\.qq\.com/v1/r/ tag=余额修改, script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/weread_vip/weread_vip.js, requires-body=true, enable={balance_fix}
 
 # OnePatch原生验证绕过
-http-response ^https://weread\.qq\.com/(wrpage|web|misc-next|policy|book-detail|invitation-gift) tag=验证绕过, script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/weread_vip/weread_patch.js, requires-body=true, enable=true
-
-# 书架收录
-http-request ^https://i\.weread\.qq\.com/subscription/users tag=书架收录, script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/wxread/wxread.js, enable=true
+http-response ^https://weread\.qq\.com/(wrpage|web|misc-next|policy|book-detail|invitation-gift) tag=验证绕过, script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/weread_vip/weread_patch.js, requires-body=true, enable={one_patch}
