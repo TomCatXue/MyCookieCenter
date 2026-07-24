@@ -1,8 +1,8 @@
 /*
 ------------------------------------------
 @Name: 微信读书 VIP
-@Version: 4.2.0
-@Desc: 修复payType嵌套路径 + 清理冗余字段
+@Version: 4.3.0
+@Desc: 只改payType，不动errcode
 ------------------------------------------
 */
 
@@ -92,32 +92,14 @@ function patchDisplay(body) {
     };
 }
 
-function patchChapter(body) {
-    // payType 在 info 里面嵌套
-    if (body.info && typeof body.info.payType !== "undefined") {
-        body.info.payType = 0;
-    }
-    if (body.payType && body.payType !== 0) {
-        body.payType = 0;
-    }
-    // 归零 errcode
-    if (body.errcode && body.errcode !== 0) {
-        body.errcode = 0;
-    }
-    if (body.info && body.info.errcode && body.info.errcode !== 0) {
-        body.info.errcode = 0;
-    }
-    // 清理付费信息
-    if (body.payInfo) body.payInfo = null;
-    if (body.info && body.info.payInfo) body.info.payInfo = null;
-    if (body.needPay !== undefined) body.needPay = false;
-    if (body.isPay !== undefined) body.isPay = true;
-}
-
-// ==================== 章节下载 (最关键) ====================
+// ==================== 章节下载 ====================
 
 if (URL.includes("/book/chapterdownload")) {
-    patchChapter(body);
+    // 只改 payType，不动 errcode（-2223 是正常状态码）
+    if (body.info && body.info.payType) {
+        body.info.payType = 0;
+    }
+    console.log("[微信读书] chapterdownload: payType归零");
     $done({ body: JSON.stringify(body) });
     return;
 }
@@ -169,7 +151,6 @@ if (URL.includes("/book/secret")) {
 
 if (URL.includes("/book/readinfo")) {
     patchDisplay(body);
-    patchChapter(body);
 }
 
 if (URL.includes("welfareCoin")) {
