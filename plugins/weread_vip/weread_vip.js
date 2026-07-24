@@ -1,8 +1,8 @@
 /*
 ------------------------------------------
 @Name: 微信读书 VIP
-@Version: 4.3.0
-@Desc: 只改payType，不动errcode
+@Version: 5.0.0
+@Desc: 会员解锁 + 屏蔽更新弹窗(6.0.4适配)
 ------------------------------------------
 */
 
@@ -20,6 +20,29 @@ try {
 
 const now = Math.floor(Date.now() / 1000);
 const expire30d = now + 30 * 86400;
+
+// ==================== 屏蔽更新 ====================
+
+// 拦截所有更新/配置/版本检查接口
+if (URL.includes("updateConfig") || URL.includes("/app/update") || URL.includes("/app/version") || URL.includes("feconfig/getBundles") || URL.includes("forceUpdate") || URL.includes("app/config") || URL.includes("iap/config")) {
+    $done({ body: JSON.stringify({ ret: 0, forceUpdate: false, needUpdate: false }) });
+    return;
+}
+
+// 全局清除响应中的更新标记 (所有接口)
+function stripUpdate(obj) {
+    if (!obj || typeof obj !== "object") return;
+    var kill = ["forceUpdate","needUpdate","mustUpdate","updateFlag","isForce","isLatest","updateInfo","updateURL","updateUrl","minVersion","forceUpdateVersion","showUpdate","updateContent","appVersion"];
+    for (var i = 0; i < kill.length; i++) {
+        var k = kill[i];
+        if (obj[k] !== undefined) obj[k] = false;
+    }
+}
+stripUpdate(body);
+if (body.data) stripUpdate(body.data);
+if (body.info) stripUpdate(body.info);
+
+// ==================== 会员/余额 ====================
 
 function patchDisplay(body) {
     body.ret = 0;
@@ -92,76 +115,28 @@ function patchDisplay(body) {
     };
 }
 
-// ==================== 章节下载 ====================
+// ==================== 路由处理 ====================
 
 if (URL.includes("/book/chapterdownload")) {
-    // 只改 payType，不动 errcode（-2223 是正常状态码）
     if (body.info && body.info.payType) {
         body.info.payType = 0;
     }
-    console.log("[微信读书] chapterdownload: payType归零");
     $done({ body: JSON.stringify(body) });
     return;
 }
 
-// ==================== 会员/余额 ====================
-
-if (URL.includes("/login")) {
-    patchDisplay(body);
-}
-
-if (URL.includes("/user/profile") || URL.includes("/pay/balance") || URL.includes("/pay/present")) {
-    patchDisplay(body);
-}
-
-if (URL.includes("unipay.qq.com")) {
-    patchDisplay(body);
-}
-
-if (URL.includes("memberCardSummary") || URL.includes("membercardsummary")) {
-    patchDisplay(body);
-}
-
-if (URL.includes("memberCardItems") || URL.includes("membercardexitems")) {
-    patchDisplay(body);
-}
-
-if (URL.includes("memberCardDetails")) {
-    patchDisplay(body);
-}
-
-if (URL.includes("/pay/item")) {
-    patchDisplay(body);
-}
-
-if (URL.includes("buyChapters") || URL.includes("buyBook")) {
-    patchDisplay(body);
-    body.succ = true;
-    body.orderId = "order_" + Date.now();
-}
-
-if (URL.includes("careplan")) {
-    patchDisplay(body);
-}
-
-if (URL.includes("/book/secret")) {
-    patchDisplay(body);
-    body.secret = body.secret || ("sec_" + Date.now());
-}
-
-if (URL.includes("/book/readinfo")) {
-    patchDisplay(body);
-}
-
-if (URL.includes("welfareCoin")) {
-    body.coin = 999;
-    body.ret = 0;
-}
-
-if (URL.includes("updateConfig")) {
-    $done({});
-    return;
-}
+if (URL.includes("/login")) patchDisplay(body);
+if (URL.includes("/user/profile") || URL.includes("/pay/balance") || URL.includes("/pay/present")) patchDisplay(body);
+if (URL.includes("unipay.qq.com")) patchDisplay(body);
+if (URL.includes("memberCardSummary") || URL.includes("membercardsummary")) patchDisplay(body);
+if (URL.includes("memberCardItems") || URL.includes("membercardexitems")) patchDisplay(body);
+if (URL.includes("memberCardDetails")) patchDisplay(body);
+if (URL.includes("/pay/item")) patchDisplay(body);
+if (URL.includes("buyChapters") || URL.includes("buyBook")) { patchDisplay(body); body.succ = true; body.orderId = "order_" + Date.now(); }
+if (URL.includes("careplan")) patchDisplay(body);
+if (URL.includes("/book/secret")) { patchDisplay(body); body.secret = body.secret || ("sec_" + Date.now()); }
+if (URL.includes("/book/readinfo")) patchDisplay(body);
+if (URL.includes("welfareCoin")) { body.coin = 999; body.ret = 0; }
 
 if (body.expiredTime && body.expiredTime < now) {
     body.expiredTime = expire30d;
