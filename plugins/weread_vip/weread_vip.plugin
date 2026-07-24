@@ -1,5 +1,5 @@
 #!name = 微信读书VIP解锁
-#!desc = 会员解锁 + 充值币 + 解除付费墙 + 屏蔽更新(6.0.4)
+#!desc = v10会员解锁 + 付费墙 + 屏蔽更新
 #!author = TomCatXue
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/weread.png
@@ -8,14 +8,14 @@
 # ===== 独立开关 =====
 
 [Argument]
-vip_unlock = switch,true,tag=会员卡VIP,desc=修改会员状态，解锁会员显示
-balance_fix = switch,true,tag=余额修改,desc=修改充值币/书币余额显示
+vip_unlock = switch,true,tag=会员卡VIP,desc=修改会员状态
+balance_fix = switch,true,tag=余额修改,desc=修改充值币/书币余额
 chapter_fix = switch,true,tag=解除付费墙,desc=章节下载时去除付费标志
 
 # ===== MITM =====
 
 [MITM]
-hostname = i.weread.qq.com, weread.qq.com, api.unipay.qq.com, weread-1258476243.file.myqcloud.com
+hostname = i.weread.qq.com, weread.qq.com, api.unipay.qq.com, weread-1258476243.file.myqcloud.com, rdelivery.qq.com
 
 # ===== 脚本规则 =====
 
@@ -26,13 +26,13 @@ http-response ^https://i\.weread\.qq\.com/(login|pay/memberCard) tag=会员卡VI
 # 余额/充值币修改
 http-response ^https://i\.weread\.qq\.com/(user/profile|pay/balance|pay/present) tag=余额修改, script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/weread_vip/weread_vip.js, requires-body=true, enable={balance_fix}
 
-# Midas支付回调
+# Midas支付
 http-response ^https://api\.unipay\.qq\.com/v1/r/ tag=余额修改, script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/weread_vip/weread_vip.js, requires-body=true, enable={balance_fix}
 
-# 解除章节付费墙 + 屏蔽更新提示
+# 付费墙 + 屏蔽更新
 http-response ^https://i\.weread\.qq\.com/book/(chapterdownload|readinfo) tag=解除付费墙, script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/weread_vip/weread_vip.js, requires-body=true, enable={chapter_fix}
 http-response ^https://i\.weread\.qq\.com/reader/welfareCoin tag=解除付费墙, script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/weread_vip/weread_vip.js, requires-body=true, enable={chapter_fix}
 
-# 屏蔽更新检查 (覆盖所有域名)
-http-response ^https://(i\.)?weread.*/(updateConfig|app/(update|version|config)|feconfig) tag=屏蔽更新, script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/weread_vip/weread_vip.js, requires-body=true, enable=true
+# 屏蔽更新推送(腾讯远程配置)
+http-response ^https://rdelivery\.qq\.com/v3/config/pull tag=屏蔽更新, script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/weread_vip/weread_vip.js, requires-body=true, enable=true
 http-response ^https://weread.*\.file\.myqcloud\.com/app/(iap|config) tag=屏蔽更新, script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/weread_vip/weread_vip.js, requires-body=true, enable=true
