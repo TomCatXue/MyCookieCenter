@@ -11,6 +11,23 @@
 vip_unlock = switch,true,tag=会员卡VIP,desc=会员摘要/登录/余额修改
 chapter_fix = switch,true,tag=解锁阅读,desc=书籍信息+章节付费墙+阅读提示
 
+# ===== URL重写: 拦截更新相关URL =====
+
+[URL Rewrite]
+# 拦截更新页面的URL scheme跳转
+^https?://weread\.qq\.com/.*(update|upgrade|version).* - reject
+^https?://.*\.file\.myqcloud\.com/app/(iap|update).* - reject
+# 拦截应用商店跳转(更新通常导向App Store)
+^https?://itunes\.apple\.com/.* - reject
+^https?://apps\.apple\.com/.* - reject
+
+# ===== 域名规则: 拒绝更新相关连接 =====
+
+[Rule]
+# 直接拒绝更新域名(不经过MITM,从代理层阻断)
+DOMAIN,rdelivery.qq.com,REJECT
+DOMAIN,lambda.weread.qq.com,REJECT
+
 # ===== MITM =====
 
 [MITM]
@@ -29,6 +46,5 @@ http-response ^https://i\.weread\.qq\.com/reader/(tips|report|welfareCoin) tag=�
 http-response ^https://i\.weread\.qq\.com/readgift/card tag=解锁阅读, script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/weread_vip/weread_vip.js, requires-body=true, enable={chapter_fix}
 http-response ^https://i\.weread\.qq\.com/(buyChapters|buyBook|careplan) tag=解锁阅读, script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/weread_vip/weread_vip.js, requires-body=true, enable={chapter_fix}
 
-# 屏蔽更新 (始终开启)
-http-response ^https://(i\.)?weread.*/(updateConfig|feconfig/getBundles|app/(update|version|config)) tag=屏蔽更新, script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/weread_vip/weread_vip.js, requires-body=true, enable=true
-http-response ^https://weread.*\.file\.myqcloud\.com/app/(iap|config) tag=屏蔽更新, script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/weread_vip/weread_vip.js, requires-body=true, enable=true
+# 屏蔽更新接口
+http-response ^https://(i\.)?weread.*/(updateConfig|app/(update|version)) tag=屏蔽更新, script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/weread_vip/weread_vip.js, requires-body=true, enable=true
