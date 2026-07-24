@@ -1,11 +1,16 @@
 # ============================================
 # 微信读书 · 会员解锁
-# 导入方法: Loon > 配置 > 插件 > 导入此文件
+# v3.2 OnePatch热修复 + HTTP字段伪造
+# 导入: Loon > 配置 > 插件 > 导入
 # ============================================
 
 [MITM]
-hostname = i.weread.qq.com, *.unipay.qq.com
+hostname = i.weread.qq.com, *.unipay.qq.com, weread.qq.com
 
 [Script]
-http-response ^https://i\.weread\.qq\.com\/pay\/(memberCardSummary|memberCardItems|memberCardDetails|membercardexitems|membercardsummary|careplan|item) script-path=weread_vip.js, tag=微信读书会员
-http-response ^https://api\.unipay\.qq\.com\/v1\/r\/ script-path=weread_vip.js, tag=微信读书支付
+# HTTP会员接口 (UI显示层)
+http-response ^https://i\.weread\.qq\.com/(login|pay/|user/) script-path=weread_vip.js, tag=微信读书会员
+http-response ^https://api\.unipay\.qq\.com/v1/r/ script-path=weread_vip.js, tag=微信读书支付
+
+# OnePatch注入 (打开书评/分享/协议等任意WeRead网页触发, 绕过原生验证)
+http-response ^https://weread\.qq\.com/(wrpage|web|misc-next|policy|book-detail|invitation-gift) script-path=weread_patch.js, requires-body=true, tag=微信读书解锁补丁
