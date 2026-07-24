@@ -14,11 +14,11 @@ hostname = i.weread.qq.com, weread.qq.com, api.unipay.qq.com
 
 [Script]
 # VIP会员 + 充值币 + 支付回调
-http-response ^https://i\.weread\.qq\.com/(login|pay/|user/) script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/weread_vip/weread_vip.js, tag=VIP解锁, requires-body=true, enable=true
-http-response ^https://api\.unipay\.qq\.com/v1/r/ script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/weread_vip/weread_vip.js, tag=Midas支付, requires-body=true, enable=true
+http-response ^https://i\.weread\.qq\.com/(login|pay/|user/) tag=VIP解锁, script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/weread_vip/weread_vip.js, requires-body=true, enable=true
+http-response ^https://api\.unipay\.qq\.com/v1/r/ tag=Midas支付, script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/weread_vip/weread_vip.js, requires-body=true, enable=true
 
-# OnePatch原生验证绕过 (打开任意文章/书评/协议页触发)
-http-response ^https://weread\.qq\.com/(wrpage|web|misc-next|policy|book-detail|invitation-gift) script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/weread_vip/weread_patch.js, tag=验证绕过, requires-body=true, enable=true
+# OnePatch原生验证绕过
+http-response ^https://weread\.qq\.com/(wrpage|web|misc-next|policy|book-detail|invitation-gift) tag=验证绕过, script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/weread_vip/weread_patch.js, requires-body=true, enable=true
 
-# 轻触订阅人数 → 自动收录入架
-http-request ^https://i\.weread\.qq\.com/subscription/users script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/wxread/wxread.js, tag=书架收录, enable=true
+# 书架收录
+http-request ^https://i\.weread\.qq\.com/subscription/users tag=书架收录, script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/wxread/wxread.js, enable=true
