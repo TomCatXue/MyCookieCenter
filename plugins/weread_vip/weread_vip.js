@@ -1,8 +1,8 @@
 /*
 ------------------------------------------
 @Name: 微信读书 VIP
-@Version: 4.1.0
-@Desc: 保留签名 + 改显示 + 解除付费墙
+@Version: 4.2.0
+@Desc: 修复payType嵌套路径 + 清理冗余字段
 ------------------------------------------
 */
 
@@ -14,7 +14,6 @@ let body;
 try {
     body = JSON.parse($response.body);
 } catch (e) {
-    // 非JSON响应,直接放行
     $done({});
     return;
 }
@@ -22,12 +21,8 @@ try {
 const now = Math.floor(Date.now() / 1000);
 const expire30d = now + 30 * 86400;
 
-// ==================== 公共工具 ====================
-
 function patchDisplay(body) {
     body.ret = 0;
-
-    // 会员状态
     body.vipStatus = "active";
     body.vipType = "month";
     body.expiredTime = expire30d;
@@ -66,8 +61,6 @@ function patchDisplay(body) {
     body.giftSendSecs = 0;
     body.shareForCardIsActive = false;
     body.shareForCardHint = "";
-
-    // 余额
     body.balance = 99999;
     body.credit = 99999;
     body.coin = 99999;
@@ -75,7 +68,6 @@ function patchDisplay(body) {
     body.totalBalance = 99999;
     body.isVip = true;
 
-    // cardItems
     if (!body.cardItems || body.cardItems.length === 0) {
         body.cardItems = [{
             cardId: "wr_vip_" + Date.now(),
@@ -100,89 +92,60 @@ function patchDisplay(body) {
     };
 }
 
-// ==================== 解除付费墙 ====================
-
 function patchChapter(body) {
-    // 把付费类型改成免费,app就不会弹付费墙
+    // payType 在 info 里面嵌套
+    if (body.info && typeof body.info.payType !== "undefined") {
+        body.info.payType = 0;
+    }
     if (body.payType && body.payType !== 0) {
         body.payType = 0;
-        console.log("[微信读书] 章节付费墙: payType " + String(body.payType_bak || "?") + " -> 0");
     }
-    // 确保errCode归零
+    // 归零 errcode
     if (body.errcode && body.errcode !== 0) {
-        body.errcode_bak = body.errcode;
         body.errcode = 0;
     }
-    // 有收费信息也清掉
-    if (body.payInfo) {
-        body.payInfo = null;
+    if (body.info && body.info.errcode && body.info.errcode !== 0) {
+        body.info.errcode = 0;
     }
-    if (body.needPay !== undefined) {
-        body.needPay = false;
-    }
-    if (body.isPay !== undefined) {
-        body.isPay = true;
-    }
+    // 清理付费信息
+    if (body.payInfo) body.payInfo = null;
+    if (body.info && body.info.payInfo) body.info.payInfo = null;
+    if (body.needPay !== undefined) body.needPay = false;
+    if (body.isPay !== undefined) body.isPay = true;
 }
 
-// ==================== 路由处理 ====================
+// ==================== 章节下载 (最关键) ====================
 
-// 章节下载 - 解除付费墙 (关键!)
 if (URL.includes("/book/chapterdownload")) {
     patchChapter(body);
-    console.log("[微信读书] chapterdownload: 已解除付费墙");
     $done({ body: JSON.stringify(body) });
     return;
 }
 
-// 书籍阅读信息
-if (URL.includes("/book/readinfo")) {
-    patchDisplay(body);
-    patchChapter(body);
-    console.log("[微信读书] readinfo: 已处理");
-    $done({ body: JSON.stringify(body) });
-    return;
-}
-
-// welfareCoin
-if (URL.includes("welfareCoin")) {
-    body.coin = 999;
-    body.ret = 0;
-    console.log("[微信读书] welfareCoin: 已修改");
-    $done({ body: JSON.stringify(body) });
-    return;
-}
-
-// 以下为会员/余额相关
+// ==================== 会员/余额 ====================
 
 if (URL.includes("/login")) {
     patchDisplay(body);
-    console.log("[微信读书] 登录: 已处理");
 }
 
 if (URL.includes("/user/profile") || URL.includes("/pay/balance") || URL.includes("/pay/present")) {
     patchDisplay(body);
-    console.log("[微信读书] 资料/余额: 已处理");
 }
 
 if (URL.includes("unipay.qq.com")) {
     patchDisplay(body);
-    console.log("[微信读书] Midas: 已处理");
 }
 
 if (URL.includes("memberCardSummary") || URL.includes("membercardsummary")) {
     patchDisplay(body);
-    console.log("[微信读书] 会员摘要: 已处理");
 }
 
 if (URL.includes("memberCardItems") || URL.includes("membercardexitems")) {
     patchDisplay(body);
-    console.log("[微信读书] 会员卡列表: 已处理");
 }
 
 if (URL.includes("memberCardDetails")) {
     patchDisplay(body);
-    console.log("[微信读书] 会员卡详情: 已处理");
 }
 
 if (URL.includes("/pay/item")) {
@@ -193,7 +156,6 @@ if (URL.includes("buyChapters") || URL.includes("buyBook")) {
     patchDisplay(body);
     body.succ = true;
     body.orderId = "order_" + Date.now();
-    console.log("[微信读书] 购买: 已模拟成功");
 }
 
 if (URL.includes("careplan")) {
@@ -205,6 +167,16 @@ if (URL.includes("/book/secret")) {
     body.secret = body.secret || ("sec_" + Date.now());
 }
 
+if (URL.includes("/book/readinfo")) {
+    patchDisplay(body);
+    patchChapter(body);
+}
+
+if (URL.includes("welfareCoin")) {
+    body.coin = 999;
+    body.ret = 0;
+}
+
 if (URL.includes("updateConfig")) {
     $done({});
     return;
@@ -214,5 +186,4 @@ if (body.expiredTime && body.expiredTime < now) {
     body.expiredTime = expire30d;
 }
 
-// 不改 signature/timestamp/random，保服务器原始值
 $done({ body: JSON.stringify(body) });
