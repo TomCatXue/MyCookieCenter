@@ -1,8 +1,8 @@
 /*
 ------------------------------------------
 @Name: 微信读书 VIP
-@Version: 6.0.0
-@Desc: v6.x专用: 老字段+硬签名+屏蔽更新+解锁阅读
+@Version: 6.0.1
+@Desc: v6.x: 不阻feconfig,全局洗更新字段,老格式会员
 ------------------------------------------
 */
 
@@ -17,16 +17,37 @@ const now = Math.floor(Date.now() / 1000);
 const exp = now + 30 * 86400;
 const OLDSIG = "63e6257faa3498333df963aff22884ddfb205c5cc0d7761bc84eac4b21de4edb";
 
-// === 屏蔽更新 ===
-if (URL.includes("updateConfig") || URL.includes("/app/update") || URL.includes("/app/version") || URL.includes("feconfig/getBundles")) {
-    $done({ body: JSON.stringify({ succ: 1, result: [] }) });
+// ==========================================
+// 全局: 清洗所有响应里的更新/版本提示字段
+// ==========================================
+function deepStrip(obj) {
+    if (!obj || typeof obj !== "object") return;
+    var kill = ["forceUpdate","needUpdate","mustUpdate","updateFlag","isForce","isLatest","minVersion","showUpdate","updateContent","updateURL","updateUrl","forceUpdateVersion","appVersion","recommendUpdate","updateTitle","updateDesc","newVersion","versionTip","upgradeInfo","upgradeFlag"];
+    for (var i = 0; i < kill.length; i++) {
+        if (obj[kill[i]] !== undefined) delete obj[kill[i]];
+    }
+    // 递归洗
+    for (var key in obj) {
+        if (obj[key] && typeof obj[key] === "object" && !Array.isArray(obj[key])) {
+            deepStrip(obj[key]);
+        }
+    }
+}
+deepStrip(body);
+
+// ==========================================
+// 特定接口: 直接拦截返回无更新
+// ==========================================
+if (URL.includes("updateConfig") || URL.includes("/app/update") || URL.includes("/app/version")) {
+    $done({ body: JSON.stringify({ succ: 1, ret: 0, forceUpdate: false, needUpdate: false, isLatest: true }) });
     return;
 }
 
-// === 屏蔽更新字段 ===
-["forceUpdate","needUpdate","mustUpdate","updateFlag","isForce","isLatest","minVersion","showUpdate"].forEach(function(k){ if(body[k]!==undefined)body[k]=false; });
+// feconfig/getBundles 不拦截,让它正常过,只洗字段
 
-// === 会员摘要 (v6老格式) ===
+// ==========================================
+// 会员摘要 (v6老格式)
+// ==========================================
 if (URL.includes("memberCardSummary") || URL.includes("membercardsummary")) {
     body.ret = 0;
     body.isAutoRenewable = false;
@@ -60,7 +81,9 @@ if (URL.includes("memberCardSummary") || URL.includes("membercardsummary")) {
     return;
 }
 
-// === 余额 (v6老格式) ===
+// ==========================================
+// 余额
+// ==========================================
 if (URL.includes("/pay/balance")) {
     body.ret = 0;
     body.balance = 99999;
@@ -89,14 +112,15 @@ if (URL.includes("/pay/balance")) {
     return;
 }
 
-// === 用户资料 ===
+// ==========================================
+// 其他接口
+// ==========================================
 if (URL.includes("/user/profile")) {
     body.isVip = true;
     $done({ body: JSON.stringify(body) });
     return;
 }
 
-// === 登录 ===
 if (URL.includes("/login")) {
     body.isVip = true;
     body.balance = 99999;
@@ -104,7 +128,6 @@ if (URL.includes("/login")) {
     return;
 }
 
-// === 书籍信息 (改付费状态) ===
 if (URL.includes("/book/info")) {
     body.payingStatus = 0;
     body.payType = 0;
@@ -116,7 +139,6 @@ if (URL.includes("/book/info")) {
     }
 }
 
-// === 阅读提示 (关键!设置可免费读) ===
 if (URL.includes("reader/tips")) {
     body.canFreeRead = 1;
     body.endOfTrialTitle = "";
@@ -124,45 +146,33 @@ if (URL.includes("reader/tips")) {
     body.payingType = 0;
     body.showShareTips = 0;
     body.showLastPageShareTips = 0;
-    delete body.secondaryCampaign;
+    if (body.secondaryCampaign) delete body.secondaryCampaign;
 }
 
-// === 章节下载 (去付费墙) ===
 if (URL.includes("/book/chapterdownload")) {
     if (body.info && body.info.payType) body.info.payType = 0;
 }
 
-// === Midas支付 ===
 if (URL.includes("unipay.qq.com")) {
     body.ret = 0;
     body.token = "tk_" + Date.now().toString(36);
 }
 
-// === 购买章节 ===
 if (URL.includes("buyChapters") || URL.includes("buyBook")) {
     body.succ = true;
     body.errcode = 0;
     body.orderId = "order_" + Date.now();
 }
 
-// === 会员卡相关 ===
-if (URL.includes("memberCardItems") || URL.includes("membercardexitems")) {
-    body.ret = 0;
-}
-if (URL.includes("memberCardDetails")) {
-    body.ret = 0;
-}
-if (URL.includes("careplan")) {
-    body.ret = 0;
-}
+if (URL.includes("memberCardItems") || URL.includes("membercardexitems")) body.ret = 0;
+if (URL.includes("memberCardDetails")) body.ret = 0;
+if (URL.includes("careplan")) body.ret = 0;
 
-// === 礼品卡 ===
 if (URL.includes("readgift/card")) {
     body.ret = 0;
     body.remainCount = 999;
 }
 
-// === welfareCoin ===
 if (URL.includes("welfareCoin")) {
     body.coin = 999;
     body.ret = 0;
