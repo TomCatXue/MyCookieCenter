@@ -51,14 +51,12 @@ https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/<目�
 
 | App | 脚本 | 状态 |
 |---|---|---|
-| 哔哩哔哩 | [`app/bilibili/`](./app/bilibili/) | 🧪 待验证 |
 | 示例模板 | [`app/example/`](./app/example/) | 💎 规划中 |
 
 ## 特殊功能插件
 
 | 插件 | 功能 | 状态 |
 |---|---|---|
-| 初见哔哩净化 | Web端剥离整条Cookie/App端删除账号字段+保留设备指纹，破信息茧房 | 🧪 待验证 |
 | QQ空间·清净 | 广告退散，空间清净 | ✅ 已验证 |
 | 微信读书·优雅收录 | 轻触订阅人数，好书即刻入架 | ✅ 已验证 |
 

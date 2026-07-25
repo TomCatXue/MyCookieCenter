@@ -24,7 +24,6 @@
 
 | 目录 | 名称 | 功能 | Loon 插件 | 状态 |
 |---|---|---|---|---|
-| [`tabulabili/`](./tabulabili/) | 初见哔哩 | 剥离 B 站首页推荐流 Cookie，强制大盘纯净热门流，打破信息茧房 | [`loon/TabulaBili.plugin`](../loon/TabulaBili.plugin) | 🧪 待验证 |
 | — | QQ空间·清净 | 广告退散，空间清净（纯规则型，无需脚本） | [`loon/QzoneAdBlock.plugin`](../loon/QzoneAdBlock.plugin) | ✅ 已验证 |
 | [`wxread/`](./wxread/) | 微信读书·优雅收录 | 轻触订阅人数，好书即刻入架 | [`loon/WeReadEnhance.plugin`](../loon/WeReadEnhance.plugin) | ✅ 已验证 |
 
@@ -49,6 +48,5 @@ feat(plugins): 新增 <插件名> 插件(<一句话功能>)
 
 ## 致谢
 
-- `tabulabili/` 灵感与原始 DNR 规则源自 [wangdaodaodao/TabulaBili](https://github.com/wangdaodaodao/TabulaBili)（MIT License）
 - `qzone/` 广告屏蔽规则源自 [zqzess/rule_for_quantumultX](https://github.com/zqzess/rule_for_quantumultX)（MIT License）
 - `wxread/` 微信读书优雅收录脚本，基于社区脚本重构整合

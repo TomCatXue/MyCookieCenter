@@ -1,26 +1,21 @@
 ﻿#!name = CookieCenter · Cookie 抓取与签到
-#!desc = 哔哩哔哩 Cookie 抓取 + 每日签到，一站式管理。
+#!desc = 多平台 Cookie 抓取 + 每日签到，一站式管理。
 #!author = TomCatXue
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/icon.png
-#!tag = Cookie,签到,哔哩哔哩
+#!tag = Cookie,签到
 
 # =================== 独立开关 ===================
 
 [Argument]
-bilibili_capture = switch,false,tag=哔哩哔哩抓取,desc=打开哔哩哔哩 App 触发指纹接口抓取 Cookie
-bilibili_sign = switch,false,tag=哔哩哔哩签到,desc=每日 07:30 执行登录/观看/分享/投币/领银瓜子
+# 暂无应用，添加新应用后在下方填入对应开关
 
 # =================== MITM ===================
 
 [MITM]
-hostname = %APPEND% app.bilibili.com
+# hostname = %APPEND% example.com
 
 # =================== 规则 ===================
 
 [Script]
-# 哔哩哔哩 Cookie - 打开 App 触发指纹接口
-http-request ^https?:\/\/app\.bilibili\.com\/x\/resource\/fingerprint\? tag=哔哩哔哩Cookie, script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/bilibili/bilibili.js, requires-body=false, enable={bilibili_capture}
-
-# 哔哩哔哩每日签到
-cron "30 7 * * *" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/bilibili/bilibili.js, tag=哔哩哔哩签到, enable={bilibili_sign}
+# 暂无脚本规则
