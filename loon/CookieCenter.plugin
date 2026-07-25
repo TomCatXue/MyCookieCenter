@@ -1,0 +1,21 @@
+﻿#!name = CookieCenter · Cookie 抓取与签到
+#!desc = 多平台 Cookie 抓取 + 每日签到，一站式管理。
+#!author = TomCatXue
+#!homepage = https://github.com/TomCatXue/MyCookieCenter
+#!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/icon.png
+#!tag = Cookie,签到
+
+# =================== 独立开关 ===================
+
+[Argument]
+# 暂无应用，添加新应用后在下方填入对应开关
+
+# =================== MITM ===================
+
+[MITM]
+# hostname = %APPEND% example.com
+
+# =================== 规则 ===================
+
+[Script]
+# 暂无脚本规则
