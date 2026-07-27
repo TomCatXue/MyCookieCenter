@@ -206,6 +206,8 @@ function Env(n) {
         return false;
     };
     this.done = function(v) {
-        if (typeof $done !== 'undefined') $done(v);
+        if (typeof $done === 'undefined') return;
+        if (arguments.length > 0 && v !== undefined) $done(v);
+        else $done();
     };
 }
