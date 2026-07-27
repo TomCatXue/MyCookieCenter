@@ -12,13 +12,24 @@ var CK = 'weread_auth'; // 存的是 {"vid":"...","skey":"..."} 而不是 Cookie
                 if (kl === 'skey') skey = h[k];
             }
             if (vid && skey) {
-                var auth = JSON.stringify({ vid: vid, skey: skey });
-                $.setdata(auth, CK);
-                $.log('[WeReadClaim] Auth OK: vid=' + vid + ' skey=' + skey);
-                $.msg($.name, 'Auth OK', 'vid=' + vid + ' skey=' + skey);
+                // 去重：同一份 vid/skey 一次浏览会命中十几二十个请求，
+                // 只有和上次存的值不一样时才写入 + 通知，避免刷一次弹一堆通知
+                var prevRaw = $persistentStore.read(CK);
+                var prev = null;
+                try { prev = prevRaw ? JSON.parse(prevRaw) : null; } catch (e) {}
+                var changed = !prev || prev.vid !== vid || prev.skey !== skey;
+
+                if (changed) {
+                    var auth = JSON.stringify({ vid: vid, skey: skey });
+                    $.setdata(auth, CK);
+                    $.log('[WeReadClaim] Auth updated: vid=' + vid + ' skey=' + skey);
+                    if (getNotifyCapture()) {
+                        $.msg($.name, 'Auth Updated', 'vid=' + vid + ' skey=' + skey);
+                    }
+                }
+                // 没变化就完全静默，不写日志不弹通知
             } else {
                 // 该请求没带 vid/skey（正常现象，App 并非每个请求都带），静默放行即可
-                $.log('[WeReadClaim] No vid/skey in this request: ' + ($request ? $request.url : ''));
             }
         } catch (e) {
             $.log('[WeReadClaim] Auth capture error: ' + (e.message || e));
@@ -53,9 +64,49 @@ function getPref() {
     return pc ? 'coin' : 'card';
 }
 
+function getNotifyCapture() {
+    var nc = false; // 默认关闭：静默抓取，避免刷 App 时弹通知
+    try {
+        if (typeof $argument !== 'undefined' && $argument) {
+            var a = typeof $argument === 'string' ? JSON.parse($argument) : $argument;
+            if (a.notify_capture === 'true' || a.notify_capture === true) nc = true;
+        }
+    } catch (e) {}
+    return nc;
+}
+
 function bd(b) { try { return JSON.parse($base64.decode(b)); } catch (e) { return null; } }
 function be(o) { return $base64.encode(JSON.stringify(o)); }
 function sp(ms) { return new Promise(function(r) { setTimeout(r, ms); }); }
+
+// 跨平台请求封装：QuantumultX 有 $task.fetch；Loon/Surge 没有 $task，只有回调式的 $httpClient
+function httpFetch(opts) {
+    return new Promise(function(resolve, reject) {
+        if (typeof $task !== 'undefined' && $task.fetch) {
+            $task.fetch(opts).then(
+                function(resp) {
+                    resolve({ status: resp.status || resp.statusCode, body: resp.body, headers: resp.headers });
+                },
+                function(err) { reject(err); }
+            );
+            return;
+        }
+        if (typeof $httpClient !== 'undefined') {
+            var method = (opts.method || 'GET').toUpperCase();
+            var req = { url: opts.url, headers: opts.headers, body: opts.body };
+            var cb = function(err, resp, body) {
+                if (err) { reject(err); return; }
+                resolve({ status: (resp && (resp.status || resp.statusCode)) || 0, body: body, headers: resp ? resp.headers : {} });
+            };
+            if (method === 'POST') $httpClient.post(req, cb);
+            else if (method === 'PUT') $httpClient.put(req, cb);
+            else if (method === 'DELETE' && $httpClient['delete']) $httpClient['delete'](req, cb);
+            else $httpClient.get(req, cb);
+            return;
+        }
+        reject(new Error('No HTTP client available ($task/$httpClient not found)'));
+    });
+}
 
 function getAuthHeaders(auth) {
     return {
@@ -86,7 +137,7 @@ async function autoClaim() {
 
     var headers = getAuthHeaders(auth);
 
-    var r1 = await $task.fetch({
+    var r1 = await httpFetch({
         url: BASE + '/weekly/exchange',
         method: 'POST',
         headers: headers,
@@ -136,7 +187,7 @@ async function autoClaim() {
             }
         }
 
-        var r2 = await $task.fetch({
+        var r2 = await httpFetch({
             url: BASE + '/weekly/exchange',
             method: 'POST',
             headers: headers,
