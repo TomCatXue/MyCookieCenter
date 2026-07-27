@@ -42,9 +42,9 @@ var CK = 'weread_auth'; // 存的是 {"vid":"...","skey":"..."} 而不是 Cookie
     autoClaim()
         .then(function() { $.done(); })
         .catch(function(e) {
-            var msg = e ? (e.message || JSON.stringify(e)) : 'unknown';
+            var msg = fmtErr(e);
             $.log('[WeReadClaim] cron error: ' + msg);
-            $.msg($.name, 'Error', msg);
+            $.msg($.name, 'Error', msg + '（网络层错误，已自动重试仍失败，可能是限流/节点抖动，可稍后手动重试）');
             $.done();
         });
 })();
@@ -52,14 +52,40 @@ var CK = 'weread_auth'; // 存的是 {"vid":"...","skey":"..."} 而不是 Cookie
 var BASE = 'https://i.weread.qq.com';
 var PF = 'weread_wx-2001-iap-2001-iphone';
 var UA = 'WeRead/10.2.1 (iPhone; iOS 26.3.1; Scale/3.00)';
+var BASEVER = '10.2.1.87';
+
+// 统一解析 $argument：不同环境/触发方式下它可能是对象、JSON 字符串，
+// 或 "key=val&key2=val2" 查询字符串格式，这里三种都兼容，避免开关静默失效
+function getArgs() {
+    var out = {};
+    try {
+        if (typeof $argument === 'undefined' || !$argument) return out;
+        if (typeof $argument === 'object') return $argument;
+
+        var s = String($argument).trim();
+        try {
+            var parsed = JSON.parse(s);
+            if (parsed && typeof parsed === 'object') return parsed;
+        } catch (e) {}
+
+        var pairs = s.split('&');
+        for (var i = 0; i < pairs.length; i++) {
+            if (!pairs[i]) continue;
+            var eq = pairs[i].indexOf('=');
+            if (eq === -1) continue;
+            var key = decodeURIComponent(pairs[i].substring(0, eq));
+            var val = decodeURIComponent(pairs[i].substring(eq + 1));
+            out[key] = val;
+        }
+    } catch (e) {}
+    return out;
+}
 
 function getPref() {
     var pc = true;
     try {
-        if (typeof $argument !== 'undefined' && $argument) {
-            var a = typeof $argument === 'string' ? JSON.parse($argument) : $argument;
-            if (a.prefer_coin === 'false' || a.prefer_coin === false) pc = false;
-        }
+        var a = getArgs();
+        if (a.prefer_coin === 'false' || a.prefer_coin === false) pc = false;
     } catch (e) {}
     return pc ? 'coin' : 'card';
 }
@@ -67,12 +93,16 @@ function getPref() {
 function getNotifyCapture() {
     var nc = false; // 默认关闭：静默抓取，避免刷 App 时弹通知
     try {
-        if (typeof $argument !== 'undefined' && $argument) {
-            var a = typeof $argument === 'string' ? JSON.parse($argument) : $argument;
-            if (a.notify_capture === 'true' || a.notify_capture === true) nc = true;
-        }
+        var a = getArgs();
+        if (a.notify_capture === 'true' || a.notify_capture === true) nc = true;
     } catch (e) {}
     return nc;
+}
+
+function fmtErr(e) {
+    if (typeof e === 'string') return e;
+    if (e && e.message) return e.message;
+    try { return JSON.stringify(e); } catch (je) { return String(e); }
 }
 
 function sp(ms) { return new Promise(function(r) { setTimeout(r, ms); }); }
@@ -199,7 +229,7 @@ function httpFetch(opts) {
         }
         if (typeof $httpClient !== 'undefined') {
             var method = (opts.method || 'GET').toUpperCase();
-            var req = { url: opts.url, headers: opts.headers, body: opts.body };
+            var req = { url: opts.url, headers: opts.headers, body: opts.body, timeout: opts.timeout || 10000 };
             var cb = function(err, resp, body) {
                 if (err) { reject(err); return; }
                 resolve({ status: (resp && (resp.status || resp.statusCode)) || 0, body: body, headers: resp ? resp.headers : {} });
@@ -214,12 +244,34 @@ function httpFetch(opts) {
     });
 }
 
+// 带重试的请求：网络层瞬时错误（连接被断开、超时等）不代表脚本有问题，
+// 重试 2 次、间隔递增，比第一次失败就直接放弃更稳
+async function httpFetchRetry(opts, retries) {
+    retries = retries === undefined ? 2 : retries;
+    var lastErr = null;
+    for (var attempt = 0; attempt <= retries; attempt++) {
+        try {
+            return await httpFetch(opts);
+        } catch (e) {
+            lastErr = e;
+            $.log('[WeReadClaim] Request failed (attempt ' + (attempt + 1) + '/' + (retries + 1) + '): ' + fmtErr(e));
+            if (attempt < retries) {
+                await sp(1500 * (attempt + 1)); // 1.5s, 3s 递增等待
+            }
+        }
+    }
+    throw lastErr;
+}
+
 function getAuthHeaders(auth) {
     return {
         'Content-Type': 'application/json',
         'User-Agent': UA,
         'Accept': '*/*',
         'Accept-Language': 'zh-Hans-US;q=1, en-US;q=0.9',
+        'channelid': 'AppStore',
+        'basever': BASEVER,
+        'v': BASEVER,
         'vid': auth.vid,
         'skey': auth.skey
     };
@@ -243,7 +295,7 @@ async function autoClaim() {
 
     var headers = getAuthHeaders(auth);
 
-    var r1 = await httpFetch({
+    var r1 = await httpFetchRetry({
         url: BASE + '/weekly/exchange',
         method: 'POST',
         headers: headers,
@@ -293,7 +345,7 @@ async function autoClaim() {
             }
         }
 
-        var r2 = await httpFetch({
+        var r2 = await httpFetchRetry({
             url: BASE + '/weekly/exchange',
             method: 'POST',
             headers: headers,
