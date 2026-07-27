@@ -12,7 +12,7 @@
  * hostname = i.weread.qq.com
  *
  * [Script]
- * http-request ^https?://i\.weread\.qq\.com/.* script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/weread_claim/weread_claim.js, tag=WeReadClaim Cookie, requires-body=false
+ * http-request ^https?://i\.weread\.qq\.com/.* script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/weread_claim/weread_claim.js, tag=WeReadClaim Cookie
  * cron "0 21 * * *" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/weread_claim/weread_claim.js, tag=WeReadClaim 签到
  */
 
@@ -35,7 +35,6 @@ function getPreference() {
     } catch (e) {
         console.log('读取插件参数失败: ' + e.message + '，使用默认值');
     }
-    console.log('\u2699\uFE0F \u5956\u52B1\u504F\u597D: ' + (preferCoin ? '\u4F18\u5148\u9009\u4E66\u5E01' : '\u4F18\u5148\u9009\u4F53\u9A8C\u5361'));
     return preferCoin ? 'coin' : 'card';
 }
 
@@ -61,14 +60,14 @@ async function autoClaim() {
     const cookie = $persistentStore.read(COOKIE_KEY);
 
     if (!cookie) {
-        console.log('\u26A0\uFE0F \u672A\u627E\u5230 Cookie\uFF0C\u8BF7\u5148\u6253\u5F00\u5FAE\u4FE1\u8BFB\u4E66 App \u5B8C\u6210\u4E00\u6B21\u7F51\u7EDC\u8BF7\u6C42');
+        const msg = '未找到 Cookie，请先打开微信读书 App';
+        console.log(msg);
+        $notification.post('微信读书自动领取', msg, '请打开 App 浏览「我的」页面触发 Cookie 捕获');
         return;
     }
 
-    console.log('\uD83D\uDD0D \u5F00\u59CB\u68C0\u67E5\u53EF\u9886\u53D6\u7684\u9605\u8BFB\u5956\u52B1...');
-    console.log('\uD83D\uDCCB Cookie: ' + cookie.substring(0, 30) + '...');
+    console.log('开始检查可领取的阅读奖励...');
 
-    // Step 1: 获取当前奖励状态
     const resp = await $task.fetch({
         url: BASE_URL + '/weekly/exchange',
         headers: {
@@ -80,65 +79,62 @@ async function autoClaim() {
     });
 
     if (resp.status !== 200) {
-        console.log('\u274C \u8BF7\u6C42\u5931\u8D25: HTTP ' + resp.status);
+        const msg = '请求失败 HTTP ' + resp.status;
+        console.log(msg);
+        $notification.post('微信读书自动领取', msg, 'Cookie 可能已过期，请重新打开 App');
         return;
     }
 
     const data = decodeBase64(resp.body);
     if (!data) {
-        console.log('\u274C \u54CD\u5E94\u89E3\u6790\u5931\u8D25');
+        $notification.post('微信读书自动领取', '响应解析失败', '可能 App 版本更新，请检查插件是否需要更新');
         return;
     }
 
+    const prefer = getPreference();
+    const preferName = prefer === 'coin' ? '书币' : '体验卡';
     const timeAwards = data.readtimeAwards || [];
     const dayAwards = data.readdayAwards || [];
     const allAwards = [...timeAwards, ...dayAwards];
 
-    console.log('\uD83D\uDCD3 \u5171 ' + allAwards.length + ' \u4E2A\u5956\u52B1\u9636\u68AF');
-    console.log('\uD83D\uDCC9 \u4ECA\u65E5\u9605\u8BFB: ' + (data.readingTime || 0) + ' \u79D2 / ' + (data.readingDay || 0) + ' \u5929');
+    console.log('共 ' + allAwards.length + ' 个奖励阶梯，偏好: ' + preferName);
 
-    const prefer = getPreference();
     let claimedCount = 0;
+    let failedCount = 0;
 
     for (const award of allAwards) {
-        if (award.awardStatus !== 1) {
-            console.log('  \u23ED ' + award.awardLevelDesc + ': ' + award.awardStatusDesc);
-            continue;
-        }
+        if (award.awardStatus !== 1) continue;
 
-        // 根据用户偏好确定领取选项
         const choices = award.awardChoices || [];
         let choiceType, choiceName;
 
         if (prefer === 'coin') {
             const coinChoice = choices.find(c => c.choiceType === 2 && c.canChoice === 1);
             if (coinChoice) {
-                choiceType = 2; choiceName = '\u4E66\u5E01';
+                choiceType = 2; choiceName = '书币';
             } else {
                 const cardChoice = choices.find(c => c.choiceType === 1 && c.canChoice === 1);
                 if (cardChoice) {
-                    choiceType = 1; choiceName = '\u4F53\u9A8C\u5361';
+                    choiceType = 1; choiceName = '体验卡';
                 } else {
-                    console.log('  \u26A0\uFE0F ' + award.awardLevelDesc + ': \u65E0\u53EF\u9009\u9009\u9879');
+                    console.log('跳过: ' + award.awardLevelDesc + ' 无可选选项');
                     continue;
                 }
             }
         } else {
             const cardChoice = choices.find(c => c.choiceType === 1 && c.canChoice === 1);
             if (cardChoice) {
-                choiceType = 1; choiceName = '\u4F53\u9A8C\u5361';
+                choiceType = 1; choiceName = '体验卡';
             } else {
                 const coinChoice = choices.find(c => c.choiceType === 2 && c.canChoice === 1);
                 if (coinChoice) {
-                    choiceType = 2; choiceName = '\u4E66\u5E01';
+                    choiceType = 2; choiceName = '书币';
                 } else {
-                    console.log('  \u26A0\uFE0F ' + award.awardLevelDesc + ': \u65E0\u53EF\u9009\u9009\u9879');
+                    console.log('跳过: ' + award.awardLevelDesc + ' 无可选选项');
                     continue;
                 }
             }
         }
-
-        console.log('\uD83C\uDFC6 \u9886\u53D6: ' + award.awardLevelDesc + ' \u2192 ' + choiceName);
 
         const payload = {
             unread: 1,
@@ -147,8 +143,6 @@ async function autoClaim() {
             awardLevelId: award.awardLevelId,
             isExchangeAward: 1
         };
-
-        const encodedBody = $base64.encode(JSON.stringify(payload));
 
         const claimResp = await $task.fetch({
             url: BASE_URL + '/weekly/exchange',
@@ -160,43 +154,53 @@ async function autoClaim() {
                 'Accept': '*/*',
                 'Accept-Language': 'zh-Hans-US;q=1, en-US;q=0.9'
             },
-            body: encodedBody
+            body: $base64.encode(JSON.stringify(payload))
         });
 
         if (claimResp.status === 200) {
             claimedCount++;
-            console.log('  \u2705 \u9886\u53D6\u6210\u529F');
+            console.log('✓ 领取: ' + award.awardLevelDesc + ' → ' + choiceName);
         } else {
-            console.log('  \u274C \u9886\u53D6\u5931\u8D25: HTTP ' + claimResp.status);
+            failedCount++;
+            console.log('✗ 失败: ' + award.awardLevelDesc + ' HTTP ' + claimResp.status);
         }
 
         await sleep(1500);
     }
 
-    if (claimedCount === 0) {
-        console.log('\u2139\uFE0F \u6CA1\u6709\u53EF\u9886\u53D6\u7684\u5956\u52B1\uFF08\u5C1A\u672A\u8FBE\u6807\u6216\u5DF2\u9886\u53D6\u5B8C\u6BD5\uFF09');
+    // 统计结果弹窗通知
+    let resultMsg;
+    if (claimedCount > 0 && failedCount === 0) {
+        resultMsg = '成功领取 ' + claimedCount + ' 个奖励（' + preferName + '）';
+    } else if (claimedCount > 0 && failedCount > 0) {
+        resultMsg = '成功 ' + claimedCount + ' 个，失败 ' + failedCount + ' 个（' + preferName + '）';
+    } else if (failedCount > 0) {
+        resultMsg = '全部失败，请检查日志';
     } else {
-        console.log('\uD83C\uDF89 \u5B8C\u6210\uFF01\u6210\u529F\u9886\u53D6 ' + claimedCount + ' \u4E2A\u5956\u52B1');
+        resultMsg = '没有可领取的奖励，尚未达标或已领完';
     }
+    console.log(resultMsg);
+    $notification.post('微信读书自动领取', resultMsg, '偏好: ' + preferName);
 }
 
 // ====== 主分发器 ======
 
 if ($script.type === 'cron') {
     autoClaim()
-        .then(() => {
-            console.log('\uD83D\uDD50 \u5B9A\u65F6\u4EFB\u52A1\u6267\u884C\u5B8C\u6BD5');
-            $done();
-        })
+        .then(() => $done())
         .catch(e => {
-            console.log('\u274C \u6267\u884C\u5F02\u5E38: ' + (e.message || JSON.stringify(e)));
+            const msg = e && e.message ? e.message : JSON.stringify(e);
+            console.log('执行异常: ' + msg);
+            $notification.post('微信读书自动领取', '执行异常', msg);
             $done();
         });
 } else if ($script.type === 'http-request') {
     const cookie = $request.headers['Cookie'];
     if (cookie) {
         $persistentStore.write(cookie, COOKIE_KEY);
-        console.log('\uD83D\uDCDD \u5DF2\u6355\u83B7 Cookie: ' + cookie.substring(0, 40) + '...');
+        const preview = cookie.length > 30 ? cookie.substring(0, 30) + '...' : cookie;
+        console.log('已捕获 Cookie: ' + preview);
+        $notification.post('微信读书自动领取', '✅ Cookie 捕获成功', '已保存认证信息，签到将每晚 21:00 自动执行');
     }
     $done($request);
 } else if ($script.type === 'http-response') {
@@ -206,7 +210,8 @@ if ($script.type === 'cron') {
         const wrCookie = cookies.find(c => c.startsWith('wr_vid='));
         if (wrCookie) {
             $persistentStore.write(wrCookie, COOKIE_KEY);
-            console.log('\uD83D\uDCDD \u5DF2\u4ECE Set-Cookie \u6355\u83B7: ' + wrCookie.substring(0, 30) + '...');
+            console.log('已从 Set-Cookie 捕获: ' + wrCookie.substring(0, 30) + '...');
+            $notification.post('微信读书自动领取', '✅ Cookie 捕获成功', '已保存认证信息，签到将每晚 21:00 自动执行');
         }
     }
     $done($response);

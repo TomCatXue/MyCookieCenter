@@ -6,8 +6,8 @@
 #!tag = 微信读书,自动领取,阅读奖励
 
 [Argument]
-# 奖励偏好: 开启=优先选书币, 关闭=优先选体验卡
-prefer_coin=title=奖励选择, desc=开启：优先选书币 / 关闭：优先选体验卡, type=boolean, default=true
+# 奖励偏好: 开=优先选书币, 关=优先选体验卡
+prefer_coin = switch,true,tag=奖励选择,desc=开启：优先选书币 / 关闭：优先选体验卡
 
 [MITM]
 hostname = i.weread.qq.com
