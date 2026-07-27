@@ -75,9 +75,115 @@ function getNotifyCapture() {
     return nc;
 }
 
-function bd(b) { try { return JSON.parse($base64.decode(b)); } catch (e) { return null; } }
-function be(o) { return $base64.encode(JSON.stringify(o)); }
 function sp(ms) { return new Promise(function(r) { setTimeout(r, ms); }); }
+
+// ====== 跨平台 base64（不依赖 $base64，Loon 某些版本没有这个全局对象）======
+
+var B64_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+
+function utf8ToBytes(str) {
+    var bytes = [];
+    for (var i = 0; i < str.length; i++) {
+        var c = str.codePointAt(i);
+        if (c > 0xffff) i++; // 代理对已合并读取，跳过下一个 code unit
+        if (c < 0x80) {
+            bytes.push(c);
+        } else if (c < 0x800) {
+            bytes.push(0xc0 | (c >> 6), 0x80 | (c & 0x3f));
+        } else if (c < 0x10000) {
+            bytes.push(0xe0 | (c >> 12), 0x80 | ((c >> 6) & 0x3f), 0x80 | (c & 0x3f));
+        } else {
+            bytes.push(0xf0 | (c >> 18), 0x80 | ((c >> 12) & 0x3f), 0x80 | ((c >> 6) & 0x3f), 0x80 | (c & 0x3f));
+        }
+    }
+    return bytes;
+}
+
+function bytesToUtf8(bytes) {
+    var str = '';
+    var i = 0;
+    while (i < bytes.length) {
+        var c = bytes[i++];
+        if (c < 0x80) {
+            str += String.fromCharCode(c);
+        } else if ((c & 0xe0) === 0xc0) {
+            var c2 = bytes[i++];
+            str += String.fromCharCode(((c & 0x1f) << 6) | (c2 & 0x3f));
+        } else if ((c & 0xf0) === 0xe0) {
+            var c2 = bytes[i++], c3 = bytes[i++];
+            str += String.fromCharCode(((c & 0x0f) << 12) | ((c2 & 0x3f) << 6) | (c3 & 0x3f));
+        } else if ((c & 0xf8) === 0xf0) {
+            var c2 = bytes[i++], c3 = bytes[i++], c4 = bytes[i++];
+            var cp = ((c & 0x07) << 18) | ((c2 & 0x3f) << 12) | ((c3 & 0x3f) << 6) | (c4 & 0x3f);
+            cp -= 0x10000;
+            str += String.fromCharCode(0xd800 + (cp >> 10), 0xdc00 + (cp & 0x3ff));
+        } else {
+            // 非法字节，跳过
+        }
+    }
+    return str;
+}
+
+function base64EncodeBytes(bytes) {
+    var out = '';
+    var i = 0;
+    for (; i + 3 <= bytes.length; i += 3) {
+        var n = (bytes[i] << 16) | (bytes[i + 1] << 8) | bytes[i + 2];
+        out += B64_CHARS[(n >> 18) & 63] + B64_CHARS[(n >> 12) & 63] + B64_CHARS[(n >> 6) & 63] + B64_CHARS[n & 63];
+    }
+    var rem = bytes.length - i;
+    if (rem === 1) {
+        var n = bytes[i] << 16;
+        out += B64_CHARS[(n >> 18) & 63] + B64_CHARS[(n >> 12) & 63] + '==';
+    } else if (rem === 2) {
+        var n = (bytes[i] << 16) | (bytes[i + 1] << 8);
+        out += B64_CHARS[(n >> 18) & 63] + B64_CHARS[(n >> 12) & 63] + B64_CHARS[(n >> 6) & 63] + '=';
+    }
+    return out;
+}
+
+function base64DecodeToBytes(str) {
+    str = String(str).replace(/[^A-Za-z0-9+/=]/g, '');
+    var lookup = {};
+    for (var i = 0; i < B64_CHARS.length; i++) lookup[B64_CHARS[i]] = i;
+    var bytes = [];
+    var p = 0;
+    while (p < str.length) {
+        var c1 = lookup[str[p++]] || 0;
+        var c2 = lookup[str[p++]] || 0;
+        var ch3 = str[p]; var c3 = (ch3 === '=' || ch3 === undefined) ? undefined : lookup[ch3]; p++;
+        var ch4 = str[p]; var c4 = (ch4 === '=' || ch4 === undefined) ? undefined : lookup[ch4]; p++;
+
+        var n = (c1 << 18) | (c2 << 12) | ((c3 || 0) << 6) | (c4 || 0);
+        bytes.push((n >> 16) & 0xff);
+        if (c3 !== undefined) bytes.push((n >> 8) & 0xff);
+        if (c4 !== undefined) bytes.push(n & 0xff);
+    }
+    return bytes;
+}
+
+function b64encode(str) {
+    if (typeof $base64 !== 'undefined' && $base64.encode) {
+        try { return $base64.encode(str); } catch (e) {}
+    }
+    if (typeof btoa === 'function') {
+        try { return btoa(unescape(encodeURIComponent(str))); } catch (e) {}
+    }
+    return base64EncodeBytes(utf8ToBytes(str));
+}
+
+function b64decode(str) {
+    if (typeof $base64 !== 'undefined' && $base64.decode) {
+        try { return $base64.decode(str); } catch (e) {}
+    }
+    if (typeof atob === 'function') {
+        try { return decodeURIComponent(escape(atob(str))); } catch (e) {}
+    }
+    return bytesToUtf8(base64DecodeToBytes(str));
+}
+
+function bd(b) { try { return JSON.parse(b64decode(b)); } catch (e) { return null; } }
+function be(o) { return b64encode(JSON.stringify(o)); }
 
 // 跨平台请求封装：QuantumultX 有 $task.fetch；Loon/Surge 没有 $task，只有回调式的 $httpClient
 function httpFetch(opts) {
