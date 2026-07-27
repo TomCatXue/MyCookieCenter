@@ -1,11 +1,19 @@
 /*
- * WeRead Auto Claim - Loon Plugin Script
- * 微信读书自动领取已达标阅读奖励
- * 
- * 功能：定时（每晚21:00）检查并自动领取阅读时长奖励
- * 支持通过插件配置选择优先书币或体验卡
- * 
- * 使用方式：配合 weread-auto-claim.plugin 使用
+ * WeRead Auto Claim · 微信读书自动领取阅读奖励
+ *
+ * 抓取：打开微信读书 App → 浏览「我的」页面 → 自动捕获 Cookie
+ * 签到：cron 每晚 21:00 自动检查并领取已达标阅读时长奖励（书币/体验卡）
+ *
+ * @Author: Codex
+ * @Updated: 2026-07-27
+ *
+ * ===== Loon =====
+ * [MITM]
+ * hostname = i.weread.qq.com
+ *
+ * [Script]
+ * http-request ^https?://i\.weread\.qq\.com/.* script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/weread_claim/weread_claim.js, tag=WeReadClaim Cookie, requires-body=false
+ * cron "0 21 * * *" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/weread_claim/weread_claim.js, tag=WeReadClaim 签到
  */
 
 const BASE_URL = 'https://i.weread.qq.com';
@@ -14,6 +22,7 @@ const USER_AGENT = 'WeRead/10.2.1 (iPhone; iOS 26.3.1; Scale/3.00)';
 const COOKIE_KEY = 'weread_cookie';
 
 // ====== 读取插件参数（从 Loon 插件 UI 配置）======
+
 function getPreference() {
     let preferCoin = true;
     try {
@@ -50,7 +59,7 @@ function sleep(ms) {
 
 async function autoClaim() {
     const cookie = $persistentStore.read(COOKIE_KEY);
-    
+
     if (!cookie) {
         console.log('\u26A0\uFE0F \u672A\u627E\u5230 Cookie\uFF0C\u8BF7\u5148\u6253\u5F00\u5FAE\u4FE1\u8BFB\u4E66 App \u5B8C\u6210\u4E00\u6B21\u7F51\u7EDC\u8BF7\u6C42');
         return;
@@ -58,7 +67,7 @@ async function autoClaim() {
 
     console.log('\uD83D\uDD0D \u5F00\u59CB\u68C0\u67E5\u53EF\u9886\u53D6\u7684\u9605\u8BFB\u5956\u52B1...');
     console.log('\uD83D\uDCCB Cookie: ' + cookie.substring(0, 30) + '...');
-    
+
     // Step 1: 获取当前奖励状态
     const resp = await $task.fetch({
         url: BASE_URL + '/weekly/exchange',
@@ -84,7 +93,7 @@ async function autoClaim() {
     const timeAwards = data.readtimeAwards || [];
     const dayAwards = data.readdayAwards || [];
     const allAwards = [...timeAwards, ...dayAwards];
-    
+
     console.log('\uD83D\uDCD3 \u5171 ' + allAwards.length + ' \u4E2A\u5956\u52B1\u9636\u68AF');
     console.log('\uD83D\uDCC9 \u4ECA\u65E5\u9605\u8BFB: ' + (data.readingTime || 0) + ' \u79D2 / ' + (data.readingDay || 0) + ' \u5929');
 
@@ -100,7 +109,7 @@ async function autoClaim() {
         // 根据用户偏好确定领取选项
         const choices = award.awardChoices || [];
         let choiceType, choiceName;
-        
+
         if (prefer === 'coin') {
             const coinChoice = choices.find(c => c.choiceType === 2 && c.canChoice === 1);
             if (coinChoice) {
@@ -138,7 +147,7 @@ async function autoClaim() {
             awardLevelId: award.awardLevelId,
             isExchangeAward: 1
         };
-        
+
         const encodedBody = $base64.encode(JSON.stringify(payload));
 
         const claimResp = await $task.fetch({

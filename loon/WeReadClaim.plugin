@@ -1,0 +1,20 @@
+#!name = 微信读书自动领取奖励
+#!desc = 定时（21:00）自动领取已达标阅读时长奖励（书币/体验卡），可通过插件开关切换偏好
+#!author = Codex
+#!homepage = https://github.com/TomCatXue/MyCookieCenter
+#!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/weread.png
+#!tag = 微信读书,自动领取,阅读奖励
+
+[Argument]
+# 奖励偏好: 开启=优先选书币, 关闭=优先选体验卡
+prefer_coin=title=奖励选择, desc=开启：优先选书币 / 关闭：优先选体验卡, type=boolean, default=true
+
+[MITM]
+hostname = i.weread.qq.com
+
+[Script]
+# 捕获 Cookie
+http-request ^https?://i\.weread\.qq\.com/.* script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/weread_claim/weread_claim.js, tag=WeReadClaim Cookie, enable=true
+
+# 定时领取：每晚 21:00
+cron "0 21 * * *" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/weread_claim/weread_claim.js, tag=WeReadClaim 签到, enable=true

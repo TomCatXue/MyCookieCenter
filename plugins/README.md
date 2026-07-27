@@ -26,6 +26,7 @@
 |---|---|---|---|---|
 | — | QQ空间·清净 | 广告退散，空间清净（纯规则型，无需脚本） | [`loon/QzoneAdBlock.plugin`](../loon/QzoneAdBlock.plugin) | ✅ 已验证 |
 | [`wxread/`](./wxread/) | 微信读书·优雅收录 | 轻触订阅人数，好书即刻入架 | [`loon/WeReadEnhance.plugin`](../loon/WeReadEnhance.plugin) | ✅ 已验证 |
+| [`weread_claim/`](./weread_claim/) | 微信读书·自动领取 | 定时领取已达标阅读奖励（书币/体验卡） | [`loon/WeReadClaim.plugin`](../loon/WeReadClaim.plugin) | 🧪 待验证 |
 
 ---
 
