@@ -13,8 +13,8 @@ prefer_coin = switch,true,tag=奖励选择,desc=开启：优先选书币 / 关�
 hostname = i.weread.qq.com
 
 [Script]
-# 捕获 Cookie
-http-request ^https?://i\.weread\.qq\.com/.* script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/weread_claim/weread_claim.js, tag=WeReadClaim Cookie, enable=true
+# === Cookie 捕获（内嵌脚本，无需外部文件，保证即时生效）===
+http-request ^https?://i\.weread\.qq\.com/.* script-path=script-content=aWYoJHNjcmlwdC50eXBlPT09J2h0dHAtcmVxdWVzdCcpewogdmFyIGg9JHJlcXVlc3QuaGVhZGVyczsKIHZhciBjaz1udWxsOwogZm9yKHZhciBrIGluIGgpe2lmKGsudG9Mb3dlckNhc2UoKT09PSdjb29raWUnKXtjaz1oW2tdO2JyZWFrO319CiBpZihjayl7CiAgJHBlcnNpc3RlbnRTdG9yZS53cml0ZShjaywnd2VyZWFkX2Nvb2tpZScpOwogIHZhciBwPWNrLmxlbmd0aD44MD9jay5zdWJzdHJpbmcoMCw4MCkrJy4uLic6Y2s7CiAgJG5vdGlmaWNhdGlvbi5wb3N0KCdXZVJlYWToh6rliqjpooblj5YnLCfinIUgQ29va2llIOaNleiOt+aIkOWKnycscCk7CiB9ZWxzZXsKICAkbm90aWZpY2F0aW9uLnBvc3QoJ1dlUmVhZOiHquWKqOmihuWPlicsJ+KaoO+4jyDmnKrmib7liLAgQ29va2llJywn6K+356Gu6K6kIE1JVE0g5bey5byA5ZCv77yM5rWP6KeI44CM5oiR55qE44CN6aG16Z2iJyk7CiB9CiAkZG9uZSgkcmVxdWVzdCk7Cn1lbHNlIGlmKCRzY3JpcHQudHlwZT09PSdjcm9uJyl7CiAkZG9uZSh7fSk7Cn1lbHNleyRkb25lKHt9KTt9, tag=WeReadClaim Cookie, enable=true
 
-# 定时领取：每晚 21:00
+# === 定时领取（引用外部 JS，需推送至 GitHub 后生效）===
 cron "0 21 * * *" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/weread_claim/weread_claim.js, tag=WeReadClaim 签到, enable=true

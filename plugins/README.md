@@ -51,3 +51,4 @@ feat(plugins): 新增 <插件名> 插件(<一句话功能>)
 
 - `qzone/` 广告屏蔽规则源自 [zqzess/rule_for_quantumultX](https://github.com/zqzess/rule_for_quantumultX)（MIT License）
 - `wxread/` 微信读书优雅收录脚本，基于社区脚本重构整合
+| [`weread_vip/`](./weread_vip/) | 微信读书·会员解锁 | v6.x 会员解锁 + 付费墙 + 更新屏蔽（v10.x 不可用） | [`plugins/weread_vip/weread_vip.plugin`](./weread_vip/weread_vip.plugin) | ⚠️ 待修（仅 v6.x） |

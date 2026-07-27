@@ -38,3 +38,4 @@
 3. 导入后在插件设置中按需打开开关（默认全关）
 4. **Cookie 抓取**：打开对应 App 开关 → 进入 App 触发接口 → 收到通知即成功 → 建议关闭开关减少 MITM
 5. **签到/羊毛**：通过 [BoxJS 订阅](../boxjs/README.md) 管理 cron 任务
+| [`WeReadClaim.plugin`](./WeReadClaim.plugin) | 微信读书·自动领取 — 定时领取已达标阅读奖励（书币/体验卡） | [`plugins/weread_claim/`](../plugins/weread_claim/) | 脚本型 |
