@@ -1,29 +1,19 @@
 /*
- * WeRead Auto Claim · 微信读书自动领取阅读奖励
+ * WeRead Auto Claim - 微信读书自动领取阅读奖励
  *
  * 本脚本提供：
- * 1. Cookie 捕获（http-request，仅备用——已通过 plugin 内嵌脚本实现）
- * 2. 定时自动领取（cron，主功能——每晚 21:00 检查并领取已达标奖励）
+ * 1. Cookie 捕获（http-request，备用 — 已通过 plugin 内嵌脚本实现）
+ * 2. 定时自动领取（cron，主功能 — 每晚 21:00 检查并领取已达标奖励）
  *
- * 插件已内嵌 Cookie 捕获脚本（无需外部文件），因此 http-request 部分备用。
- * cron 部分仍需要本文件，请在推送至 GitHub 后生效，或手动复制到 Loon 脚本目录。
+ * 基于 HAR 抓包 (325 条请求, WeRead 10.2.1) 校验：
+ *   /weekly/exchange 全部为 POST + Base64 body — 不可用 GET
+ *   查询 body 必须含 isVisitReadGoal: 1
  *
  * @Author: Codex
  * @Updated: 2026-07-27
- *
- * ===== Loon =====
- * [MITM]
- * hostname = i.weread.qq.com
- *
- * [Script]
- * # Cookie 捕获（内嵌于 plugin，无需此文件）
- * http-request ^https?://i\.weread\.qq\.com/.* script-path=script-content=<base64>, tag=WeReadClaim Cookie
- *
- * # 定时领取
- * cron "0 21 * * *" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/weread_claim/weread_claim.js, tag=WeReadClaim 签到
  */
 
-const SCRIPT_VERSION = '2026-07-27.r2';
+const SCRIPT_VERSION = '2026-07-27.r3';
 console.log('[WeReadClaim] 脚本已加载 v' + SCRIPT_VERSION + ', type=' + ($script ? $script.type : 'unknown'));
 
 const BASE_URL = 'https://i.weread.qq.com';
@@ -77,6 +67,57 @@ function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+// ====== 核心逻辑：查询奖励状态 (POST, 仿真实 App) ======
+
+async function fetchRewardStatus(cookie) {
+    const queryBody = {
+        awardLevelId: 0,
+        unread: 1,
+        isExchangeAward: 0,
+        pf: PF,
+        isVisitReadGoal: 1,
+        awardChoiceType: 0
+    };
+
+    return $task.fetch({
+        url: BASE_URL + '/weekly/exchange',
+        method: 'POST',
+        headers: {
+            'Cookie': cookie,
+            'Content-Type': 'application/json',
+            'User-Agent': USER_AGENT,
+            'Accept': '*/*',
+            'Accept-Language': 'zh-Hans-US;q=1, en-US;q=0.9'
+        },
+        body: $base64.encode(JSON.stringify(queryBody))
+    });
+}
+
+// ====== 核心逻辑：领取单个奖励 ======
+
+async function claimOneAward(cookie, awardLevelId, awardChoiceType) {
+    const claimBody = {
+        unread: 1,
+        awardChoiceType: awardChoiceType,
+        pf: PF,
+        awardLevelId: awardLevelId,
+        isExchangeAward: 1
+    };
+
+    return $task.fetch({
+        url: BASE_URL + '/weekly/exchange',
+        method: 'POST',
+        headers: {
+            'Cookie': cookie,
+            'Content-Type': 'application/json',
+            'User-Agent': USER_AGENT,
+            'Accept': '*/*',
+            'Accept-Language': 'zh-Hans-US;q=1, en-US;q=0.9'
+        },
+        body: $base64.encode(JSON.stringify(claimBody))
+    });
+}
+
 // ====== 核心逻辑：检查并领取奖励 ======
 
 async function autoClaim() {
@@ -90,18 +131,10 @@ async function autoClaim() {
         $notification.post('WeRead自动领取', '❌ ' + msg, '请打开 App 浏览「我的」页面触发 Cookie 捕获');
         return;
     }
-    console.log('[WeReadClaim] ✓ Cookie 存在，准备查询奖励状态');
+    console.log('[WeReadClaim] ✓ Cookie 存在，POST 查询奖励状态...');
 
-    // 第二步：查询奖励状态
-    const resp = await $task.fetch({
-        url: BASE_URL + '/weekly/exchange',
-        headers: {
-            'Cookie': cookie,
-            'User-Agent': USER_AGENT,
-            'Accept': '*/*',
-            'Accept-Language': 'zh-Hans-US;q=1, en-US;q=0.9'
-        }
-    });
+    // 第二步：查询奖励状态（POST）
+    const resp = await fetchRewardStatus(cookie);
 
     if (resp.status !== 200) {
         const msg = '请求奖励接口失败 (HTTP ' + resp.status + ')';
@@ -140,6 +173,8 @@ async function autoClaim() {
         $notification.post('WeRead自动领取', 'ℹ️ ' + msg, '阅读时长：' + (data.readingTime || 0) + '秒');
         return;
     }
+
+    console.log('[WeReadClaim] 发现 ' + claimable.length + ' 项可领取奖励，开始领取...');
 
     // 第四步：逐级领取
     let claimedCount = 0;
@@ -180,24 +215,7 @@ async function autoClaim() {
             }
         }
 
-        const claimResp = await $task.fetch({
-            url: BASE_URL + '/weekly/exchange',
-            method: 'POST',
-            headers: {
-                'Cookie': cookie,
-                'User-Agent': USER_AGENT,
-                'Content-Type': 'application/json',
-                'Accept': '*/*',
-                'Accept-Language': 'zh-Hans-US;q=1, en-US;q=0.9'
-            },
-            body: $base64.encode(JSON.stringify({
-                unread: 1,
-                awardChoiceType: choiceType,
-                pf: PF,
-                awardLevelId: award.awardLevelId,
-                isExchangeAward: 1
-            }))
-        });
+        const claimResp = await claimOneAward(cookie, award.awardLevelId, choiceType);
 
         if (claimResp.status === 200) {
             claimedCount++;
@@ -229,7 +247,7 @@ async function autoClaim() {
     console.log('[WeReadClaim] ' + resultMsg);
 }
 
-// ====== Cookie 捕获（备用，主逻辑由 plugin 内嵌脚本处理）======
+// ====== Cookie 捕获（备用）======
 
 function cookieCapture() {
     console.log('[WeReadClaim] ▶ http-request 触发, URL=' + $request.url);
