@@ -1,304 +1,301 @@
-/*
- * WeRead Auto Claim - 微信读书自动领取阅读奖励
+/**
+ * 微信读书 · 自动领取阅读奖励
  *
- * 本脚本提供：
- * 1. Cookie 捕获（http-request，备用 — 已通过 plugin 内嵌脚本实现）
- * 2. 定时自动领取（cron，主功能 — 每晚 21:00 检查并领取已达标奖励）
+ * 抓取：打开微信读书 App → 浏览「我的」页面 → 自动捕获 Cookie
+ * 签到：cron 每晚 21:00 自动检查并领取已达标阅读时长奖励（书币/体验卡）
  *
  * 基于 HAR 抓包 (325 条请求, WeRead 10.2.1) 校验：
- *   /weekly/exchange 全部为 POST + Base64 body — 不可用 GET
+ *   /weekly/exchange 全部 POST + Base64 body
  *   查询 body 必须含 isVisitReadGoal: 1
  *
  * @Author: Codex
  * @Updated: 2026-07-27
+ *
+ * ===== Loon =====
+ * [MITM]
+ * hostname = i.weread.qq.com
+ *
+ * [Script]
+ * http-request ^https?://i\.weread\.qq\.com/.* script-path=<this file>, tag=WeReadClaim Cookie
+ * cron "0 21 * * *" script-path=<this file>, tag=WeReadClaim 签到
  */
 
-const SCRIPT_VERSION = '2026-07-27.r3';
-console.log('[WeReadClaim] 脚本已加载 v' + SCRIPT_VERSION + ', type=' + ($script ? $script.type : 'unknown'));
+var $ = new Env('微信读书自动领取');
+var COOKIE_KEY = 'weread_cookie';
 
-const BASE_URL = 'https://i.weread.qq.com';
-const PF = 'weread_wx-2001-iap-2001-iphone';
-const USER_AGENT = 'WeRead/10.2.1 (iPhone; iOS 26.3.1; Scale/3.00)';
-const COOKIE_KEY = 'weread_cookie';
+(function main() {
+    // http-request: Cookie 捕获
+    if (typeof $request !== 'undefined') {
+        if ($request.method === 'OPTIONS') { $.done(); return; }
+        try {
+            var headers = $request.headers || {};
+            var cookie = null;
+            for (var k in headers) {
+                if (k.toLowerCase() === 'cookie') {
+                    cookie = headers[k];
+                    break;
+                }
+            }
+            if (cookie) {
+                $.setdata(cookie, COOKIE_KEY);
+                var preview = cookie.length > 60 ? cookie.substring(0, 60) + '...' : cookie;
+                $.log('[WeReadClaim] Cookie 捕获成功: ' + preview);
+                $.msg($.name, '✅ Cookie 捕获成功', preview);
+            } else {
+                $.log('[WeReadClaim] 请求无 Cookie 头，跳过');
+            }
+        } catch (e) {
+            $.log('[WeReadClaim] Cookie 捕获异常: ' + (e.message || e));
+        }
+        $.done();
+        return;
+    }
 
-// ====== 读取插件参数 ======
+    // http-response: 从 Set-Cookie 捕获
+    if (typeof $response !== 'undefined') {
+        try {
+            var setCookie = $response.headers['Set-Cookie'];
+            if (setCookie) {
+                var cs = Array.isArray(setCookie) ? setCookie : [setCookie];
+                for (var i = 0; i < cs.length; i++) {
+                    if (cs[i].indexOf('wr_vid=') === 0) {
+                        $.setdata(cs[i], COOKIE_KEY);
+                        $.log('[WeReadClaim] 从 Set-Cookie 捕获: ' + cs[i].substring(0, 30) + '...');
+                        $.msg($.name, '✅ Cookie 捕获成功', '已保存认证信息');
+                        break;
+                    }
+                }
+            }
+        } catch (e) {
+            $.log('[WeReadClaim] Set-Cookie 捕获异常: ' + (e.message || e));
+        }
+        $.done();
+        return;
+    }
+
+    // cron: 自动领取
+    $.log('[WeReadClaim] 开始自动领取任务');
+    autoClaim()
+        .then(function() { $.done(); })
+        .catch(function(e) {
+            var msg = e && e.message ? e.message : JSON.stringify(e);
+            $.log('[WeReadClaim] 异常: ' + msg);
+            $.msg($.name, '❌ 执行异常', msg);
+            $.done();
+        });
+})();
+
+// ====== 核心逻辑 ======
+
+var BASE_URL = 'https://i.weread.qq.com';
+var PF = 'weread_wx-2001-iap-2001-iphone';
+var UA = 'WeRead/10.2.1 (iPhone; iOS 26.3.1; Scale/3.00)';
 
 function getPreference() {
-    let preferCoin = true;
+    var preferCoin = true;
     try {
         if (typeof $argument !== 'undefined' && $argument) {
-            const args = typeof $argument === 'string' ? JSON.parse($argument) : $argument;
+            var args = typeof $argument === 'string' ? JSON.parse($argument) : $argument;
             if (args.prefer_coin === 'false' || args.prefer_coin === false) {
                 preferCoin = false;
             }
         }
     } catch (e) {
-        console.log('[WeReadClaim] 读取插件参数失败: ' + e.message);
+        $.log('[WeReadClaim] 读取插件参数失败: ' + e.message);
     }
     return preferCoin ? 'coin' : 'card';
 }
 
-// ====== 安全获取 Cookie（兼容大小写）======
-
-function getCookieFromHeaders(headers) {
-    if (!headers) return null;
-    const keys = Object.keys(headers);
-    for (let i = 0; i < keys.length; i++) {
-        if (keys[i].toLowerCase() === 'cookie') {
-            return headers[keys[i]];
-        }
-    }
-    return null;
-}
-
-// ====== 辅助函数 ======
-
-function decodeBase64(body) {
+function b64decode(body) {
     try {
-        const decoded = $base64.decode(body);
-        return JSON.parse(decoded);
+        return JSON.parse($base64.decode(body));
     } catch (e) {
-        console.log('[WeReadClaim] Base64 decode error: ' + e.message);
+        $.log('[WeReadClaim] Base64 decode error: ' + e.message);
         return null;
     }
 }
 
+function b64encode(obj) {
+    return $base64.encode(JSON.stringify(obj));
+}
+
 function sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-// ====== 核心逻辑：查询奖励状态 (POST, 仿真实 App) ======
-
-async function fetchRewardStatus(cookie) {
-    const queryBody = {
-        awardLevelId: 0,
-        unread: 1,
-        isExchangeAward: 0,
-        pf: PF,
-        isVisitReadGoal: 1,
-        awardChoiceType: 0
-    };
-
-    return $task.fetch({
-        url: BASE_URL + '/weekly/exchange',
-        method: 'POST',
-        headers: {
-            'Cookie': cookie,
-            'Content-Type': 'application/json',
-            'User-Agent': USER_AGENT,
-            'Accept': '*/*',
-            'Accept-Language': 'zh-Hans-US;q=1, en-US;q=0.9'
-        },
-        body: $base64.encode(JSON.stringify(queryBody))
+    return new Promise(function(resolve) {
+        setTimeout(resolve, ms);
     });
 }
-
-// ====== 核心逻辑：领取单个奖励 ======
-
-async function claimOneAward(cookie, awardLevelId, awardChoiceType) {
-    const claimBody = {
-        unread: 1,
-        awardChoiceType: awardChoiceType,
-        pf: PF,
-        awardLevelId: awardLevelId,
-        isExchangeAward: 1
-    };
-
-    return $task.fetch({
-        url: BASE_URL + '/weekly/exchange',
-        method: 'POST',
-        headers: {
-            'Cookie': cookie,
-            'Content-Type': 'application/json',
-            'User-Agent': USER_AGENT,
-            'Accept': '*/*',
-            'Accept-Language': 'zh-Hans-US;q=1, en-US;q=0.9'
-        },
-        body: $base64.encode(JSON.stringify(claimBody))
-    });
-}
-
-// ====== 核心逻辑：检查并领取奖励 ======
 
 async function autoClaim() {
-    console.log('[WeReadClaim] ▶ 开始自动领取任务');
-
-    // 第一步：检查 Cookie
-    const cookie = $persistentStore.read(COOKIE_KEY);
+    var cookie = $persistentStore.read(COOKIE_KEY);
     if (!cookie) {
-        const msg = '未找到 Cookie，请先打开微信读书 App';
-        console.log('[WeReadClaim] ✗ ' + msg);
-        $notification.post('WeRead自动领取', '❌ ' + msg, '请打开 App 浏览「我的」页面触发 Cookie 捕获');
+        $.log('[WeReadClaim] 未找到 Cookie');
+        $.msg($.name, '❌ 未找到 Cookie', '请先打开微信读书 App，浏览「我的」页面');
         return;
     }
-    console.log('[WeReadClaim] ✓ Cookie 存在，POST 查询奖励状态...');
+    $.log('[WeReadClaim] Cookie 存在，POST 查询奖励状态...');
 
-    // 第二步：查询奖励状态（POST）
-    const resp = await fetchRewardStatus(cookie);
+    // 查询奖励状态 (POST, isExchangeAward=0)
+    var resp = await $task.fetch({
+        url: BASE_URL + '/weekly/exchange',
+        method: 'POST',
+        headers: {
+            'Cookie': cookie,
+            'Content-Type': 'application/json',
+            'User-Agent': UA,
+            'Accept': '*/*',
+            'Accept-Language': 'zh-Hans-US;q=1, en-US;q=0.9'
+        },
+        body: b64encode({
+            awardLevelId: 0,
+            unread: 1,
+            isExchangeAward: 0,
+            pf: PF,
+            isVisitReadGoal: 1,
+            awardChoiceType: 0
+        })
+    });
 
     if (resp.status !== 200) {
-        const msg = '请求奖励接口失败 (HTTP ' + resp.status + ')';
-        console.log('[WeReadClaim] ✗ ' + msg);
-        $notification.post('WeRead自动领取', '❌ ' + msg, 'Cookie 可能已过期，请重新打开 App 以刷新');
+        $.log('[WeReadClaim] 查询失败 HTTP ' + resp.status);
+        $.msg($.name, '❌ 查询奖励失败', 'HTTP ' + resp.status + '，Cookie 可能已过期');
         return;
     }
 
-    const data = decodeBase64(resp.body);
+    var data = b64decode(resp.body);
     if (!data) {
-        $notification.post('WeRead自动领取', '❌ 响应解析失败', '可能 App 版本更新，请检查插件是否需要更新');
+        $.msg($.name, '❌ 响应解析失败', '可能 App 版本更新');
         return;
     }
-
-    // 检查是否有奖励数据
     if (!data.readtimeAwards && !data.readdayAwards) {
-        $notification.post('WeRead自动领取', '⚠️ 未找到奖励数据', '响应结构异常，可能接口已变更');
+        $.msg($.name, '⚠️ 未找到奖励数据', '响应结构异常');
         return;
     }
 
-    // 第三步：读取偏好选择
-    const prefer = getPreference();
-    const preferName = prefer === 'coin' ? '书币' : '体验卡';
-    const allAwards = [...(data.readtimeAwards || []), ...(data.readdayAwards || [])];
+    var prefer = getPreference();
+    var preferName = prefer === 'coin' ? '书币' : '体验卡';
+    var all = (data.readtimeAwards || []).concat(data.readdayAwards || []);
+    $.log('[WeReadClaim] 共 ' + all.length + ' 个阶梯，偏好: ' + preferName);
 
-    console.log('[WeReadClaim] 共 ' + allAwards.length + ' 个奖励阶梯，偏好: ' + preferName);
-
-    // 检查是否有可领取的奖励
-    const claimable = allAwards.filter(function(a) { return a.awardStatus === 1; });
+    var claimable = all.filter(function(a) { return a.awardStatus === 1; });
     if (claimable.length === 0) {
-        const totalAwards = allAwards.length;
-        const completedAwards = allAwards.filter(function(a) { return a.awardStatus === 2; }).length;
-        const unlockedAwards = allAwards.filter(function(a) { return a.awardStatus === 0; }).length;
-        const msg = '今日无待领取奖励 (已领 ' + completedAwards + '/' + totalAwards + ', 未达标 ' + unlockedAwards + ')';
-        console.log('[WeReadClaim] ℹ️ ' + msg);
-        $notification.post('WeRead自动领取', 'ℹ️ ' + msg, '阅读时长：' + (data.readingTime || 0) + '秒');
+        var completed = all.filter(function(a) { return a.awardStatus === 2; }).length;
+        var locked = all.filter(function(a) { return a.awardStatus === 0; }).length;
+        var msg = '今日无待领取 (' + completed + '/' + all.length + ' 已领, ' + locked + ' 未达标)';
+        $.msg($.name, 'ℹ️ ' + msg, '阅读时长：' + (data.readingTime || 0) + '秒');
         return;
     }
 
-    console.log('[WeReadClaim] 发现 ' + claimable.length + ' 项可领取奖励，开始领取...');
+    $.log('[WeReadClaim] 发现 ' + claimable.length + ' 项可领取');
 
-    // 第四步：逐级领取
-    let claimedCount = 0;
-    let failedCount = 0;
-    let claimedNames = [];
+    var ok = 0, fail = 0, names = [];
 
-    for (let i = 0; i < allAwards.length; i++) {
-        const award = allAwards[i];
-        if (award.awardStatus !== 1) {
-            console.log('[WeReadClaim] 跳过 ' + award.awardLevelDesc + ' (状态: ' + award.awardStatus + ')');
-            continue;
-        }
+    for (var i = 0; i < all.length; i++) {
+        var award = all[i];
+        if (award.awardStatus !== 1) continue;
 
-        const choices = award.awardChoices || [];
-        let choiceType, choiceName;
-
+        // 选择偏好类型
+        var choices = award.awardChoices || [];
+        var type, label;
         if (prefer === 'coin') {
-            const coinChoice = choices.find(function(c) { return c.choiceType === 2 && c.canChoice === 1; });
-            if (coinChoice) { choiceType = 2; choiceName = '书币'; }
+            var coinMatch = choices.filter(function(c) { return c.choiceType === 2 && c.canChoice === 1; })[0];
+            if (coinMatch) { type = 2; label = '书币'; }
             else {
-                const cardChoice = choices.find(function(c) { return c.choiceType === 1 && c.canChoice === 1; });
-                if (cardChoice) { choiceType = 1; choiceName = '体验卡'; }
-                else {
-                    console.log('[WeReadClaim] 跳过 ' + award.awardLevelDesc + ' (无可用选项)');
-                    continue;
-                }
+                var cardFallback = choices.filter(function(c) { return c.choiceType === 1 && c.canChoice === 1; })[0];
+                if (cardFallback) { type = 1; label = '体验卡'; }
+                else continue;
             }
         } else {
-            const cardChoice = choices.find(function(c) { return c.choiceType === 1 && c.canChoice === 1; });
-            if (cardChoice) { choiceType = 1; choiceName = '体验卡'; }
+            var cardMatch = choices.filter(function(c) { return c.choiceType === 1 && c.canChoice === 1; })[0];
+            if (cardMatch) { type = 1; label = '体验卡'; }
             else {
-                const coinChoice = choices.find(function(c) { return c.choiceType === 2 && c.canChoice === 1; });
-                if (coinChoice) { choiceType = 2; choiceName = '书币'; }
-                else {
-                    console.log('[WeReadClaim] 跳过 ' + award.awardLevelDesc + ' (无可用选项)');
-                    continue;
-                }
+                var coinFallback = choices.filter(function(c) { return c.choiceType === 2 && c.canChoice === 1; })[0];
+                if (coinFallback) { type = 2; label = '书币'; }
+                else continue;
             }
         }
 
-        const claimResp = await claimOneAward(cookie, award.awardLevelId, choiceType);
+        // 领取
+        var claimResp = await $task.fetch({
+            url: BASE_URL + '/weekly/exchange',
+            method: 'POST',
+            headers: {
+                'Cookie': cookie,
+                'Content-Type': 'application/json',
+                'User-Agent': UA,
+                'Accept': '*/*',
+                'Accept-Language': 'zh-Hans-US;q=1, en-US;q=0.9'
+            },
+            body: b64encode({
+                unread: 1,
+                awardChoiceType: type,
+                pf: PF,
+                awardLevelId: award.awardLevelId,
+                isExchangeAward: 1
+            })
+        });
 
         if (claimResp.status === 200) {
-            claimedCount++;
-            claimedNames.push(award.awardLevelDesc + '(' + choiceName + ')');
-            console.log('[WeReadClaim] ✓ ' + award.awardLevelDesc + ' → ' + choiceName + ' (成功)');
+            ok++;
+            names.push(award.awardLevelDesc + '(' + label + ')');
+            $.log('[WeReadClaim] ' + award.awardLevelDesc + ' -> ' + label + ' OK');
         } else {
-            failedCount++;
-            console.log('[WeReadClaim] ✗ ' + award.awardLevelDesc + ' HTTP ' + claimResp.status);
+            fail++;
+            $.log('[WeReadClaim] ' + award.awardLevelDesc + ' FAIL ' + claimResp.status);
         }
-
         await sleep(1000);
     }
 
-    // 第五步：汇总通知
-    let resultMsg;
-    if (claimedCount > 0 && failedCount === 0) {
-        resultMsg = '✅ 成功领取 ' + claimedCount + ' 项: ' + claimedNames.join('、');
-        $notification.post('WeRead自动领取', resultMsg, '偏好: ' + preferName + '，阅读 ' + (data.readingTime || 0) + '秒');
-    } else if (claimedCount > 0 && failedCount > 0) {
-        resultMsg = '⚠️ 成功 ' + claimedCount + ' 项，失败 ' + failedCount + ' 项';
-        $notification.post('WeRead自动领取', resultMsg, '偏好: ' + preferName + '，请检查日志');
-    } else if (failedCount > 0) {
-        resultMsg = '❌ 领取全部失败 (' + failedCount + ' 项)';
-        $notification.post('WeRead自动领取', resultMsg, 'Cookie 可能已过期，请重新捕获');
+    var result;
+    if (ok > 0 && fail === 0) {
+        result = '✅ 领取 ' + ok + ' 项: ' + names.join('、');
+    } else if (ok > 0 && fail > 0) {
+        result = '⚠️ 成功 ' + ok + ' 项，失败 ' + fail + ' 项';
+    } else if (fail > 0) {
+        result = '❌ 全部失败 (' + fail + ' 项)';
     } else {
-        resultMsg = 'ℹ️ 今日无可领取奖励';
-        $notification.post('WeRead自动领取', resultMsg, '');
+        result = 'ℹ️ 无可领取';
     }
-    console.log('[WeReadClaim] ' + resultMsg);
+
+    $.msg($.name, result, '偏好: ' + preferName + '，阅读 ' + (data.readingTime || 0) + '秒');
+    $.log('[WeReadClaim] ' + result);
 }
 
-// ====== Cookie 捕获（备用）======
+// ====== 跨平台 Env 类 ======
 
-function cookieCapture() {
-    console.log('[WeReadClaim] ▶ http-request 触发, URL=' + $request.url);
-    var cookie = getCookieFromHeaders($request.headers);
-    if (cookie) {
-        $persistentStore.write(cookie, COOKIE_KEY);
-        var preview = cookie.length > 60 ? cookie.substring(0, 60) + '...' : cookie;
-        console.log('[WeReadClaim] ✅ Cookie 捕获成功: ' + preview);
-        $notification.post('WeRead自动领取', '✅ Cookie 捕获成功', preview);
-    } else {
-        console.log('[WeReadClaim] ℹ️ 请求无 Cookie 头，跳过捕获');
-    }
-}
+function Env(name) {
+    this.name = name;
+    this.isLoon = function() { return typeof $loon !== 'undefined'; };
+    this.isSurge = function() { return typeof $httpClient !== 'undefined' && !this.isLoon(); };
+    this.isQX = function() { return typeof $task !== 'undefined' && !this.isLoon(); };
 
-// ====== 主分发器 ======
+    this.log = function() {
+        var args = Array.prototype.slice.call(arguments);
+        console.log(args.join('\n'));
+    };
 
-try {
-    if ($script.type === 'cron') {
-        console.log('[WeReadClaim] ▶ cron 触发（每晚 21:00 自动领取）');
-        autoClaim()
-            .then(function() { $done(); })
-            .catch(function(e) {
-                var msg = e && e.message ? e.message : JSON.stringify(e);
-                console.log('[WeReadClaim] ❌ 异常: ' + msg);
-                $notification.post('WeRead自动领取', '❌ 执行异常', msg);
-                $done();
-            });
-    } else if ($script.type === 'http-request') {
-        cookieCapture();
-        $done($request);
-    } else if ($script.type === 'http-response') {
-        console.log('[WeReadClaim] ▶ http-response 触发');
-        var setCookie = $response.headers['Set-Cookie'];
-        if (setCookie) {
-            var cookies = Array.isArray(setCookie) ? setCookie : [setCookie];
-            var wrCookie = null;
-            for (var i = 0; i < cookies.length; i++) {
-                if (cookies[i].indexOf('wr_vid=') === 0) { wrCookie = cookies[i]; break; }
-            }
-            if (wrCookie) {
-                $persistentStore.write(wrCookie, COOKIE_KEY);
-                console.log('[WeReadClaim] ✅ 从 Set-Cookie 捕获: ' + wrCookie.substring(0, 30) + '...');
-                $notification.post('WeRead自动领取', '✅ Cookie 捕获成功（Set-Cookie）', '已保存认证信息');
-            }
+    this.msg = function(title, subtitle, body) {
+        title = title || this.name;
+        subtitle = subtitle || '';
+        body = body || '';
+        if (typeof $notification !== 'undefined') {
+            $notification.post(title, subtitle, body);
         }
-        $done($response);
-    } else {
-        console.log('[WeReadClaim] ⚠️ 未知脚本类型: ' + $script.type);
-        $done({});
-    }
-} catch (e) {
-    console.log('[WeReadClaim] ❌ 分发器异常: ' + (e.message || JSON.stringify(e)));
-    $done({});
+        console.log('📣 ' + title + '\n' + subtitle + '\n' + body);
+    };
+
+    this.getdata = function(key) {
+        if (typeof $persistentStore !== 'undefined') return $persistentStore.read(key);
+        if (typeof $prefs !== 'undefined') return $prefs.valueForKey(key);
+        return null;
+    };
+
+    this.setdata = function(value, key) {
+        if (typeof $persistentStore !== 'undefined') return $persistentStore.write(value, key);
+        if (typeof $prefs !== 'undefined') return $prefs.setValueForKey(value, key);
+        return false;
+    };
+
+    this.done = function(value) {
+        if (typeof $done !== 'undefined') { $done(value); }
+    };
 }
