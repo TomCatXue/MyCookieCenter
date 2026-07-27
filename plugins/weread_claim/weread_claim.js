@@ -15,6 +15,8 @@ var CK = 'weread_cookie';
                 $.log('[WeReadClaim] Cookie OK: ' + p);
                 $.msg($.name, 'Cookie OK', p);
             } else {
+                $.log('[WeReadClaim] No cookie in request: ' + ($request ? $request.url : ''));
+                $.msg($.name, 'Running', 'No cookie in this request');
             }
         } catch (e) {
             $.log('[WeReadClaim] Cookie error: ' + (e.message || e));
