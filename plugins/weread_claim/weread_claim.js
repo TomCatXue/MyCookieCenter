@@ -1,48 +1,29 @@
 var $ = new Env('WeRead');
-var CK = 'weread_cookie';
+var CK = 'weread_auth'; // 存的是 {"vid":"...","skey":"..."} 而不是 Cookie 字符串
 
 (function main() {
     if (typeof $request !== 'undefined') {
         try {
             var h = $request.headers || {};
-            var ck = null;
+            var vid = null, skey = null;
             for (var k in h) {
-                if (k.toLowerCase() === 'cookie') { ck = h[k]; break; }
+                var kl = k.toLowerCase();
+                if (kl === 'vid') vid = h[k];
+                if (kl === 'skey') skey = h[k];
             }
-            if (ck) {
-                $.setdata(ck, CK);
-                var p = ck.length > 60 ? ck.substring(0, 60) + '...' : ck;
-                $.log('[WeReadClaim] Cookie OK: ' + p);
-                $.msg($.name, 'Cookie OK', p);
+            if (vid && skey) {
+                var auth = JSON.stringify({ vid: vid, skey: skey });
+                $.setdata(auth, CK);
+                $.log('[WeReadClaim] Auth OK: vid=' + vid + ' skey=' + skey);
+                $.msg($.name, 'Auth OK', 'vid=' + vid + ' skey=' + skey);
             } else {
-                $.log('[WeReadClaim] No cookie in request: ' + ($request ? $request.url : ''));
-                $.msg($.name, 'Running', 'No cookie in this request');
+                // 该请求没带 vid/skey（正常现象，App 并非每个请求都带），静默放行即可
+                $.log('[WeReadClaim] No vid/skey in this request: ' + ($request ? $request.url : ''));
             }
         } catch (e) {
-            $.log('[WeReadClaim] Cookie error: ' + (e.message || e));
+            $.log('[WeReadClaim] Auth capture error: ' + (e.message || e));
         }
         $done($request);
-        return;
-    }
-
-    if (typeof $response !== 'undefined') {
-        try {
-            var sc = $response.headers['Set-Cookie'];
-            if (sc) {
-                var arr = Array.isArray(sc) ? sc : [sc];
-                for (var i = 0; i < arr.length; i++) {
-                    if (arr[i].indexOf('wr_vid=') === 0) {
-                        $.setdata(arr[i], CK);
-                        $.log('[WeReadClaim] Set-Cookie OK');
-                        $.msg($.name, 'Cookie OK', 'from Set-Cookie');
-                        break;
-                    }
-                }
-            }
-        } catch (e) {
-            $.log('[WeReadClaim] Set-Cookie error: ' + (e.message || e));
-        }
-        $.done();
         return;
     }
 
@@ -76,28 +57,43 @@ function bd(b) { try { return JSON.parse($base64.decode(b)); } catch (e) { retur
 function be(o) { return $base64.encode(JSON.stringify(o)); }
 function sp(ms) { return new Promise(function(r) { setTimeout(r, ms); }); }
 
+function getAuthHeaders(auth) {
+    return {
+        'Content-Type': 'application/json',
+        'User-Agent': UA,
+        'Accept': '*/*',
+        'Accept-Language': 'zh-Hans-US;q=1, en-US;q=0.9',
+        'vid': auth.vid,
+        'skey': auth.skey
+    };
+}
+
 async function autoClaim() {
-    var ck = $persistentStore.read(CK);
-    if (!ck) {
-        $.log('[WeReadClaim] No cookie');
-        $.msg($.name, 'No Cookie', 'Open WeRead and visit profile page');
+    var raw = $persistentStore.read(CK);
+    if (!raw) {
+        $.log('[WeReadClaim] No auth stored');
+        $.msg($.name, 'No Auth', '请打开微信读书 App 随便刷一下（比如"我的"或书架页）');
         return;
     }
+
+    var auth;
+    try { auth = JSON.parse(raw); } catch (e) { auth = null; }
+    if (!auth || !auth.vid || !auth.skey) {
+        $.log('[WeReadClaim] Stored auth invalid: ' + raw);
+        $.msg($.name, 'Auth Invalid', '请重新打开微信读书 App 触发抓取');
+        return;
+    }
+
+    var headers = getAuthHeaders(auth);
 
     var r1 = await $task.fetch({
         url: BASE + '/weekly/exchange',
         method: 'POST',
-        headers: {
-            'Cookie': ck,
-            'Content-Type': 'application/json',
-            'User-Agent': UA,
-            'Accept': '*/*',
-            'Accept-Language': 'zh-Hans-US;q=1, en-US;q=0.9'
-        },
+        headers: headers,
         body: be({ awardLevelId: 0, unread: 1, isExchangeAward: 0, pf: PF, isVisitReadGoal: 1, awardChoiceType: 0 })
     });
 
-    if (r1.status !== 200) { $.msg($.name, 'Query Failed', 'HTTP ' + r1.status); return; }
+    if (r1.status !== 200) { $.msg($.name, 'Query Failed', 'HTTP ' + r1.status + '（skey 可能已过期，请重新打开 App）'); return; }
 
     var d = bd(r1.body);
     if (!d || (!d.readtimeAwards && !d.readdayAwards)) { $.msg($.name, 'Parse Error', ''); return; }
@@ -143,13 +139,7 @@ async function autoClaim() {
         var r2 = await $task.fetch({
             url: BASE + '/weekly/exchange',
             method: 'POST',
-            headers: {
-                'Cookie': ck,
-                'Content-Type': 'application/json',
-                'User-Agent': UA,
-                'Accept': '*/*',
-                'Accept-Language': 'zh-Hans-US;q=1, en-US;q=0.9'
-            },
+            headers: headers,
             body: be({ unread: 1, awardChoiceType: ty, pf: PF, awardLevelId: aw.awardLevelId, isExchangeAward: 1 })
         });
 
@@ -216,6 +206,3 @@ function Env(n) {
         else $done();
     };
 }
-            } else {
-                $.log('[WeReadClaim] No cookie in request: ' + ($request ? $request.url : ''));
-                $.msg($.name, 'Running', 'No cookie in this request');
