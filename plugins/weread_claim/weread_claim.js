@@ -60,7 +60,7 @@ var BASE = 'https://i.weread.qq.com';
 var PF = 'weread_wx-2001-iap-2001-iphone';
 var UA = 'WeRead/10.2.1 (iPhone; iOS 26.3.1; Scale/3.00)';
 
-function getPreference() {
+function getPref() {
     var pc = true;
     try {
         if (typeof $argument !== 'undefined' && $argument) {
@@ -71,18 +71,9 @@ function getPreference() {
     return pc ? 'coin' : 'card';
 }
 
-function bd(b) {
-    try { return JSON.parse($base64.decode(b)); }
-    catch (e) { return null; }
-}
-
-function be(o) {
-    return $base64.encode(JSON.stringify(o));
-}
-
-function sp(ms) {
-    return new Promise(function(r) { setTimeout(r, ms); });
-}
+function bd(b) { try { return JSON.parse($base64.decode(b)); } catch (e) { return null; } }
+function be(o) { return $base64.encode(JSON.stringify(o)); }
+function sp(ms) { return new Promise(function(r) { setTimeout(r, ms); }); }
 
 async function autoClaim() {
     var ck = $persistentStore.read(CK);
@@ -110,7 +101,7 @@ async function autoClaim() {
     var d = bd(r1.body);
     if (!d || (!d.readtimeAwards && !d.readdayAwards)) { $.msg($.name, 'Parse Error', ''); return; }
 
-    var pref = getPreference();
+    var pref = getPref();
     var pn = pref === 'coin' ? 'coin' : 'card';
     var all = (d.readtimeAwards || []).concat(d.readdayAwards || []);
 
@@ -127,7 +118,6 @@ async function autoClaim() {
     for (var i = 0; i < all.length; i++) {
         var aw = all[i];
         if (aw.awardStatus !== 1) continue;
-
         var cs = aw.awardChoices || [];
         var ty, lb;
 
@@ -181,30 +171,44 @@ async function autoClaim() {
     $.msg($.name, rs, 'Prefer: ' + pn);
 }
 
+// ====== Env (match camscanner pattern) ======
+
 function Env(n) {
     this.name = n;
+    this.isSurge = function() { return typeof $httpClient !== 'undefined' && !!$httpClient; };
+    this.isQX = function() { return typeof $task !== 'undefined' && !this.isLoon(); };
+    this.isLoon = function() { return typeof $loon !== 'undefined' && !!$loon; };
+
     this.log = function() {
         var a = [];
         for (var i = 0; i < arguments.length; i++) a.push(arguments[i]);
         console.log(a.join(' '));
     };
+
     this.msg = function(t, s, b) {
-        t = t || this.name; s = s || ''; b = b || '';
-        if (typeof $notification !== 'undefined') {
-            try { $notification.post(t, s, b); } catch (e) {}
+        t = t || this.name;
+        s = s || '';
+        b = b || '';
+        if (this.isSurge() || this.isLoon()) {
+            $notification.post(t, s, b);
+        } else if (this.isQX()) {
+            if (typeof $notify !== 'undefined') $notify(t, s, b);
         }
         console.log(t + ' | ' + s + ' | ' + b);
     };
+
     this.getdata = function(k) {
-        if (typeof $persistentStore !== 'undefined') return $persistentStore.read(k);
-        if (typeof $prefs !== 'undefined') return $prefs.valueForKey(k);
+        if (this.isSurge() || this.isLoon()) return $persistentStore.read(k);
+        if (this.isQX()) return $prefs.valueForKey(k);
         return null;
     };
+
     this.setdata = function(v, k) {
-        if (typeof $persistentStore !== 'undefined') return $persistentStore.write(v, k);
-        if (typeof $prefs !== 'undefined') return $prefs.setValueForKey(v, k);
+        if (this.isSurge() || this.isLoon()) return $persistentStore.write(v, k);
+        if (this.isQX()) return $prefs.setValueForKey(v, k);
         return false;
     };
+
     this.done = function(v) {
         if (typeof $done === 'undefined') return;
         if (arguments.length > 0 && v !== undefined) $done(v);
