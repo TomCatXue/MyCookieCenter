@@ -35,13 +35,6 @@ let $ = new Env("WeRead");
 
 
 function saveAuth() {
-    // capture_cookie switch (default true): skip auth capture when disabled
-    let arg = (typeof $argument !== "undefined") ? $argument : {};
-    if (arg.capture_cookie === false || arg.capture_cookie === "false") {
-        $.log("[WeRead] cookie capture disabled by switch");
-        return;
-    }
-
     let h = $request.headers || {};
 
     // Quick scan: only extract vid/skey for comparison

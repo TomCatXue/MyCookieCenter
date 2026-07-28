@@ -16,7 +16,7 @@ hostname = i.weread.qq.com
 
 [Script]
 # 捕获鉴权信息（vid + skey，而非 Cookie）：打开微信读书 App 随便刷一下（几乎任何页面都会触发）
-http-request ^https?://i\.weread\.qq\.com/.* script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/weread_claim/weread_claim.js, tag=WeReadClaim Auth, enable=true
+http-request ^https?://i\.weread\.qq\.com/.* script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/weread_claim/weread_claim.js, tag=WeReadClaim Auth, enable={capture_cookie}
 
-# 定时领取：每晚 21:00 自动检查并领取
-cron "0 21 * * *" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/weread_claim/weread_claim.js, tag=WeReadClaim 签到, enable=true
+# 定时领取：每晚 23:00 自动检查并领取
+cron "0 23 * * *" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/weread_claim/weread_claim.js, tag=WeReadClaim 签到, enable=true
