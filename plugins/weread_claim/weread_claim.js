@@ -26,7 +26,7 @@ let $ = new Env("WeRead");
         }
 
         await runClaim();
-    } catch(e) {
+    } catch (e) {
         $.msg("WeRead", "执行异常", String(e));
     }
 
@@ -36,22 +36,32 @@ let $ = new Env("WeRead");
 
 function saveAuth() {
     let h = $request.headers || {};
-    let auth = {};
 
+    // Quick scan: only extract vid/skey for comparison
+    let vid, skey;
     for (let k in h) {
         let key = k.toLowerCase();
+        if (key === "vid") vid = h[k];
+        if (key === "skey") skey = h[k];
+    }
 
-        if (key === "vid") auth.vid = h[k];
-        if (key === "skey") auth.skey = h[k];
+    if (!vid || !skey) return;
+
+    // Skip if auth already saved with same credentials — avoid redundant writes
+    let existing = getAuth();
+    if (existing && existing.vid === vid && existing.skey === skey) return;
+
+    // Auth is new or changed — extract all fields and save
+    let auth = { vid, skey };
+    for (let k in h) {
+        let key = k.toLowerCase();
         if (key === "basever") auth.basever = h[k];
         if (key === "channelid") auth.channelid = h[k];
         if (key === "user-agent") auth.ua = h[k];
     }
 
-    if (auth.vid && auth.skey) {
-        $.setdata(JSON.stringify(auth), AUTH_KEY);
-        $.log("[WeRead] auth saved");
-    }
+    $.setdata(JSON.stringify(auth), AUTH_KEY);
+    $.log("[WeRead] auth saved");
 }
 
 
@@ -61,7 +71,7 @@ function getAuth() {
 
     try {
         return JSON.parse(data);
-    } catch(e) {
+    } catch (e) {
         return null;
     }
 }
@@ -99,26 +109,49 @@ function decode(str) {
         }
 
         return JSON.parse(str);
-    } catch(e) {
+    } catch (e) {
         return null;
     }
 }
 
 
+// Build a human-readable description for a claimed reward
+function describeChoice(choice, resp) {
+    // Try to extract detail from exchange response first
+    if (resp && resp.body) {
+        let ex = decode(resp.body);
+        if (ex) {
+            if (ex.awardName) return ex.awardName;
+            if (ex.exchangeName) return ex.exchangeName;
+            if (ex.desc) return ex.desc;
+            if (ex.choiceName) return ex.choiceName;
+        }
+    }
+    // Then try fields on the choice object itself
+    if (choice.choiceName) return choice.choiceName;
+    if (choice.name) return choice.name;
+    if (choice.desc) return choice.desc;
+    // Fallback to choiceType-based description
+    if (choice.choiceType === 2) return "书币";
+    if (choice.choiceType === 1) return "体验卡";
+    return "奖励";
+}
+
+
 function post(url, body, headers) {
-    return new Promise((resolve,reject)=>{
+    return new Promise((resolve, reject) => {
 
         $httpClient.post({
             url,
             headers,
             body,
-            timeout:10000
-        },(err,res,data)=>{
+            timeout: 10000
+        }, (err, res, data) => {
 
-            if(err) reject(err);
+            if (err) reject(err);
             else resolve({
-                status:res.status,
-                body:data
+                status: res.status,
+                body: data
             });
 
         });
@@ -127,136 +160,142 @@ function post(url, body, headers) {
 }
 
 
-async function runClaim(){
+async function runClaim() {
 
-    let auth=getAuth();
+    let auth = getAuth();
 
-    if(!auth){
-        $.msg("WeRead","没有认证","请打开微信读书刷新一次");
+    if (!auth) {
+        $.msg("WeRead", "没有认证", "请打开微信读书刷新一次");
         return;
     }
 
 
-    let result=await post(
-        API+"/weekly/exchange",
+    let result = await post(
+        API + "/weekly/exchange",
         encode({
-            awardLevelId:0,
-            unread:1,
-            isExchangeAward:0,
-            pf:PF,
-            awardChoiceType:0
+            awardLevelId: 0,
+            unread: 1,
+            isExchangeAward: 0,
+            pf: PF,
+            awardChoiceType: 0
         }),
         getHeaders(auth)
     );
 
 
-    if(result.status!==200){
-        $.msg("WeRead","请求失败","HTTP "+result.status);
+    if (result.status !== 200) {
+        $.msg("WeRead", "请求失败", "HTTP " + result.status);
         return;
     }
 
 
-    let data=decode(result.body);
+    let data = decode(result.body);
 
-    if(!data){
-        $.msg("WeRead","解析失败",result.body.slice(0,100));
+    if (!data) {
+        $.msg("WeRead", "解析失败", result.body.slice(0, 100));
         return;
     }
 
 
-    let awards=[];
+    let awards = [];
 
-    if(data.readtimeAwards)
-        awards.push(...data.readtimeAwards);
+    if (data.readtimeAwards)
+        data.readtimeAwards.forEach(a => { a._src = "阅读时长"; awards.push(a); });
 
-    if(data.readdayAwards)
-        awards.push(...data.readdayAwards);
-
-
-    let count=0;
+    if (data.readdayAwards)
+        data.readdayAwards.forEach(a => { a._src = "阅读天数"; awards.push(a); });
 
 
-    for(let item of awards){
+    let count = 0;
+    let details = [];
 
-        if(item.awardStatus!==1)
+
+    for (let item of awards) {
+
+        if (item.awardStatus !== 1)
             continue;
 
 
-        let choices=item.awardChoices||[];
+        let choices = item.awardChoices || [];
 
         let choice =
-            choices.find(x=>x.choiceType===2 && x.canChoice===1)
+            choices.find(x => x.choiceType === 2 && x.canChoice === 1)
             ||
-            choices.find(x=>x.choiceType===1 && x.canChoice===1);
+            choices.find(x => x.choiceType === 1 && x.canChoice === 1);
 
 
-        if(!choice)
+        if (!choice)
             continue;
 
 
-        let r=await post(
-            API+"/weekly/exchange",
+        let r = await post(
+            API + "/weekly/exchange",
             encode({
-                unread:1,
-                awardChoiceType:choice.choiceType,
-                awardLevelId:item.awardLevelId,
-                isExchangeAward:1,
-                pf:PF
+                unread: 1,
+                awardChoiceType: choice.choiceType,
+                awardLevelId: item.awardLevelId,
+                isExchangeAward: 1,
+                pf: PF
             }),
             getHeaders(auth)
         );
 
 
-        if(r.status===200)
+        if (r.status === 200) {
             count++;
+            details.push((item._src || "奖励") + "·" + describeChoice(choice, r));
+        }
 
     }
 
 
-    $.msg("WeRead","领取完成","成功领取 "+count+" 个奖励");
+    if (count > 0)
+        $.msg("WeRead", "领取完成", "成功领取 " + count + " 个奖励\n" + details.join("、"));
+    else
+        $.msg("WeRead", "领取完成", "暂无可领取的奖励");
 
 }
 
 
 
-function Env(name){
+function Env(name) {
 
-    this.name=name;
+    this.name = name;
 
-    this.getdata=function(k){
+    this.getdata = function (k) {
 
-        if(typeof $persistentStore!=="undefined")
+        if (typeof $persistentStore !== "undefined")
             return $persistentStore.read(k);
 
-        if(typeof $prefs!=="undefined")
+        if (typeof $prefs !== "undefined")
             return $prefs.valueForKey(k);
 
         return null;
     };
 
 
-    this.setdata=function(v,k){
+    this.setdata = function (v, k) {
 
-        if(typeof $persistentStore!=="undefined")
-            return $persistentStore.write(v,k);
+        if (typeof $persistentStore !== "undefined")
+            return $persistentStore.write(v, k);
 
-        if(typeof $prefs!=="undefined")
-            return $prefs.setValueForKey(v,k);
+        if (typeof $prefs !== "undefined")
+            return $prefs.setValueForKey(v, k);
 
         return false;
     };
 
 
-    this.msg=function(t,s,b){
+    this.msg = function (t, s, b) {
 
-        if(typeof $notification!=="undefined")
-            $notification.post(t,s,b);
+        if (typeof $notification !== "undefined")
+            $notification.post(t, s, b);
 
     };
 
 
-    this.log=function(){
-        console.log.apply(console,arguments);
+    this.log = function () {
+        console.log.apply(console, arguments);
     };
 
 }
