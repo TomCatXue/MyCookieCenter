@@ -254,3 +254,191 @@ $.log(`[INFO] 脚本版本 ${SCRIPT_VERSION}`);
 | docs | 仅改文档 | docs(wps): 更新已知限制说明 |
 | refactor | 重构(行为不变) | refactor: 拆分到独立子目录 |
 | chore | 杂项(依赖、配置) | chore: 更新 .gitignore |
+
+---
+
+## 📖 经验总结（基于实战踩坑）
+
+以下经验来自本仓库微信读书系列插件的实际开发历程，适用于所有签到脚本和 VIP 破解脚本。
+
+### 签到脚本经验
+
+#### ✅ 成功实践
+
+**1. 抓取 + 签到合一**
+
+一个 `.js` 文件同时承载抓取和签到两个功能，入口用 `$request` 判断走哪条路：
+
+```js
+(async () => {
+    if (typeof $request !== "undefined") {
+        saveAuth();   // 抓取凭据
+        $done({});
+        return;
+    }
+    await runClaim();  // cron 签到
+    $done({});
+})();
+```
+
+好处：用户只需配置一个 script-path，减少配置项和出错面。
+
+**2. http-request 被动捕获 + 去重写入**
+
+`http-request` 匹配 App 流量后被动捕获凭据。但要**先比对再写入**，避免每次请求都写持久化存储：
+
+```js
+function saveAuth() {
+    // 先提取 vid/skey
+    // → 读取已存储的值
+    // → 相同则直接 return（不做任何写入）
+    // → 不同才提取全部字段并保存
+}
+```
+
+**3. 请求头 key 大小写兼容**
+
+不同代理平台（Loon/Surge/QX）回传的 header key 大小写不一致，必须用 `.toLowerCase()` 遍历匹配：
+
+```js
+for (let k in headers) {
+    let key = k.toLowerCase();
+    if (key === "vid") vid = headers[k];
+    if (key === "skey") skey = headers[k];
+}
+```
+
+**4. 通知要告诉用户「领了什么」**
+
+签到完成的通知不能只写「成功领取 N 个」，要列出具体奖励内容：
+
+```
+WeRead · 领取完成
+成功领取 2 个奖励
+阅读时长·书币、阅读天数·体验卡
+```
+
+**5. Base64 body 编解码**
+
+微信读书 App 所有接口的 request/response body 都是 Base64 编码（Content-Type 仍是 `application/json`），需要统一封装 `encode()` / `decode()`：
+
+```js
+function encode(obj) {
+    let str = JSON.stringify(obj);
+    if (typeof $base64 !== "undefined") return $base64.encode(str);
+    return str;
+}
+```
+
+#### ❌ 踩坑记录
+
+**坑 1：Unicode 转义写中文**
+
+早期在通知文案里用了 `\u2699\uFE0F`（齿轮 emoji）等 Unicode 转义，可读性极差、维护困难。后改为直接写中文。
+
+> **规范**：脚本里的中文、emoji 一律直接写原文，不用 `\uXXXX` 转义。
+
+**坑 2：http-request 匹配范围过宽**
+
+`^https://i.weread.qq.com/` 匹配了该域名下**所有**请求（121 次/天），每次都触发 `saveAuth()`。虽然加了去重后开销小了，但更好的做法是收窄到特定接口（如 `/user/profile`）。
+
+> **规范**：`http-request` 正则尽量收窄到「登录后必请求、且携带完整凭据」的单一接口，不要匹配整域。
+
+**坑 3：`requires-body` 参数遗漏**
+
+Loon 的 `http-request` 配置中 `requires-body=false` 被误删，导致脚本无法正常触发。
+
+> **规范**：Loon `.plugin` 文件中 `requires-body=false` 对纯抓 header 的脚本不可省略。
+
+**坑 4：Cookie vs vid/skey 认证体系混用**
+
+早期版本用 Cookie 抓取，后改为 vid/skey 请求头。逆向笔记发现常规 API 其实只需要 `Cookie: wr_vid`（长期有效），skey 可能是多余的。
+
+> **规范**：抓包分析阶段要搞清楚目标 App 的认证体系：是 Cookie、请求头、还是 Token。优先用长期有效的凭据，减少刷新依赖。
+
+**坑 5：skey 无法自动刷新**
+
+App 的 `/login` 接口有 `signature` 签名保护，无法在脚本中主动刷新 skey。导致领取脚本是「半自动」——cron 自动领，但 skey 过期后需手动开 App 重新捕获。
+
+> **规范**：签到脚本设计阶段就要评估凭据有效期。如果凭据短期过期且无法自动刷新，要在通知里明确提示用户「请打开 App 刷新」。
+
+**坑 6：一次性调试脚本残留**
+
+开发期间写了 `_check_js.py`（Loon 兼容性检查）、`_check_cookie.py`（HAR 分析）等一次性脚本，完成后忘记清理，残留在仓库根目录。
+
+> **规范**：逆向分析用的临时脚本不进仓库。如需保留分析过程，写入 `notes/` 目录并附结论，脚本本身用完即删。
+
+### VIP 破解脚本经验
+
+#### ✅ 成功实践
+
+**1. http-response 拦截 + 递归清洗**
+
+VIP 破解走的是 http-response 拦截，修改服务端返回的 JSON。用递归函数统一清洗所有嵌套层级的更新/版本字段：
+
+```js
+function deepStrip(obj) {
+    var kill = ["forceUpdate", "needUpdate", "mustUpdate", ...];
+    for (var i = 0; i < kill.length; i++) {
+        if (obj[kill[i]] !== undefined) delete obj[kill[i]];
+    }
+    for (var key in obj) {
+        if (obj[key] && typeof obj[key] === "object" && !Array.isArray(obj[key])) {
+            deepStrip(obj[key]);
+        }
+    }
+}
+```
+
+**2. 区分签名接口与非签名接口**
+
+逆向分析发现接口分两类：
+- **无签名接口**（`/pay/balance`、`/weekly/exchange`）：可直接修改响应，难度低
+- **有签名接口**（`/pay/memberCardSummary`）：有 `signature` + `random` + `timestamp` 三重校验，无法伪造
+
+策略：**绕过签名接口，直接改无签名接口的响应**。如果 App 拿到的余额是 99999、会员过期时间被改成 30 天后，前端就不会触发付费墙。
+
+**3. feconfig 不拦截只洗字段**
+
+`/feconfig/getBundles` 等配置接口不要直接拦截返回假数据，会让 App 崩溃。正确做法是**让它正常过，只递归洗掉更新字段**。
+
+**4. 老格式会员兼容**
+
+新版 App 可能用新格式存储会员状态，但老格式（固定 `signature` 值 + 固定字段结构）仍然被前端兼容。直接构造老格式响应比逆向新签名更简单可靠。
+
+#### ❌ 踩坑记录
+
+**坑 7：尝试逆向签名接口（死路）**
+
+曾尝试逆向 `/pay/memberCardSummary` 的 `signature` HMAC Key，需要从 IPA 二进制中定位，难度极高且不可维护（App 更新后 Key 可能变）。
+
+> **规范**：签名接口不要逆向，绕过它去改无签名接口的响应。如果核心状态接口有签名，改它依赖的下游展示接口。
+
+**坑 8：修改 `canExchange` 字段无效**
+
+尝试修改 `/pay/membercardexitems` 的 `canExchange` 字段来解锁兑换，但 App 实际走的是 IAP（Apple 内购）流程，服务端二次验证，改前端字段无法白嫖。
+
+> **规范**：涉及实际付费/兑换的接口，客户端修改无法绕过服务端验证。只改「展示类」字段（余额数字、会员天数、过期时间），不改「交易类」字段。
+
+**坑 9：阅读时长无法通过 HTTP 伪造**
+
+`/app/onlineTime` 接口虽然无签名（请求体仅 `{"time": 60}`），但服务端有「行为特征联合判断」反作弊，且真实上报是持续渐进的（每几秒一次），Loon cron 脚本有超时限制无法模拟。
+
+> **规范**：阅读时长、在线时长等「服务端累加 + 行为分析」类数据，无法通过 Loon 脚本伪造。这类需求需走网页版方案（如 [midpoint/weread](https://github.com/midpoint/weread)，部署在 GitHub Action 长时运行）。
+
+### 通用规范清单
+
+| 类别 | 规范 | 来源 |
+|------|------|------|
+| 通知文案 | 直接写中文，不用 `\uXXXX` 转义 | 坑 1 |
+| http-request | 正则收窄到单一接口，不匹配整域 | 坑 2 |
+| Loon 配置 | `requires-body=false` 不可省略 | 坑 3 |
+| 认证设计 | 优先用长期有效凭据，减少刷新依赖 | 坑 4 |
+| 凭据过期 | 无法自动刷新时，通知明确提示用户 | 坑 5 |
+| 临时脚本 | 不进仓库，用完即删，结论写 notes | 坑 6 |
+| VIP 破解 | 绕过签名接口，改无签名展示接口 | 坑 7 |
+| 交易字段 | 只改展示类，不改交易类 | 坑 8 |
+| 时长伪造 | 服务端累加型数据不碰，走网页版方案 | 坑 9 |
+| Env 类 | 内联在脚本底部，用 `// prettier-ignore` 标注 | 成功 1 |
+| 版本号 | 主脚本带 `SCRIPT_VERSION` + 首行 `$.log` 打印 | 头部规范 |
+| commit | 写有意义的 message，不用「更新」「22」 | 全历史 |
