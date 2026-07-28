@@ -35,6 +35,13 @@ let $ = new Env("WeRead");
 
 
 function saveAuth() {
+    // capture_cookie switch (default true): skip auth capture when disabled
+    let arg = (typeof $argument !== "undefined") ? $argument : {};
+    if (arg.capture_cookie === false || arg.capture_cookie === "false") {
+        $.log("[WeRead] cookie capture disabled by switch");
+        return;
+    }
+
     let h = $request.headers || {};
 
     // Quick scan: only extract vid/skey for comparison
@@ -218,10 +225,16 @@ async function runClaim() {
 
         let choices = item.awardChoices || [];
 
+        // prefer_coin switch (default true): true=优先书币, false=优先体验卡
+        let arg = (typeof $argument !== "undefined") ? $argument : {};
+        let preferCoin = !(arg.prefer_coin === false || arg.prefer_coin === "false");
+        let firstType = preferCoin ? 2 : 1;
+        let secondType = preferCoin ? 1 : 2;
+
         let choice =
-            choices.find(x => x.choiceType === 2 && x.canChoice === 1)
+            choices.find(x => x.choiceType === firstType && x.canChoice === 1)
             ||
-            choices.find(x => x.choiceType === 1 && x.canChoice === 1);
+            choices.find(x => x.choiceType === secondType && x.canChoice === 1);
 
 
         if (!choice)

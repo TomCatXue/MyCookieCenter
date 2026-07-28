@@ -8,8 +8,8 @@
 [Argument]
 # 奖励偏好: 开=优先选书币, 关=优先选体验卡
 prefer_coin = switch,true,tag=奖励选择,desc=开启：优先选书币 / 关闭：优先选体验卡
-# 抓取通知: 开=每次抓到新的登录信息就弹通知（调试用）, 关=静默抓取（推荐，避免刷 App 时弹一堆通知）
-notify_capture = switch,false,tag=抓取提示,desc=开启：抓到新登录信息时通知 / 关闭：静默抓取（推荐）
+# 抓取Cookie: 开=自动抓取登录信息(vid/skey), 关=不抓取（需手动配置）
+capture_cookie = switch,true,tag=抓取Cookie,desc=开启：自动抓取登录信息 / 关闭：不抓取
 
 [MITM]
 hostname = i.weread.qq.com
