@@ -163,8 +163,10 @@ function saveAuth() {
     let h = $request.headers || {};
     let url = ($request.url || "");
 
-    // --- weread.qq.com: Cookie-based auth (wr_vid / wr_skey) ---
-    if (url.indexOf("weread.qq.com") !== -1) {
+    // --- weread.qq.com (非 i.weread.qq.com): Cookie-based auth (wr_vid / wr_skey) ---
+    // 注意：不能用 indexOf("weread.qq.com")，因为 i.weread.qq.com 也含此子串
+    // 用 "://weread.qq.com" 精确匹配协议后的域名开头
+    if (url.indexOf("://weread.qq.com") !== -1) {
         let cookie = h["Cookie"] || "";
         if (!cookie) return;
 
@@ -180,11 +182,13 @@ function saveAuth() {
         });
 
         if (wrVid && wrSkey) {
-            // Merge with existing auth if present
+            // 翻牌游戏的 wr_vid/wr_skey 存到独立字段，不覆盖 i.weread.qq.com 的 vid/skey
             let existing = getAuth() || {};
             let auth = {
-                vid: wrVid,
-                skey: wrSkey,
+                vid: existing.vid || "",
+                skey: existing.skey || "",
+                wrVid: wrVid,
+                wrSkey: wrSkey,
                 refreshToken: existing.refreshToken || "",
                 deviceId: existing.deviceId || "",
                 basever: existing.basever || "",
@@ -193,7 +197,7 @@ function saveAuth() {
             };
 
             $.setdata(JSON.stringify(auth), AUTH_KEY);
-            $.log("[WeRead] weread.qq.com auth saved: vid=" + wrVid.slice(0, 8) + "...");
+            $.log("[WeRead] weread.qq.com Cookie saved: wrVid=" + wrVid.slice(0, 8) + "...");
         }
         return;
     }
@@ -209,11 +213,17 @@ function saveAuth() {
     if (!vid || !skey) return;
 
     // Skip if auth already saved with same credentials — avoid redundant writes
-    let existing = getAuth();
-    if (existing && existing.vid === vid && existing.skey === skey) return;
+    let existing = getAuth() || {};
+    if (existing.vid === vid && existing.skey === skey) return;
 
     // Auth is new or changed — extract all fields and save
     let auth = { vid, skey };
+    // 保留已有的翻牌凭证和刷新字段
+    if (existing.wrVid) auth.wrVid = existing.wrVid;
+    if (existing.wrSkey) auth.wrSkey = existing.wrSkey;
+    if (existing.refreshToken) auth.refreshToken = existing.refreshToken;
+    if (existing.deviceId) auth.deviceId = existing.deviceId;
+    if (existing.openId) auth.openId = existing.openId;
     for (let k in h) {
         let key = k.toLowerCase();
         if (key === "basever") auth.basever = h[k];
@@ -414,6 +424,7 @@ async function runClaim() {
             $.log("[WeRead] 401 — attempting auto-refresh...");
             let refreshed = await tryRefreshLogin(auth);
             if (refreshed) {
+                $.setdata(JSON.stringify(refreshed), AUTH_KEY);
                 $.log("[WeRead] refresh succeeded, retrying claim...");
                 return await runClaimWithAuth(refreshed);
             }
@@ -594,11 +605,14 @@ function parseCookie(str) {
 
 // Build Cookie header for weread.qq.com
 function getFlipHeaders(auth) {
+    // 翻牌游戏用 wrVid/wrSkey（Cookie 认证），与 i.weread.qq.com 的 vid/skey 分开存储
+    let wrVid = auth.wrVid || auth.vid || "";
+    let wrSkey = auth.wrSkey || auth.skey || "";
     return {
         "User-Agent": auth.ua || "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15",
         "Accept": "application/json, text/plain, */*",
         "Accept-Language": "zh-CN,zh-Hans;q=0.9",
-        "Cookie": "wr_skey=" + auth.skey + "; wr_vid=" + auth.vid
+        "Cookie": "wr_skey=" + wrSkey + "; wr_vid=" + wrVid
     };
 }
 
@@ -609,8 +623,8 @@ async function runFlipCard(auth) {
     // Get auth if not provided
     if (!auth) auth = getAuth();
 
-    if (!auth || !auth.vid || !auth.skey) {
-        $.msg("WeRead", "翻牌", "未捕获到登录信息，请先打开微信读书 App 触发认证捕获");
+    if (!auth || !(auth.wrVid || auth.vid) || !(auth.wrSkey || auth.skey)) {
+        $.msg("WeRead", "翻牌", "未捕获到 weread.qq.com 登录信息，请先打开微信读书 App 触发认证捕获");
         return;
     }
 
