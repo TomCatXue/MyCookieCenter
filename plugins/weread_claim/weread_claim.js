@@ -13,6 +13,7 @@ hostname = i.weread.qq.com
 
 const AUTH_KEY = "weread_auth_v2";
 const API = "https://i.weread.qq.com";
+const FLIP_API = "https://weread.qq.com/flip-card-game/api";
 const PF = "weread_wx-2001-iap-2001-iphone";
 const HMAC_SALT = "EBRYFkVMReKBGsU2";
 
@@ -26,7 +27,13 @@ let $ = new Env("WeRead");
             return;
         }
 
-        await runClaim();
+        // cron 任务：通过 $argument 区分任务类型
+        let arg = parseArgument(typeof $argument !== "undefined" ? $argument : {});
+        if (arg.task === "flip") {
+            await runFlipCard();
+        } else {
+            await runClaim();
+        }
     } catch (e) {
         $.msg("WeRead", "执行异常", String(e));
     }
@@ -156,7 +163,42 @@ function saveAuth() {
     let h = $request.headers || {};
     let url = ($request.url || "");
 
-    // Quick scan: only extract vid/skey for comparison
+    // --- weread.qq.com: Cookie-based auth (wr_vid / wr_skey) ---
+    if (url.indexOf("weread.qq.com") !== -1) {
+        let cookie = h["Cookie"] || "";
+        if (!cookie) return;
+
+        let wrVid = "", wrSkey = "";
+        cookie.split(";").forEach(pair => {
+            let eq = pair.indexOf("=");
+            if (eq > 0) {
+                let name = decodeURIComponent(pair.slice(0, eq).trim());
+                let val = decodeURIComponent(pair.slice(eq + 1).trim());
+                if (name === "wr_vid") wrVid = val;
+                if (name === "wr_skey") wrSkey = val;
+            }
+        });
+
+        if (wrVid && wrSkey) {
+            // Merge with existing auth if present
+            let existing = getAuth() || {};
+            let auth = {
+                vid: wrVid,
+                skey: wrSkey,
+                refreshToken: existing.refreshToken || "",
+                deviceId: existing.deviceId || "",
+                basever: existing.basever || "",
+                channelid: existing.channelid || "",
+                ua: existing.ua || ""
+            };
+
+            $.setdata(JSON.stringify(auth), AUTH_KEY);
+            $.log("[WeRead] weread.qq.com auth saved: vid=" + wrVid.slice(0, 8) + "...");
+        }
+        return;
+    }
+
+    // --- i.weread.qq.com: Header-based auth (vid / skey) ---
     let vid, skey;
     for (let k in h) {
         let key = k.toLowerCase();
@@ -517,6 +559,135 @@ async function runClaimWithAuth(auth, cachedBody) {
     else
         $.msg("WeRead", "领取完成", "暂无可领取的奖励");
 
+}
+
+
+// ── GET helper ──────────────────────────────────────────
+
+function get(url, headers) {
+    return new Promise((resolve, reject) => {
+        $httpClient.get({
+            url,
+            headers,
+            timeout: 10000
+        }, (err, res, data) => {
+            if (err) reject(err);
+            else resolve({ status: res.status, body: data });
+        });
+    });
+}
+
+// ── Flip card helpers ───────────────────────────────────
+
+// Parse Cookie string into key-value object
+function parseCookie(str) {
+    let obj = {};
+    if (!str) return obj;
+    str.split(";").forEach(pair => {
+        let eq = pair.indexOf("=");
+        if (eq > 0) {
+            obj[decodeURIComponent(pair.slice(0, eq).trim())] = decodeURIComponent(pair.slice(eq + 1).trim());
+        }
+    });
+    return obj;
+}
+
+// Build Cookie header for weread.qq.com
+function getFlipHeaders(auth) {
+    return {
+        "User-Agent": auth.ua || "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15",
+        "Accept": "application/json, text/plain, */*",
+        "Accept-Language": "zh-CN,zh-Hans;q=0.9",
+        "Cookie": "wr_skey=" + auth.skey + "; wr_vid=" + auth.vid
+    };
+}
+
+// Try to flip all available cards (max 5 flips per week)
+async function runFlipCard(auth) {
+    $.log("[WeRead] 翻牌游戏 — 开始...");
+
+    // Get auth if not provided
+    if (!auth) auth = getAuth();
+
+    if (!auth || !auth.vid || !auth.skey) {
+        $.msg("WeRead", "翻牌", "未捕获到登录信息，请先打开微信读书 App 触发认证捕获");
+        return;
+    }
+
+    let results = [];
+    let attempts = 0;
+    const MAX_ATTEMPTS = 5; // 每周最多 5 次
+
+    while (attempts < MAX_ATTEMPTS) {
+        // 1. GET card list to find unflipped cards
+        let listUrl = FLIP_API + "/flipCard?pf=ios&platform=ios_html";
+        let listRes = await get(listUrl, getFlipHeaders(auth));
+
+        if (listRes.status !== 200) {
+            $.log("[WeRead] 翻牌 — 查询卡列表失败 HTTP " + listRes.status);
+            break;
+        }
+
+        let data = JSON.parse(listRes.body || "{}");
+
+        // remainingCount = remaining flips allowed
+        let remaining = data.remainingCount;
+        if (!remaining || remaining <= 0) {
+            $.log("[WeRead] 翻牌 — 无剩余翻牌次数");
+            break;
+        }
+
+        // 2. Find first unflipped card (status === 0)
+        let cards = data.cardList || [];
+        let target = null;
+        for (let c of cards) {
+            if (c.status === 0) {
+                target = c;
+                break;
+            }
+        }
+
+        if (!target) {
+            $.log("[WeRead] 翻牌 — 没有未翻开的卡片");
+            break;
+        }
+
+        $.log("[WeRead] 翻牌 — 第 " + (attempts + 1) + "/" + MAX_ATTEMPTS + " 次, 翻 cardIndex=" + target.cardIndex);
+
+        // 3. POST flip request (captured as POST, URL has query params, no body)
+        let flipUrl = FLIP_API + "/flipCardFlip?cardIndex=" + target.cardIndex + "&pf=ios&platform=ios_html";
+        let flipRes = await post(
+            flipUrl,
+            "",
+            getFlipHeaders(auth)
+        );
+
+        attempts++;
+
+        if (flipRes.status === 200) {
+            let flipData = JSON.parse(flipRes.body || "{}");
+            // Extract prize info
+            let prize = flipData.prizeName || flipData.reward || flipData.giftName || "未知奖励";
+            let type = flipData.prizeType || flipData.type || "";
+            results.push("第" + attempts + "次: " + prize + (type ? " (" + type + ")" : ""));
+            $.log("[WeRead] 翻牌 — 第 " + attempts + " 次成功: " + prize);
+        } else {
+            $.log("[WeRead] 翻牌 — 第 " + attempts + " 次失败 HTTP " + flipRes.status);
+            results.push("第" + attempts + "次: 失败 (HTTP " + flipRes.status + ")");
+            break;
+        }
+
+        // Brief delay between flips
+        if (attempts < MAX_ATTEMPTS) {
+            await new Promise(r => setTimeout(r, 1500));
+        }
+    }
+
+    if (results.length > 0) {
+        $.msg("WeRead", "翻牌完成", results.join("\n"));
+    } else {
+        $.msg("WeRead", "翻牌", "暂无可翻的卡片");
+    }
 }
 
 
