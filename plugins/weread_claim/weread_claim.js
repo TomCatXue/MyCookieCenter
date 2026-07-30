@@ -498,6 +498,16 @@ async function runClaimWithAuth(auth, cachedBody) {
     let count = 0;
     let details = [];
 
+    // 在循环外解析一次 prefer_coin，避免每个奖励项重复解析
+    let arg = parseArgument(typeof $argument !== "undefined" ? $argument : {});
+    let rawPrefer = arg.prefer_coin;
+    let preferCoin = true; // 默认优先书币
+    if (rawPrefer === false || rawPrefer === "false" || rawPrefer === "switch,false") {
+        preferCoin = false;
+    }
+    let firstType = preferCoin ? 2 : 1;
+    let secondType = preferCoin ? 1 : 2;
+    $.log("[WeRead] prefer_coin=" + preferCoin + ", firstType=" + firstType);
 
     for (let item of awards) {
 
@@ -506,18 +516,6 @@ async function runClaimWithAuth(auth, cachedBody) {
 
 
         let choices = item.awardChoices || [];
-
-        // Parse argument: may be string (Loon cron) or object
-        let arg = parseArgument(typeof $argument !== "undefined" ? $argument : {});
-        // prefer_coin 值形如 "switch,true" 或 "switch,false"，或布尔值
-        let rawPrefer = arg.prefer_coin;
-        let preferCoin = true; // 默认优先书币
-        if (rawPrefer === false || rawPrefer === "false" || rawPrefer === "switch,false") {
-            preferCoin = false;
-        }
-        let firstType = preferCoin ? 2 : 1;
-        let secondType = preferCoin ? 1 : 2;
-        $.log("[WeRead] prefer_coin=" + preferCoin + ", firstType=" + firstType);
 
         let choice =
             choices.find(x => x.choiceType === firstType && x.canChoice === 1)
