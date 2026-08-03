@@ -295,6 +295,15 @@ function saveAuth() {
     $.setdata(JSON.stringify(auth), AUTH_KEY);
     $.log("[WeRead] auth saved, deviceId=" + (auth.deviceId ? "present" : "missing")
         + ", refreshToken=" + (auth.refreshToken ? "present" : "missing"));
+
+    // 中转存储 prefer_coin：http-request 能读到 [Argument]，存下来给 cron 用
+    if (typeof $argument !== "undefined") {
+        let pArg = parseArgument($argument);
+        if (pArg.prefer_coin !== undefined) {
+            $.setdata(String(pArg.prefer_coin), "weread_prefer_coin");
+            $.log("[WeRead] prefer_coin 中转存储: " + pArg.prefer_coin);
+        }
+    }
 }
 
 
@@ -504,7 +513,7 @@ async function tryWebRenewal(auth) {
             } else {
                 // 也许新 skey 在 response body 里（网页版可能不走 Set-Cookie）
                 let bodyData = null;
-                try { bodyData = JSON.parse(data); } catch (e) {}
+                try { bodyData = JSON.parse(data); } catch (e) { }
                 if (bodyData && (bodyData.skey || bodyData.wr_skey)) {
                     let sk = bodyData.skey || bodyData.wr_skey;
                     $.log("[WeRead] renewal 成功(body): 新 skey=" + String(sk).slice(0, 8) + "...");
@@ -654,15 +663,16 @@ async function runClaimWithAuth(auth, cachedBody) {
     let details = [];
 
     // 在循环外解析一次 prefer_coin，避免每个奖励项重复解析
+    // 读取顺序：$argument（Loon 可能注入 [Argument] 对象）→ 持久存储（http-request 中转）→ 默认
     let arg = parseArgument(typeof $argument !== "undefined" ? $argument : {});
     let rawPrefer = arg.prefer_coin;
-    // 兜底：Loon [Argument] 可能不通过 $argument 传入 cron，尝试从持久存储读取
-    if (rawPrefer === undefined && typeof $persistentStore !== "undefined") {
-        let stored = $persistentStore.read("prefer_coin");
+    if (rawPrefer === undefined) {
+        let stored = $.getdata("weread_prefer_coin");
         if (stored !== null && stored !== undefined) rawPrefer = stored;
     }
-    let preferCoin = true; // 默认优先书币
-    if (rawPrefer === false || rawPrefer === "false" || rawPrefer === "switch,false" || rawPrefer === "0" || rawPrefer === 0) {
+    // 1=优先体验卡, 2=优先书币（默认）
+    let preferCoin = true;
+    if (rawPrefer === 1 || rawPrefer === "1" || rawPrefer === false || rawPrefer === "false" || rawPrefer === "switch,false") {
         preferCoin = false;
     }
     let firstType = preferCoin ? 2 : 1;
