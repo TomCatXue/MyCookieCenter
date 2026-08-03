@@ -193,11 +193,68 @@ function saveAuth() {
                 deviceId: existing.deviceId || "",
                 basever: existing.basever || "",
                 channelid: existing.channelid || "",
-                ua: existing.ua || ""
+                ua: existing.ua || "",
+                authTime: Date.now()
             };
 
             $.setdata(JSON.stringify(auth), AUTH_KEY);
             $.log("[WeRead] weread.qq.com Cookie saved: wrVid=" + wrVid.slice(0, 8) + "...");
+        }
+        return;
+    }
+
+    // --- /login 响应：从 RESPONSE body 提取 vid/skey/refreshToken ---
+    // /login 请求本身不带 vid/skey header（它们在响应中返回），必须在下方 vid/skey 检查之前处理
+    if (url.indexOf("/login") !== -1 && typeof $response !== "undefined" && $response.body) {
+        let loginData = decode($response.body);
+        if (loginData && loginData.vid && loginData.skey) {
+            let existing = getAuth() || {};
+            let auth = {
+                vid: loginData.vid,
+                skey: loginData.skey,
+                refreshToken: loginData.refreshToken || existing.refreshToken || "",
+                deviceId: existing.deviceId || "",
+                openId: loginData.openId || existing.openId || "",
+                basever: existing.basever || "",
+                channelid: existing.channelid || "",
+                ua: existing.ua || "",
+                wrVid: existing.wrVid || "",
+                wrSkey: existing.wrSkey || ""
+            };
+            // 从请求体补充 deviceId
+            if (typeof $request !== "undefined" && $request.body) {
+                let reqBody = decode($request.body);
+                if (reqBody && reqBody.deviceId) auth.deviceId = reqBody.deviceId;
+            }
+            auth.authTime = Date.now();
+            $.setdata(JSON.stringify(auth), AUTH_KEY);
+            $.log("[WeRead] /login response saved: vid=" + String(loginData.vid).slice(0, 8)
+                + "..., refreshToken=" + (auth.refreshToken ? "present" : "missing")
+                + ", deviceId=" + (auth.deviceId ? "present" : "missing"));
+        }
+        return;
+    }
+
+    // --- /login 请求：从 REQUEST body 提取 deviceId + refreshToken ---
+    // /login 请求本身不带 vid/skey header，必须在下方 vid/skey 检查之前处理
+    if (url.indexOf("/login") !== -1 && typeof $request !== "undefined" && $request.body) {
+        let reqBody = decode($request.body);
+        if (reqBody) {
+            let existing = getAuth() || {};
+            let updated = false;
+            if (reqBody.deviceId && !existing.deviceId) {
+                existing.deviceId = reqBody.deviceId;
+                updated = true;
+            }
+            if (reqBody.refreshToken && !existing.refreshToken) {
+                existing.refreshToken = reqBody.refreshToken;
+                updated = true;
+            }
+            if (updated) {
+                $.setdata(JSON.stringify(existing), AUTH_KEY);
+                $.log("[WeRead] /login request: deviceId=" + (existing.deviceId ? "present" : "missing")
+                    + ", refreshToken=" + (existing.refreshToken ? "present" : "missing"));
+            }
         }
         return;
     }
@@ -232,29 +289,9 @@ function saveAuth() {
         if (key === "deviceid") auth.deviceId = h[k];
     }
 
-    // If this is a /login response, try to extract refreshToken from the decoded body
-    // NOTE: $response is only available in Loon http-response handlers
-    if (url.indexOf("/login") !== -1 && typeof $response !== "undefined" && $response.body) {
-        let loginData = decode($response.body);
-        if (loginData && loginData.refreshToken) {
-            auth.refreshToken = loginData.refreshToken;
-            if (loginData.openId) auth.openId = loginData.openId;
-        }
-    }
+    // /login 响应和请求已在上方独立处理（vid/skey 检查之前），此处不会到达
 
-    // If this is /login request, also capture deviceId from URL params or request body
-    if (url.indexOf("/login") !== -1) {
-        // Try URL params first
-        let match = url.match(/[?&]deviceId=([^&]+)/);
-        if (match) auth.deviceId = decodeURIComponent(match[1]);
-
-        // Also try request body (Base64-encoded JSON) for /login POST
-        if (!auth.deviceId && typeof $request !== "undefined" && $request.body) {
-            let decodedBody = decode($request.body);
-            if (decodedBody && decodedBody.deviceId) auth.deviceId = decodedBody.deviceId;
-        }
-    }
-
+    auth.authTime = Date.now();
     $.setdata(JSON.stringify(auth), AUTH_KEY);
     $.log("[WeRead] auth saved, deviceId=" + (auth.deviceId ? "present" : "missing")
         + ", refreshToken=" + (auth.refreshToken ? "present" : "missing"));
@@ -291,16 +328,18 @@ function parseArgument(arg) {
 
 
 function getHeaders(a) {
-    return {
+    let h = {
         "Content-Type": "application/json",
         "Accept": "*/*",
         "User-Agent": a.ua || "WeRead",
         "channelid": a.channelid || "AppStore",
         "basever": a.basever || "",
         "v": a.basever || "",
-        "vid": a.vid,
-        "skey": a.skey
+        "vid": a.vid
     };
+    // skey 可选：方案 C（vid 长期有效，部分接口不校验 skey）
+    if (a.skey) h.skey = a.skey;
+    return h;
 }
 
 
@@ -397,6 +436,93 @@ function post(url, body, headers) {
 }
 
 
+// 方案 B：通过网页版 /web/login/renewal 自动续期 skey
+// ⚠️ 已禁用：网页版 renewal 与 App 版认证不同源，不适用
+// 保留代码供参考，当前 401 走方案 C（不带 skey 重试）+ 方案 D（通知用户）
+// 前提：App 的 skey 和网页版的 wr_skey 同源（待验证）
+// 如果成功，用户无需手动打开 App 刷新
+async function tryWebRenewal(auth) {
+    let wrVid = auth.wrVid || auth.vid || "";
+    let wrSkey = auth.wrSkey || auth.skey || "";
+
+    if (!wrVid || !wrSkey) {
+        $.log("[WeRead] renewal 跳过：无 wr_vid/wr_skey");
+        return null;
+    }
+
+    $.log("[WeRead] 尝试网页版 renewal 续期 skey... (wrVid=" + String(wrVid).slice(0, 8) + "...)");
+
+    return new Promise((resolve) => {
+        $httpClient.post({
+            url: "https://weread.qq.com/web/login/renewal",
+            headers: {
+                "User-Agent": auth.ua || "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15",
+                "Content-Type": "application/json",
+                "Cookie": "wr_skey=" + wrSkey + "; wr_vid=" + wrVid
+            },
+            body: JSON.stringify({ "rq": "%2Fweb%2Fbook%2Fread" }),
+            timeout: 10000
+        }, (err, res, data) => {
+            if (err) {
+                $.log("[WeRead] renewal 请求失败: " + String(err));
+                resolve(null);
+                return;
+            }
+
+            $.log("[WeRead] renewal HTTP " + res.status);
+
+            if (res.status !== 200) {
+                $.log("[WeRead] renewal 非 200，skey 可能已彻底失效");
+                resolve(null);
+                return;
+            }
+
+            // 从 Set-Cookie 响应头提取新的 wr_skey
+            let setCookie = "";
+            if (res.headers) {
+                let sc = res.headers["Set-Cookie"] || res.headers["set-cookie"] || "";
+                if (Array.isArray(sc)) setCookie = sc.join("; ");
+                else setCookie = String(sc);
+            }
+
+            let newSkey = "";
+            setCookie.split(/;|,/).forEach(part => {
+                part = part.trim();
+                if (part.startsWith("wr_skey=")) {
+                    newSkey = part.substring("wr_skey=".length);
+                }
+            });
+
+            if (newSkey) {
+                $.log("[WeRead] renewal 成功(Set-Cookie): 新 wr_skey=" + newSkey.slice(0, 8) + "...");
+                // 更新 wrSkey 和 skey（假设同源，待验证）
+                auth.wrSkey = newSkey;
+                auth.skey = newSkey;
+                auth.authTime = Date.now();
+                $.setdata(JSON.stringify(auth), AUTH_KEY);
+                resolve(auth);
+            } else {
+                // 也许新 skey 在 response body 里（网页版可能不走 Set-Cookie）
+                let bodyData = null;
+                try { bodyData = JSON.parse(data); } catch (e) {}
+                if (bodyData && (bodyData.skey || bodyData.wr_skey)) {
+                    let sk = bodyData.skey || bodyData.wr_skey;
+                    $.log("[WeRead] renewal 成功(body): 新 skey=" + String(sk).slice(0, 8) + "...");
+                    auth.skey = sk;
+                    auth.wrSkey = sk;
+                    auth.authTime = Date.now();
+                    $.setdata(JSON.stringify(auth), AUTH_KEY);
+                    resolve(auth);
+                } else {
+                    $.log("[WeRead] renewal: 响应中未找到新 skey, body=" + String(data).slice(0, 100));
+                    resolve(null);
+                }
+            }
+        });
+    });
+}
+
+
 async function runClaim() {
 
     let auth = getAuth();
@@ -420,18 +546,29 @@ async function runClaim() {
     );
 
     if (probe.status === 401) {
-        if (auth.refreshToken && auth.deviceId) {
-            $.log("[WeRead] 401 — attempting auto-refresh...");
-            let refreshed = await tryRefreshLogin(auth);
-            if (refreshed) {
-                $.setdata(JSON.stringify(refreshed), AUTH_KEY);
-                $.log("[WeRead] refresh succeeded, retrying claim...");
-                return await runClaimWithAuth(refreshed);
-            }
-            $.msg("WeRead", "刷新失败", "自动刷新未成功，请重新打开微信读书 App 手动刷新认证");
-            return;
+        // 方案 C：skey 已过期，但 vid 长期有效——尝试不带 skey 重新请求
+        $.log("[WeRead] 401 — skey 已过期，尝试不带 skey 请求（vid 长期有效）...");
+        let noSkeyAuth = JSON.parse(JSON.stringify(auth));
+        delete noSkeyAuth.skey;
+        let probe2 = await post(
+            API + "/weekly/exchange",
+            encode({
+                awardLevelId: 0,
+                unread: 1,
+                isExchangeAward: 0,
+                pf: PF,
+                awardChoiceType: 0
+            }),
+            getHeaders(noSkeyAuth)
+        );
+
+        if (probe2.status === 200) {
+            $.log("[WeRead] 不带 skey 请求成功，vid 仍然有效");
+            // 传 noSkeyAuth（无 skey），后续领取请求直接不带 skey，避免每次 401
+            return await runClaimWithAuth(noSkeyAuth, probe2.body);
         }
 
+        // 方案 D：vid/skey 均失效，通知用户手动刷新
         $.msg("WeRead", "认证已过期", "vid/skey 已失效，请重新打开微信读书 App 刷新认证后再试");
         $.setdata("", AUTH_KEY);
         return;
@@ -467,9 +604,27 @@ async function runClaimWithAuth(auth, cachedBody) {
         );
 
         if (result.status === 401) {
-            $.msg("WeRead", "认证已过期", "vid/skey 已失效，请重新打开微信读书 App 刷新认证后再试");
-            $.setdata("", AUTH_KEY);
-            return;
+            // 方案 C：尝试不带 skey 查询
+            $.log("[WeRead] query 401 — 尝试不带 skey 请求...");
+            delete auth.skey;
+            let r1 = await post(
+                API + "/weekly/exchange",
+                encode({
+                    awardLevelId: 0,
+                    unread: 1,
+                    isExchangeAward: 0,
+                    pf: PF,
+                    awardChoiceType: 0
+                }),
+                getHeaders(auth)
+            );
+            if (r1.status === 200) {
+                queryBody = r1.body;
+            } else {
+                $.msg("WeRead", "认证已过期", "vid/skey 已失效，请重新打开微信读书 App 刷新认证后再试");
+                $.setdata("", AUTH_KEY);
+                return;
+            }
         }
         if (result.status !== 200) {
             $.msg("WeRead", "请求失败", "HTTP " + result.status);
@@ -501,8 +656,13 @@ async function runClaimWithAuth(auth, cachedBody) {
     // 在循环外解析一次 prefer_coin，避免每个奖励项重复解析
     let arg = parseArgument(typeof $argument !== "undefined" ? $argument : {});
     let rawPrefer = arg.prefer_coin;
+    // 兜底：Loon [Argument] 可能不通过 $argument 传入 cron，尝试从持久存储读取
+    if (rawPrefer === undefined && typeof $persistentStore !== "undefined") {
+        let stored = $persistentStore.read("prefer_coin");
+        if (stored !== null && stored !== undefined) rawPrefer = stored;
+    }
     let preferCoin = true; // 默认优先书币
-    if (rawPrefer === false || rawPrefer === "false" || rawPrefer === "switch,false") {
+    if (rawPrefer === false || rawPrefer === "false" || rawPrefer === "switch,false" || rawPrefer === "0" || rawPrefer === 0) {
         preferCoin = false;
     }
     let firstType = preferCoin ? 2 : 1;
@@ -541,15 +701,28 @@ async function runClaimWithAuth(auth, cachedBody) {
 
 
         if (r.status === 401) {
-            if (auth.refreshToken && auth.deviceId) {
-                $.log("[WeRead] claim 401 — attempting auto-refresh...");
-                let refreshed = await tryRefreshLogin(auth);
-                if (refreshed) {
-                    $.setdata(JSON.stringify(refreshed), AUTH_KEY);
-                    $.log("[WeRead] refresh succeeded, retrying claim from scratch...");
-                    return await runClaimWithAuth(refreshed);
-                }
+            // 方案 C：skey 已过期，尝试不带 skey 重新领取
+            $.log("[WeRead] claim 401 — 尝试不带 skey 重新领取...");
+            delete auth.skey; // 后续请求都不带 skey
+            let r2 = await post(
+                API + "/weekly/exchange",
+                encode({
+                    unread: 1,
+                    awardChoiceType: choice.choiceType,
+                    awardLevelId: item.awardLevelId,
+                    isExchangeAward: 1,
+                    pf: PF
+                }),
+                getHeaders(auth)
+            );
+
+            if (r2.status === 200) {
+                count++;
+                details.push((item._src || "奖励") + "·" + describeChoice(choice, r2));
+                continue;
             }
+
+            // 方案 D：vid/skey 均失效
             $.msg("WeRead", "认证已过期", "vid/skey 已失效，请重新打开微信读书 App 刷新认证后再试");
             $.setdata("", AUTH_KEY);
             return;
@@ -704,6 +877,11 @@ async function runFlipCard(auth) {
 
 
 // Try to refresh vid/skey via /login using saved refreshToken + deviceId
+//
+// ⚠️ 非功能代码：/login 的 signature 算法经逆向分析确认为「极高难度」
+// （HMAC-SHA256 key 格式 %@_%@_EBRYFkVMReKBGsU2_%@ 但 3 个 %@ 的具体来源
+//  以及 message 的构建方式无法从二进制中确定，160+ 种组合验证均不匹配）。
+// 保留此函数待将来签名被破解后启用；当前 401 走方案 C（不带 skey 重试）+ 方案 D（通知用户）。
 async function tryRefreshLogin(auth) {
     let body = {
         refreshToken: auth.refreshToken,
