@@ -13,6 +13,7 @@ hostname = i.weread.qq.com
 
 const AUTH_KEY = "weread_auth_v2";
 const FLIP_STATE_KEY = "weread_flip_state_v1";
+const SCRIPT_VERSION = "2026-08-05-flip-order";
 const API = "https://i.weread.qq.com";
 const FLIP_API = "https://weread.qq.com/flip-card-game/api";
 const PF = "weread_wx-2001-iap-2001-iphone";
@@ -880,7 +881,7 @@ function getFlipHeaders(auth) {
 
 // Try to flip all available cards (max 5 flips per week)
 async function runFlipCardDirect(auth) {
-    $.log("[WeRead] 翻牌游戏 — 开始...");
+    $.log("[WeRead] 翻牌游戏 — 开始... version=" + SCRIPT_VERSION);
 
     if (!auth) auth = getAuth();
 
