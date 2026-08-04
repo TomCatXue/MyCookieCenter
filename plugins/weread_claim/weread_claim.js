@@ -162,12 +162,13 @@ function hmacSha256Hex(keyStr, dataStr) {
 function saveAuth() {
     let h = $request.headers || {};
     let url = ($request.url || "");
+    savePreferenceFromArgument();
 
     // --- weread.qq.com (非 i.weread.qq.com): Cookie-based auth (wr_vid / wr_skey) ---
     // 注意：不能用 indexOf("weread.qq.com")，因为 i.weread.qq.com 也含此子串
     // 用 "://weread.qq.com" 精确匹配协议后的域名开头
     if (url.indexOf("://weread.qq.com") !== -1) {
-        let cookie = h["Cookie"] || "";
+        let cookie = getHeader(h, "cookie") || "";
         if (!cookie) return;
 
         let wrVid = "", wrSkey = "";
@@ -296,7 +297,12 @@ function saveAuth() {
     $.log("[WeRead] auth saved, deviceId=" + (auth.deviceId ? "present" : "missing")
         + ", refreshToken=" + (auth.refreshToken ? "present" : "missing"));
 
-    // 中转存储 prefer_coin：http-request 能读到 [Argument]，存下来给 cron 用
+}
+
+
+function savePreferenceFromArgument() {
+    // 中转存储 prefer_coin：http-request 能读到 [Argument]，存下来给 cron 用。
+    // 必须在凭据去重 return 前执行，否则用户切换偏好后凭据未变会导致新值不落盘。
     if (typeof $argument !== "undefined") {
         let pArg = parseArgument($argument);
         if (pArg.prefer_coin !== undefined) {
@@ -304,6 +310,15 @@ function saveAuth() {
             $.log("[WeRead] prefer_coin 中转存储: " + pArg.prefer_coin);
         }
     }
+}
+
+
+function getHeader(headers, name) {
+    let target = String(name).toLowerCase();
+    for (let key in (headers || {})) {
+        if (String(key).toLowerCase() === target) return headers[key];
+    }
+    return "";
 }
 
 
@@ -771,6 +786,27 @@ function get(url, headers) {
 
 // ── Flip card helpers ───────────────────────────────────
 
+function pickNextFlip(data) {
+    let cards = data.cardList || [];
+    let used = {};
+    cards.forEach(c => {
+        if (typeof c.cardIndex === "number" && c.cardIndex >= 0) {
+            used[c.cardIndex] = true;
+        }
+    });
+
+    let giftIndex = Array.isArray(data.flipList) ? data.flipList.length : Object.keys(used).length;
+    let cardIndex = -1;
+    for (let i = 0; i < 9; i++) {
+        if (!used[i]) {
+            cardIndex = i;
+            break;
+        }
+    }
+
+    return cardIndex >= 0 ? { cardIndex, giftIndex } : null;
+}
+
 // Parse Cookie string into key-value object
 function parseCookie(str) {
     let obj = {};
@@ -832,15 +868,10 @@ async function runFlipCard(auth) {
             break;
         }
 
-        // 2. Find first unflipped card (status === 0)
-        let cards = data.cardList || [];
-        let target = null;
-        for (let c of cards) {
-            if (c.status === 0) {
-                target = c;
-                break;
-            }
-        }
+        // 2. Infer the next hidden card from revealed positions.
+        // Captured traffic uses GET /flipCardFlip?cardIndex=N&giftIndex=M.
+        // In cardList, unflipped cards may be placeholders with cardIndex=-1.
+        let target = pickNextFlip(data);
 
         if (!target) {
             $.log("[WeRead] 翻牌 — 没有未翻开的卡片");
@@ -849,11 +880,11 @@ async function runFlipCard(auth) {
 
         $.log("[WeRead] 翻牌 — 第 " + (attempts + 1) + "/" + MAX_ATTEMPTS + " 次, 翻 cardIndex=" + target.cardIndex);
 
-        // 3. POST flip request (captured as POST, URL has query params, no body)
-        let flipUrl = FLIP_API + "/flipCardFlip?cardIndex=" + target.cardIndex + "&pf=ios&platform=ios_html";
-        let flipRes = await post(
+        // 3. GET flip request (matches captured traffic)
+        let flipUrl = FLIP_API + "/flipCardFlip?cardIndex=" + target.cardIndex
+            + "&giftIndex=" + target.giftIndex + "&pf=ios&platform=ios_html";
+        let flipRes = await get(
             flipUrl,
-            "",
             getFlipHeaders(auth)
         );
 
