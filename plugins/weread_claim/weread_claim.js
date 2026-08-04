@@ -17,6 +17,7 @@ const API = "https://i.weread.qq.com";
 const FLIP_API = "https://weread.qq.com/flip-card-game/api";
 const PF = "weread_wx-2001-iap-2001-iphone";
 const HMAC_SALT = "EBRYFkVMReKBGsU2";
+const FLIP_CARD_ORDER = [2, 5, 4, 7, 8, 6, 0, 1, 3];
 
 let $ = new Env("WeRead");
 
@@ -798,9 +799,10 @@ function pickNextFlip(data) {
 
     let giftIndex = Array.isArray(data.flipList) ? data.flipList.length : Object.keys(used).length;
     let cardIndex = -1;
-    for (let i = 0; i < 9; i++) {
-        if (!used[i]) {
-            cardIndex = i;
+    for (let i = 0; i < FLIP_CARD_ORDER.length; i++) {
+        let candidate = FLIP_CARD_ORDER[i];
+        if (!used[candidate]) {
+            cardIndex = candidate;
             break;
         }
     }
