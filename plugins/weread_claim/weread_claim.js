@@ -12,6 +12,7 @@ hostname = i.weread.qq.com
 */
 
 const AUTH_KEY = "weread_auth_v2";
+const FLIP_STATE_KEY = "weread_flip_state_v1";
 const API = "https://i.weread.qq.com";
 const FLIP_API = "https://weread.qq.com/flip-card-game/api";
 const PF = "weread_wx-2001-iap-2001-iphone";
@@ -807,6 +808,48 @@ function pickNextFlip(data) {
     return cardIndex >= 0 ? { cardIndex, giftIndex } : null;
 }
 
+function getSavedFlipState() {
+    let raw = $.getdata(FLIP_STATE_KEY);
+    if (!raw) return null;
+
+    try {
+        let saved = JSON.parse(raw);
+        let maxAge = 8 * 24 * 60 * 60 * 1000;
+        if (saved.savedAt && Date.now() - saved.savedAt > maxAge) return null;
+        return saved.data || null;
+    } catch (e) {
+        return null;
+    }
+}
+
+function saveFlipState(data) {
+    if (!data) return;
+    $.setdata(JSON.stringify({ savedAt: Date.now(), data }), FLIP_STATE_KEY);
+}
+
+function clearFlipState() {
+    $.setdata("", FLIP_STATE_KEY);
+}
+
+function describeFlipResult(data) {
+    if (!data) return "未知奖励";
+    if (data.prizeName) return data.prizeName;
+    if (data.reward) return data.reward;
+    if (data.giftName) return data.giftName;
+
+    let cards = data.cardList || [];
+    for (let i = 0; i < cards.length; i++) {
+        let card = cards[i];
+        if (card.status === 3 || card.status === 1) {
+            if (card.bookInfo && card.bookInfo.title) return card.bookInfo.title;
+            if (card.cardType === "money" || card.type === "money") return "书币";
+            if (card.cardType === "infinite" || card.type === "infinite") return "体验卡";
+        }
+    }
+
+    return "未知奖励";
+}
+
 // Parse Cookie string into key-value object
 function parseCookie(str) {
     let obj = {};
@@ -834,7 +877,78 @@ function getFlipHeaders(auth) {
 }
 
 // Try to flip all available cards (max 5 flips per week)
+async function runFlipCardDirect(auth) {
+    $.log("[WeRead] 翻牌游戏 — 开始...");
+
+    if (!auth) auth = getAuth();
+
+    if (!auth || !(auth.wrVid || auth.vid) || !(auth.wrSkey || auth.skey)) {
+        $.msg("WeRead", "翻牌", "未捕获到 weread.qq.com 登录信息，请先打开微信读书 App 触发认证捕获");
+        return;
+    }
+
+    let results = [];
+    let attempts = 0;
+    let state = getSavedFlipState() || {};
+    const MAX_ATTEMPTS = 5;
+
+    while (attempts < MAX_ATTEMPTS) {
+        let target = pickNextFlip(state);
+
+        if (!target && state && state.cardList) {
+            clearFlipState();
+            state = {};
+            target = pickNextFlip(state);
+        }
+
+        if (!target) {
+            $.log("[WeRead] 翻牌 — 没有未翻开的卡片");
+            break;
+        }
+
+        $.log("[WeRead] 翻牌 — 第 " + (attempts + 1) + "/" + MAX_ATTEMPTS
+            + " 次, cardIndex=" + target.cardIndex + ", giftIndex=" + target.giftIndex);
+
+        let flipUrl = FLIP_API + "/flipCardFlip?cardIndex=" + target.cardIndex
+            + "&giftIndex=" + target.giftIndex + "&pf=ios&platform=ios_html";
+        let flipRes = await get(flipUrl, getFlipHeaders(auth));
+
+        attempts++;
+
+        if (flipRes.status === 200) {
+            let flipData = JSON.parse(flipRes.body || "{}");
+            state = flipData;
+            saveFlipState(state);
+
+            let prize = describeFlipResult(flipData);
+            let type = flipData.prizeType || flipData.type || "";
+            results.push("第 " + attempts + " 次: " + prize + (type ? " (" + type + ")" : ""));
+            $.log("[WeRead] 翻牌 — 第 " + attempts + " 次成功: " + prize);
+
+            if (!flipData.remainingCount || flipData.remainingCount <= 0) {
+                $.log("[WeRead] 翻牌 — 无剩余翻牌次数");
+                break;
+            }
+        } else {
+            $.log("[WeRead] 翻牌 — 第 " + attempts + " 次失败 HTTP " + flipRes.status);
+            results.push("第 " + attempts + " 次: 失败 (HTTP " + flipRes.status + ")");
+            break;
+        }
+
+        if (attempts < MAX_ATTEMPTS) {
+            await new Promise(r => setTimeout(r, 1500));
+        }
+    }
+
+    if (results.length > 0) {
+        $.msg("WeRead", "翻牌完成", results.join("\n"));
+    } else {
+        $.msg("WeRead", "翻牌", "暂无可翻的卡片");
+    }
+}
+
 async function runFlipCard(auth) {
+    return await runFlipCardDirect(auth);
     $.log("[WeRead] 翻牌游戏 — 开始...");
 
     // Get auth if not provided
