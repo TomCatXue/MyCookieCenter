@@ -193,6 +193,7 @@ function saveAuth() {
                 skey: existing.skey || "",
                 wrVid: wrVid,
                 wrSkey: wrSkey,
+                flipUa: h["user-agent"] || existing.flipUa || existing.ua || "",
                 refreshToken: existing.refreshToken || "",
                 deviceId: existing.deviceId || "",
                 basever: existing.basever || "",
@@ -871,10 +872,17 @@ function getFlipHeaders(auth) {
     // 翻牌游戏用 wrVid/wrSkey（Cookie 认证），与 i.weread.qq.com 的 vid/skey 分开存储
     let wrVid = auth.wrVid || auth.vid || "";
     let wrSkey = auth.wrSkey || auth.skey || "";
+    let flipUa = auth.flipUa || auth.ua || "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;WeRead/10.2.1 (iPhone; iOS 26.3.1; Scale/3.00)";
     return {
-        "User-Agent": auth.ua || "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15",
+        "User-Agent": flipUa,
         "Accept": "application/json, text/plain, */*",
         "Accept-Language": "zh-CN,zh-Hans;q=0.9",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Referer": "https://weread.qq.com/flip-card-game?isAnimateNavBarBackground=1&isShowNavBarShadow=0&isStatusbarLight=1&backgroundColor=%25234CB6FA&navBarTintColor=%2523ffffff&navBarTitleColor=%2523ffffff&navBarBackgroundColor=%25234CB6FA",
+        "sec-fetch-site": "same-origin",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-dest": "empty",
+        "priority": "u=3, i",
         "Cookie": "wr_skey=" + wrSkey + "; wr_vid=" + wrVid
     };
 }
