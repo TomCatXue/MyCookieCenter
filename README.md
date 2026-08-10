@@ -24,7 +24,7 @@ MyCookieCenter/
 | [`plugins/`](./plugins/) | 解锁会员、特殊功能脚本（首页净化、响应改写等） | [查看](./plugins/README.md) |
 | [`loon/`](./loon/) | 所有 Loon `.plugin` 插件文件 | [查看](./loon/README.md) |
 | [`boxjs/`](./boxjs/) | BoxJS 面板订阅文件（仅签到体系） | [查看](./boxjs/README.md) |
-| [`docs/`](./docs/) | 通用文档（抓包、接入指南） | - |
+| [`docs/`](./docs/) | 通用文档（抓包、接入指南） | [查看](#通用文档) |
 
 ### 分类说明
 
@@ -32,6 +32,16 @@ MyCookieCenter/
 |---|---|---|
 | **签到体系** | `app/` + `loon/CookieCenter.plugin`(抓Cookie) + `boxjs/`(签到cron) | 抓 Cookie + cron 定时签到，需持久化 |
 | **功能插件** | `plugins/` + `loon/*.plugin`（独立） | 无状态请求/响应改写，实时生效，独立开关 |
+
+---
+
+## 通用文档
+
+| 文档 | 内容 |
+|---|---|
+| [`docs/capture.md`](./docs/capture.md) | 抓包教程：手机抓取 Cookie 与签到接口 |
+| [`docs/add-app.md`](./docs/add-app.md) | 接入新 App（抓 Cookie + 自动签到） |
+| [`docs/add-plugin.md`](./docs/add-plugin.md) | 新增功能插件（解锁会员 / 净化 / 改写） |
 
 ---
 
@@ -53,12 +63,21 @@ https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/<目�
 |---|---|---|
 | 示例模板 | [`app/example/`](./app/example/) | 💎 规划中 |
 
+> 当前 `CookieCenter.plugin` 为框架壳，尚未内置真实 App 签到脚本；`app/example/` 提供单文件脚本模板（抓 Cookie + cron 签到）。新平台接入请参考 [`docs/add-app.md`](./docs/add-app.md)。
+
 ## 特殊功能插件
 
 | 插件 | 功能 | 状态 |
 |---|---|---|
-| QQ空间·清净 | 广告退散，空间清净 | ✅ 已验证 |
-| 微信读书·优雅收录 | 轻触订阅人数，好书即刻入架 | ✅ 已验证 |
+| [QQ空间·清净](./loon/QzoneAdBlock.plugin) | 广告退散，空间清净（纯规则型） | ✅ 已验证 |
+| [微信读书·优雅收录](./loon/WeReadEnhance.plugin) | 轻触订阅人数，好书即刻入架 | ✅ 已验证 |
+| [微信读书·自动领取](./loon/WeReadClaim.plugin) | 定时领取阅读奖励 + 每周翻牌 | ✅ 已验证 |
+| [微信读书·会员解锁](./loon/WeReadVip.plugin) | v6.x 会员解锁 + 付费墙 + 屏蔽更新 | ⚠️ 待修（仅 v6.x） |
+| [扫描全能王·签到](./loon/camscanner.plugin) | 抓取 Cookie + 每日签到 | 🧪 待验证（外部依赖） |
+
+> `扫描全能王·签到` 的脚本与图标指向外部仓库（[MaYIHEI/paperclip](https://github.com/MaYIHEI/paperclip)、[MaYIHEI/pin](https://github.com/MaYIHEI/pin)），本仓库仅提供 `.plugin` 入口，脚本内容不在维护范围内。
+
+**状态徽章**：✅ 已验证（实测可用）｜ 🧪 待验证（未确认）｜ ⚠️ 待修（失效/受限）｜ 📦 已归档 ｜ 💎 规划中
 
 ---
 

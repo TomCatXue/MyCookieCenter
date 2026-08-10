@@ -19,10 +19,15 @@
 
 ### 独立功能
 
-| 文件 | 说明 | 对应脚本 | 类型 |
-|---|---|---|---|
-| [`QzoneAdBlock.plugin`](./QzoneAdBlock.plugin) | QQ空间·清净 — 广告退散，空间清净 | [`plugins/qzone/`](../plugins/qzone/) | 规则型 |
-| [`WeReadEnhance.plugin`](./WeReadEnhance.plugin) | 微信读书·优雅收录 — 轻触订阅人数，好书即刻入架 | [`plugins/wxread/`](../plugins/wxread/) | 脚本型 |
+| 文件 | 说明 | 类型 |
+|---|---|---|
+| [`QzoneAdBlock.plugin`](./QzoneAdBlock.plugin) | QQ空间·清净 — 广告退散，空间清净 | 规则型（无脚本） |
+| [`WeReadEnhance.plugin`](./WeReadEnhance.plugin) | 微信读书·优雅收录 — 轻触订阅人数，好书即刻入架 | 脚本型 · [`plugins/wxread/`](../plugins/wxread/) |
+| [`WeReadClaim.plugin`](./WeReadClaim.plugin) | 微信读书·自动领取 — 定时领取阅读奖励（书币/体验卡）+ 每周翻牌 | 脚本型 · [`plugins/weread_claim/`](../plugins/weread_claim/) |
+| [`WeReadVip.plugin`](./WeReadVip.plugin) | 微信读书·会员解锁 — v6.x 会员解锁 + 付费墙 + 屏蔽更新 | 脚本型 · [`plugins/weread_vip/`](../plugins/weread_vip/) |
+| [`camscanner.plugin`](./camscanner.plugin) | 扫描全能王·签到 — 抓取 Cookie + 每日签到 | 脚本型 · 外部依赖 ⚠️ |
+
+> `camscanner.plugin` 的脚本与图标指向外部仓库（[MaYIHEI/paperclip](https://github.com/MaYIHEI/paperclip)、[MaYIHEI/pin](https://github.com/MaYIHEI/pin)），本仓库仅提供 `.plugin` 入口，脚本内容不在本仓库维护范围内。
 
 ---
 
@@ -38,4 +43,3 @@
 3. 导入后在插件设置中按需打开开关（默认全关）
 4. **Cookie 抓取**：打开对应 App 开关 → 进入 App 触发接口 → 收到通知即成功 → 建议关闭开关减少 MITM
 5. **签到/羊毛**：通过 [BoxJS 订阅](../boxjs/README.md) 管理 cron 任务
-| [`WeReadClaim.plugin`](./WeReadClaim.plugin) | 微信读书·自动领取 — 定时领取已达标阅读奖励（书币/体验卡） | [`plugins/weread_claim/`](../plugins/weread_claim/) | 脚本型 |

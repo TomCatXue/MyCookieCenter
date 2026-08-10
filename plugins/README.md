@@ -26,7 +26,8 @@
 |---|---|---|---|---|
 | — | QQ空间·清净 | 广告退散，空间清净（纯规则型，无需脚本） | [`loon/QzoneAdBlock.plugin`](../loon/QzoneAdBlock.plugin) | ✅ 已验证 |
 | [`wxread/`](./wxread/) | 微信读书·优雅收录 | 轻触订阅人数，好书即刻入架 | [`loon/WeReadEnhance.plugin`](../loon/WeReadEnhance.plugin) | ✅ 已验证 |
-| [`weread_claim/`](./weread_claim/) | 微信读书·自动领取 | 定时领取已达标阅读奖励（书币/体验卡） | [`loon/WeReadClaim.plugin`](../loon/WeReadClaim.plugin) | 🧪 待验证 |
+| [`weread_claim/`](./weread_claim/) | 微信读书·自动领取 | 定时领取阅读奖励（书币/体验卡）+ 每周翻牌 | [`loon/WeReadClaim.plugin`](../loon/WeReadClaim.plugin) | ✅ 已验证 |
+| [`weread_vip/`](./weread_vip/) | 微信读书·会员解锁 | v6.x 会员解锁 + 付费墙 + 屏蔽更新 | [`loon/WeReadVip.plugin`](../loon/WeReadVip.plugin) | ⚠️ 待修（仅 v6.x） |
 
 ---
 
@@ -49,6 +50,5 @@ feat(plugins): 新增 <插件名> 插件(<一句话功能>)
 
 ## 致谢
 
-- `qzone/` 广告屏蔽规则源自 [zqzess/rule_for_quantumultX](https://github.com/zqzess/rule_for_quantumultX)（MIT License）
+- `QzoneAdBlock` 广告屏蔽规则源自 [zqzess/rule_for_quantumultX](https://github.com/zqzess/rule_for_quantumultX)（MIT License）
 - `wxread/` 微信读书优雅收录脚本，基于社区脚本重构整合
-| [`weread_vip/`](./weread_vip/) | 微信读书·会员解锁 | v6.x 会员解锁 + 付费墙 + 更新屏蔽（v10.x 不可用） | [`plugins/weread_vip/weread_vip.plugin`](./weread_vip/weread_vip.plugin) | ⚠️ 待修（仅 v6.x） |
