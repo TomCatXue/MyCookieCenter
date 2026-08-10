@@ -1,19 +1,44 @@
 /*
-#!name=微信读书自动领取增强版 V2
-#!desc=动态认证版，自动保存vid/skey/basever
-#!author=TomCatXue
+#!name=微信读书自动领取奖励
+#!desc=定时自动领取已达标阅读时长奖励（书币/体验卡），可切换偏好；每周二 20:00 自动翻牌游戏
+#!author=Codex
+#!homepage=https://github.com/TomCatXue/MyCookieCenter
+#!icon=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/weread.png
+#!tag=微信读书,自动领取,阅读奖励,翻牌游戏
 
-[Script]
-http-request ^https:\/\/i\.weread\.qq\.com\/ script-path=weread_claim_enhanced_v2.js
-cron "0 9 * * *" script-path=weread_claim_enhanced_v2.js
+[Argument]
+# 奖励偏好: 1=优先体验卡, 2=优先书币
+prefer_coin = input,2,tag=奖励选择,desc=1=优先体验卡 2=优先书币
+# 抓取Cookie: 开=自动抓取登录信息(vid/skey/refreshToken), 关=不抓取（需手动配置）
+capture_cookie = switch,true,tag=抓取Cookie,desc=开启：自动抓取登录信息 / 关闭：不抓取
 
 [MITM]
-hostname = i.weread.qq.com
+hostname = i.weread.qq.com, weread.qq.com
+
+[Script]
+# 捕获鉴权信息（vid + skey，而非 Cookie）：打开微信读书 App 随便刷一下（几乎任何页面都会触发）
+http-request ^https?://i\.weread\.qq\.com/.* script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/weread_claim/weread_claim.js?v=20260810-fix, tag=WeReadClaim Auth, requires-body=false, enable={capture_cookie}
+
+# 捕获 /login 请求体（Base64 编码），提取 deviceId
+http-request POST ^https?://i\.weread\.qq\.com/login script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/weread_claim/weread_claim.js?v=20260810-fix, tag=WeReadClaim Login, requires-body=true, enable={capture_cookie}
+
+# 捕获 /login 响应体，提取 vid/skey/refreshToken（自动刷新的前置条件）
+http-response POST ^https?://i\.weread\.qq\.com/login script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/weread_claim/weread_claim.js?v=20260810-fix, tag=WeReadClaim LoginResp, requires-body=true, enable={capture_cookie}
+
+# 捕获 weread.qq.com Cookie（wr_skey/wr_vid，翻牌游戏用）
+http-request ^https?://weread\.qq\.com/.* script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/weread_claim/weread_claim.js?v=20260810-fix, tag=WeReadClaim FlipCookie, requires-body=false, enable={capture_cookie}
+
+# 定时领取：每晚 23:00 自动检查并领取
+# 不设 argument=，让 Loon 自动把 [Argument] 值注入 $argument；http-request 中转存储兜底
+cron "0 23 * * *" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/weread_claim/weread_claim.js?v=20260810-fix, tag=WeReadClaim 签到, enable=true
+
+# 翻牌游戏：每周二 20:00 自动翻牌
+cron "0 20 * * 2" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/weread_claim/weread_claim.js?v=20260810-fix, argument="task=flip", tag=WeReadClaim 翻牌, enable=true
 */
 
 const AUTH_KEY = "weread_auth_v2";
 const FLIP_STATE_KEY = "weread_flip_state_v1";
-const SCRIPT_VERSION = "2026-08-05-flip-order";
+const SCRIPT_VERSION = "2026-08-10-fix";
 const API = "https://i.weread.qq.com";
 const FLIP_API = "https://weread.qq.com/flip-card-game/api";
 const PF = "weread_wx-2001-iap-2001-iphone";
@@ -690,8 +715,13 @@ async function runClaimWithAuth(auth, cachedBody) {
         if (stored !== null && stored !== undefined) rawPrefer = stored;
     }
     // 1=优先体验卡, 2=优先书币（默认）
+    // Loon 的 input/switch 类型参数可能带 "input," / "switch," 前缀，统一剥离后再判断
+    let preferVal = rawPrefer;
+    if (typeof preferVal === "string") {
+        preferVal = preferVal.replace(/^(input|switch),/, "");
+    }
     let preferCoin = true;
-    if (rawPrefer === 1 || rawPrefer === "1" || rawPrefer === false || rawPrefer === "false" || rawPrefer === "switch,false") {
+    if (preferVal === 1 || preferVal === "1" || preferVal === false || preferVal === "false") {
         preferCoin = false;
     }
     let firstType = preferCoin ? 2 : 1;
@@ -887,7 +917,7 @@ function getFlipHeaders(auth) {
     };
 }
 
-// Try to flip all available cards (max 5 flips per week)
+// Try to flip all available cards (max 6 flips per week)
 async function runFlipCardDirect(auth) {
     $.log("[WeRead] 翻牌游戏 — 开始... version=" + SCRIPT_VERSION);
 
@@ -901,7 +931,7 @@ async function runFlipCardDirect(auth) {
     let results = [];
     let attempts = 0;
     let state = getSavedFlipState() || {};
-    const MAX_ATTEMPTS = 5;
+    const MAX_ATTEMPTS = 6;
 
     while (attempts < MAX_ATTEMPTS) {
         let target = pickNextFlip(state);
@@ -927,7 +957,12 @@ async function runFlipCardDirect(auth) {
         attempts++;
 
         if (flipRes.status === 200) {
-            let flipData = JSON.parse(flipRes.body || "{}");
+            let flipData;
+            try {
+                flipData = JSON.parse(flipRes.body || "{}");
+            } catch (e) {
+                flipData = decode(flipRes.body) || {};
+            }
             state = flipData;
             saveFlipState(state);
 
@@ -960,85 +995,6 @@ async function runFlipCardDirect(auth) {
 
 async function runFlipCard(auth) {
     return await runFlipCardDirect(auth);
-    $.log("[WeRead] 翻牌游戏 — 开始...");
-
-    // Get auth if not provided
-    if (!auth) auth = getAuth();
-
-    if (!auth || !(auth.wrVid || auth.vid) || !(auth.wrSkey || auth.skey)) {
-        $.msg("WeRead", "翻牌", "未捕获到 weread.qq.com 登录信息，请先打开微信读书 App 触发认证捕获");
-        return;
-    }
-
-    let results = [];
-    let attempts = 0;
-    const MAX_ATTEMPTS = 5; // 每周最多 5 次
-
-    while (attempts < MAX_ATTEMPTS) {
-        // 1. GET card list to find unflipped cards
-        let listUrl = FLIP_API + "/flipCard?pf=ios&platform=ios_html";
-        let listRes = await get(listUrl, getFlipHeaders(auth));
-
-        if (listRes.status !== 200) {
-            $.log("[WeRead] 翻牌 — 查询卡列表失败 HTTP " + listRes.status);
-            break;
-        }
-
-        let data = JSON.parse(listRes.body || "{}");
-
-        // remainingCount = remaining flips allowed
-        let remaining = data.remainingCount;
-        if (!remaining || remaining <= 0) {
-            $.log("[WeRead] 翻牌 — 无剩余翻牌次数");
-            break;
-        }
-
-        // 2. Infer the next hidden card from revealed positions.
-        // Captured traffic uses GET /flipCardFlip?cardIndex=N&giftIndex=M.
-        // In cardList, unflipped cards may be placeholders with cardIndex=-1.
-        let target = pickNextFlip(data);
-
-        if (!target) {
-            $.log("[WeRead] 翻牌 — 没有未翻开的卡片");
-            break;
-        }
-
-        $.log("[WeRead] 翻牌 — 第 " + (attempts + 1) + "/" + MAX_ATTEMPTS + " 次, 翻 cardIndex=" + target.cardIndex);
-
-        // 3. GET flip request (matches captured traffic)
-        let flipUrl = FLIP_API + "/flipCardFlip?cardIndex=" + target.cardIndex
-            + "&giftIndex=" + target.giftIndex + "&pf=ios&platform=ios_html";
-        let flipRes = await get(
-            flipUrl,
-            getFlipHeaders(auth)
-        );
-
-        attempts++;
-
-        if (flipRes.status === 200) {
-            let flipData = JSON.parse(flipRes.body || "{}");
-            // Extract prize info
-            let prize = flipData.prizeName || flipData.reward || flipData.giftName || "未知奖励";
-            let type = flipData.prizeType || flipData.type || "";
-            results.push("第" + attempts + "次: " + prize + (type ? " (" + type + ")" : ""));
-            $.log("[WeRead] 翻牌 — 第 " + attempts + " 次成功: " + prize);
-        } else {
-            $.log("[WeRead] 翻牌 — 第 " + attempts + " 次失败 HTTP " + flipRes.status);
-            results.push("第" + attempts + "次: 失败 (HTTP " + flipRes.status + ")");
-            break;
-        }
-
-        // Brief delay between flips
-        if (attempts < MAX_ATTEMPTS) {
-            await new Promise(r => setTimeout(r, 1500));
-        }
-    }
-
-    if (results.length > 0) {
-        $.msg("WeRead", "翻牌完成", results.join("\n"));
-    } else {
-        $.msg("WeRead", "翻牌", "暂无可翻的卡片");
-    }
 }
 
 
