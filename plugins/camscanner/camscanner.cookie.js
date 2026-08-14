@@ -37,7 +37,7 @@ const SCRIPT_VERSION = '2026-08-14-silent';
             headers['X-Is-Token'] ||
             (url.match(/[?&]token=([^&]+)/) || [])[1] || '';
 
-        const csEptD  = (url.match(/[?&]cs_ept_d=([^&]+)/) || [])[1] || '';
+        const csEptD = (url.match(/[?&]cs_ept_d=([^&]+)/) || [])[1] || '';
         const clientId = (url.match(/[?&]client_id=([^&]+)/) || [])[1] || '';
 
         if (!token) {
@@ -48,13 +48,13 @@ const SCRIPT_VERSION = '2026-08-14-silent';
 
         const old = $.getdata(CK_KEY);
         let prev = {};
-        try { prev = JSON.parse(old || '{}'); } catch (e) {}
+        try { prev = JSON.parse(old || '{}'); } catch (e) { }
 
         // cs_ept_d / client_id 可能在不同请求里,增量更新
         const data = {
-            token:       token,
-            cs_ept_d:    csEptD   || prev.cs_ept_d  || '',
-            client_id:   clientId || prev.client_id || '',
+            token: token,
+            cs_ept_d: csEptD || prev.cs_ept_d || '',
+            client_id: clientId || prev.client_id || '',
         };
 
         // 数据未变 → 完全静默
@@ -78,7 +78,7 @@ function Env(s) {
     this.name = s;
     this.isSurge = () => typeof $httpClient !== 'undefined' && !!$httpClient;
     this.isQuanX = () => typeof $task !== 'undefined' && !!$task;
-    this.isLoon  = () => typeof $loon !== 'undefined' && !!$loon;
+    this.isLoon = () => typeof $loon !== 'undefined' && !!$loon;
     this.log = (...a) => console.log(a.join('\n'));
     this.msg = (t = this.name, s = '', b = '') => {
         if (this.isSurge() || this.isLoon()) $notification.post(t, s, b);
