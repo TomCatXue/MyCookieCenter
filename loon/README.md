@@ -25,7 +25,6 @@
 | [`WeReadEnhance.plugin`](./WeReadEnhance.plugin) | 微信读书·优雅收录 — 轻触订阅人数，好书即刻入架 | 脚本型 · [`plugins/wxread/`](../plugins/wxread/) |
 | [`WeReadClaim.plugin`](./WeReadClaim.plugin) | 微信读书·自动领取 — 定时领取阅读奖励（书币/体验卡）+ 每周翻牌 | 脚本型 · [`plugins/weread_claim/`](../plugins/weread_claim/) |
 | [`WeReadVip.plugin`](./WeReadVip.plugin) | 微信读书·会员解锁 — v6.x 会员解锁 + 付费墙 + 屏蔽更新 | 脚本型 · [`plugins/weread_vip/`](../plugins/weread_vip/) |
-| [`AlipayAdBlock.plugin`](./AlipayAdBlock.plugin) | 支付宝·广告屏蔽 — 拦截推广资源与创意图，净化运营位 | 脚本型 · [`plugins/alipay_ad/`](../plugins/alipay_ad/) |
 | [`camscanner.plugin`](./camscanner.plugin) | 扫描全能王·签到 — 抓取 Cookie + 每日签到 | 脚本型 · 外部依赖 ⚠️ |
 
 > `camscanner.plugin` 的脚本与图标指向外部仓库（[MaYIHEI/paperclip](https://github.com/MaYIHEI/paperclip)、[MaYIHEI/pin](https://github.com/MaYIHEI/pin)），本仓库仅提供 `.plugin` 入口，脚本内容不在本仓库维护范围内。
