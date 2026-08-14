@@ -17,28 +17,28 @@ hostname = i.weread.qq.com, weread.qq.com
 
 [Script]
 # 捕获鉴权信息（vid + skey，而非 Cookie）：打开微信读书 App 随便刷一下（几乎任何页面都会触发）
-http-request ^https?://i\.weread\.qq\.com/.* script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/weread_claim/weread_claim.js?v=20260811-flipfix, tag=WeReadClaim Auth, requires-body=false, enable={capture_cookie}
+http-request ^https?://i\.weread\.qq\.com/.* script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/weread_claim/weread_claim.js?v=20260814-preferfix, tag=WeReadClaim Auth, requires-body=false, enable={capture_cookie}
 
 # 捕获 /login 请求体（Base64 编码），提取 deviceId
-http-request POST ^https?://i\.weread\.qq\.com/login script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/weread_claim/weread_claim.js?v=20260811-flipfix, tag=WeReadClaim Login, requires-body=true, enable={capture_cookie}
+http-request POST ^https?://i\.weread\.qq\.com/login script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/weread_claim/weread_claim.js?v=20260814-preferfix, tag=WeReadClaim Login, requires-body=true, enable={capture_cookie}
 
 # 捕获 /login 响应体，提取 vid/skey/refreshToken（自动刷新的前置条件）
-http-response POST ^https?://i\.weread\.qq\.com/login script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/weread_claim/weread_claim.js?v=20260811-flipfix, tag=WeReadClaim LoginResp, requires-body=true, enable={capture_cookie}
+http-response POST ^https?://i\.weread\.qq\.com/login script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/weread_claim/weread_claim.js?v=20260814-preferfix, tag=WeReadClaim LoginResp, requires-body=true, enable={capture_cookie}
 
 # 捕获 weread.qq.com Cookie（wr_skey/wr_vid，翻牌游戏用）
-http-request ^https?://weread\.qq\.com/.* script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/weread_claim/weread_claim.js?v=20260811-flipfix, tag=WeReadClaim FlipCookie, requires-body=false, enable={capture_cookie}
+http-request ^https?://weread\.qq\.com/.* script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/weread_claim/weread_claim.js?v=20260814-preferfix, tag=WeReadClaim FlipCookie, requires-body=false, enable={capture_cookie}
 
 # 定时领取：每晚 23:00 自动检查并领取
 # 不设 argument=，让 Loon 自动把 [Argument] 值注入 $argument；http-request 中转存储兜底
-cron "0 23 * * *" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/weread_claim/weread_claim.js?v=20260811-flipfix, tag=WeReadClaim 签到, enable=true
+cron "0 23 * * *" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/weread_claim/weread_claim.js?v=20260814-preferfix, tag=WeReadClaim 签到, enable=true
 
 # 翻牌游戏：每周二 20:00 自动翻牌
-cron "0 20 * * 2" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/weread_claim/weread_claim.js?v=20260811-flipfix, argument="task=flip", tag=WeReadClaim 翻牌, enable=true
+cron "0 20 * * 2" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/weread_claim/weread_claim.js?v=20260814-preferfix, argument="task=flip", tag=WeReadClaim 翻牌, enable=true
 */
 
 const AUTH_KEY = "weread_auth_v2";
 const FLIP_STATE_KEY = "weread_flip_state_v1";
-const SCRIPT_VERSION = "2026-08-11-flipfix";
+const SCRIPT_VERSION = "2026-08-14-preferfix";
 const API = "https://i.weread.qq.com";
 const FLIP_API = "https://weread.qq.com/flip-card-game/api";
 const PF = "weread_wx-2001-iap-2001-iphone";
@@ -47,7 +47,7 @@ const FLIP_CARD_ORDER = [2, 5, 4, 7, 8, 6, 0, 1, 3];
 
 let $ = new Env("WeRead");
 
-(async () => {
+async function main() {
     try {
         if (typeof $request !== "undefined") {
             saveAuth();
@@ -67,7 +67,11 @@ let $ = new Env("WeRead");
     }
 
     $done({});
-})();
+}
+
+if (typeof module === "undefined" || !module.exports) {
+    main();
+}
 
 
 // ============================================================
@@ -190,7 +194,6 @@ function hmacSha256Hex(keyStr, dataStr) {
 function saveAuth() {
     let h = $request.headers || {};
     let url = ($request.url || "");
-    savePreferenceFromArgument();
 
     // --- weread.qq.com (非 i.weread.qq.com): Cookie-based auth (wr_vid / wr_skey) ---
     // 注意：不能用 indexOf("weread.qq.com")，因为 i.weread.qq.com 也含此子串
@@ -329,19 +332,6 @@ function saveAuth() {
 }
 
 
-function savePreferenceFromArgument() {
-    // 中转存储 prefer_coin：http-request 能读到 [Argument]，存下来给 cron 用。
-    // 必须在凭据去重 return 前执行，否则用户切换偏好后凭据未变会导致新值不落盘。
-    if (typeof $argument !== "undefined") {
-        let pArg = parseArgument($argument);
-        if (pArg.prefer_coin !== undefined) {
-            $.setdata(String(pArg.prefer_coin), "weread_prefer_coin");
-            $.log("[WeRead] prefer_coin 中转存储: " + pArg.prefer_coin);
-        }
-    }
-}
-
-
 function getHeader(headers, name) {
     let target = String(name).toLowerCase();
     for (let key in (headers || {})) {
@@ -443,6 +433,28 @@ function describeChoice(choice, resp) {
 }
 
 
+// 解析奖励偏好 prefer_coin。
+// Loon [Argument] 段的值通过 $persistentStore.read("prefer_coin") 读取（见 Env.getdata），
+// 返回用户选择的 "1"(优先体验卡) / "2"(优先书币) 字符串；兼容个别版本带 "input," 前缀。
+// 1=优先体验卡, 2=优先书币（默认）。
+function resolvePreferCoin(rawPrefer) {
+    let preferVal = rawPrefer;
+    if (typeof preferVal === "string") {
+        preferVal = preferVal.replace(/^(input|switch),/, "");
+    }
+    let preferCoin = true; // 默认书币优先
+    if (preferVal === 1 || preferVal === "1" || preferVal === false || preferVal === "false") {
+        preferCoin = false; // 体验卡优先
+    }
+    return {
+        raw: rawPrefer,
+        preferCoin: preferCoin,
+        firstType: preferCoin ? 2 : 1,
+        secondType: preferCoin ? 1 : 2
+    };
+}
+
+
 // Build HMAC key for /login: refreshToken_deviceId_SALT_random
 function buildLoginKey(refreshToken, deviceId, random) {
     return refreshToken + "_" + deviceId + "_" + HMAC_SALT + "_" + random;
@@ -489,11 +501,8 @@ function post(url, body, headers) {
 }
 
 
-// 方案 B：通过网页版 /web/login/renewal 自动续期 skey
-// ⚠️ 已禁用：网页版 renewal 与 App 版认证不同源，不适用
-// 保留代码供参考，当前 401 走方案 C（不带 skey 重试）+ 方案 D（通知用户）
-// 前提：App 的 skey 和网页版的 wr_skey 同源（待验证）
-// 如果成功，用户无需手动打开 App 刷新
+// 方案 B：通过网页版 /web/login/renewal 自动续期 wr_skey
+// 仅用于 weread.qq.com H5 翻牌 Cookie，不回写 App API 的 skey。
 async function tryWebRenewal(auth) {
     let wrVid = auth.wrVid || auth.vid || "";
     let wrSkey = auth.wrSkey || auth.skey || "";
@@ -509,7 +518,7 @@ async function tryWebRenewal(auth) {
         $httpClient.post({
             url: "https://weread.qq.com/web/login/renewal",
             headers: {
-                "User-Agent": auth.ua || "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15",
+                "User-Agent": auth.flipUa || auth.ua || "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15",
                 "Content-Type": "application/json",
                 "Cookie": "wr_skey=" + wrSkey + "; wr_vid=" + wrVid
             },
@@ -542,16 +551,15 @@ async function tryWebRenewal(auth) {
             setCookie.split(/;|,/).forEach(part => {
                 part = part.trim();
                 if (part.startsWith("wr_skey=")) {
-                    newSkey = part.substring("wr_skey=".length);
+                    newSkey = decodeURIComponent(part.substring("wr_skey=".length));
                 }
             });
 
             if (newSkey) {
                 $.log("[WeRead] renewal 成功(Set-Cookie): 新 wr_skey=" + newSkey.slice(0, 8) + "...");
-                // 更新 wrSkey 和 skey（假设同源，待验证）
+                // 只续期 H5 翻牌 Cookie，避免污染 App API 的 skey
                 auth.wrSkey = newSkey;
-                auth.skey = newSkey;
-                auth.authTime = Date.now();
+                auth.webRenewTime = Date.now();
                 $.setdata(JSON.stringify(auth), AUTH_KEY);
                 resolve(auth);
             } else {
@@ -561,9 +569,8 @@ async function tryWebRenewal(auth) {
                 if (bodyData && (bodyData.skey || bodyData.wr_skey)) {
                     let sk = bodyData.skey || bodyData.wr_skey;
                     $.log("[WeRead] renewal 成功(body): 新 skey=" + String(sk).slice(0, 8) + "...");
-                    auth.skey = sk;
                     auth.wrSkey = sk;
-                    auth.authTime = Date.now();
+                    auth.webRenewTime = Date.now();
                     $.setdata(JSON.stringify(auth), AUTH_KEY);
                     resolve(auth);
                 } else {
@@ -706,27 +713,13 @@ async function runClaimWithAuth(auth, cachedBody) {
     let count = 0;
     let details = [];
 
-    // 在循环外解析一次 prefer_coin，避免每个奖励项重复解析
-    // 读取顺序：$argument（Loon 可能注入 [Argument] 对象）→ 持久存储（http-request 中转）→ 默认
-    let arg = parseArgument(typeof $argument !== "undefined" ? $argument : {});
-    let rawPrefer = arg.prefer_coin;
-    if (rawPrefer === undefined) {
-        let stored = $.getdata("weread_prefer_coin");
-        if (stored !== null && stored !== undefined) rawPrefer = stored;
-    }
-    // 1=优先体验卡, 2=优先书币（默认）
-    // Loon 的 input/switch 类型参数可能带 "input," / "switch," 前缀，统一剥离后再判断
-    let preferVal = rawPrefer;
-    if (typeof preferVal === "string") {
-        preferVal = preferVal.replace(/^(input|switch),/, "");
-    }
-    let preferCoin = true;
-    if (preferVal === 1 || preferVal === "1" || preferVal === false || preferVal === "false") {
-        preferCoin = false;
-    }
-    let firstType = preferCoin ? 2 : 1;
-    let secondType = preferCoin ? 1 : 2;
-    $.log("[WeRead] prefer_coin=" + preferCoin + ", firstType=" + firstType);
+    // 读取奖励偏好：Loon 把 [Argument] 段参数值存在 persistentStore（key = 参数名），
+    // 直接用 $.getdata("prefer_coin") 读取用户在插件界面选择的值。
+    // 注意：$argument 只对应 argument="..." 里的静态字符串，无法读取 [Argument] 段参数。
+    let prefer = resolvePreferCoin($.getdata("prefer_coin"));
+    let firstType = prefer.firstType;
+    let secondType = prefer.secondType;
+    $.log("[WeRead] prefer_coin 原始值=" + String(prefer.raw) + ", preferCoin=" + prefer.preferCoin + ", firstType=" + firstType);
 
     for (let item of awards) {
 
@@ -972,6 +965,15 @@ async function runFlipCardDirect(auth) {
         let flipRes = await get(flipUrl, getFlipHeaders(auth));
 
         attempts++;
+
+        if (flipRes.status === 401 || flipRes.status === 403) {
+            $.log("[WeRead] 翻牌 — Cookie 过期，尝试 renewal 续期 wr_skey...");
+            let renewed = await tryWebRenewal(auth);
+            if (renewed) {
+                auth = renewed;
+                flipRes = await get(flipUrl, getFlipHeaders(auth));
+            }
+        }
 
         if (flipRes.status === 200) {
             let flipData;

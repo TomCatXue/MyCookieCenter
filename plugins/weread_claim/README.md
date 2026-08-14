@@ -43,7 +43,8 @@
 
 ## 已知限制
 
-- **登录态无法自动刷新**：`/login` 请求体含 HMAC-SHA256 签名（盐 `EBRYFkVMReKBGsU2`，key 格式 `%@_%@_EBRYFkVMReKBGsU2_%@`），穷举 160+ 组合均无法复现，签名算法不可逆。因此 cookie 失效后需重新打开 App 触发抓取，不能自动续期。
+- **App 签到凭据不能主动刷新**：`/login` 请求体含 HMAC-SHA256 签名（盐 `EBRYFkVMReKBGsU2`，key 格式 `%@_%@_EBRYFkVMReKBGsU2_%@`），穷举 160+ 组合均无法复现。脚本会在 `skey` 失效时尝试仅用长期 `vid` 重试；若 `vid` 也失效，仍需重新打开 App 触发抓取。
+- **翻牌 Cookie 支持自动续期**：`weread.qq.com` 的 `wr_skey` 失效时，脚本会调用网页版 `/web/login/renewal` 获取新的 `wr_skey`，并重试本次翻牌；该续期只更新 `wr_skey`，不会覆盖 App API 的 `skey`。
 - 翻牌每周 6 次，脚本按抓包确认的 `FLIP_CARD_ORDER` 时序翻牌，用尽即止。
 
 ## 文件说明
@@ -57,3 +58,4 @@
 
 - `2026-08-10-fix` — 修复 cookie 自动抓取、翻牌时序、奖励切换三处问题（基于逆向笔记）
 - `2026-08-11-flipfix` — 修复翻牌通知奖励误报：一次运行翻多张牌时，`describeFlipResult` 误取 `cardList` 中首张已翻牌的奖励，改为按本次 `cardIndex` 精确匹配
+- `2026-08-12-autorenew` — 翻牌遇到 401/403 时自动调用网页版 `renewal` 续期 `wr_skey` 并重试，减少手动打开 App 重新抓 Cookie 的次数- `2026-08-14-preferfix` — 修复奖励偏好切换失效：Loon `[Argument]` 段参数值应通过 `$persistentStore.read("prefer_coin")` 读取（即 `$.getdata("prefer_coin")`），而非 `$argument`（后者只对应 `argument="..."` 静态字符串）。原代码读取源错误导致偏好恒为默认书币，体验卡/书币切换不生效；同时移除失效的 `savePreferenceFromArgument` 中转存储死代码。
