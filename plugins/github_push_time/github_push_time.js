@@ -1,8 +1,8 @@
 /*
 ------------------------------------------
 @Name: GitHub 星标推送时间
-@Version: 1.0.6
-@Desc: 在 GitHub App 星标列表星标数/语言行后紧凑显示推送时间
+@Version: 1.0.7
+@Desc: 在 GitHub App 星标列表星标数/语言行后显示推送日期
 @Author: TomCatXue
 @Date: 2026-08-18
 ------------------------------------------
@@ -10,7 +10,7 @@
 console.log("[GitHub 推送时间] 脚本已加载");
 
 const NAME_MARKER = " · 最近推送 · ";
-const TIME_SUFFIX_RE = / · (刚刚|\d+(分钟前|小时前|天前)|\d{4}-\d{2}-\d{2})$/;
+const TIME_SUFFIX_RE = / · (\d{4}-\d{2}-\d{2}|刚刚|\d+(分钟前|小时前|天前))$/;
 
 function isStarredQuery(rawBody) {
   try {
@@ -73,26 +73,17 @@ function pad2(value) {
   return value < 10 ? "0" + value : "" + value;
 }
 
-function formatRelative(value) {
-  const time = new Date(value).getTime();
-  if (Number.isNaN(time)) return String(value || "");
-  const diff = Math.max(0, Date.now() - time);
-  const minute = 60 * 1000;
-  const hour = 60 * minute;
-  const day = 24 * hour;
-  if (diff < minute) return "刚刚";
-  if (diff < hour) return Math.floor(diff / minute) + "分钟前";
-  if (diff < day) return Math.floor(diff / hour) + "小时前";
-  if (diff < 30 * day) return Math.floor(diff / day) + "天前";
-  const date = new Date(time);
-  return date.getFullYear() + "-" + pad2(date.getMonth() + 1) + "-" + pad2(date.getDate());
+function formatPushDate(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value || "");
+  return date.getUTCFullYear() + "-" + pad2(date.getUTCMonth() + 1) + "-" + pad2(date.getUTCDate());
 }
 
 function decorateRepo(repo) {
   if (!repo || repo.__typename !== "Repository") return false;
   const timeValue = repo.pushedAt || repo.updatedAt;
   if (!timeValue) return false;
-  const label = formatRelative(timeValue);
+  const label = formatPushDate(timeValue);
   if (!label) return false;
   const language = repo.primaryLanguage;
   if (!language || typeof language.name !== "string") return false;
