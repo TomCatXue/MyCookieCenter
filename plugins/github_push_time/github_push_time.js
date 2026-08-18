@@ -1,8 +1,8 @@
 /*
 ------------------------------------------
 @Name: GitHub 星标推送时间
-@Version: 1.0.11
-@Desc: 在 GitHub App 星标列表仓库名称下方显示推送时间
+@Version: 1.0.12
+@Desc: 在 GitHub App 星标列表语言后显示推送时间
 @Author: TomCatXue
 @Date: 2026-08-18
 ------------------------------------------
@@ -10,7 +10,7 @@
 console.log("[GitHub 推送时间] 脚本已加载");
 
 const NAME_MARKER = " · 最近推送 · ";
-const BADGE_MARKER = "data-github-push-time";
+const TIME_SUFFIX_RE = / · (刚刚|\d+(分钟前|小时前|天前)|\d{4}-\d{2}-\d{2})$/;
 
 function isStarredQuery(rawBody) {
   try {
@@ -94,10 +94,15 @@ function decorateRepo(repo) {
   if (!timeValue) return false;
   const label = formatRelative(timeValue);
   if (!label) return false;
-  if (typeof repo.shortDescriptionHTML !== "string" || repo.shortDescriptionHTML.indexOf(BADGE_MARKER) !== -1) return false;
-  const badge = '<span ' + BADGE_MARKER + '="1" style="font-size:12px;color:#57606a;font-weight:600">' + label + '</span>';
-  const current = repo.shortDescriptionHTML.trim();
-  repo.shortDescriptionHTML = current ? badge + '<br>' + current : badge;
+  const language = repo.primaryLanguage;
+  if (!language || typeof language.name !== "string") return false;
+  if (language.name.indexOf(NAME_MARKER) !== -1 || TIME_SUFFIX_RE.test(language.name)) return false;
+  repo.primaryLanguage = {
+    __typename: language.__typename,
+    id: (repo.id || "repo") + "-" + (language.id || "lang"),
+    name: language.name + " · " + label,
+    color: language.color
+  };
   return true;
 }
 

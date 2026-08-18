@@ -1,11 +1,11 @@
 # GitHub 星标推送时间
 
-在 GitHub 官方 App 的星标列表仓库名称下方显示每个仓库的最近推送时间。
+在 GitHub 官方 App 的星标列表语言后显示每个仓库的最近推送时间。
 
 ## 功能
 
 - 自动给 `StarredRepositoriesForUser` GraphQL 查询补充 `pushedAt` / `updatedAt`
-- 在星标列表每个仓库名称下方显示一行小字 `2小时前` / `2026-01-19`，原简介保留在下方
+- 在星标列表每个仓库语言后显示 `Python · 2小时前` / `Python · 2026-01-19`
 - `pushedAt` 缺失时自动使用 `updatedAt` 兜底
 - 只改展示内容，不改变列表排序；不再修改 `name`，点击跳转不受影响
 
@@ -27,12 +27,13 @@
 
 - 仅针对 GitHub 官方 App 的星标列表 GraphQL 请求，不处理网页端
 - 需要 MITM `api.github.com`；若 App 启用证书固定或改走 QUIC，可能失效
-- 显示位置为仓库名称下方（通过 `shortDescriptionHTML` 渲染），不改变列表排序
-- 不修改 `primaryLanguage`，避免同语言仓库共享缓存对象导致时间串扰；`RepoProfile` 不请求 `shortDescriptionHTML`，返回星标页仍稳定显示
+- 显示位置为语言后（通过每仓库独立 `Language` 对象渲染），不改变列表排序
+- 不修改共享的 `primaryLanguage` 对象，而是给每个仓库生成独立 `Language` 副本，避免同语言仓库缓存串扰
 - 状态：已验证
 
 ## 版本历史
 
+- 2026-08-18 v1.0.12 恢复语言后显示，通过每仓库独立 Language 副本避免共享缓存串扰
 - 2026-08-18 v1.0.11 修复 primaryLanguage 共享缓存导致时间串扰，改为每仓库独立的 shortDescriptionHTML
 - 2026-08-18 v1.0.6 去掉“最近推送”文案，改为 `· 2小时前` 紧凑格式
 - 2026-08-18 v1.0.5 改为星标数/语言行后追加，位置更贴近仓库行（已验证）
