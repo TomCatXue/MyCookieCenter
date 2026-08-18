@@ -73,7 +73,7 @@ https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/<目�
 | [微信读书·优雅收录](./loon/WeReadEnhance.plugin) | 轻触订阅人数，好书即刻入架 | ✅ 已验证 |
 | [微信读书·自动领取](./loon/WeReadClaim.plugin) | 定时领取阅读奖励 + 每周翻牌 | ✅ 已验证 |
 | [微信读书·会员解锁](./loon/WeReadVip.plugin) | v6.x 会员解锁 + 付费墙 + 屏蔽更新 | ⚠️ 待修（仅 v6.x） |
-| [GitHub·星标推送时间](./loon/GitHubPushTime.plugin) | 在 GitHub App 星标列表仓库名称下方显示最近推送时间 | 🧪 待验证 |
+| [GitHub·星标推送时间](./loon/GitHubPushTime.plugin) | 在 GitHub App 星标列表星标数/语言行后显示最近推送时间 | 🧪 待验证 |
 | [扫描全能王·签到](./loon/camscanner.plugin) | 抓取 Cookie + 每日签到 | 🧪 待验证（外部依赖） |
 
 > `扫描全能王·签到` 的脚本与图标指向外部仓库（[MaYIHEI/paperclip](https://github.com/MaYIHEI/paperclip)、[MaYIHEI/pin](https://github.com/MaYIHEI/pin)），本仓库仅提供 `.plugin` 入口，脚本内容不在维护范围内。
