@@ -1,8 +1,8 @@
 /*
 ------------------------------------------
 @Name: GitHub 星标推送时间
-@Version: 1.0.5
-@Desc: 在 GitHub App 星标列表星标数/语言行后显示最近推送时间
+@Version: 1.0.6
+@Desc: 在 GitHub App 星标列表星标数/语言行后紧凑显示推送时间
 @Author: TomCatXue
 @Date: 2026-08-18
 ------------------------------------------
@@ -10,6 +10,7 @@
 console.log("[GitHub 推送时间] 脚本已加载");
 
 const NAME_MARKER = " · 最近推送 · ";
+const TIME_SUFFIX_RE = / · (刚刚|\d+(分钟前|小时前|天前)|\d{4}-\d{2}-\d{2})$/;
 
 function isStarredQuery(rawBody) {
   try {
@@ -80,9 +81,9 @@ function formatRelative(value) {
   const hour = 60 * minute;
   const day = 24 * hour;
   if (diff < minute) return "刚刚";
-  if (diff < hour) return Math.floor(diff / minute) + " 分钟前";
-  if (diff < day) return Math.floor(diff / hour) + " 小时前";
-  if (diff < 30 * day) return Math.floor(diff / day) + " 天前";
+  if (diff < hour) return Math.floor(diff / minute) + "分钟前";
+  if (diff < day) return Math.floor(diff / hour) + "小时前";
+  if (diff < 30 * day) return Math.floor(diff / day) + "天前";
   const date = new Date(time);
   return date.getFullYear() + "-" + pad2(date.getMonth() + 1) + "-" + pad2(date.getDate());
 }
@@ -94,8 +95,9 @@ function decorateRepo(repo) {
   const label = formatRelative(timeValue);
   if (!label) return false;
   const language = repo.primaryLanguage;
-  if (!language || typeof language.name !== "string" || language.name.indexOf(NAME_MARKER) !== -1) return false;
-  language.name = language.name + NAME_MARKER + label;
+  if (!language || typeof language.name !== "string") return false;
+  if (language.name.indexOf(NAME_MARKER) !== -1 || TIME_SUFFIX_RE.test(language.name)) return false;
+  language.name = language.name + " · " + label;
   return true;
 }
 
