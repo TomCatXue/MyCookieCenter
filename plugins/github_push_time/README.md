@@ -1,11 +1,11 @@
 # GitHub 星标推送时间
 
-在 GitHub 官方 App 的星标列表醒目显示每个仓库的最近推送时间。
+在 GitHub 官方 App 的星标列表仓库名称下方优雅显示每个仓库的最近推送时间。
 
 ## 功能
 
 - 自动给 `StarredRepositoriesForUser` GraphQL 查询补充 `pushedAt` / `updatedAt`
-- 在星标列表每个仓库的简介前显示高亮标签 `最近推送 · x分钟前 / x小时前 / x天前`
+- 在星标列表每个仓库名称下方显示一行优雅标签 `最近推送 · x分钟前 / x小时前 / x天前`，原简介保留在下方
 - `pushedAt` 缺失时自动使用 `updatedAt` 兜底
 - 只改展示内容，不改变列表排序；不再修改 `name`，点击跳转不受影响
 
@@ -27,12 +27,13 @@
 
 - 仅针对 GitHub 官方 App 的星标列表 GraphQL 请求，不处理网页端
 - 需要 MITM `api.github.com`；若 App 启用证书固定或改走 QUIC，可能失效
-- 显示位置为简介前的高亮标签（修改 `shortDescriptionHTML`），不改变列表排序
+- 显示位置为仓库名称下方（通过 `shortDescriptionHTML` 渲染），不改变列表排序
 - 使用 `shortDescriptionHTML` 展示，不会被 `RepoProfile` 响应覆盖，返回星标页仍稳定显示；请求侧仍保留旧缓存后缀清理
 - 状态：待真机验证
 
 ## 版本历史
 
+- 2026-08-18 v1.0.4 改为仓库名称下方的独立优雅标签，原简介保留
 - 2026-08-18 v1.0.3 改为简介前高亮标签，避免 name 被 RepoProfile 缓存覆盖
 - 2026-08-18 v1.0.2 修复点击仓库进不去：请求侧剥离 name 展示后缀
 - 2026-08-18 v1.0.1 推送时间改为显示在仓库名称后
