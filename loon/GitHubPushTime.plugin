@@ -1,5 +1,5 @@
 #!name = GitHub 星标推送时间
-#!desc = 在 GitHub App 星标列表仓库名称后显示最近推送时间
+#!desc = 在 GitHub App 星标列表醒目显示最近推送时间
 #!author = TomCatXue
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/github.png
@@ -8,7 +8,7 @@
 # ===== 独立开关 =====
 
 [Argument]
-github_push_time = switch,false,tag=星标推送时间,desc=在 GitHub App 星标列表仓库名称后显示最近推送时间
+github_push_time = switch,false,tag=星标推送时间,desc=在 GitHub App 星标列表醒目显示最近推送时间
 
 # ===== MITM =====
 
@@ -19,7 +19,7 @@ hostname = api.github.com
 
 [Script]
 # 请求增强：给 StarredRepositoriesForUser 查询补充 pushedAt/updatedAt
-http-request ^https?://api\.github\.com/graphql script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/github_push_time/github_push_time.js?v=20260818-2, requires-body=true, timeout=10, tag=GitHub 推送时间-查询增强, enable={github_push_time}
+http-request ^https?://api\.github\.com/graphql script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/github_push_time/github_push_time.js?v=20260818-3, requires-body=true, timeout=10, tag=GitHub 推送时间-查询增强, enable={github_push_time}
 
-# 响应注入：在星标列表每个仓库名称后追加最近推送时间
-http-response ^https?://api\.github\.com/graphql script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/github_push_time/github_push_time.js?v=20260818-2, requires-body=true, timeout=10, tag=GitHub 推送时间-列表注入, enable={github_push_time}
+# 响应注入：在星标列表简介前显示高亮推送时间标签
+http-response ^https?://api\.github\.com/graphql script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/github_push_time/github_push_time.js?v=20260818-3, requires-body=true, timeout=10, tag=GitHub 推送时间-列表注入, enable={github_push_time}
