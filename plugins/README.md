@@ -28,7 +28,7 @@
 | [`wxread/`](./wxread/) | 微信读书·优雅收录 | 轻触订阅人数，好书即刻入架 | [`loon/WeReadEnhance.plugin`](../loon/WeReadEnhance.plugin) | ✅ 已验证 |
 | [`weread_claim/`](./weread_claim/) | 微信读书·自动领取 | 定时领取阅读奖励（书币/体验卡）+ 每周翻牌 | [`loon/WeReadClaim.plugin`](../loon/WeReadClaim.plugin) | ✅ 已验证 |
 | [`weread_vip/`](./weread_vip/) | 微信读书·会员解锁 | v6.x 会员解锁 + 付费墙 + 屏蔽更新 | [`loon/WeReadVip.plugin`](../loon/WeReadVip.plugin) | ⚠️ 待修（仅 v6.x） |
-| [`github_push_time/`](./github_push_time/) | GitHub·星标推送时间 | 在 GitHub App 星标列表星标数/语言行后显示最近推送时间 | [`loon/GitHubPushTime.plugin`](../loon/GitHubPushTime.plugin) | ✅ 已验证 |
+| [`github_push_time/`](./github_push_time/) | GitHub·星标推送时间 | 在 GitHub App 星标列表仓库名称下方显示最近推送时间 | [`loon/GitHubPushTime.plugin`](../loon/GitHubPushTime.plugin) | ✅ 已验证 |
 
 ---
 
