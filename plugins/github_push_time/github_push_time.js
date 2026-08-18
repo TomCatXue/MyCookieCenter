@@ -1,8 +1,8 @@
 /*
 ------------------------------------------
 @Name: GitHub 星标推送时间
-@Version: 1.0.0
-@Desc: 在 GitHub App 星标列表固定区域显示最近推送时间
+@Version: 1.0.1
+@Desc: 在 GitHub App 星标列表仓库名称后显示最近推送时间
 @Author: TomCatXue
 @Date: 2026-08-18
 ------------------------------------------
@@ -74,16 +74,8 @@ function decorateRepo(repo) {
   if (!timeValue) return false;
   const label = formatRelative(timeValue);
   if (!label) return false;
-  const fieldName = typeof repo.shortDescriptionHTML === "string"
-    ? "shortDescriptionHTML"
-    : typeof repo.descriptionHTML === "string"
-      ? "descriptionHTML"
-      : null;
-  if (!fieldName) return false;
-  if (repo[fieldName].indexOf(MARKER) !== -1) return false;
-  const badge = '<span ' + MARKER + '="1">最近推送 · ' + label + '</span>';
-  const current = repo[fieldName].trim();
-  repo[fieldName] = current ? current + " " + badge : badge;
+  if (typeof repo.name !== "string" || repo.name.indexOf("最近推送 ·") !== -1) return false;
+  repo.name = repo.name + " · 最近推送 · " + label;
   return true;
 }
 
