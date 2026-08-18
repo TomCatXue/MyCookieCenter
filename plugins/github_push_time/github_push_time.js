@@ -1,7 +1,7 @@
 /*
 ------------------------------------------
 @Name: GitHub 星标推送时间
-@Version: 1.0.1
+@Version: 1.0.2
 @Desc: 在 GitHub App 星标列表仓库名称后显示最近推送时间
 @Author: TomCatXue
 @Date: 2026-08-18
@@ -9,7 +9,7 @@
 */
 console.log("[GitHub 推送时间] 脚本已加载");
 
-const MARKER = "data-github-push-time";
+const NAME_MARKER = " · 最近推送 · ";
 
 function isStarredQuery(rawBody) {
   try {
@@ -35,13 +35,32 @@ function injectPushedAt(rawBody) {
   }
 }
 
+function stripPushSuffix(name) {
+  const index = name.indexOf(NAME_MARKER);
+  if (index === -1) return name;
+  return name.substring(0, index);
+}
+
+function sanitizeRepoName(rawBody) {
+  try {
+    const body = JSON.parse(rawBody);
+    const name = body && body.variables && body.variables.name;
+    if (typeof name !== "string" || name.indexOf(NAME_MARKER) === -1) return null;
+    body.variables.name = stripPushSuffix(name);
+    return JSON.stringify(body);
+  } catch (e) {
+    return null;
+  }
+}
+
 function handleRequest() {
   const rawBody = typeof $request !== "undefined" ? $request.body : "";
-  if (!rawBody || !isStarredQuery(rawBody)) {
+  if (!rawBody) {
     $done({});
     return;
   }
-  const nextBody = injectPushedAt(rawBody);
+  let nextBody = sanitizeRepoName(rawBody);
+  if (!nextBody && isStarredQuery(rawBody)) nextBody = injectPushedAt(rawBody);
   if (!nextBody) {
     $done({});
     return;
@@ -74,8 +93,8 @@ function decorateRepo(repo) {
   if (!timeValue) return false;
   const label = formatRelative(timeValue);
   if (!label) return false;
-  if (typeof repo.name !== "string" || repo.name.indexOf("最近推送 ·") !== -1) return false;
-  repo.name = repo.name + " · 最近推送 · " + label;
+  if (typeof repo.name !== "string" || repo.name.indexOf(NAME_MARKER) !== -1) return false;
+  repo.name = repo.name + NAME_MARKER + label;
   return true;
 }
 
