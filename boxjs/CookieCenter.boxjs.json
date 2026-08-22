@@ -8,7 +8,11 @@
     {
       "id": "weread_claim",
       "name": "微信读书",
-      "keys": ["weread_auth_v2", "weread_flip_state_v1", "prefer_coin"],
+      "keys": [
+        "weread_auth_v2",
+        "weread_flip_state_v1",
+        "prefer_coin"
+      ],
       "author": "@Codex",
       "repo": "https://github.com/TomCatXue/MyCookieCenter",
       "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js",

@@ -26,8 +26,6 @@
 |---|---|---|---|---|
 | — | QQ空间·清净 | 广告退散，空间清净（纯规则型，无需脚本） | [`loon/QzoneAdBlock.plugin`](../loon/QzoneAdBlock.plugin) | ✅ 已验证 |
 | [`wxread/`](./wxread/) | 微信读书·优雅收录 | 轻触订阅人数，好书即刻入架 | [`loon/WeReadEnhance.plugin`](../loon/WeReadEnhance.plugin) | ✅ 已验证 |
-| [`weread_claim/`](./weread_claim/) | 微信读书·自动领取 | 定时领取阅读奖励（书币/体验卡）+ 每周翻牌 | [`loon/WeReadClaim.plugin`](../loon/WeReadClaim.plugin) | ✅ 已验证 |
-| [`weread_vip/`](./weread_vip/) | 微信读书·会员解锁 | v6.x 会员解锁 + 付费墙 + 屏蔽更新 | [`loon/WeReadVip.plugin`](../loon/WeReadVip.plugin) | ⚠️ 待修（仅 v6.x） |
 | [`github_push_time/`](./github_push_time/) | GitHub·星标推送时间 | 在 GitHub App 星标列表语言后显示最近推送时间 | [`loon/GitHubPushTime.plugin`](../loon/GitHubPushTime.plugin) | ✅ 已验证 |
 
 ---

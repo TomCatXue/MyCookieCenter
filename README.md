@@ -61,9 +61,10 @@ https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/<目�
 
 | App | 脚本 | 状态 |
 |---|---|---|
+| 微信读书·自动领取 | [`app/weread_claim/`](./app/weread_claim/) | ✅ 已验证 |
 | 示例模板 | [`app/example/`](./app/example/) | 💎 规划中 |
 
-> 当前 `CookieCenter.plugin` 为框架壳，尚未内置真实 App 签到脚本；`app/example/` 提供单文件脚本模板（抓 Cookie + cron 签到）。新平台接入请参考 [`docs/add-app.md`](./docs/add-app.md)。
+> 新平台接入请参考 [`docs/add-app.md`](./docs/add-app.md)。
 
 ## 特殊功能插件
 
@@ -72,7 +73,6 @@ https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/<目�
 | [QQ空间·清净](./loon/QzoneAdBlock.plugin) | 广告退散，空间清净（纯规则型） | ✅ 已验证 |
 | [微信读书·优雅收录](./loon/WeReadEnhance.plugin) | 轻触订阅人数，好书即刻入架 | ✅ 已验证 |
 | [微信读书·自动领取](./loon/WeReadClaim.plugin) | 定时领取阅读奖励 + 每周翻牌 | ✅ 已验证 |
-| [微信读书·会员解锁](./loon/WeReadVip.plugin) | v6.x 会员解锁 + 付费墙 + 屏蔽更新 | ⚠️ 待修（仅 v6.x） |
 | [GitHub·星标推送时间](./loon/GitHubPushTime.plugin) | 在 GitHub App 星标列表语言后显示最近推送时间 | 🧪 待验证 |
 | [扫描全能王·签到](./loon/camscanner.plugin) | 抓取 Cookie + 每日签到 | 🧪 待验证（外部依赖） |
 

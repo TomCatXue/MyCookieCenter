@@ -23,8 +23,7 @@
 |---|---|---|
 | [`QzoneAdBlock.plugin`](./QzoneAdBlock.plugin) | QQ空间·清净 — 广告退散，空间清净 | 规则型（无脚本） |
 | [`WeReadEnhance.plugin`](./WeReadEnhance.plugin) | 微信读书·优雅收录 — 轻触订阅人数，好书即刻入架 | 脚本型 · [`plugins/wxread/`](../plugins/wxread/) |
-| [`WeReadClaim.plugin`](./WeReadClaim.plugin) | 微信读书·自动领取 — 定时领取阅读奖励（书币/体验卡）+ 每周翻牌 | 脚本型 · [`plugins/weread_claim/`](../plugins/weread_claim/) |
-| [`WeReadVip.plugin`](./WeReadVip.plugin) | 微信读书·会员解锁 — v6.x 会员解锁 + 付费墙 + 屏蔽更新 | 脚本型 · [`plugins/weread_vip/`](../plugins/weread_vip/) |
+| [`WeReadClaim.plugin`](./WeReadClaim.plugin) | 微信读书·自动领取 — 定时领取阅读奖励（书币/体验卡）+ 每周翻牌 | 脚本型 · [`app/weread_claim/`](../app/weread_claim/) |
 | [`GitHubPushTime.plugin`](./GitHubPushTime.plugin) | GitHub·星标推送时间 — 在 GitHub App 星标列表语言后显示最近推送时间 | 脚本型 · [`plugins/github_push_time/`](../plugins/github_push_time/) |
 | [`camscanner.plugin`](./camscanner.plugin) | 扫描全能王·签到 — 抓取 Cookie + 每日签到 | 脚本型 · 抓取内化 [`plugins/camscanner/`](../plugins/camscanner/) / 签到外部 |
 
