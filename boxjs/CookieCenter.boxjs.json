@@ -4,5 +4,23 @@
   "author": "@MyCookieCenter",
   "icon": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/icon.png",
   "repo": "https://github.com/TomCatXue/MyCookieCenter",
-  "apps": []
+  "apps": [
+    {
+      "id": "weread_claim",
+      "name": "微信读书",
+      "keys": ["weread_auth_v2", "weread_flip_state_v1", "prefer_coin"],
+      "author": "@Codex",
+      "repo": "https://github.com/TomCatXue/MyCookieCenter",
+      "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js",
+      "settings": [
+        {
+          "id": "prefer_coin",
+          "name": "奖励偏好",
+          "val": "2",
+          "type": "number",
+          "desc": "1=优先体验卡 2=优先书币"
+        }
+      ]
+    }
+  ]
 }

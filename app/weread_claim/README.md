@@ -16,6 +16,10 @@
 3. 收到抓取成功通知后可关闭开关（减少 MITM 开销）
 4. 领取与翻牌由 cron 自动执行，无需手动干预
 
+## BoxJS 配置
+
+本脚本已纳入 `boxjs/CookieCenter.boxjs.json` 订阅，在 BoxJS 中添加订阅后可在面板中配置 `prefer_coin`（奖励偏好）。
+
 ## 参数配置
 
 | 参数 | 类型 | 作用 | 默认 |
