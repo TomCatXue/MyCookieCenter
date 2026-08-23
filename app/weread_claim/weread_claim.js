@@ -17,28 +17,28 @@ hostname = i.weread.qq.com, weread.qq.com
 
 [Script]
 # 捕获鉴权信息（vid + skey，而非 Cookie）：打开微信读书 App 随便刷一下（几乎任何页面都会触发）
-http-request ^https?://i\.weread\.qq\.com/.* script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260823-diag, tag=WeReadClaim Auth, requires-body=false, enable={capture_cookie}
+http-request ^https?://i\.weread\.qq\.com/.* script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260823-diag2, tag=WeReadClaim Auth, requires-body=false, enable={capture_cookie}
 
 # 捕获 /login 请求体（Base64 编码），提取 deviceId
-http-request POST ^https?://i\.weread\.qq\.com/login script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260823-diag, tag=WeReadClaim Login, requires-body=true, enable={capture_cookie}
+http-request POST ^https?://i\.weread\.qq\.com/login script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260823-diag2, tag=WeReadClaim Login, requires-body=true, enable={capture_cookie}
 
 # 捕获 /login 响应体，提取 vid/skey/refreshToken（自动刷新的前置条件）
-http-response POST ^https?://i\.weread\.qq\.com/login script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260823-diag, tag=WeReadClaim LoginResp, requires-body=true, enable={capture_cookie}
+http-response POST ^https?://i\.weread\.qq\.com/login script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260823-diag2, tag=WeReadClaim LoginResp, requires-body=true, enable={capture_cookie}
 
 # 捕获 weread.qq.com Cookie（wr_skey/wr_vid，翻牌游戏用）
-http-request ^https?://weread\.qq\.com/.* script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260823-diag, tag=WeReadClaim FlipCookie, requires-body=false, enable={capture_cookie}
+http-request ^https?://weread\.qq\.com/.* script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260823-diag2, tag=WeReadClaim FlipCookie, requires-body=false, enable={capture_cookie}
 
 # 定时领取：每晚 23:00 自动检查并领取
 # 不设 argument=，让 Loon 自动把 [Argument] 值注入 $argument；http-request 中转存储兜底
-cron "0 23 * * *" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260823-diag, tag=WeReadClaim 签到, enable=true
+cron "0 23 * * *" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260823-diag2, tag=WeReadClaim 签到, enable=true
 
 # 翻牌游戏：每周二 20:00 自动翻牌
-cron "0 20 * * 2" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260823-diag, argument="task=flip", tag=WeReadClaim 翻牌, enable=true
+cron "0 20 * * 2" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260823-diag2, argument="task=flip", tag=WeReadClaim 翻牌, enable=true
 */
 
 const AUTH_KEY = "weread_auth_v2";
 const FLIP_STATE_KEY = "weread_flip_state_v1";
-const SCRIPT_VERSION = "2026-08-23-diag";
+const SCRIPT_VERSION = "2026-08-23-diag2";
 const API = "https://i.weread.qq.com";
 const FLIP_API = "https://weread.qq.com/flip-card-game/api";
 const PF = "weread_wx-2001-iap-2001-iphone";
@@ -779,7 +779,21 @@ async function runDiagnose() {
 
     // 步骤1: 当前 skey 对 App API 的有效性
     $.log("[WeRead 诊断] ── 步骤1: 探测当前 skey 对 App API 是否有效 ──");
-    let probe1 = await post(API + "/weekly/exchange", buildExchangeQuery(), getHeaders(auth));
+    let probe1, step1Err = null;
+    try {
+        probe1 = await post(API + "/weekly/exchange", buildExchangeQuery(), getHeaders(auth));
+    } catch (e) {
+        step1Err = String(e);
+        probe1 = { status: -1, body: "" };
+    }
+    if (step1Err) {
+        $.log("[WeRead 诊断] 步骤1 结果: HTTP 调用异常 — " + step1Err);
+        $.log("[WeRead 诊断] BoxJS 运行环境的 $httpClient 无法连通 i.weread.qq.com，诊断中止。");
+        $.log("[WeRead 诊断] 可能原因: ①capture_cookie 开关拦截了探测请求; ②网络/代理路由问题; ③Loon 子请求超时");
+        $.msg("WeRead 诊断", "HTTP 异常 (步骤1)", step1Err);
+        $.log("════════════════════════════════════════");
+        return;
+    }
     let skeyValid = (probe1.status === 200);
     $.log("[WeRead 诊断] 步骤1 结果: HTTP " + probe1.status + (skeyValid ? " → 当前 skey 有效 ✓" : " → 当前 skey 已失效 ✗"));
     if (skeyValid) {
@@ -826,7 +840,23 @@ async function runDiagnose() {
 
     $.log("[WeRead 诊断] ── 步骤3: 用 renewal 新 skey 探测 App API ──");
     let testAuth = Object.assign({}, auth, { skey: newSkey, wrSkey: newSkey });
-    let probe2 = await post(API + "/weekly/exchange", buildExchangeQuery(), getHeaders(testAuth));
+    let probe2, step3Err = null;
+    try {
+        probe2 = await post(API + "/weekly/exchange", buildExchangeQuery(), getHeaders(testAuth));
+    } catch (e) {
+        step3Err = String(e);
+        probe2 = { status: -1, body: "" };
+    }
+    if (step3Err) {
+        $.log("[WeRead 诊断] 步骤3 结果: HTTP 调用异常 — " + step3Err);
+        $.log("[WeRead 诊断]");
+        $.log("[WeRead 诊断] ★ 结论: 本次无法判定 (步骤3 HTTP 异常) ★");
+        $.log("[WeRead 诊断] 步骤1 已成功且 renewal 已轮换新 skey，但步骤3 无法连通 i.weread.qq.com。");
+        $.log("[WeRead 诊断] 不回写新 skey (未确认其 App 有效性)。");
+        $.msg("WeRead 诊断", "步骤3 HTTP 异常", step3Err);
+        $.log("════════════════════════════════════════");
+        return;
+    }
     let newSkeyWorks = (probe2.status === 200);
     $.log("[WeRead 诊断] 步骤3 结果: HTTP " + probe2.status + (newSkeyWorks ? " → 新 skey 对 App 有效 ✓" : " → 新 skey 对 App 无效 ✗"));
     $.log("");
