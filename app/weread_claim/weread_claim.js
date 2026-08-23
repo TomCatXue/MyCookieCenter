@@ -17,28 +17,28 @@ hostname = i.weread.qq.com, weread.qq.com
 
 [Script]
 # 捕获鉴权信息（vid + skey，而非 Cookie）：打开微信读书 App 随便刷一下（几乎任何页面都会触发）
-http-request ^https?://i\.weread\.qq\.com/.* script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260823-diag4, tag=WeReadClaim Auth, requires-body=false, enable={capture_cookie}
+http-request ^https?://i\.weread\.qq\.com/.* script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260823-diag5, tag=WeReadClaim Auth, requires-body=false, enable={capture_cookie}
 
 # 捕获 /login 请求体（Base64 编码），提取 deviceId
-http-request POST ^https?://i\.weread\.qq\.com/login script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260823-diag4, tag=WeReadClaim Login, requires-body=true, enable={capture_cookie}
+http-request POST ^https?://i\.weread\.qq\.com/login script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260823-diag5, tag=WeReadClaim Login, requires-body=true, enable={capture_cookie}
 
 # 捕获 /login 响应体，提取 vid/skey/refreshToken（自动刷新的前置条件）
-http-response POST ^https?://i\.weread\.qq\.com/login script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260823-diag4, tag=WeReadClaim LoginResp, requires-body=true, enable={capture_cookie}
+http-response POST ^https?://i\.weread\.qq\.com/login script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260823-diag5, tag=WeReadClaim LoginResp, requires-body=true, enable={capture_cookie}
 
 # 捕获 weread.qq.com Cookie（wr_skey/wr_vid，翻牌游戏用）
-http-request ^https?://weread\.qq\.com/.* script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260823-diag4, tag=WeReadClaim FlipCookie, requires-body=false, enable={capture_cookie}
+http-request ^https?://weread\.qq\.com/.* script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260823-diag5, tag=WeReadClaim FlipCookie, requires-body=false, enable={capture_cookie}
 
 # 定时领取：每晚 23:00 自动检查并领取
 # 不设 argument=，让 Loon 自动把 [Argument] 值注入 $argument；http-request 中转存储兜底
-cron "0 23 * * *" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260823-diag4, tag=WeReadClaim 签到, enable=true
+cron "0 23 * * *" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260823-diag5, tag=WeReadClaim 签到, enable=true
 
 # 翻牌游戏：每周二 20:00 自动翻牌
-cron "0 20 * * 2" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260823-diag4, argument="task=flip", tag=WeReadClaim 翻牌, enable=true
+cron "0 20 * * 2" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260823-diag5, argument="task=flip", tag=WeReadClaim 翻牌, enable=true
 */
 
 const AUTH_KEY = "weread_auth_v2";
 const FLIP_STATE_KEY = "weread_flip_state_v1";
-const SCRIPT_VERSION = "2026-08-23-diag4";
+const SCRIPT_VERSION = "2026-08-23-diag5";
 const API = "https://i.weread.qq.com";
 const FLIP_API = "https://weread.qq.com/flip-card-game/api";
 const PF = "weread_wx-2001-iap-2001-iphone";
@@ -529,9 +529,11 @@ async function tryWebRenewal(auth) {
             headers: {
                 "User-Agent": auth.flipUa || auth.ua || "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15",
                 "Content-Type": "application/json",
+                "Origin": "https://weread.qq.com",
+                "Referer": "https://weread.qq.com/",
                 "Cookie": "wr_skey=" + wrSkey + "; wr_vid=" + wrVid
             },
-            body: JSON.stringify({ "rq": "%2Fweb%2Fbook%2Fread" }),
+            body: JSON.stringify({ "rq": "%2Fweb%2Fbook%2Fread", "ql": false }),
             timeout: 10000
         }, (err, res, data) => {
             if (err) {
@@ -612,9 +614,11 @@ async function refreshAppSkeyViaWeb(auth) {
             headers: {
                 "User-Agent": auth.ua || "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15",
                 "Content-Type": "application/json",
+                "Origin": "https://weread.qq.com",
+                "Referer": "https://weread.qq.com/",
                 "Cookie": "wr_skey=" + skey + "; wr_vid=" + vid
             },
-            body: JSON.stringify({ "rq": "%2Fweb%2Fbook%2Fread" }),
+            body: JSON.stringify({ "rq": "%2Fweb%2Fbook%2Fread", "ql": false }),
             timeout: 10000
         }, (err, res, data) => {
             if (err) {
@@ -712,10 +716,12 @@ async function callRenewalProbe(vid, skey, ua, opts) {
         return { ok: false, error: "无 vid/skey" };
     }
 
-    let body = opts.body || JSON.stringify({ "rq": "%2Fweb%2Fbook%2Fread" });
+    let body = opts.body || JSON.stringify({ "rq": "%2Fweb%2Fbook%2Fread", "ql": false });
     let headers = {
         "User-Agent": ua || "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15",
         "Content-Type": opts.contentType || "application/json",
+        "Origin": "https://weread.qq.com",
+        "Referer": "https://weread.qq.com/",
         "Cookie": "wr_skey=" + skey + "; wr_vid=" + vid
     };
     if (opts.extraHeaders) {
@@ -811,17 +817,14 @@ async function runDiagnose() {
     }
     $.log("");
 
-    // 步骤2: 网页版 renewal 变体探测（纯查询，不回写）
-    // 现象: renewal 报 -2013 params error。头号嫌疑 = rq 双重编码 (%2F 塞进 JSON 字符串值)。
-    // 测多种 body/格式组合, 用证据找出能通的格式, 而非盲改。
+    // 步骤2: 网页版 renewal 格式验证（纯查询，不回写）
+    // 真因: 旧 body 缺 ql 字段 → -2013 params error (OSS 参考格式为 {rq, ql:false})。
+    // v1 完整格式应通, v2 去ql 对照应败, 以此坐实 ql 为关键。
     // 因 skey == wrSkey (见头部已打印), 只在 App 凭据上测格式即可。
-    $.log("[WeRead 诊断] ── 步骤2: 调用网页版 /web/login/renewal (变体探测) ──");
+    $.log("[WeRead 诊断] ── 步骤2: 调用网页版 /web/login/renewal (格式验证) ──");
     let variants = [
-        { n: "v1 编码rq(JSON) [基线]",     body: JSON.stringify({ rq: "%2Fweb%2Fbook%2Fread" }),      ct: "application/json" },
-        { n: "v2 原始rq(JSON)",          body: JSON.stringify({ rq: "/web/book/read" }),             ct: "application/json" },
-        { n: "v3 原始rq+Referer/Origin",  body: JSON.stringify({ rq: "/web/book/read" }),             ct: "application/json", extra: { Referer: "https://weread.qq.com/", Origin: "https://weread.qq.com" } },
-        { n: "v4 form编码",             body: "rq=%2Fweb%2Fbook%2Fread",                             ct: "application/x-www-form-urlencoded" },
-        { n: "v5 原始rq+vid入body",      body: JSON.stringify({ rq: "/web/book/read", vid: auth.vid }), ct: "application/json" }
+        { n: "v1 完整格式(rq+ql) [OSS参考]",  body: JSON.stringify({ rq: "%2Fweb%2Fbook%2Fread", ql: false }) },
+        { n: "v2 对照(无ql) [证ql为关键]",     body: JSON.stringify({ rq: "%2Fweb%2Fbook%2Fread" }) }
     ];
     let newSkey = null, winName = "";
     for (let i = 0; i < variants.length; i++) {
@@ -836,11 +839,11 @@ async function runDiagnose() {
     $.log("");
 
     if (!newSkey) {
-        $.log("[WeRead 诊断] ★ 结论: 本次无法判定 (5 种 renewal 变体全失败) ★");
-        $.log("[WeRead 诊断] /web/login/renewal 端点已变更, 所有 body/格式组合均 -2013。");
-        $.log("[WeRead 诊断] 已尝试: v1编码rq v2原始rq v3+Referer/Origin v4 form编码 v5 +vid入body");
-        $.log("[WeRead 诊断] 下一步: 需重新抓包真实的 /web/login/renewal 请求 (微信读书网页版 wr_skey 临近过期时触发), 对比其 body 与 header。");
-        $.msg("WeRead 诊断", "无法判定", "5 种 renewal 变体全失败；需重新抓包");
+        $.log("[WeRead 诊断] ★ 结论: 意外 — OSS 参考格式 (rq+ql) 也失败 ★");
+        $.log("[WeRead 诊断] 端点 /web/login/renewal 可能已再变更, 或 cookie 需含 wr_rt。");
+        $.log("[WeRead 诊断] 已尝试: v1 完整格式(rq+ql:false+Origin/Referer) v2 对照(无ql)");
+        $.log("[WeRead 诊断] 下一步: 抓包真实 /web/login/renewal (网页版 wr_skey 临近过期时触发), 对比 cookie 是否含 wr_rt。");
+        $.msg("WeRead 诊断", "OSS格式也失败", "需抓包确认 cookie/字段");
         $.log("════════════════════════════════════════");
         return;
     }
@@ -889,11 +892,11 @@ async function runDiagnose() {
     // 综合结论
     $.log("[WeRead 诊断] ── 综合结论 ──");
     if (newSkeyWorks) {
-        $.log("[WeRead 诊断] ★ 结论: 同源假设成立 + renewal 格式 bug 确认 (根因丙) ★");
+        $.log("[WeRead 诊断] ★ 结论: 根因丙确认 (renewal 缺 ql 字段) + 方案B 已修复 ★");
         $.log("[WeRead 诊断] renewal 新 skey 对 App API 有效, App skey == 网页 wr_skey (同源成立)。");
-        $.log("[WeRead 诊断] cron 失败根因: 旧 renewal 请求格式错误 (-2013 params error), 非凭据问题。");
-        $.log("[WeRead 诊断] 修复方向: 把 refreshAppSkeyViaWeb / tryWebRenewal 的 body 改为 " + winName + "。");
-        $.msg("WeRead 诊断", "根因丙 (可修复)", "renewal 格式 bug；按 " + winName + " 修方案B 即可");
+        $.log("[WeRead 诊断] cron 失败根因: 旧 renewal body 缺 ql 字段 → -2013 params error, 非凭据问题。");
+        $.log("[WeRead 诊断] 已修复: refreshAppSkeyViaWeb / tryWebRenewal body 改为 {rq, ql:false} + Origin/Referer。");
+        $.msg("WeRead 诊断", "根因丙+已修复", "renewal 缺 ql；方案B 已修可用");
         // 附带红利: 回写有效新 skey (诊断兼做一次续期)
         auth.skey = newSkey;
         auth.wrSkey = newSkey;
@@ -904,8 +907,8 @@ async function runDiagnose() {
         $.log("[WeRead 诊断] ★ 结论: 根因乙确认 ★");
         $.log("[WeRead 诊断] renewal 新 skey 对 App API 无效 (HTTP " + probe2.status + ")。");
         $.log("[WeRead 诊断] 同源假设不成立: App skey ≠ 网页 wr_skey，二者不能互通。");
-        $.log("[WeRead 诊断] 修复方向: 方案B 不可行，应移除 refreshAppSkeyViaWeb，仅保留方案D 兜底。");
-        $.msg("WeRead 诊断", "根因乙确认", "新 skey 对 App 无效；方案B 不可行，建议移除");
+        $.log("[WeRead 诊断] 方案B 不可行: 移除 refreshAppSkeyViaWeb 的 skey 回写; ql 修复对 tryWebRenewal(H5) 仍有用, 保留。");
+        $.msg("WeRead 诊断", "根因乙确认", "新 skey 对 App 无效；方案B 不可行, 需回退回写");
     }
     $.log("════════════════════════════════════════");
 }
