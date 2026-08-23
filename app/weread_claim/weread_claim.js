@@ -42,7 +42,7 @@ const SCRIPT_VERSION = "2026-08-23-diag6";
 const API = "https://i.weread.qq.com";
 const FLIP_API = "https://weread.qq.com/flip-card-game/api";
 const PF = "weread_wx-2001-iap-2001-iphone";
-const HMAC_SALT = "EBRYFkVMReKBGsU2";
+
 const FLIP_CARD_ORDER = [2, 5, 4, 7, 8, 6, 0, 1, 3];
 
 let $ = new Env("WeRead");
@@ -80,123 +80,6 @@ async function main() {
 
 if (typeof module === "undefined" || !module.exports) {
     main();
-}
-
-
-// ============================================================
-// Pure-JS SHA-256 / HMAC-SHA256（Loon 无原生 crypto，手写）
-// ============================================================
-
-const SHA256_K = [
-    0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
-    0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
-    0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
-    0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
-    0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
-    0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
-    0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
-    0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
-];
-
-function sha256Uint8(bytes) {
-    const H = [0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
-        0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19];
-
-    const n = bytes.length;
-    const bitLen = n * 8;
-    const padLen = (n % 64 < 56) ? (56 - n % 64) : (120 - n % 64);
-
-    const padded = new Uint8Array(n + padLen + 8);
-    padded.set(bytes);
-    padded[n] = 0x80;
-    const dv = new DataView(padded.buffer);
-    dv.setUint32(padded.length - 4, bitLen >>> 0, false);
-    dv.setUint32(padded.length - 8, (bitLen / 4294967296) >>> 0, false);
-
-    const W = new Uint32Array(64);
-    for (let off = 0; off < padded.length; off += 64) {
-        const block = padded.subarray(off, off + 64);
-        const bdv = new DataView(block.buffer, block.byteOffset, block.byteLength);
-        for (let i = 0; i < 16; i++) W[i] = bdv.getUint32(i * 4, false);
-        for (let i = 16; i < 64; i++) {
-            const s0 = (W[i - 15] >>> 7 | W[i - 15] << 25) ^ (W[i - 15] >>> 18 | W[i - 15] << 14) ^ (W[i - 15] >>> 3);
-            const s1 = (W[i - 2] >>> 17 | W[i - 2] << 15) ^ (W[i - 2] >>> 19 | W[i - 2] << 13) ^ (W[i - 2] >>> 10);
-            W[i] = (W[i - 16] + s0 + W[i - 7] + s1) >>> 0;
-        }
-
-        let [a, b, c, d, e, f, g, h] = H;
-        for (let i = 0; i < 64; i++) {
-            const S1 = (e >>> 6 | e << 26) ^ (e >>> 11 | e << 21) ^ (e >>> 25 | e << 7);
-            const ch = (e & f) ^ (~e & g);
-            const t1 = (h + S1 + ch + SHA256_K[i] + W[i]) >>> 0;
-            const S0 = (a >>> 2 | a << 30) ^ (a >>> 13 | a << 19) ^ (a >>> 22 | a << 10);
-            const maj = (a & b) ^ (a & c) ^ (b & c);
-            const t2 = (S0 + maj) >>> 0;
-            h = g; g = f; f = e; e = (d + t1) >>> 0;
-            d = c; c = b; b = a; a = (t1 + t2) >>> 0;
-        }
-        H[0] = (H[0] + a) >>> 0; H[1] = (H[1] + b) >>> 0; H[2] = (H[2] + c) >>> 0; H[3] = (H[3] + d) >>> 0;
-        H[4] = (H[4] + e) >>> 0; H[5] = (H[5] + f) >>> 0; H[6] = (H[6] + g) >>> 0; H[7] = (H[7] + h) >>> 0;
-    }
-
-    const out = new Uint8Array(32);
-    const odv = new DataView(out.buffer);
-    for (let i = 0; i < 8; i++) odv.setUint32(i * 4, H[i], false);
-    return out;
-}
-
-function strToBytes(s) {
-    const out = [];
-    for (let i = 0; i < s.length; i++) {
-        const c = s.charCodeAt(i);
-        if (c < 0x80) out.push(c);
-        else if (c < 0x800) { out.push(0xc0 | c >> 6, 0x80 | c & 0x3f); }
-        else { out.push(0xe0 | c >> 12, 0x80 | c >> 6 & 0x3f, 0x80 | c & 0x3f); }
-    }
-    return new Uint8Array(out);
-}
-
-function bytesToHex(bytes) {
-    const hex = "0123456789abcdef";
-    let s = "";
-    for (let i = 0; i < bytes.length; i++) {
-        s += hex[bytes[i] >> 4] + hex[bytes[i] & 0xf];
-    }
-    return s;
-}
-
-function hmacSha256(keyStr, dataStr) {
-    const key = strToBytes(keyStr);
-    const data = strToBytes(dataStr);
-
-    let K = key;
-    if (K.length > 64) {
-        K = sha256Uint8(K);
-    } else if (K.length < 64) {
-        const pad = new Uint8Array(64);
-        pad.set(K);
-        K = pad;
-    }
-
-    const iPad = new Uint8Array(64), oPad = new Uint8Array(64);
-    for (let i = 0; i < 64; i++) {
-        iPad[i] = K[i] ^ 0x36;
-        oPad[i] = K[i] ^ 0x5c;
-    }
-
-    const inner = new Uint8Array(64 + data.length);
-    inner.set(iPad);
-    inner.set(data, 64);
-    const innerHash = sha256Uint8(inner);
-
-    const outer = new Uint8Array(64 + 32);
-    outer.set(oPad);
-    outer.set(innerHash, 64);
-    return sha256Uint8(outer);
-}
-
-function hmacSha256Hex(keyStr, dataStr) {
-    return bytesToHex(hmacSha256(keyStr, dataStr));
 }
 
 
@@ -464,30 +347,6 @@ function resolvePreferCoin(rawPrefer) {
 }
 
 
-// Build HMAC key for /login: refreshToken_deviceId_SALT_random
-function buildLoginKey(refreshToken, deviceId, random) {
-    return refreshToken + "_" + deviceId + "_" + HMAC_SALT + "_" + random;
-}
-
-// Sort body keys alphabetically, join as key=value&... for signing
-function signableString(body) {
-    return Object.keys(body).sort().map(k => k + "=" + body[k]).join("&");
-}
-
-// Compute /login signature: HMAC-SHA256(key, sortedBody)
-function computeLoginSignature(refreshToken, deviceId, body) {
-    let random = (body.random || Math.floor(Math.random() * 999999999)).toString();
-    body.random = parseInt(random, 10);
-    let ts = Math.floor(Date.now() / 1000);
-    body.timestamp = ts;
-
-    let key = buildLoginKey(refreshToken, deviceId, random);
-    let data = signableString(body);
-    $.log("[WeRead] login key=" + key.slice(0, 30) + "... data=" + data.slice(0, 50) + "...");
-    return hmacSha256Hex(key, data);
-}
-
-
 function post(url, body, headers) {
     return new Promise((resolve, reject) => {
 
@@ -506,175 +365,6 @@ function post(url, body, headers) {
 
         });
 
-    });
-}
-
-
-// 方案 B：通过网页版 /web/login/renewal 自动续期 wr_skey
-// 仅用于 weread.qq.com H5 翻牌 Cookie，不回写 App API 的 skey。
-async function tryWebRenewal(auth) {
-    let wrVid = auth.wrVid || auth.vid || "";
-    let wrSkey = auth.wrSkey || auth.skey || "";
-
-    if (!wrVid || !wrSkey) {
-        $.log("[WeRead] renewal 跳过：无 wr_vid/wr_skey");
-        return null;
-    }
-
-    $.log("[WeRead] 尝试网页版 renewal 续期 skey... (wrVid=" + String(wrVid).slice(0, 8) + "...)");
-
-    return new Promise((resolve) => {
-        $httpClient.post({
-            url: "https://weread.qq.com/web/login/renewal",
-            headers: {
-                "User-Agent": auth.flipUa || auth.ua || "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15",
-                "Content-Type": "application/json",
-                "Origin": "https://weread.qq.com",
-                "Referer": "https://weread.qq.com/",
-                "Cookie": "wr_skey=" + wrSkey + "; wr_vid=" + wrVid
-            },
-            body: JSON.stringify({ "rq": "%2Fweb%2Fbook%2Fread", "ql": false }),
-            timeout: 10000
-        }, (err, res, data) => {
-            if (err) {
-                $.log("[WeRead] renewal 请求失败: " + String(err));
-                resolve(null);
-                return;
-            }
-
-            $.log("[WeRead] renewal HTTP " + res.status);
-
-            if (res.status !== 200) {
-                $.log("[WeRead] renewal 非 200，skey 可能已彻底失效");
-                resolve(null);
-                return;
-            }
-
-            // 从 Set-Cookie 响应头提取新的 wr_skey
-            let setCookie = "";
-            if (res.headers) {
-                let sc = res.headers["Set-Cookie"] || res.headers["set-cookie"] || "";
-                if (Array.isArray(sc)) setCookie = sc.join("; ");
-                else setCookie = String(sc);
-            }
-
-            let newSkey = "";
-            setCookie.split(/;|,/).forEach(part => {
-                part = part.trim();
-                if (part.startsWith("wr_skey=")) {
-                    newSkey = decodeURIComponent(part.substring("wr_skey=".length));
-                }
-            });
-
-            if (newSkey) {
-                $.log("[WeRead] renewal 成功(Set-Cookie): 新 wr_skey=" + newSkey.slice(0, 8) + "...");
-                // 只续期 H5 翻牌 Cookie，避免污染 App API 的 skey
-                auth.wrSkey = newSkey;
-                auth.webRenewTime = Date.now();
-                $.setdata(JSON.stringify(auth), AUTH_KEY);
-                resolve(auth);
-            } else {
-                // 也许新 skey 在 response body 里（网页版可能不走 Set-Cookie）
-                let bodyData = null;
-                try { bodyData = JSON.parse(data); } catch (e) { }
-                if (bodyData && (bodyData.skey || bodyData.wr_skey)) {
-                    let sk = bodyData.skey || bodyData.wr_skey;
-                    $.log("[WeRead] renewal 成功(body): 新 skey=" + String(sk).slice(0, 8) + "...");
-                    auth.wrSkey = sk;
-                    auth.webRenewTime = Date.now();
-                    $.setdata(JSON.stringify(auth), AUTH_KEY);
-                    resolve(auth);
-                } else {
-                    $.log("[WeRead] renewal: 响应中未找到新 skey, body=" + String(data).slice(0, 100));
-                    resolve(null);
-                }
-            }
-        });
-    });
-}
-
-
-// ⚠️ 死代码 — 诊断已确认 App skey ≠ Web wrSkey，方案B 不可行。
-// 保留此函数仅作参考，runClaim 中已移除对其调用。
-// 若将来诊断步骤3 显示新 wrSkey 对 App API 有效，可恢复调用并取消下方 Cookie 修正注释。
-async function refreshAppSkeyViaWeb(auth) {
-    let vid = auth.vid || "";
-    // TODO: 如果诊断确认新 wrSkey 对 App API 有效，此处应改为 auth.wrSkey 而非 auth.skey
-    let skey = auth.skey || "";
-
-    if (!vid || !skey) {
-        $.log("[WeRead] AppSkey 续期跳过：无 vid/skey");
-        return null;
-    }
-
-    $.log("[WeRead] 尝试网页版 renewal 续期 App skey... (vid=" + String(vid).slice(0, 8) + "...)");
-
-    return new Promise((resolve) => {
-        $httpClient.post({
-            url: "https://weread.qq.com/web/login/renewal",
-            headers: {
-                "User-Agent": auth.ua || "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15",
-                "Content-Type": "application/json",
-                "Origin": "https://weread.qq.com",
-                "Referer": "https://weread.qq.com/",
-                // TODO: 如果诊断确认新 wrSkey 对 App API 有效，Cookie 值应改为 wrSkey 而非 skey
-                "Cookie": "wr_skey=" + skey + "; wr_vid=" + vid
-            },
-            body: JSON.stringify({ "rq": "%2Fweb%2Fbook%2Fread", "ql": false }),
-            timeout: 10000
-        }, (err, res, data) => {
-            if (err) {
-                $.log("[WeRead] AppSkey renewal 请求失败: " + String(err));
-                resolve(null);
-                return;
-            }
-
-            $.log("[WeRead] AppSkey renewal HTTP " + res.status);
-
-            if (res.status !== 200) {
-                $.log("[WeRead] AppSkey renewal 非 200，skey 可能已彻底失效");
-                resolve(null);
-                return;
-            }
-
-            // 从 Set-Cookie 响应头提取新的 wr_skey
-            let setCookie = "";
-            if (res.headers) {
-                let sc = res.headers["Set-Cookie"] || res.headers["set-cookie"] || "";
-                if (Array.isArray(sc)) setCookie = sc.join("; ");
-                else setCookie = String(sc);
-            }
-
-            let newSkey = "";
-            setCookie.split(/;|,/).forEach(part => {
-                part = part.trim();
-                if (part.startsWith("wr_skey=")) {
-                    newSkey = decodeURIComponent(part.substring("wr_skey=".length));
-                }
-            });
-
-            if (!newSkey) {
-                // 也许新 skey 在 response body 里
-                let bodyData = null;
-                try { bodyData = JSON.parse(data); } catch (e) { }
-                if (bodyData && (bodyData.skey || bodyData.wr_skey)) {
-                    newSkey = bodyData.skey || bodyData.wr_skey;
-                }
-            }
-
-            if (newSkey) {
-                $.log("[WeRead] AppSkey renewal 成功: 新 skey=" + newSkey.slice(0, 8) + "...");
-                // 关键：同时更新 App API 的 skey 和网页版的 wrSkey
-                auth.skey = newSkey;
-                auth.wrSkey = newSkey;
-                auth.skeyRenewTime = Date.now();
-                $.setdata(JSON.stringify(auth), AUTH_KEY);
-                resolve(auth);
-            } else {
-                $.log("[WeRead] AppSkey renewal: 响应中未找到新 skey, body=" + String(data).slice(0, 100));
-                resolve(null);
-            }
-        });
     });
 }
 
@@ -918,7 +608,7 @@ async function runClaim() {
     let auth = getAuth();
 
     if (!auth) {
-        $.msg("WeRead", "没有认证", "请打开微信读书刷新一次");
+        $.msg("WeRead", "没有认证", "点击打开微信读书捕获登录信息", "weread://");
         return;
     }
 
@@ -929,10 +619,10 @@ async function runClaim() {
         // 诊断已确认：App skey ≠ Web wrSkey，方案B 不可行。
         // 网页 renewal 续期的是 wrSkey（web Cookie），对 App API 无效。
         // 唯一自动续期路径：/login 响应捕获（用户打开 App 时自动刷新）。
+        // 不清空 auth：保留 wrVid/wrSkey 给翻牌游戏，保留 vid 供下次捕获复用。
         $.log("[WeRead] 401 — skey 已过期，无法自动续期");
         $.log("[WeRead] 请打开微信读书 App，脚本会自动捕获新的 vid/skey");
-        $.msg("WeRead", "认证已过期", "请打开微信读书 App 刷新认证");
-        $.setdata("", AUTH_KEY);
+        $.msg("WeRead", "认证已过期", "点击打开微信读书自动刷新", "weread://");
         return;
     }
 
@@ -1032,9 +722,7 @@ async function runClaimWithAuth(auth, cachedBody) {
 
 
         if (r.status === 401) {
-            // 方案 D：vid/skey 均失效，通知用户
-            $.msg("WeRead", "认证已过期", "vid/skey 已失效，请重新打开微信读书 App 刷新认证后再试");
-            $.setdata("", AUTH_KEY);
+            $.msg("WeRead", "认证已过期", "点击打开微信读书自动刷新", "weread://");
             return;
         }
 
@@ -1192,7 +880,7 @@ async function runFlipCardDirect(auth) {
     if (!auth) auth = getAuth();
 
     if (!auth || !(auth.wrVid || auth.vid) || !(auth.wrSkey || auth.skey)) {
-        $.msg("WeRead", "翻牌", "未捕获到 weread.qq.com 登录信息，请先打开微信读书 App 触发认证捕获");
+        $.msg("WeRead", "翻牌", "点击打开微信读书捕获登录信息", "weread://");
         return;
     }
 
@@ -1225,12 +913,10 @@ async function runFlipCardDirect(auth) {
         attempts++;
 
         if (flipRes.status === 401 || flipRes.status === 403) {
-            $.log("[WeRead] 翻牌 — Cookie 过期，尝试 renewal 续期 wr_skey...");
-            let renewed = await tryWebRenewal(auth);
-            if (renewed) {
-                auth = renewed;
-                flipRes = await get(flipUrl, getFlipHeaders(auth));
-            }
+            // renewal 端点已确认不可用 (-2013)，直接通知用户
+            $.log("[WeRead] 翻牌 — Cookie 过期，通知用户打开 App 刷新");
+            $.msg("WeRead", "翻牌认证过期", "点击打开微信读书刷新", "weread://");
+            break;
         }
 
         if (flipRes.status === 200) {
@@ -1276,64 +962,6 @@ async function runFlipCard(auth) {
 
 
 // Try to refresh vid/skey via /login using saved refreshToken + deviceId
-//
-// ⚠️ 非功能代码：/login 的 signature 算法经逆向分析确认为「极高难度」
-// （HMAC-SHA256 key 格式 %@_%@_EBRYFkVMReKBGsU2_%@ 但 3 个 %@ 的具体来源
-//  以及 message 的构建方式无法从二进制中确定，20+ 种策略共 30 万+ 组合验证均不匹配）。
-// 保留此函数待将来通过 Frida hook 或 Ghidra 反编译破解后启用；
-// 当前 401 走方案 B（网页版 renewal 续期）+ 方案 D（通知用户）。
-async function tryRefreshLogin(auth) {
-    let body = {
-        refreshToken: auth.refreshToken,
-        deviceId: auth.deviceId,
-        random: Math.floor(Math.random() * 999999999),
-        timestamp: Math.floor(Date.now() / 1000)
-    };
-
-    let sig = computeLoginSignature(auth.refreshToken, auth.deviceId, body);
-    body.signature = sig;
-
-    $.log("[WeRead] /login body=" + JSON.stringify(body).slice(0, 120));
-
-    let r = await post(
-        API + "/login",
-        encode(body),
-        {
-            "Content-Type": "application/json",
-            "Accept": "*/*",
-            "User-Agent": auth.ua || "WeRead",
-            "channelid": auth.channelid || "AppStore",
-            "basever": auth.basever || "",
-            "v": auth.basever || ""
-        }
-    );
-
-    if (r.status !== 200) {
-        $.log("[WeRead] /login failed with HTTP " + r.status + ": " + (r.body || "").slice(0, 100));
-        return null;
-    }
-
-    let loginData = decode(r.body);
-    if (!loginData || !loginData.vid || !loginData.skey) {
-        $.log("[WeRead] /login response missing vid/skey: " + (r.body || "").slice(0, 150));
-        return null;
-    }
-
-    let newAuth = {
-        vid: loginData.vid,
-        skey: loginData.skey,
-        refreshToken: loginData.refreshToken || auth.refreshToken,
-        deviceId: auth.deviceId,
-        openId: loginData.openId || auth.openId,
-        basever: auth.basever,
-        channelid: auth.channelid,
-        ua: auth.ua
-    };
-
-    $.log("[WeRead] login refresh OK, vid=" + newAuth.vid.slice(0, 8) + "...");
-    return newAuth;
-}
-
 
 
 function Env(name) {
@@ -1364,10 +992,25 @@ function Env(name) {
     };
 
 
-    this.msg = function (t, s, b) {
+    this.msg = function (t, s, b, url) {
 
-        if (typeof $notification !== "undefined")
+        if (typeof $notification === "undefined") return;
+
+        if (url) {
+            // Loon: $notification.post(title, subtitle, body, urlString)
+            // Surge: $notification.post(title, subtitle, body, { "url": url })
+            // Quantumult X: $notification.post(title, subtitle, body, { "open-url": url })
+            if (typeof $loon !== "undefined") {
+                $notification.post(t, s, b, url);
+            } else if (typeof $surge !== "undefined") {
+                $notification.post(t, s, b, { "url": url });
+            } else {
+                // Quantumult X 或其他
+                $notification.post(t, s, b, { "open-url": url });
+            }
+        } else {
             $notification.post(t, s, b);
+        }
 
     };
 
