@@ -11,11 +11,12 @@
       "keys": [
         "weread_auth_v2",
         "weread_flip_state_v1",
-        "prefer_coin"
+        "prefer_coin",
+        "weread_diagnose"
       ],
       "author": "@Codex",
       "repo": "https://github.com/TomCatXue/MyCookieCenter",
-      "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js",
+      "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260823-diag",
       "settings": [
         {
           "id": "prefer_coin",
@@ -23,6 +24,13 @@
           "val": "2",
           "type": "number",
           "desc": "1=优先体验卡 2=优先书币"
+        },
+        {
+          "id": "weread_diagnose",
+          "name": "诊断模式",
+          "val": "false",
+          "type": "switch",
+          "desc": "开启后点击「运行脚本」，输出方案B同源假设诊断日志到日志区（运行后自动关闭，不影响定时任务）"
         }
       ]
     }
