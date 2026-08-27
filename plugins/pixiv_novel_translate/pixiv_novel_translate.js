@@ -12,7 +12,7 @@ hostname = app-api.pixiv.net
 
 [Script]
 http-response ^https://app-api\.pixiv\.net/webview/v2/novel script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/pixiv_novel_translate/pixiv_novel_translate.js, requires-body=true, timeout=30
-http-request POST ^https://app-api\.pixiv\.net/pxtrans script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/pixiv_novel_translate/pixiv_novel_translate.js, requires-body=true, timeout=60
+http-response ^https://app-api\.pixiv\.net/pxtrans script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/pixiv_novel_translate/pixiv_novel_translate.js, requires-body=true, timeout=60
 ------------------------------------------
 */
 
@@ -22,7 +22,7 @@ function Env(t) { return new class { constructor(t) { this.name = t, this.startT
 
 const $ = new Env("Pixiv 小说翻译");
 
-const SCRIPT_VERSION = "20260827-r1";
+const SCRIPT_VERSION = "20260827-r2";
 
 const PXTC_LANG_MAP = {
   "zh-CN": { google: "zh-CN", microsoft: "zh-Hans", baidu: "zh" },
@@ -250,10 +250,10 @@ const PXTC_CSS = "#pxtc-fab{position:fixed;right:16px;bottom:48px;z-index:214748
 "#pxtc-panel .pxtc-btn{flex:1;padding:8px 0;border:1px solid #d0d0d0;border-radius:6px;background:#f6f6f6;color:#1a1a1a;font-size:14px;cursor:pointer;}" +
 "#pxtc-panel .pxtc-primary{background:#0096fa;border-color:#0096fa;color:#fff;}" +
 "#pxtc-panel .pxtc-status{margin-top:10px;min-height:20px;color:#555;word-break:break-all;}" +
-".pxtc-reader{max-width:720px;margin:0 auto;padding:20px 16px 110px;background:#fff;color:#1a1a1a;}" +
-".pxtc-chunk{margin-bottom:22px;padding-bottom:16px;border-bottom:1px solid #eee;}" +
-".pxtc-orig p{margin:4px 0;color:#9a9a9a;line-height:1.8;}" +
-".pxtc-trans p{margin:4px 0;color:#111;line-height:1.8;}" +
+".pxtc-reader{max-width:720px;margin:0 auto;padding:20px 16px 110px;background:transparent;color:inherit;}" +
+".pxtc-chunk{margin-bottom:22px;padding-bottom:16px;border-bottom:1px solid rgba(127,127,127,.35);}" +
+".pxtc-orig p{margin:4px 0;color:inherit;opacity:.55;line-height:1.8;}" +
+".pxtc-trans p{margin:4px 0;color:inherit;line-height:1.8;}" +
 ".pxtc-error{margin-top:6px;color:#c0392b;font-size:13px;word-break:break-all;}";
 
 function __pxtc_client() {
@@ -414,6 +414,15 @@ function __pxtc_client() {
       if (!root) return false;
       originalDisplay = root.style.display || "";
       reader = createEl("div", "pxtc-reader");
+      var rootStyle = window.getComputedStyle(root);
+      var pageBg = rootStyle.backgroundColor;
+      if (!pageBg || pageBg === "transparent" || pageBg.indexOf("rgba(0, 0, 0, 0)") === 0) {
+        pageBg = window.getComputedStyle(document.body).backgroundColor;
+      }
+      if (pageBg && pageBg !== "transparent" && pageBg.indexOf("rgba(0, 0, 0, 0)") !== 0) {
+        reader.style.background = pageBg;
+      }
+      reader.style.color = rootStyle.color;
       root.parentNode.insertBefore(reader, root.nextSibling);
       root.style.display = "none";
       return true;
@@ -564,14 +573,12 @@ async function handleProxy() {
     result.error = String((e && e.message) || e);
   }
   $done({
-    response: {
-      status: 200,
-      headers: {
-        "Content-Type": "application/json; charset=utf-8",
-        "Cache-Control": "no-store"
-      },
-      body: JSON.stringify(result)
-    }
+    status: 200,
+    headers: {
+      "Content-Type": "application/json; charset=utf-8",
+      "Cache-Control": "no-store"
+    },
+    body: JSON.stringify(result)
   });
 }
 
@@ -608,7 +615,18 @@ function handleInject() {
     $done({});
   }
 })().catch(function (e) {
-  try { $done({}); } catch (err) {}
+  const url = typeof $request !== "undefined" && $request.url ? $request.url : "";
+  try {
+    if (url.indexOf("/pxtrans") !== -1) {
+      $done({
+        status: 200,
+        headers: { "Content-Type": "application/json; charset=utf-8" },
+        body: JSON.stringify({ ok: false, translation: "", src: "", error: String((e && e.message) || e) })
+      });
+    } else {
+      $done({});
+    }
+  } catch (err) {}
 });
 
 

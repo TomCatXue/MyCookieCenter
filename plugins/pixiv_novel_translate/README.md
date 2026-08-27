@@ -39,11 +39,11 @@
 
 - `http-response` 匹配 `app-api.pixiv.net/webview/v2/novel`，往页面注入样式和客户端脚本
 - 客户端脚本读取 `window.pixiv.novel.text`，按段落分块，通过同源 `POST /pxtrans` 发送给 Loon 脚本
-- `http-request` 匹配 `app-api.pixiv.net/pxtrans`，由 Loon 脚本直接调用翻译接口，再以本地响应返回
+- `http-response` 匹配 `app-api.pixiv.net/pxtrans` 的上游 404 响应，由 Loon 脚本直接调用翻译接口，并改写为本地 JSON 响应
 - 翻译结果按“原文置灰 + 译文正文”的双语形式展示，“恢复原文”可还原阅读器
 
 ## 注意
 
 - Google 免费接口是网页版接口，非商用 API，调用过于频繁可能被限流
 - 微软翻译与百度翻译为付费/限额 API，密钥只在 Loon 脚本侧使用，不会下发到页面
-- 需要 Loon 保持脚本最新版，插件内已带 `?v=20260827-r1` 版本参数
+- 需要 Loon 保持脚本最新版，插件内已带 `?v=20260827-r2` 版本参数
