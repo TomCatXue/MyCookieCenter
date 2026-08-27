@@ -17,28 +17,28 @@ hostname = i.weread.qq.com, weread.qq.com
 
 [Script]
 # 捕获鉴权信息（vid + skey，而非 Cookie）：打开微信读书 App 随便刷一下（几乎任何页面都会触发）
-http-request ^https?://i\.weread\.qq\.com/.* script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260827-flipfix4, tag=WeReadClaim Auth, requires-body=false, enable={capture_cookie}
+http-request ^https?://i\.weread\.qq\.com/.* script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260827-flipfix5, tag=WeReadClaim Auth, requires-body=false, enable={capture_cookie}
 
 # 捕获 /login 请求体（Base64 编码），提取 deviceId
-http-request POST ^https?://i\.weread\.qq\.com/login script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260827-flipfix4, tag=WeReadClaim Login, requires-body=true, enable={capture_cookie}
+http-request POST ^https?://i\.weread\.qq\.com/login script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260827-flipfix5, tag=WeReadClaim Login, requires-body=true, enable={capture_cookie}
 
 # 捕获 /login 响应体，提取 vid/skey/refreshToken（自动刷新的前置条件）
-http-response POST ^https?://i\.weread\.qq\.com/login script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260827-flipfix4, tag=WeReadClaim LoginResp, requires-body=true, enable={capture_cookie}
+http-response POST ^https?://i\.weread\.qq\.com/login script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260827-flipfix5, tag=WeReadClaim LoginResp, requires-body=true, enable={capture_cookie}
 
 # 捕获 weread.qq.com Cookie（wr_skey/wr_vid，翻牌游戏用）
-http-request ^https?://weread\.qq\.com/.* script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260827-flipfix4, tag=WeReadClaim FlipCookie, requires-body=false, enable={capture_cookie}
+http-request ^https?://weread\.qq\.com/.* script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260827-flipfix5, tag=WeReadClaim FlipCookie, requires-body=false, enable={capture_cookie}
 
 # 定时领取：每晚 23:00 自动检查并领取
 # 不设 argument=，让 Loon 自动把 [Argument] 值注入 $argument；http-request 中转存储兜底
-cron "0 23 * * *" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260827-flipfix4, tag=WeReadClaim 签到, enable=true
+cron "0 23 * * *" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260827-flipfix5, tag=WeReadClaim 签到, enable=true
 
 # 翻牌游戏：每周二 20:00 自动翻牌
-cron "0 20 * * 2" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260827-flipfix4, argument="task=flip", tag=WeReadClaim 翻牌, enable=true
+cron "0 20 * * 2" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260827-flipfix5, argument="task=flip", tag=WeReadClaim 翻牌, enable=true
 */
 
 const AUTH_KEY = "weread_auth_v2";
 const FLIP_STATE_KEY = "weread_flip_state_v1";
-const SCRIPT_VERSION = "2026-08-27-flipfix4";
+const SCRIPT_VERSION = "2026-08-27-flipfix5";
 const API = "https://i.weread.qq.com";
 const FLIP_API = "https://weread.qq.com/flip-card-game/api";
 const PF = "weread_wx-2001-iap-2001-iphone";
@@ -821,6 +821,9 @@ function get(url, headers) {
 // ── Flip card helpers ───────────────────────────────────
 
 function pickNextFlip(data) {
+    // 2026-08-27 抓包确认：cardIndex = cardList/initialList 的数组下标。
+    // 可翻的牌 status=0（未翻开）；status=1 已翻开(书)、2 已翻开未领、3 已自动领、4 已领。
+    // giftIndex 真实抓包为 0（每次翻牌都传 0），不能用本地 state 的 flipList.length 推算（会 499）。
     let cards = data.cardList || [];
     let used = {};
     cards.forEach(c => {
@@ -829,17 +832,28 @@ function pickNextFlip(data) {
         }
     });
 
-    let giftIndex = Array.isArray(data.flipList) ? data.flipList.length : Object.keys(used).length;
-    let cardIndex = -1;
-    for (let i = 0; i < FLIP_CARD_ORDER.length; i++) {
-        let candidate = FLIP_CARD_ORDER[i];
-        if (!used[candidate]) {
-            cardIndex = candidate;
-            break;
+    // 收集 status=0（可翻）的卡片位置，优先 initialList 再 cardList
+    let candidates = [];
+    (data.initialList || []).forEach((c, i) => {
+        if (c.status === 0 && !used[i]) candidates.push(i);
+    });
+    cards.forEach((c, i) => {
+        if (c.status === 0 && !used[i]) candidates.push(i);
+    });
+    // 回退：按 FLIP_CARD_ORDER 顺序找未翻的位置
+    if (candidates.length === 0) {
+        for (let i = 0; i < FLIP_CARD_ORDER.length; i++) {
+            let candidate = FLIP_CARD_ORDER[i];
+            if (!used[candidate]) {
+                candidates.push(candidate);
+            }
         }
     }
 
-    return cardIndex >= 0 ? { cardIndex, giftIndex } : null;
+    if (candidates.length === 0) return null;
+    let cardIndex = candidates[0];
+    // 真实抓包 giftIndex=0
+    return { cardIndex, giftIndex: 0 };
 }
 
 function getSavedFlipState() {
@@ -953,9 +967,39 @@ async function runFlipCardDirect(auth) {
         return;
     }
 
+    // ⚠️ 关键：先 GET flipCardList 获取服务器最新状态（抓包确认真实 App 会先查列表）。
+    // 不能依赖本地保存的旧 state —— 旧 state 的 flipList.length 会算出错误的 giftIndex，
+    // 导致服务器/WAF 校验参数非法直接断开（HTTP 499）。
+    let listRes = await get(FLIP_API + "/flipCardList?pf=ios&platform=ios_html", getFlipHeaders(auth));
+    if (listRes.status !== 200) {
+        $.log("[WeRead] 翻牌 — flipCardList 查询失败 HTTP " + listRes.status
+            + "，body=" + String(listRes.body || "").slice(0, 100));
+        $.msg("WeRead", "翻牌失败", "查询卡片列表失败 (HTTP " + listRes.status + ")\n若为 401/403/499，请打开微信读书 App 的「翻牌游戏」页面一次重新捕获 Cookie");
+        return;
+    }
+
+    let freshState;
+    try {
+        freshState = JSON.parse(listRes.body || "{}");
+    } catch (e) {
+        freshState = decode(listRes.body) || {};
+    }
+
+    let remainingCount = freshState.remainingCount || 0;
+    $.log("[WeRead] 翻牌 — flipCardList 成功, remainingCount=" + remainingCount
+        + ", flipList.length=" + (freshState.flipList ? freshState.flipList.length : 0));
+
+    if (remainingCount <= 0) {
+        $.msg("WeRead", "翻牌", "本周翻牌次数已用完");
+        return;
+    }
+
+    // 用服务器最新状态作为起点（替换本地旧 state），giftIndex 由最新 flipList.length 决定
+    state = freshState;
+    saveFlipState(state);
+
     let results = [];
     let attempts = 0;
-    let state = getSavedFlipState() || {};
     const MAX_ATTEMPTS = 6;
 
     while (attempts < MAX_ATTEMPTS) {
@@ -981,14 +1025,22 @@ async function runFlipCardDirect(auth) {
 
         attempts++;
 
-        // 401/403/499 = Cookie 失效或 WAF 断连（wr_skey 约 7 天有效期，过期即失效）。
-        // ⚠️ 不尝试 renewal 续期：8-23 诊断已确认 App skey ≠ 网页 wr_skey，
-        // 且 /web/login/renewal 接口对任何 Cookie 均返回 -2013 params error，续期不可行。
-        // 唯一恢复途径：用户重新打开翻牌页面触发 Cookie 捕获。
-        if (flipRes.status === 401 || flipRes.status === 403 || flipRes.status === 499) {
-            $.log("[WeRead] 翻牌 — HTTP " + flipRes.status + "，wr_skey 已失效（renewal 不可行，需重新捕获）");
-            results.push("第 " + attempts + " 次: 失败 (HTTP " + flipRes.status + ")，wr_skey 已失效");
+        // 401/403 = Cookie 明确失效（需重新捕获）；499 = WAF/服务器断开连接。
+        // 2026-08-27 抓包确认：wr_skey 有效时真实请求仍 200，499 通常因请求参数/头不合法被 WAF 拦。
+        if (flipRes.status === 401 || flipRes.status === 403) {
+            $.log("[WeRead] 翻牌 — HTTP " + flipRes.status + "，Cookie 失效，需重新捕获");
+            results.push("第 " + attempts + " 次: 失败 (HTTP " + flipRes.status + ")，Cookie 失效");
             break;
+        }
+        if (flipRes.status === 499) {
+            $.log("[WeRead] 翻牌 — HTTP 499（WAF 断开），该 cardIndex 不可翻，跳过");
+            results.push("第 " + attempts + " 次: 失败 (HTTP 499)");
+            // 把当前 cardIndex 记入 used，避免死循环重试同一张
+            state = state || {};
+            state.cardList = state.cardList || [];
+            state.cardList.push({ cardIndex: target.cardIndex, status: 9 });
+            state.initialList = state.initialList || [];
+            continue;
         }
 
         if (flipRes.status === 200) {
