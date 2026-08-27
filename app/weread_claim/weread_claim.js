@@ -17,28 +17,28 @@ hostname = i.weread.qq.com, weread.qq.com
 
 [Script]
 # 捕获鉴权信息（vid + skey，而非 Cookie）：打开微信读书 App 随便刷一下（几乎任何页面都会触发）
-http-request ^https?://i\.weread\.qq\.com/.* script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260822-migrate, tag=WeReadClaim Auth, requires-body=false, enable={capture_cookie}
+http-request ^https?://i\.weread\.qq\.com/.* script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260814-preferfix, tag=WeReadClaim Auth, requires-body=false, enable={capture_cookie}
 
 # 捕获 /login 请求体（Base64 编码），提取 deviceId
-http-request POST ^https?://i\.weread\.qq\.com/login script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260822-migrate, tag=WeReadClaim Login, requires-body=true, enable={capture_cookie}
+http-request POST ^https?://i\.weread\.qq\.com/login script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260814-preferfix, tag=WeReadClaim Login, requires-body=true, enable={capture_cookie}
 
 # 捕获 /login 响应体，提取 vid/skey/refreshToken（自动刷新的前置条件）
-http-response POST ^https?://i\.weread\.qq\.com/login script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260822-migrate, tag=WeReadClaim LoginResp, requires-body=true, enable={capture_cookie}
+http-response POST ^https?://i\.weread\.qq\.com/login script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260814-preferfix, tag=WeReadClaim LoginResp, requires-body=true, enable={capture_cookie}
 
 # 捕获 weread.qq.com Cookie（wr_skey/wr_vid，翻牌游戏用）
-http-request ^https?://weread\.qq\.com/.* script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260822-migrate, tag=WeReadClaim FlipCookie, requires-body=false, enable={capture_cookie}
+http-request ^https?://weread\.qq\.com/.* script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260814-preferfix, tag=WeReadClaim FlipCookie, requires-body=false, enable={capture_cookie}
 
 # 定时领取：每晚 23:00 自动检查并领取
 # 不设 argument=，让 Loon 自动把 [Argument] 值注入 $argument；http-request 中转存储兜底
-cron "0 23 * * *" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260822-migrate, tag=WeReadClaim 签到, enable=true
+cron "0 23 * * *" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260814-preferfix, tag=WeReadClaim 签到, enable=true
 
 # 翻牌游戏：每周二 20:00 自动翻牌
-cron "0 20 * * 2" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260822-migrate, argument="task=flip", tag=WeReadClaim 翻牌, enable=true
+cron "0 20 * * 2" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260814-preferfix, argument="task=flip", tag=WeReadClaim 翻牌, enable=true
 */
 
 const AUTH_KEY = "weread_auth_v2";
 const FLIP_STATE_KEY = "weread_flip_state_v1";
-const SCRIPT_VERSION = "2026-08-22-migrate";
+const SCRIPT_VERSION = "2026-08-14-preferfix";
 const API = "https://i.weread.qq.com";
 const FLIP_API = "https://weread.qq.com/flip-card-game/api";
 const PF = "weread_wx-2001-iap-2001-iphone";
@@ -380,7 +380,7 @@ function getHeaders(a) {
         "v": a.basever || "",
         "vid": a.vid
     };
-    // skey 必传：方案 C 已确认为不可行，不带 skey 返回 401
+    // skey 可选：方案 C（vid 长期有效，部分接口不校验 skey）
     if (a.skey) h.skey = a.skey;
     return h;
 }
@@ -583,97 +583,6 @@ async function tryWebRenewal(auth) {
 }
 
 
-// 方案 B：通过网页版 /web/login/renewal 刷新 App API 的 skey
-// 假设 App 的 vid == 网页版 wr_vid，App 的 skey == 网页版 wr_skey（同源，仅传输方式不同）
-// 如果验证通过，skey 过期时可自动续期，无需手动开 App
-async function refreshAppSkeyViaWeb(auth) {
-    let vid = auth.vid || "";
-    let skey = auth.skey || "";
-
-    if (!vid || !skey) {
-        $.log("[WeRead] AppSkey 续期跳过：无 vid/skey");
-        return null;
-    }
-
-    $.log("[WeRead] 尝试网页版 renewal 续期 App skey... (vid=" + String(vid).slice(0, 8) + "...)");
-
-    return new Promise((resolve) => {
-        $httpClient.post({
-            url: "https://weread.qq.com/web/login/renewal",
-            headers: {
-                "User-Agent": auth.ua || "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15",
-                "Content-Type": "application/json",
-                "Cookie": "wr_skey=" + skey + "; wr_vid=" + vid
-            },
-            body: JSON.stringify({ "rq": "%2Fweb%2Fbook%2Fread" }),
-            timeout: 10000
-        }, (err, res, data) => {
-            if (err) {
-                $.log("[WeRead] AppSkey renewal 请求失败: " + String(err));
-                resolve(null);
-                return;
-            }
-
-            $.log("[WeRead] AppSkey renewal HTTP " + res.status);
-
-            if (res.status !== 200) {
-                $.log("[WeRead] AppSkey renewal 非 200，skey 可能已彻底失效");
-                resolve(null);
-                return;
-            }
-
-            // 从 Set-Cookie 响应头提取新的 wr_skey
-            let setCookie = "";
-            if (res.headers) {
-                let sc = res.headers["Set-Cookie"] || res.headers["set-cookie"] || "";
-                if (Array.isArray(sc)) setCookie = sc.join("; ");
-                else setCookie = String(sc);
-            }
-
-            let newSkey = "";
-            setCookie.split(/;|,/).forEach(part => {
-                part = part.trim();
-                if (part.startsWith("wr_skey=")) {
-                    newSkey = decodeURIComponent(part.substring("wr_skey=".length));
-                }
-            });
-
-            if (!newSkey) {
-                // 也许新 skey 在 response body 里
-                let bodyData = null;
-                try { bodyData = JSON.parse(data); } catch (e) { }
-                if (bodyData && (bodyData.skey || bodyData.wr_skey)) {
-                    newSkey = bodyData.skey || bodyData.wr_skey;
-                }
-            }
-
-            if (newSkey) {
-                $.log("[WeRead] AppSkey renewal 成功: 新 skey=" + newSkey.slice(0, 8) + "...");
-                // 关键：同时更新 App API 的 skey 和网页版的 wrSkey
-                auth.skey = newSkey;
-                auth.wrSkey = newSkey;
-                auth.skeyRenewTime = Date.now();
-                $.setdata(JSON.stringify(auth), AUTH_KEY);
-                resolve(auth);
-            } else {
-                $.log("[WeRead] AppSkey renewal: 响应中未找到新 skey, body=" + String(data).slice(0, 100));
-                resolve(null);
-            }
-        });
-    });
-}
-
-// 构建查询请求体（复用）
-function buildExchangeQuery() {
-    return encode({
-        awardLevelId: 0,
-        unread: 1,
-        isExchangeAward: 0,
-        pf: PF,
-        awardChoiceType: 0
-    });
-}
-
 async function runClaim() {
 
     let auth = getAuth();
@@ -684,23 +593,42 @@ async function runClaim() {
     }
 
     // 快速检测 skey 是否有效：先发一个查询请求
-    let probe = await post(API + "/weekly/exchange", buildExchangeQuery(), getHeaders(auth));
+    let probe = await post(
+        API + "/weekly/exchange",
+        encode({
+            awardLevelId: 0,
+            unread: 1,
+            isExchangeAward: 0,
+            pf: PF,
+            awardChoiceType: 0
+        }),
+        getHeaders(auth)
+    );
 
     if (probe.status === 401) {
-        // 方案 B：先尝试网页版 renewal 续期 App skey
-        $.log("[WeRead] 401 — skey 已过期，尝试网页版 renewal 自动续期...");
-        let renewed = await refreshAppSkeyViaWeb(auth);
-        if (renewed) {
-            // renewal 成功，用新 skey 重试
-            let probeRetry = await post(API + "/weekly/exchange", buildExchangeQuery(), getHeaders(renewed));
-            if (probeRetry.status === 200) {
-                $.log("[WeRead] renewal 续期成功，skey 已自动刷新 ✅ 全自动！");
-                return await runClaimWithAuth(renewed, probeRetry.body);
-            }
-            $.log("[WeRead] renewal 后仍非 200 (HTTP " + probeRetry.status + ")，继续降级...");
+        // 方案 C：skey 已过期，但 vid 长期有效——尝试不带 skey 重新请求
+        $.log("[WeRead] 401 — skey 已过期，尝试不带 skey 请求（vid 长期有效）...");
+        let noSkeyAuth = JSON.parse(JSON.stringify(auth));
+        delete noSkeyAuth.skey;
+        let probe2 = await post(
+            API + "/weekly/exchange",
+            encode({
+                awardLevelId: 0,
+                unread: 1,
+                isExchangeAward: 0,
+                pf: PF,
+                awardChoiceType: 0
+            }),
+            getHeaders(noSkeyAuth)
+        );
+
+        if (probe2.status === 200) {
+            $.log("[WeRead] 不带 skey 请求成功，vid 仍然有效");
+            // 传 noSkeyAuth（无 skey），后续领取请求直接不带 skey，避免每次 401
+            return await runClaimWithAuth(noSkeyAuth, probe2.body);
         }
 
-        // 方案 D：所有自动方案均失效，通知用户手动刷新
+        // 方案 D：vid/skey 均失效，通知用户手动刷新
         $.msg("WeRead", "认证已过期", "vid/skey 已失效，请重新打开微信读书 App 刷新认证后再试");
         $.setdata("", AUTH_KEY);
         return;
@@ -735,6 +663,29 @@ async function runClaimWithAuth(auth, cachedBody) {
             getHeaders(auth)
         );
 
+        if (result.status === 401) {
+            // 方案 C：尝试不带 skey 查询
+            $.log("[WeRead] query 401 — 尝试不带 skey 请求...");
+            delete auth.skey;
+            let r1 = await post(
+                API + "/weekly/exchange",
+                encode({
+                    awardLevelId: 0,
+                    unread: 1,
+                    isExchangeAward: 0,
+                    pf: PF,
+                    awardChoiceType: 0
+                }),
+                getHeaders(auth)
+            );
+            if (r1.status === 200) {
+                queryBody = r1.body;
+            } else {
+                $.msg("WeRead", "认证已过期", "vid/skey 已失效，请重新打开微信读书 App 刷新认证后再试");
+                $.setdata("", AUTH_KEY);
+                return;
+            }
+        }
         if (result.status !== 200) {
             $.msg("WeRead", "请求失败", "HTTP " + result.status);
             return;
@@ -802,7 +753,28 @@ async function runClaimWithAuth(auth, cachedBody) {
 
 
         if (r.status === 401) {
-            // 方案 D：vid/skey 均失效，通知用户
+            // 方案 C：skey 已过期，尝试不带 skey 重新领取
+            $.log("[WeRead] claim 401 — 尝试不带 skey 重新领取...");
+            delete auth.skey; // 后续请求都不带 skey
+            let r2 = await post(
+                API + "/weekly/exchange",
+                encode({
+                    unread: 1,
+                    awardChoiceType: choice.choiceType,
+                    awardLevelId: item.awardLevelId,
+                    isExchangeAward: 1,
+                    pf: PF
+                }),
+                getHeaders(auth)
+            );
+
+            if (r2.status === 200) {
+                count++;
+                details.push((item._src || "奖励") + "·" + describeChoice(choice, r2));
+                continue;
+            }
+
+            // 方案 D：vid/skey 均失效
             $.msg("WeRead", "认证已过期", "vid/skey 已失效，请重新打开微信读书 App 刷新认证后再试");
             $.setdata("", AUTH_KEY);
             return;
@@ -1049,9 +1021,8 @@ async function runFlipCard(auth) {
 //
 // ⚠️ 非功能代码：/login 的 signature 算法经逆向分析确认为「极高难度」
 // （HMAC-SHA256 key 格式 %@_%@_EBRYFkVMReKBGsU2_%@ 但 3 个 %@ 的具体来源
-//  以及 message 的构建方式无法从二进制中确定，20+ 种策略共 30 万+ 组合验证均不匹配）。
-// 保留此函数待将来通过 Frida hook 或 Ghidra 反编译破解后启用；
-// 当前 401 走方案 B（网页版 renewal 续期）+ 方案 D（通知用户）。
+//  以及 message 的构建方式无法从二进制中确定，160+ 种组合验证均不匹配）。
+// 保留此函数待将来签名被破解后启用；当前 401 走方案 C（不带 skey 重试）+ 方案 D（通知用户）。
 async function tryRefreshLogin(auth) {
     let body = {
         refreshToken: auth.refreshToken,
