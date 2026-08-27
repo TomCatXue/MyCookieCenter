@@ -1,0 +1,29 @@
+#!name = Pixiv 小说翻译
+#!desc = 在 Pixiv 小说阅读页注入翻译按钮，支持 Google 免费接口 / 微软翻译 / 百度翻译
+#!author = TomCatXue
+#!homepage = https://github.com/TomCatXue/MyCookieCenter
+#!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/pixiv.png
+#!tag = Pixiv,小说,翻译,Google,微软,百度
+
+[Argument]
+# 总开关：默认关闭，按需开启
+pixiv_novel_translate = switch,false,tag=小说翻译,desc=在 Pixiv 小说阅读页注入翻译按钮
+# 默认翻译源: google / microsoft / baidu
+translator = input,google,tag=默认翻译源,desc=google=Google免费接口 microsoft=微软翻译 baidu=百度翻译
+# 目标语言: zh-CN / zh-TW / en / ja / ko
+target = input,zh-CN,tag=目标语言,desc=zh-CN简体 zh-TW繁体 en英文 ja日文 ko韩文
+# 选择 microsoft 时填写
+ms_key = input,,tag=微软翻译Key,desc=Ocp-Apim-Subscription-Key
+# 选择 baidu 时填写
+baidu_appid = input,,tag=百度AppID,desc=百度开放平台应用 ID
+baidu_secret = input,,tag=百度密钥,desc=百度开放平台密钥
+
+[MITM]
+hostname = app-api.pixiv.net
+
+[Script]
+# 页面注入：往小说阅读页插入“译”按钮
+http-response ^https://app-api\.pixiv\.net/webview/v2/novel script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/pixiv_novel_translate/pixiv_novel_translate.js?v=20260827-r1, requires-body=true, timeout=30, tag=Pixiv 小说翻译-页面注入, enable={pixiv_novel_translate}
+
+# 翻译中转：接收页面请求，调用翻译服务并返回结果（不请求上游 Pixiv）
+http-request POST ^https://app-api\.pixiv\.net/pxtrans script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/pixiv_novel_translate/pixiv_novel_translate.js?v=20260827-r1, requires-body=true, timeout=60, tag=Pixiv 小说翻译-翻译中转, enable={pixiv_novel_translate}
