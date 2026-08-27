@@ -17,28 +17,28 @@ hostname = i.weread.qq.com, weread.qq.com
 
 [Script]
 # 捕获鉴权信息（vid + skey，而非 Cookie）：打开微信读书 App 随便刷一下（几乎任何页面都会触发）
-http-request ^https?://i\.weread\.qq\.com/.* script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260827-flipfix2, tag=WeReadClaim Auth, requires-body=false, enable={capture_cookie}
+http-request ^https?://i\.weread\.qq\.com/.* script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260827-flipfix3, tag=WeReadClaim Auth, requires-body=false, enable={capture_cookie}
 
 # 捕获 /login 请求体（Base64 编码），提取 deviceId
-http-request POST ^https?://i\.weread\.qq\.com/login script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260827-flipfix2, tag=WeReadClaim Login, requires-body=true, enable={capture_cookie}
+http-request POST ^https?://i\.weread\.qq\.com/login script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260827-flipfix3, tag=WeReadClaim Login, requires-body=true, enable={capture_cookie}
 
 # 捕获 /login 响应体，提取 vid/skey/refreshToken（自动刷新的前置条件）
-http-response POST ^https?://i\.weread\.qq\.com/login script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260827-flipfix2, tag=WeReadClaim LoginResp, requires-body=true, enable={capture_cookie}
+http-response POST ^https?://i\.weread\.qq\.com/login script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260827-flipfix3, tag=WeReadClaim LoginResp, requires-body=true, enable={capture_cookie}
 
 # 捕获 weread.qq.com Cookie（wr_skey/wr_vid，翻牌游戏用）
-http-request ^https?://weread\.qq\.com/.* script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260827-flipfix2, tag=WeReadClaim FlipCookie, requires-body=false, enable={capture_cookie}
+http-request ^https?://weread\.qq\.com/.* script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260827-flipfix3, tag=WeReadClaim FlipCookie, requires-body=false, enable={capture_cookie}
 
 # 定时领取：每晚 23:00 自动检查并领取
 # 不设 argument=，让 Loon 自动把 [Argument] 值注入 $argument；http-request 中转存储兜底
-cron "0 23 * * *" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260827-flipfix2, tag=WeReadClaim 签到, enable=true
+cron "0 23 * * *" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260827-flipfix3, tag=WeReadClaim 签到, enable=true
 
 # 翻牌游戏：每周二 20:00 自动翻牌
-cron "0 20 * * 2" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260827-flipfix2, argument="task=flip", tag=WeReadClaim 翻牌, enable=true
+cron "0 20 * * 2" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260827-flipfix3, argument="task=flip", tag=WeReadClaim 翻牌, enable=true
 */
 
 const AUTH_KEY = "weread_auth_v2";
 const FLIP_STATE_KEY = "weread_flip_state_v1";
-const SCRIPT_VERSION = "2026-08-27-flipfix2";
+const SCRIPT_VERSION = "2026-08-27-flipfix3";
 const API = "https://i.weread.qq.com";
 const FLIP_API = "https://weread.qq.com/flip-card-game/api";
 const PF = "weread_wx-2001-iap-2001-iphone";
@@ -503,6 +503,9 @@ function post(url, body, headers) {
 
 // 方案 B：通过网页版 /web/login/renewal 自动续期 wr_skey
 // 仅用于 weread.qq.com H5 翻牌 Cookie，不回写 App API 的 skey。
+// ⚠️ 死代码 — 2026-08-23 诊断确认不可行：App skey ≠ 网页 wr_skey（b1523e1），
+// 且 /web/login/renewal 对任何 Cookie 均返回 -2013 params error，无法续期。
+// 翻牌 wr_skey 失效的唯一恢复途径：用户重新打开翻牌页面触发 Cookie 捕获。
 async function tryWebRenewal(auth) {
     let wrVid = auth.wrVid || auth.vid || "";
     let wrSkey = auth.wrSkey || auth.skey || "";
@@ -975,16 +978,14 @@ async function runFlipCardDirect(auth) {
 
         attempts++;
 
-        // 401/403 = Cookie 明确失效；499 = 服务器/WAF 直接断开（wr_skey 过期时也常见）
-        // 两者都先尝试 renewal 续期 wr_skey 再重试一次
+        // 401/403/499 = Cookie 失效或 WAF 断连（wr_skey 约 7 天有效期，过期即失效）。
+        // ⚠️ 不尝试 renewal 续期：8-23 诊断已确认 App skey ≠ 网页 wr_skey，
+        // 且 /web/login/renewal 接口对任何 Cookie 均返回 -2013 params error，续期不可行。
+        // 唯一恢复途径：用户重新打开翻牌页面触发 Cookie 捕获。
         if (flipRes.status === 401 || flipRes.status === 403 || flipRes.status === 499) {
-            $.log("[WeRead] 翻牌 — HTTP " + flipRes.status + "，尝试 renewal 续期 wr_skey...");
-            let renewed = await tryWebRenewal(auth);
-            if (renewed) {
-                auth = renewed;
-                $.log("[WeRead] 翻牌 — renewal 成功，重试翻牌...");
-                flipRes = await get(flipUrl, getFlipHeaders(auth));
-            }
+            $.log("[WeRead] 翻牌 — HTTP " + flipRes.status + "，wr_skey 已失效（renewal 不可行，需重新捕获）");
+            results.push("第 " + attempts + " 次: 失败 (HTTP " + flipRes.status + ")，wr_skey 已失效");
+            break;
         }
 
         if (flipRes.status === 200) {
@@ -1018,7 +1019,13 @@ async function runFlipCardDirect(auth) {
     }
 
     if (results.length > 0) {
-        $.msg("WeRead", "翻牌完成", results.join("\n"));
+        let failed = results.some(r => r.indexOf("失败") !== -1);
+        if (failed) {
+            // 401/403/499 = Cookie 失效。renewal 不可行，需用户重新打开翻牌页面捕获
+            $.msg("WeRead", "翻牌失败", "wr_skey 已失效（约 7 天有效）\n请打开微信读书 App 的「翻牌游戏」页面一次，让 Loon 重新捕获 Cookie 后再试\n\n" + results.join("\n"));
+        } else {
+            $.msg("WeRead", "翻牌完成", results.join("\n"));
+        }
     } else {
         $.msg("WeRead", "翻牌", "暂无可翻的卡片");
     }
