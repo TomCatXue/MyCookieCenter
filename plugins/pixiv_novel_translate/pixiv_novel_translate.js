@@ -25,7 +25,7 @@ function Env(t) { return new class { constructor(t) { this.name = t, this.startT
 
 const $ = new Env("Pixiv 小说翻译");
 
-const SCRIPT_VERSION = "20260828-r1";
+const SCRIPT_VERSION = "20260828-r2";
 
 const PXTC_LANG_MAP = {
   "zh-CN": { google: "zh-CN", microsoft: "zh-Hans", baidu: "zh" },
@@ -574,6 +574,18 @@ function __pxtc_client() {
   })();
 }
 
+// Loon / Surge / Stash 的 http-request 脚本中，$done({status,headers,body}) 会被当作
+// “修改请求”下发到上游；要直接返回响应（mock），必须包一层 response：$done({response:{...}})。
+// Quantumult X 的 response.status 需要字符串形式的起始行（如 "HTTP/1.1 200"）。
+function doneWithResponse(status, headers, body) {
+  const payload = { status: status, headers: headers || {}, body: body };
+  if (typeof $task !== "undefined") {
+    $done({ response: { status: "HTTP/1.1 " + status, headers: payload.headers, body: payload.body } });
+  } else {
+    $done({ response: payload });
+  }
+}
+
 async function handleProxy() {
   const args = parseArgument();
   const query = parseQuery($request.url);
@@ -604,14 +616,10 @@ async function handleProxy() {
   } catch (e) {
     result.error = String((e && e.message) || e);
   }
-  $done({
-    status: 200,
-    headers: {
-      "Content-Type": "application/json; charset=utf-8",
-      "Cache-Control": "no-store"
-    },
-    body: JSON.stringify(result)
-  });
+  doneWithResponse(200, {
+    "Content-Type": "application/json; charset=utf-8",
+    "Cache-Control": "no-store"
+  }, JSON.stringify(result));
 }
 
 function handleInject() {
@@ -650,11 +658,7 @@ function handleInject() {
   const url = typeof $request !== "undefined" && $request.url ? $request.url : "";
   try {
     if (url.indexOf("/pxtrans") !== -1) {
-      $done({
-        status: 200,
-        headers: { "Content-Type": "application/json; charset=utf-8" },
-        body: JSON.stringify({ ok: false, translation: "", src: "", error: String((e && e.message) || e) })
-      });
+      doneWithResponse(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" }, JSON.stringify({ ok: false, translation: "", src: "", error: String((e && e.message) || e) }));
     } else {
       $done({});
     }
