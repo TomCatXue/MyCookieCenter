@@ -25,7 +25,7 @@ function Env(t) { return new class { constructor(t) { this.name = t, this.startT
 
 const $ = new Env("Pixiv 小说翻译");
 
-const SCRIPT_VERSION = "20260828-r2";
+const SCRIPT_VERSION = "20260828-r3";
 
 const PXTC_LANG_MAP = {
   "zh-CN": { google: "zh-CN", microsoft: "zh-Hans", baidu: "zh" },
@@ -179,7 +179,32 @@ function md5(str) {
   return toHex(a) + toHex(b) + toHex(c) + toHex(d);
 }
 
+// Google 免费接口限流露出 429 + HTML（body 以 < 开头），Loon 的 $httpClient 会尝试
+// JSON.parse 该 HTML 并报 “JSON Parse error: Unrecognized token '<'”。防御三层：
+// 1) 限流窗口写入 $persistentStore（跨 Loon 脚本调用保留），窗口内快速失败；
+// 2) 识别 status=429 / HTML 响应，自动进入 60 秒限流窗口；
+// 3) 把 Loon 层 JSON 解析错误归一化为可读文案。
+let _pxtcRateLimitUntil = 0;
+
+function pxtcIsRateLimited() {
+  if (_pxtcRateLimitUntil > Date.now()) return true;
+  const saved = $.getdata("pxtc_grl_until");
+  const until = saved ? parseInt(saved, 10) : 0;
+  if (until > Date.now()) { _pxtcRateLimitUntil = until; return true; }
+  return false;
+}
+
+function pxtcSetRateLimit(ms) {
+  const until = Date.now() + ms;
+  _pxtcRateLimitUntil = until;
+  try { $.setdata(String(until), "pxtc_grl_until"); } catch (e) { }
+}
+
 async function googleTranslate(text, target) {
+  // 限流窗口内快速失败，避免继续打 Google 加剧限流
+  if (pxtcIsRateLimited()) {
+    throw new Error("Google 限流中，请稍后再试（已自动暂停约 60 秒）");
+  }
   const qs = "client=it&dt=t&otf=3&dj=1&hl=zh_CN&sl=auto&tl=" + encodeURIComponent(target) + "&q=" + encodeURIComponent(text);
   const hosts = [
     "https://translate.google.hk/translate_a/single",
@@ -192,7 +217,24 @@ async function googleTranslate(text, target) {
         url: hosts[i] + "?" + qs,
         headers: { "User-Agent": "Mozilla/5.0" }
       });
-      const data = JSON.parse(res.body || "{}");
+      const status = res && (res.status || res.statusCode);
+      const raw = res && res.body;
+      // 429 或 HTML 响应 = Google 限流
+      if (status === 429 || (typeof raw === "string" && /^\s*</.test(raw))) {
+        pxtcSetRateLimit(60000);
+        throw new Error("Google 限流（429），已自动暂停约 60 秒，请稍后再试");
+      }
+      // Loon 的 $httpClient 可能已把合法 JSON 响应 parse 成对象，两种形态都要兼容
+      let data;
+      if (typeof raw === "string") {
+        try { data = JSON.parse(raw); } catch (e) {
+          throw new Error("Google 接口异常（返回非 JSON），请稍后重试");
+        }
+      } else if (raw && typeof raw === "object") {
+        data = raw;
+      } else {
+        throw new Error("Google 返回空响应");
+      }
       if (!data || !Array.isArray(data.sentences)) throw new Error("Google 返回格式异常");
       let out = "";
       for (let j = 0; j < data.sentences.length; j++) {
@@ -215,7 +257,15 @@ async function msTranslate(text, target, key) {
     },
     body: JSON.stringify([{ Text: text }])
   });
-  const data = JSON.parse(res.body || "{}");
+  const raw = res && res.body;
+  let data;
+  if (typeof raw === "string") {
+    try { data = JSON.parse(raw); } catch (e) { throw new Error("微软翻译返回非 JSON"); }
+  } else if (raw && typeof raw === "object") {
+    data = raw;
+  } else {
+    throw new Error("微软翻译返回空响应");
+  }
   if (!Array.isArray(data) || !data[0] || !data[0].translations || !data[0].translations[0]) {
     throw new Error("微软翻译返回格式异常");
   }
@@ -233,7 +283,15 @@ async function baiduTranslate(text, target, appid, secret) {
     url: url,
     headers: { "User-Agent": "Mozilla/5.0" }
   });
-  const data = JSON.parse(res.body || "{}");
+  const raw = res && res.body;
+  let data;
+  if (typeof raw === "string") {
+    try { data = JSON.parse(raw); } catch (e) { throw new Error("百度翻译返回非 JSON"); }
+  } else if (raw && typeof raw === "object") {
+    data = raw;
+  } else {
+    throw new Error("百度翻译返回空响应");
+  }
   if (data && data.error_code) throw new Error("百度翻译 " + data.error_code + " " + (data.error_msg || ""));
   if (!data || !Array.isArray(data.trans_result)) throw new Error("百度翻译返回格式异常");
   let out = "";
@@ -402,11 +460,18 @@ function __pxtc_client() {
           sections[i].innerHTML = '<div class="pxtc-orig">' + renderParagraphs(chunks[i]) + '</div><div class="pxtc-trans">' + renderParagraphs(trans) + "</div>";
           done++;
         } catch (e) {
+          var errMsg = String((e && e.message) || e);
           failed++;
-          sections[i].innerHTML = '<div class="pxtc-orig">' + renderParagraphs(chunks[i]) + '</div><div class="pxtc-error">' + esc((e && e.message) || e) + "</div>";
+          sections[i].innerHTML = '<div class="pxtc-orig">' + renderParagraphs(chunks[i]) + '</div><div class="pxtc-error">' + esc(errMsg) + "</div>";
+          // 遇到限流立即停止整篇翻译，避免继续请求加剧限流
+          if (errMsg.indexOf("限流") !== -1) {
+            setStatus("Google 限流，已停止本次翻译，请稍后再试", "#c0392b");
+            if (panel) panel.style.display = "none";
+            return;
+          }
         }
         setStatus("翻译中 " + (i + 1) + "/" + chunks.length, "");
-        if (cfg.translator === "google") await sleep(150);
+        if (cfg.translator === "google") await sleep(300);
       }
       if (failed) setStatus("完成，失败 " + failed + " 段", "#c0392b");
       else setStatus("翻译完成 " + done + "/" + chunks.length, "#1e8449");
