@@ -821,9 +821,10 @@ function get(url, headers) {
 // ── Flip card helpers ───────────────────────────────────
 
 function pickNextFlip(data) {
-    // 2026-08-27 抓包确认：cardIndex = cardList/initialList 的数组下标。
-    // 可翻的牌 status=0（未翻开）；status=1 已翻开(书)、2 已翻开未领、3 已自动领、4 已领。
-    // giftIndex 真实抓包为 0（每次翻牌都传 0），不能用本地 state 的 flipList.length 推算（会 499）。
+    // 2026-08-27 抓包确认：
+    // 1) cardIndex = cardList/initialList 中 status=0（未翻开）的数组下标（真实翻 cardIndex=6 对应 initialList[6] status=0）
+    // 2) giftIndex = 本次会话已翻的牌数 = flipList.length（抓包第 1 次翻 flipList 空 → giftIndex=0；已翻 1 张 → giftIndex=1）
+    //    ⚠️ 必须用服务器最新 flipList.length，固定 0 在已翻过牌时是非法参数 → WAF 断开 499
     let cards = data.cardList || [];
     let used = {};
     cards.forEach(c => {
@@ -834,17 +835,18 @@ function pickNextFlip(data) {
 
     // 收集 status=0（可翻）的卡片位置，优先 initialList 再 cardList
     let candidates = [];
+    let seen = {};
     (data.initialList || []).forEach((c, i) => {
-        if (c.status === 0 && !used[i]) candidates.push(i);
+        if (c.status === 0 && !used[i] && !seen[i]) { candidates.push(i); seen[i] = true; }
     });
     cards.forEach((c, i) => {
-        if (c.status === 0 && !used[i]) candidates.push(i);
+        if (c.status === 0 && !used[i] && !seen[i]) { candidates.push(i); seen[i] = true; }
     });
     // 回退：按 FLIP_CARD_ORDER 顺序找未翻的位置
     if (candidates.length === 0) {
         for (let i = 0; i < FLIP_CARD_ORDER.length; i++) {
             let candidate = FLIP_CARD_ORDER[i];
-            if (!used[candidate]) {
+            if (!used[candidate] && !seen[candidate]) {
                 candidates.push(candidate);
             }
         }
@@ -852,8 +854,8 @@ function pickNextFlip(data) {
 
     if (candidates.length === 0) return null;
     let cardIndex = candidates[0];
-    // 真实抓包 giftIndex=0
-    return { cardIndex, giftIndex: 0 };
+    let giftIndex = Array.isArray(data.flipList) ? data.flipList.length : 0;
+    return { cardIndex, giftIndex };
 }
 
 function getSavedFlipState() {
