@@ -25,7 +25,7 @@ function Env(t) { return new class { constructor(t) { this.name = t, this.startT
 
 const $ = new Env("Pixiv 小说翻译");
 
-const SCRIPT_VERSION = "20260828-r3";
+const SCRIPT_VERSION = "20260828-r4";
 
 const PXTC_LANG_MAP = {
   "zh-CN": { google: "zh-CN", microsoft: "zh-Hans", baidu: "zh" },
@@ -35,7 +35,9 @@ const PXTC_LANG_MAP = {
   "ko": { google: "ko", microsoft: "ko", baidu: "kor" }
 };
 
-const PXTC_CHUNK_LIMITS = { google: 350, microsoft: 4500, baidu: 580 };
+// Google 网页接口实测支持 4500+ 字符单次请求；分块上限加大后请求次数显著下降，
+// 从源头降低限流触发概率（一篇 10 万字符小说：350 上限≈285 次 → 1500 上限≈67 次）
+const PXTC_CHUNK_LIMITS = { google: 1500, microsoft: 4500, baidu: 580 };
 
 function parseArgument() {
   const out = {};
@@ -208,7 +210,8 @@ async function googleTranslate(text, target) {
   const qs = "client=it&dt=t&otf=3&dj=1&hl=zh_CN&sl=auto&tl=" + encodeURIComponent(target) + "&q=" + encodeURIComponent(text);
   const hosts = [
     "https://translate.google.hk/translate_a/single",
-    "https://translate.googleapis.com/translate_a/single"
+    "https://translate.googleapis.com/translate_a/single",
+    "https://translate.google.com/translate_a/single"
   ];
   let lastError = null;
   for (let i = 0; i < hosts.length; i++) {
@@ -433,10 +436,36 @@ function __pxtc_client() {
 
     function translateChunk(text) {
       var url = "/pxtrans?t=" + encodeURIComponent(cfg.translator) + "&l=" + encodeURIComponent(cfg.target);
+      // 本地缓存：重复段落/整篇重翻直接命中，不打 Google，显著减少请求量
+      if (cfg.translator === "google") {
+        try {
+          var ck = cfg.target + ":" + text.length + ":" + text.slice(0, 32);
+          var cached = localStorage.getItem("pxtc-cache");
+          var map = cached ? JSON.parse(cached) : {};
+          if (map[ck]) return Promise.resolve(map[ck]);
+        } catch (e) { }
+      }
       return fetch(url, { method: "POST", body: text })
         .then(function (res) { return res.json(); })
         .then(function (data) {
           if (!data || !data.ok) throw new Error((data && data.error) || "翻译失败");
+          if (cfg.translator === "google") {
+            try {
+              var ck2 = cfg.target + ":" + text.length + ":" + text.slice(0, 32);
+              var cached2 = localStorage.getItem("pxtc-cache");
+              var map2 = cached2 ? JSON.parse(cached2) : {};
+              map2[ck2] = data.translation || "";
+              var keys2 = Object.keys(map2);
+              // 只保留最近 100 条，防止 localStorage 无限增长
+              if (keys2.length > 100) {
+                var slice2 = keys2.slice(keys2.length - 100);
+                var m2 = {};
+                for (var i2 = 0; i2 < slice2.length; i2++) m2[slice2[i2]] = map2[slice2[i2]];
+                map2 = m2;
+              }
+              localStorage.setItem("pxtc-cache", JSON.stringify(map2));
+            } catch (e) { }
+          }
           return data.translation || "";
         });
     }
@@ -538,7 +567,7 @@ function __pxtc_client() {
         return;
       }
       var paragraphs = splitParagraphs(text);
-      var limit = { google: 350, microsoft: 4500, baidu: 580 }[cfg.translator] || 350;
+      var limit = { google: 1500, microsoft: 4500, baidu: 580 }[cfg.translator] || 1500;
       var chunks = buildChunks(paragraphs, limit);
       if (!chunks.length) {
         restore();
