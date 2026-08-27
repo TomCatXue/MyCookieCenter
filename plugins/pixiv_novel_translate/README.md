@@ -39,11 +39,12 @@
 
 - `http-response` 匹配 `app-api.pixiv.net/webview/v2/novel`，往页面注入样式和客户端脚本
 - 客户端脚本读取 `window.pixiv.novel.text`，按段落分块，通过同源 `POST /pxtrans` 发送给 Loon 脚本
-- `http-response` 匹配 `app-api.pixiv.net/pxtrans` 的上游 404 响应，由 Loon 脚本直接调用翻译接口，并改写为本地 JSON 响应
+- `http-request` 匹配 `app-api.pixiv.net/pxtrans`，请求不会发往 Pixiv 上游，直接由 Loon 脚本调用翻译接口并返回 JSON 响应
+  - 早期版本用 `http-response` 改写上游 404 响应，但上游被 Cloudflare 拦截时可能返回 HTML（响应头却是 JSON），Loon 在脚本执行前解析响应体即报 `JSON Parse error: Unrecognized token '<'`；改为 `http-request` 后完全不依赖上游响应，该错误从根源上消除
 - 翻译结果按“原文置灰 + 译文正文”的双语形式展示，“恢复原文”可还原阅读器
 
 ## 注意
 
 - Google 免费接口是网页版接口，非商用 API，调用过于频繁可能被限流
 - 微软翻译与百度翻译为付费/限额 API，密钥只在 Loon 脚本侧使用，不会下发到页面
-- 需要 Loon 保持脚本最新版，插件内已带 `?v=20260827-r3` 版本参数
+- 需要 Loon 保持脚本最新版，插件内已带 `?v=20260828-r1` 版本参数

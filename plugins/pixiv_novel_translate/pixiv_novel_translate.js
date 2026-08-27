@@ -11,8 +11,11 @@
 hostname = app-api.pixiv.net
 
 [Script]
+# 页面注入
 http-response ^https://app-api\.pixiv\.net/webview/v2/novel script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/pixiv_novel_translate/pixiv_novel_translate.js, requires-body=true, timeout=30
-http-response ^https://app-api\.pixiv\.net/pxtrans script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/pixiv_novel_translate/pixiv_novel_translate.js, requires-body=true, timeout=60
+# 翻译中转：用 http-request 直接拦截，不经过上游，避免上游非 JSON 响应导致 Loon 报
+# “JSON Parse error: Unrecognized token '<'”（http-response 会在脚本执行前解析响应体）
+http-request ^https://app-api\.pixiv\.net/pxtrans script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/pixiv_novel_translate/pixiv_novel_translate.js, requires-body=true, timeout=60
 ------------------------------------------
 */
 
@@ -22,7 +25,7 @@ function Env(t) { return new class { constructor(t) { this.name = t, this.startT
 
 const $ = new Env("Pixiv 小说翻译");
 
-const SCRIPT_VERSION = "20260827-r3";
+const SCRIPT_VERSION = "20260828-r1";
 
 const PXTC_LANG_MAP = {
   "zh-CN": { google: "zh-CN", microsoft: "zh-Hans", baidu: "zh" },
@@ -578,7 +581,10 @@ async function handleProxy() {
   let target = String(query.l || args.target || "zh-CN");
   if (!PXTC_LANG_MAP[target]) target = "zh-CN";
   if (translator !== "microsoft" && translator !== "baidu") translator = "google";
-  const text = typeof $request.body === "string" ? $request.body : "";
+  // http-request / http-response 下 $request.body 都可能是字符串；
+  // 若 Loon 按 JSON Content-Type 解析过请求体会是对象，这里统一兜底转字符串
+  const rawBody = $request.body;
+  const text = typeof rawBody === "string" ? rawBody : (rawBody && typeof rawBody === "object" ? JSON.stringify(rawBody) : "");
   const result = { ok: false, translation: "", src: translator, error: "" };
   try {
     if (!text) throw new Error("空请求体");
