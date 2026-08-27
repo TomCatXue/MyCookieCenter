@@ -49,7 +49,7 @@ function parseArgument() {
     }
     let key = pair.substring(0, idx).trim();
     let value = pair.substring(idx + 1).trim();
-    try { value = decodeURIComponent(value); } catch (e) {}
+    try { value = decodeURIComponent(value); } catch (e) { }
     out[key] = value;
   }
   return out;
@@ -70,8 +70,8 @@ function parseQuery(url) {
     }
     let key = pair.substring(0, eq);
     let value = pair.substring(eq + 1);
-    try { key = decodeURIComponent(key); } catch (e) {}
-    try { value = decodeURIComponent(value); } catch (e) {}
+    try { key = decodeURIComponent(key); } catch (e) { }
+    try { value = decodeURIComponent(value); } catch (e) { }
     out[key] = value;
   }
   return out;
@@ -139,38 +139,38 @@ function md5(str) {
   let a = 0x67452301, b = 0xefcdab89, c = 0x98badcfe, d = 0x10325476;
   for (let k = 0; k < x.length; k += 16) {
     const aa = a, bb = b, cc = c, dd = d;
-    a = FF(a, b, c, d, x[k+0], 7, 0xd76aa478); d = FF(d, a, b, c, x[k+1], 12, 0xe8c7b756);
-    c = FF(c, d, a, b, x[k+2], 17, 0x242070db); b = FF(b, c, d, a, x[k+3], 22, 0xc1bdceee);
-    a = FF(a, b, c, d, x[k+4], 7, 0xf57c0faf); d = FF(d, a, b, c, x[k+5], 12, 0x4787c62a);
-    c = FF(c, d, a, b, x[k+6], 17, 0xa8304613); b = FF(b, c, d, a, x[k+7], 22, 0xfd469501);
-    a = FF(a, b, c, d, x[k+8], 7, 0x698098d8); d = FF(d, a, b, c, x[k+9], 12, 0x8b44f7af);
-    c = FF(c, d, a, b, x[k+10], 17, 0xffff5bb1); b = FF(b, c, d, a, x[k+11], 22, 0x895cd7be);
-    a = FF(a, b, c, d, x[k+12], 7, 0x6b901122); d = FF(d, a, b, c, x[k+13], 12, 0xfd987193);
-    c = FF(c, d, a, b, x[k+14], 17, 0xa679438e); b = FF(b, c, d, a, x[k+15], 22, 0x49b40821);
-    a = GG(a, b, c, d, x[k+1], 5, 0xf61e2562); d = GG(d, a, b, c, x[k+6], 9, 0xc040b340);
-    c = GG(c, d, a, b, x[k+11], 14, 0x265e5a51); b = GG(b, c, d, a, x[k+0], 20, 0xe9b6c7aa);
-    a = GG(a, b, c, d, x[k+5], 5, 0xd62f105d); d = GG(d, a, b, c, x[k+10], 9, 0x02441453);
-    c = GG(c, d, a, b, x[k+15], 14, 0xd8a1e681); b = GG(b, c, d, a, x[k+4], 20, 0xe7d3fbc8);
-    a = GG(a, b, c, d, x[k+9], 5, 0x21e1cde6); d = GG(d, a, b, c, x[k+14], 9, 0xc33707d6);
-    c = GG(c, d, a, b, x[k+3], 14, 0xf4d50d87); b = GG(b, c, d, a, x[k+8], 20, 0x455a14ed);
-    a = GG(a, b, c, d, x[k+13], 5, 0xa9e3e905); d = GG(d, a, b, c, x[k+2], 9, 0xfcefa3f8);
-    c = GG(c, d, a, b, x[k+7], 14, 0x676f02d9); b = GG(b, c, d, a, x[k+12], 20, 0x8d2a4c8a);
-    a = HH(a, b, c, d, x[k+5], 4, 0xfffa3942); d = HH(d, a, b, c, x[k+8], 11, 0x8771f681);
-    c = HH(c, d, a, b, x[k+11], 16, 0x6d9d6122); b = HH(b, c, d, a, x[k+14], 23, 0xfde5380c);
-    a = HH(a, b, c, d, x[k+1], 4, 0xa4beea44); d = HH(d, a, b, c, x[k+4], 11, 0x4bdecfa9);
-    c = HH(c, d, a, b, x[k+7], 16, 0xf6bb4b60); b = HH(b, c, d, a, x[k+10], 23, 0xbebfbc70);
-    a = HH(a, b, c, d, x[k+13], 4, 0x289b7ec6); d = HH(d, a, b, c, x[k+0], 11, 0xeaa127fa);
-    c = HH(c, d, a, b, x[k+3], 16, 0xd4ef3085); b = HH(b, c, d, a, x[k+6], 23, 0x04881d05);
-    a = HH(a, b, c, d, x[k+9], 4, 0xd9d4d039); d = HH(d, a, b, c, x[k+12], 11, 0xe6db99e5);
-    c = HH(c, d, a, b, x[k+15], 16, 0x1fa27cf8); b = HH(b, c, d, a, x[k+2], 23, 0xc4ac5665);
-    a = II(a, b, c, d, x[k+0], 6, 0xf4292244); d = II(d, a, b, c, x[k+7], 10, 0x432aff97);
-    c = II(c, d, a, b, x[k+14], 15, 0xab9423a7); b = II(b, c, d, a, x[k+5], 21, 0xfc93a039);
-    a = II(a, b, c, d, x[k+12], 6, 0x655b59c3); d = II(d, a, b, c, x[k+3], 10, 0x8f0ccc92);
-    c = II(c, d, a, b, x[k+10], 15, 0xffeff47d); b = II(b, c, d, a, x[k+1], 21, 0x85845dd1);
-    a = II(a, b, c, d, x[k+8], 6, 0x6fa87e4f); d = II(d, a, b, c, x[k+15], 10, 0xfe2ce6e0);
-    c = II(c, d, a, b, x[k+6], 15, 0xa3014314); b = II(b, c, d, a, x[k+13], 21, 0x4e0811a1);
-    a = II(a, b, c, d, x[k+4], 6, 0xf7537e82); d = II(d, a, b, c, x[k+11], 10, 0xbd3af235);
-    c = II(c, d, a, b, x[k+2], 15, 0x2ad7d2bb); b = II(b, c, d, a, x[k+9], 21, 0xeb86d391);
+    a = FF(a, b, c, d, x[k + 0], 7, 0xd76aa478); d = FF(d, a, b, c, x[k + 1], 12, 0xe8c7b756);
+    c = FF(c, d, a, b, x[k + 2], 17, 0x242070db); b = FF(b, c, d, a, x[k + 3], 22, 0xc1bdceee);
+    a = FF(a, b, c, d, x[k + 4], 7, 0xf57c0faf); d = FF(d, a, b, c, x[k + 5], 12, 0x4787c62a);
+    c = FF(c, d, a, b, x[k + 6], 17, 0xa8304613); b = FF(b, c, d, a, x[k + 7], 22, 0xfd469501);
+    a = FF(a, b, c, d, x[k + 8], 7, 0x698098d8); d = FF(d, a, b, c, x[k + 9], 12, 0x8b44f7af);
+    c = FF(c, d, a, b, x[k + 10], 17, 0xffff5bb1); b = FF(b, c, d, a, x[k + 11], 22, 0x895cd7be);
+    a = FF(a, b, c, d, x[k + 12], 7, 0x6b901122); d = FF(d, a, b, c, x[k + 13], 12, 0xfd987193);
+    c = FF(c, d, a, b, x[k + 14], 17, 0xa679438e); b = FF(b, c, d, a, x[k + 15], 22, 0x49b40821);
+    a = GG(a, b, c, d, x[k + 1], 5, 0xf61e2562); d = GG(d, a, b, c, x[k + 6], 9, 0xc040b340);
+    c = GG(c, d, a, b, x[k + 11], 14, 0x265e5a51); b = GG(b, c, d, a, x[k + 0], 20, 0xe9b6c7aa);
+    a = GG(a, b, c, d, x[k + 5], 5, 0xd62f105d); d = GG(d, a, b, c, x[k + 10], 9, 0x02441453);
+    c = GG(c, d, a, b, x[k + 15], 14, 0xd8a1e681); b = GG(b, c, d, a, x[k + 4], 20, 0xe7d3fbc8);
+    a = GG(a, b, c, d, x[k + 9], 5, 0x21e1cde6); d = GG(d, a, b, c, x[k + 14], 9, 0xc33707d6);
+    c = GG(c, d, a, b, x[k + 3], 14, 0xf4d50d87); b = GG(b, c, d, a, x[k + 8], 20, 0x455a14ed);
+    a = GG(a, b, c, d, x[k + 13], 5, 0xa9e3e905); d = GG(d, a, b, c, x[k + 2], 9, 0xfcefa3f8);
+    c = GG(c, d, a, b, x[k + 7], 14, 0x676f02d9); b = GG(b, c, d, a, x[k + 12], 20, 0x8d2a4c8a);
+    a = HH(a, b, c, d, x[k + 5], 4, 0xfffa3942); d = HH(d, a, b, c, x[k + 8], 11, 0x8771f681);
+    c = HH(c, d, a, b, x[k + 11], 16, 0x6d9d6122); b = HH(b, c, d, a, x[k + 14], 23, 0xfde5380c);
+    a = HH(a, b, c, d, x[k + 1], 4, 0xa4beea44); d = HH(d, a, b, c, x[k + 4], 11, 0x4bdecfa9);
+    c = HH(c, d, a, b, x[k + 7], 16, 0xf6bb4b60); b = HH(b, c, d, a, x[k + 10], 23, 0xbebfbc70);
+    a = HH(a, b, c, d, x[k + 13], 4, 0x289b7ec6); d = HH(d, a, b, c, x[k + 0], 11, 0xeaa127fa);
+    c = HH(c, d, a, b, x[k + 3], 16, 0xd4ef3085); b = HH(b, c, d, a, x[k + 6], 23, 0x04881d05);
+    a = HH(a, b, c, d, x[k + 9], 4, 0xd9d4d039); d = HH(d, a, b, c, x[k + 12], 11, 0xe6db99e5);
+    c = HH(c, d, a, b, x[k + 15], 16, 0x1fa27cf8); b = HH(b, c, d, a, x[k + 2], 23, 0xc4ac5665);
+    a = II(a, b, c, d, x[k + 0], 6, 0xf4292244); d = II(d, a, b, c, x[k + 7], 10, 0x432aff97);
+    c = II(c, d, a, b, x[k + 14], 15, 0xab9423a7); b = II(b, c, d, a, x[k + 5], 21, 0xfc93a039);
+    a = II(a, b, c, d, x[k + 12], 6, 0x655b59c3); d = II(d, a, b, c, x[k + 3], 10, 0x8f0ccc92);
+    c = II(c, d, a, b, x[k + 10], 15, 0xffeff47d); b = II(b, c, d, a, x[k + 1], 21, 0x85845dd1);
+    a = II(a, b, c, d, x[k + 8], 6, 0x6fa87e4f); d = II(d, a, b, c, x[k + 15], 10, 0xfe2ce6e0);
+    c = II(c, d, a, b, x[k + 6], 15, 0xa3014314); b = II(b, c, d, a, x[k + 13], 21, 0x4e0811a1);
+    a = II(a, b, c, d, x[k + 4], 6, 0xf7537e82); d = II(d, a, b, c, x[k + 11], 10, 0xbd3af235);
+    c = II(c, d, a, b, x[k + 2], 15, 0x2ad7d2bb); b = II(b, c, d, a, x[k + 9], 21, 0xeb86d391);
     a = au(a, aa); b = au(b, bb); c = au(c, cc); d = au(d, dd);
   }
   return toHex(a) + toHex(b) + toHex(c) + toHex(d);
@@ -240,21 +240,21 @@ async function baiduTranslate(text, target, appid, secret) {
   return out;
 }
 
-const PXTC_CSS = "#pxtc-fab{position:fixed;right:13px;bottom:50px;z-index:2147483647;width:48px;height:48px;border-radius:24px;border:0;background:#0096fa;color:#fff;font-size:18px;font-weight:700;box-shadow:0 4px 14px rgba(0,0,0,.35);cursor:pointer;}" +
-"#pxtc-panel{position:fixed;right:16px;bottom:260px;z-index:2147483646;width:320px;max-width:calc(100vw - 32px);max-height:70vh;overflow:auto;background:#fff;color:#1a1a1a;border-radius:8px;box-shadow:0 8px 28px rgba(0,0,0,.35);font:14px/1.6 -apple-system,'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif;padding:12px 14px;box-sizing:border-box;}" +
-"#pxtc-panel .pxtc-head{display:flex;align-items:center;justify-content:space-between;font-weight:700;margin-bottom:8px;}" +
-"#pxtc-panel .pxtc-close{width:26px;height:26px;border:0;border-radius:50%;background:#eee;color:#333;font-size:16px;line-height:1;cursor:pointer;}" +
-"#pxtc-panel .pxtc-row{display:block;margin:8px 0;}" +
-"#pxtc-panel .pxtc-select{display:block;width:100%;margin-top:4px;padding:6px 8px;border:1px solid #ccc;border-radius:6px;background:#fff;color:#1a1a1a;}" +
-"#pxtc-panel .pxtc-actions{display:flex;gap:8px;margin-top:10px;}" +
-"#pxtc-panel .pxtc-btn{flex:1;padding:8px 0;border:1px solid #d0d0d0;border-radius:6px;background:#f6f6f6;color:#1a1a1a;font-size:14px;cursor:pointer;}" +
-"#pxtc-panel .pxtc-primary{background:#0096fa;border-color:#0096fa;color:#fff;}" +
-"#pxtc-panel .pxtc-status{margin-top:10px;min-height:20px;color:#555;word-break:break-all;}" +
-".pxtc-reader{max-width:720px;margin:0 auto;padding:20px 16px 110px;background:transparent;color:inherit;}" +
-".pxtc-chunk{margin-bottom:22px;padding-bottom:16px;border-bottom:1px solid rgba(127,127,127,.35);}" +
-".pxtc-orig p{margin:4px 0;color:inherit;opacity:.55;line-height:1.8;}" +
-".pxtc-trans p{margin:4px 0;color:inherit;line-height:1.8;}" +
-".pxtc-error{margin-top:6px;color:#c0392b;font-size:13px;word-break:break-all;}";
+const PXTC_CSS = "#pxtc-fab{position:fixed;right:13px;bottom:150px;z-index:2147483647;width:40px;height:40px;border-radius:20px;border:0;background:#0096fa;color:#fff;font-size:16px;font-weight:700;box-shadow:0 4px 14px rgba(0,0,0,.35);cursor:pointer;}" +
+  "#pxtc-panel{position:fixed;right:16px;bottom:260px;z-index:2147483646;width:320px;max-width:calc(100vw - 32px);max-height:70vh;overflow:auto;background:#fff;color:#1a1a1a;border-radius:8px;box-shadow:0 8px 28px rgba(0,0,0,.35);font:14px/1.6 -apple-system,'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif;padding:12px 14px;box-sizing:border-box;}" +
+  "#pxtc-panel .pxtc-head{display:flex;align-items:center;justify-content:space-between;font-weight:700;margin-bottom:8px;}" +
+  "#pxtc-panel .pxtc-close{width:26px;height:26px;border:0;border-radius:50%;background:#eee;color:#333;font-size:16px;line-height:1;cursor:pointer;}" +
+  "#pxtc-panel .pxtc-row{display:block;margin:8px 0;}" +
+  "#pxtc-panel .pxtc-select{display:block;width:100%;margin-top:4px;padding:6px 8px;border:1px solid #ccc;border-radius:6px;background:#fff;color:#1a1a1a;}" +
+  "#pxtc-panel .pxtc-actions{display:flex;gap:8px;margin-top:10px;}" +
+  "#pxtc-panel .pxtc-btn{flex:1;padding:8px 0;border:1px solid #d0d0d0;border-radius:6px;background:#f6f6f6;color:#1a1a1a;font-size:14px;cursor:pointer;}" +
+  "#pxtc-panel .pxtc-primary{background:#0096fa;border-color:#0096fa;color:#fff;}" +
+  "#pxtc-panel .pxtc-status{margin-top:10px;min-height:20px;color:#555;word-break:break-all;}" +
+  ".pxtc-reader{max-width:720px;margin:0 auto;padding:20px 16px 110px;background:transparent;color:inherit;}" +
+  ".pxtc-chunk{margin-bottom:22px;padding-bottom:16px;border-bottom:1px solid rgba(127,127,127,.35);}" +
+  ".pxtc-orig p{margin:4px 0;color:inherit;opacity:.55;line-height:1.8;}" +
+  ".pxtc-trans p{margin:4px 0;color:inherit;line-height:1.8;}" +
+  ".pxtc-error{margin-top:6px;color:#c0392b;font-size:13px;word-break:break-all;}";
 
 function __pxtc_client() {
   (function () {
@@ -628,7 +628,7 @@ function handleInject() {
     } else {
       $done({});
     }
-  } catch (err) {}
+  } catch (err) { }
 });
 
 
