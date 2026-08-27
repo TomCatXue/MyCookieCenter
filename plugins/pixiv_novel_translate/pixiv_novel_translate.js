@@ -240,7 +240,7 @@ async function baiduTranslate(text, target, appid, secret) {
   return out;
 }
 
-const PXTC_CSS = "#pxtc-fab{position:fixed;right:13px;bottom:150px;z-index:2147483647;width:40px;height:40px;border-radius:20px;border:0;background:#0096fa;color:#fff;font-size:16px;font-weight:700;box-shadow:0 4px 14px rgba(0,0,0,.35);cursor:pointer;}" +
+const PXTC_CSS = "#pxtc-fab{position:fixed;right:13px;bottom:150px;z-index:2147483647;width:48px;height:48px;border-radius:20px;border:0;background:#0096fa;color:#fff;font-size:16px;font-weight:700;box-shadow:0 4px 14px rgba(0,0,0,.35);cursor:pointer;}" +
   "#pxtc-panel{position:fixed;right:16px;bottom:260px;z-index:2147483646;width:320px;max-width:calc(100vw - 32px);max-height:70vh;overflow:auto;background:#fff;color:#1a1a1a;border-radius:8px;box-shadow:0 8px 28px rgba(0,0,0,.35);font:14px/1.6 -apple-system,'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif;padding:12px 14px;box-sizing:border-box;}" +
   "#pxtc-panel .pxtc-head{display:flex;align-items:center;justify-content:space-between;font-weight:700;margin-bottom:8px;}" +
   "#pxtc-panel .pxtc-close{width:26px;height:26px;border:0;border-radius:50%;background:#eee;color:#333;font-size:16px;line-height:1;cursor:pointer;}" +
