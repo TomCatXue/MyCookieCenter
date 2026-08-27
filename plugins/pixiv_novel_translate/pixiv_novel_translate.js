@@ -22,7 +22,7 @@ function Env(t) { return new class { constructor(t) { this.name = t, this.startT
 
 const $ = new Env("Pixiv 小说翻译");
 
-const SCRIPT_VERSION = "20260827-r2";
+const SCRIPT_VERSION = "20260827-r3";
 
 const PXTC_LANG_MAP = {
   "zh-CN": { google: "zh-CN", microsoft: "zh-Hans", baidu: "zh" },
@@ -240,8 +240,8 @@ async function baiduTranslate(text, target, appid, secret) {
   return out;
 }
 
-const PXTC_CSS = "#pxtc-fab{position:fixed;right:16px;bottom:48px;z-index:2147483647;width:48px;height:48px;border-radius:24px;border:0;background:#0096fa;color:#fff;font-size:18px;font-weight:700;box-shadow:0 4px 14px rgba(0,0,0,.35);cursor:pointer;}" +
-"#pxtc-panel{position:fixed;right:16px;bottom:104px;z-index:2147483646;width:320px;max-width:calc(100vw - 32px);max-height:70vh;overflow:auto;background:#fff;color:#1a1a1a;border-radius:8px;box-shadow:0 8px 28px rgba(0,0,0,.35);font:14px/1.6 -apple-system,'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif;padding:12px 14px;box-sizing:border-box;}" +
+const PXTC_CSS = "#pxtc-fab{position:fixed;right:16px;bottom:200px;z-index:2147483647;width:48px;height:48px;border-radius:24px;border:0;background:#0096fa;color:#fff;font-size:18px;font-weight:700;box-shadow:0 4px 14px rgba(0,0,0,.35);cursor:pointer;}" +
+"#pxtc-panel{position:fixed;right:16px;bottom:260px;z-index:2147483646;width:320px;max-width:calc(100vw - 32px);max-height:70vh;overflow:auto;background:#fff;color:#1a1a1a;border-radius:8px;box-shadow:0 8px 28px rgba(0,0,0,.35);font:14px/1.6 -apple-system,'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif;padding:12px 14px;box-sizing:border-box;}" +
 "#pxtc-panel .pxtc-head{display:flex;align-items:center;justify-content:space-between;font-weight:700;margin-bottom:8px;}" +
 "#pxtc-panel .pxtc-close{width:26px;height:26px;border:0;border-radius:50%;background:#eee;color:#333;font-size:16px;line-height:1;cursor:pointer;}" +
 "#pxtc-panel .pxtc-row{display:block;margin:8px 0;}" +
