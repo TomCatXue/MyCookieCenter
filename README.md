@@ -73,9 +73,9 @@ https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/<目�
 | [QQ空间·清净](./loon/QzoneAdBlock.plugin) | 广告退散，空间清净（纯规则型） | ✅ 已验证 |
 | [微信读书·优雅收录](./loon/WeReadEnhance.plugin) | 轻触订阅人数，好书即刻入架 | ✅ 已验证 |
 | [微信读书·自动领取](./loon/WeReadClaim.plugin) | 定时领取阅读奖励 + 每周翻牌 | ✅ 已验证 |
-| [GitHub·星标推送时间](./loon/GitHubPushTime.plugin) | 在 GitHub App 星标列表语言后显示最近推送时间 | 🧪 待验证 |
-| [Pixiv·小说翻译](./loon/PixivNovelTranslate.plugin) | 小说阅读页一键翻译，支持 Google 免费接口 / 微软 / 百度 | 🧪 待验证 |
-| [扫描全能王·签到](./loon/camscanner.plugin) | 抓取 Cookie + 每日签到 | 🧪 待验证（外部依赖） |
+| [GitHub·星标推送时间](./loon/GitHubPushTime.plugin) | 在 GitHub App 星标列表语言后显示最近推送时间 | ✅ 已验证 |
+| [Pixiv·小说翻译](./loon/PixivNovelTranslate.plugin) | 小说阅读页一键翻译，支持 Google 免费接口 / 微软 / 百度 | ✅ 已验证 |
+| [扫描全能王·签到](./loon/camscanner.plugin) | 抓取 Cookie + 每日签到 | ✅ 已验证（外部依赖） |
 
 > `扫描全能王·签到` 的脚本与图标指向外部仓库（[MaYIHEI/paperclip](https://github.com/MaYIHEI/paperclip)、[MaYIHEI/pin](https://github.com/MaYIHEI/pin)），本仓库仅提供 `.plugin` 入口，脚本内容不在维护范围内。
 
