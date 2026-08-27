@@ -17,28 +17,28 @@ hostname = i.weread.qq.com, weread.qq.com
 
 [Script]
 # 捕获鉴权信息（vid + skey，而非 Cookie）：打开微信读书 App 随便刷一下（几乎任何页面都会触发）
-http-request ^https?://i\.weread\.qq\.com/.* script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260827-flipfix3, tag=WeReadClaim Auth, requires-body=false, enable={capture_cookie}
+http-request ^https?://i\.weread\.qq\.com/.* script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260827-flipfix4, tag=WeReadClaim Auth, requires-body=false, enable={capture_cookie}
 
 # 捕获 /login 请求体（Base64 编码），提取 deviceId
-http-request POST ^https?://i\.weread\.qq\.com/login script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260827-flipfix3, tag=WeReadClaim Login, requires-body=true, enable={capture_cookie}
+http-request POST ^https?://i\.weread\.qq\.com/login script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260827-flipfix4, tag=WeReadClaim Login, requires-body=true, enable={capture_cookie}
 
 # 捕获 /login 响应体，提取 vid/skey/refreshToken（自动刷新的前置条件）
-http-response POST ^https?://i\.weread\.qq\.com/login script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260827-flipfix3, tag=WeReadClaim LoginResp, requires-body=true, enable={capture_cookie}
+http-response POST ^https?://i\.weread\.qq\.com/login script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260827-flipfix4, tag=WeReadClaim LoginResp, requires-body=true, enable={capture_cookie}
 
 # 捕获 weread.qq.com Cookie（wr_skey/wr_vid，翻牌游戏用）
-http-request ^https?://weread\.qq\.com/.* script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260827-flipfix3, tag=WeReadClaim FlipCookie, requires-body=false, enable={capture_cookie}
+http-request ^https?://weread\.qq\.com/.* script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260827-flipfix4, tag=WeReadClaim FlipCookie, requires-body=false, enable={capture_cookie}
 
 # 定时领取：每晚 23:00 自动检查并领取
 # 不设 argument=，让 Loon 自动把 [Argument] 值注入 $argument；http-request 中转存储兜底
-cron "0 23 * * *" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260827-flipfix3, tag=WeReadClaim 签到, enable=true
+cron "0 23 * * *" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260827-flipfix4, tag=WeReadClaim 签到, enable=true
 
 # 翻牌游戏：每周二 20:00 自动翻牌
-cron "0 20 * * 2" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260827-flipfix3, argument="task=flip", tag=WeReadClaim 翻牌, enable=true
+cron "0 20 * * 2" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260827-flipfix4, argument="task=flip", tag=WeReadClaim 翻牌, enable=true
 */
 
 const AUTH_KEY = "weread_auth_v2";
 const FLIP_STATE_KEY = "weread_flip_state_v1";
-const SCRIPT_VERSION = "2026-08-27-flipfix3";
+const SCRIPT_VERSION = "2026-08-27-flipfix4";
 const API = "https://i.weread.qq.com";
 const FLIP_API = "https://weread.qq.com/flip-card-game/api";
 const PF = "weread_wx-2001-iap-2001-iphone";
@@ -919,12 +919,15 @@ function getFlipHeaders(auth) {
     // 翻牌游戏用 wrVid/wrSkey（Cookie 认证），与 i.weread.qq.com 的 vid/skey 分开存储
     let wrVid = auth.wrVid || auth.vid || "";
     let wrSkey = auth.wrSkey || auth.skey || "";
-    let flipUa = auth.flipUa || auth.ua || "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;WeRead/10.2.1 (iPhone; iOS 26.3.1; Scale/3.00)";
+    // ⚠️ 必须用 WebView UA（Mozilla/...AppleWebKit...），绝不能用 App 原生 UA（auth.ua，无 Mozilla 前缀）。
+    // 2026-08-27 抓包确认：真实翻牌请求 UA 是 iOS 26.6.1 的 WebView UA；
+    // 用 App UA 请求 H5 翻牌接口会被 WAF 直接断开（HTTP 499）。
+    let flipUa = auth.flipUa || "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;WeRead/10.2.1 (iPhone; iOS 26.6.1; Scale/3.00)";
     return {
         "User-Agent": flipUa,
         "Accept": "application/json, text/plain, */*",
         "Accept-Language": "zh-CN,zh-Hans;q=0.9",
-        "Accept-Encoding": "gzip, deflate, br",
+        "Accept-Encoding": "gzip, deflate, br, zstd",
         "Referer": "https://weread.qq.com/flip-card-game?isAnimateNavBarBackground=1&isShowNavBarShadow=0&isStatusbarLight=1&backgroundColor=%25234CB6FA&navBarTintColor=%2523ffffff&navBarTitleColor=%2523ffffff&navBarBackgroundColor=%25234CB6FA",
         "sec-fetch-site": "same-origin",
         "sec-fetch-mode": "cors",
