@@ -6,9 +6,11 @@
  *
  * 接口协议（与插件 pxtrans 返回结构保持一致）：
  *   POST https://<worker>/translate?t=google&l=zh-CN
- *   Body: 待翻译文本（纯文本）
+ *   Body（批量）: {"texts":["段1","段2",...]}
+ *   Body（单段）: 待翻译文本（纯文本）
  *   Header: x-worker-token: <WORKER_TOKEN>（可选，防滥用）
- *   Response: {"ok":true,"translation":"...","src":"google","error":""}
+ *   Response（批量）: {"ok":true,"translation":"","translations":["译1","译2"],"src":"google","error":""}
+ *   Response（单段）: {"ok":true,"translation":"...","src":"google","error":""}
  *
  * 部署说明见同目录 README.md
  */
@@ -34,14 +36,56 @@ export default {
       return json({ ok: false, translation: "", src: "", error: "method not allowed" }, 405);
     }
 
-    const text = await request.text();
     const target = url.searchParams.get("l") || "zh-CN";
     const src = url.searchParams.get("t") || "google";
-    if (!text || !text.trim()) {
+
+    // —— 解析请求体：支持 JSON 批量协议 {texts:[...]} 和裸文本两种形态 ——
+    // request.body 只能读一次，先读出来再判断
+    const raw = await request.text();
+    let texts = null;
+    let text = "";
+    const trimmed = raw.trim();
+    if (/^[{[]/.test(trimmed)) {
+      try {
+        const parsed = JSON.parse(raw);
+        if (parsed && Array.isArray(parsed.texts)) texts = parsed.texts.map(String);
+      } catch (e) { texts = null; }
+    }
+    if (!texts) text = raw;
+    if (!text && !(texts && texts.length)) {
       return json({ ok: false, translation: "", src, error: "空请求体" });
     }
 
-    // —— 缓存查询（KV 命名空间 PXTC_CACHE，部署时绑定）——
+    // —— 批量翻译（多段）——
+    if (texts) {
+      try {
+        const translations = [];
+        for (let i = 0; i < texts.length; i++) {
+          // 逐段缓存查询
+          const ck = await sha256(target + "\n" + texts[i]);
+          if (env.PXTC_CACHE) {
+            try {
+              const hit = await env.PXTC_CACHE.get(ck);
+              if (hit !== null) { translations.push(hit); continue; }
+            } catch (e) { /* 缓存不可用则跳过 */ }
+          }
+          const t = await googleTranslate(texts[i], target);
+          translations.push(t);
+          if (env.PXTC_CACHE && t) {
+            try { await env.PXTC_CACHE.put(ck, t, { expirationTtl: 30 * 24 * 3600 }); } catch (e) { }
+          }
+        }
+        return json({ ok: true, translation: "", translations, src, error: "" });
+      } catch (e) {
+        const msg = String((e && e.message) || e);
+        if (/限流|429/.test(msg)) {
+          return json({ ok: false, translation: "", translations: [], src, error: "代理端 Google 限流（429），请稍后重试" });
+        }
+        return json({ ok: false, translation: "", translations: [], src, error: "代理翻译失败：" + msg });
+      }
+    }
+
+    // —— 单段翻译 ——
     const cacheKey = await sha256(target + "\n" + text);
     if (env.PXTC_CACHE) {
       try {
@@ -51,8 +95,6 @@ export default {
         }
       } catch (e) { /* 缓存不可用则跳过 */ }
     }
-
-    // —— 调 Google 免费接口（三域名轮换）——
     try {
       const translation = await googleTranslate(text, target);
       if (env.PXTC_CACHE && translation) {
@@ -63,7 +105,6 @@ export default {
       return json({ ok: true, translation, src, error: "" });
     } catch (e) {
       const msg = String((e && e.message) || e);
-      // 429/HTML → 明确标记限流，插件侧可提示
       if (/限流|429/.test(msg)) {
         return json({ ok: false, translation: "", src, error: "代理端 Google 限流（429），请稍后重试" });
       }

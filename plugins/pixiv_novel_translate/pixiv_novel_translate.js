@@ -27,18 +27,32 @@ const $ = new Env("Pixiv 小说翻译");
 
 // Loon/Surge/Stash 的 $httpClient 请求超时默认只有 5 秒，而 DeepSeek 等 AI 接口
 // 单次响应常要 5~10 秒，导致页面报 "Request timeout"。这里给所有出站请求显式加
-// timeout=60（秒）。新版 Loon/Stash 支持该参数；不支持的版本会忽略它，无副作用。
+// timeout=60000（毫秒 = 60 秒）。同时用 Promise.race 兜底：某些版本不识别
+// $httpClient 的 timeout 参数，由 setTimeout 强制 60 秒超时。
 {
+  const PXTC_REQ_TIMEOUT = 60000;
   const pxtcSend = $.send.bind($);
   $.send = function (opts, method) {
     if (opts && typeof opts === "object" && opts.timeout == null) {
-      opts = Object.assign({}, opts, { timeout: 60 });
+      opts = Object.assign({}, opts, { timeout: PXTC_REQ_TIMEOUT });
     }
-    return pxtcSend(opts, method);
+    return new Promise(function (resolve, reject) {
+      var timer = setTimeout(function () {
+        // 加前缀标记真正的 60s 超时，供 handleProxy 区分“响应太慢”与“连接失败”
+        reject(new Error("__PXTC_TIMEOUT__请求超时（" + (PXTC_REQ_TIMEOUT / 1000) + "s）"));
+      }, PXTC_REQ_TIMEOUT);
+      pxtcSend(opts, method).then(function (res) {
+        clearTimeout(timer);
+        resolve(res);
+      }, function (err) {
+        clearTimeout(timer);
+        reject(err);
+      });
+    });
   };
 }
 
-const SCRIPT_VERSION = "20260828-r11";
+const SCRIPT_VERSION = "20260828-r13";
 
 const PXTC_LANG_MAP = {
   "zh-CN": { google: "zh-CN", microsoft: "zh-Hans", baidu: "zh", deepseek: "Simplified Chinese" },
@@ -268,11 +282,54 @@ function pxtcIsRateLimitResponse(status, raw) {
   return false;
 }
 
+// Worker 代理配置（在 handleProxy 中设置，googleTranslateBatch 中读取）。
+// 配置后 Google 翻译请求不再直连 Google，而是走 Cloudflare Worker 代理，
+// 把限流压力从设备 IP 转移到 Worker IP，并享受服务端 KV 缓存。
+let _pxtcGoogleProxy = null;
+
+// 通过 Worker 代理翻译：把 {texts:[...]} 发给 Worker，Worker 调 Google 并返回结果。
+async function googleTranslateViaProxy(texts, target, proxy) {
+  const arr = texts.map(String);
+  if (!arr.length) return [];
+  const headers = { "Content-Type": "application/json" };
+  if (proxy.token) headers["x-worker-token"] = proxy.token;
+  const res = await $.post({
+    url: proxy.url + "?t=google&l=" + encodeURIComponent(target),
+    headers: headers,
+    body: JSON.stringify({ texts: arr })
+  });
+  const raw = res && res.body;
+  let data;
+  if (typeof raw === "string") {
+    try { data = JSON.parse(raw); } catch (e) {
+      throw new Error("Worker 代理返回非 JSON（" + (res.status || res.statusCode) + "）");
+    }
+  } else if (raw && typeof raw === "object") {
+    data = raw;
+  } else {
+    throw new Error("Worker 代理返回空响应");
+  }
+  if (!data || !data.ok) {
+    throw new Error((data && data.error) || "Worker 代理翻译失败");
+  }
+  // Worker 批量返回 translations 数组
+  if (Array.isArray(data.translations) && data.translations.length === arr.length) {
+    return data.translations;
+  }
+  // 兼容单段返回
+  if (data.translation !== undefined && arr.length === 1) return [data.translation];
+  throw new Error("Worker 代理返回段数不匹配");
+}
+
 // Google 免费接口批量翻译：一次请求带多个 q（POST form 编码），实测
 // translate.googleapis.com / google.com / google.hk 的 /translate_a/t 都支持，
 // 返回与 q 一一对应的 [[译文, 源语言], ...]，一次可翻几十段，请求次数大幅减少，
 // 是避免 429 最有效的办法。
 async function googleTranslateBatch(texts, target) {
+  // 配置了 Worker 代理时走代理，不直连 Google
+  if (_pxtcGoogleProxy) {
+    return googleTranslateViaProxy(texts, target, _pxtcGoogleProxy);
+  }
   // 限流窗口内快速失败，避免继续打 Google 加剧限流
   if (pxtcIsRateLimited()) {
     throw new Error("Google 限流中，请稍后再试（已自动暂停约 60 秒）");
@@ -1001,6 +1058,11 @@ async function handleProxy() {
   const deepseekKey = pxtcArg(args, "deepseek_api_key");
   const deepseekApiUrl = pxtcArg(args, "deepseek_api_url") || "https://api.deepseek.com/v1/chat/completions";
   const deepseekModel = pxtcArg(args, "deepseek_model") || "deepseek-v4-flash";
+  // Google Worker 代理（可选）：配置后 Google 翻译走 Worker，不直连 Google
+  const googleProxyUrl = pxtcArg(args, "google_proxy_url");
+  const googleProxyToken = pxtcArg(args, "google_proxy_token");
+  if (googleProxyUrl) _pxtcGoogleProxy = { url: googleProxyUrl, token: googleProxyToken };
+  else _pxtcGoogleProxy = null;
   let translator = String(query.t || pxtcArg(args, "translator") || "google").toLowerCase();
   let target = String(query.l || pxtcArg(args, "target") || "zh-CN");
   if (!PXTC_LANG_MAP[target]) target = "zh-CN";
@@ -1008,7 +1070,6 @@ async function handleProxy() {
   // 新协议：客户端一次 POST 一段 JSON {texts:[...]}，服务端批量翻译多段后一次返回；
   // 兼容旧协议：正文直接作为裸字符串时按单段翻译。
   const rawBody = $request.body;
-  const ct = ($request.headers && ($request.headers["Content-Type"] || $request.headers["content-type"])) || "";
   let texts = null;
   let text = "";
   if (typeof rawBody === "object" && rawBody !== null) {
@@ -1016,7 +1077,9 @@ async function handleProxy() {
     else text = JSON.stringify(rawBody);
   } else if (typeof rawBody === "string") {
     const trimmed = rawBody.trim();
-    if (ct.indexOf("application/json") !== -1 && /^[\[{]/.test(trimmed)) {
+    // 不依赖 Content-Type：只要 body 以 { 或 [ 开头就尝试 JSON 解析。
+    // 某些 Loon 版本可能不传递请求头，仅靠 Content-Type 判断会导致 JSON body 被当裸文本翻译。
+    if (/^[\[{]/.test(trimmed)) {
       try {
         const parsed = JSON.parse(rawBody);
         if (parsed && Array.isArray(parsed.texts)) texts = parsed.texts.map(String);
@@ -1051,9 +1114,15 @@ async function handleProxy() {
     result.translations = translations;
   } catch (e) {
     const msg = String((e && e.message) || e);
-    result.error = /timeout|超时/i.test(msg)
-      ? "翻译接口请求超时：接口响应太慢，请重试；若仍超时可在插件参数里调小 chunk 分块，或更换更快的翻译源"
-      : msg;
+    if (msg.indexOf("__PXTC_TIMEOUT__") !== -1) {
+      // 真正的 60 秒超时：接口确实响应太慢
+      result.error = "翻译接口请求超时：接口响应太慢，请重试；若仍超时可在插件参数里调小 chunk 分块，或更换更快的翻译源";
+    } else if (msg && msg !== "[object Object]") {
+      // 非超时错误（连接失败/代理节点不可用等）：保留原始错误，避免误导为“接口太慢/调 chunk”
+      result.error = msg + "（若为连接失败，请检查 Loon 代理节点是否可用，或配置 Google Worker 代理）";
+    } else {
+      result.error = "翻译请求失败：请检查 Loon 代理节点是否可用，或配置 Google Worker 代理（插件参数 google_proxy_url）";
+    }
   }
   doneWithResponse(200, {
     "Content-Type": "application/json; charset=utf-8",
