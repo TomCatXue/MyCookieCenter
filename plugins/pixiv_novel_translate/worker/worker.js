@@ -15,8 +15,8 @@
  * 部署说明见同目录 README.md
  */
 const DEFAULT_TOKEN = "CHANGE_ME_PLEASE"; // 仅本机直跑测试用；正式部署用 env.WORKER_TOKEN
-// 版本自证：所有响应带 v 字段。curl 返回里能看到 v=20260828-batch-v2 才说明部署的是新版。
-const WORKER_VERSION = "20260828-batch-v2";
+// 版本自证：所有响应带 v 字段。curl 返回里能看到 v=20260828-batch-v3 才说明部署的是最新版。
+const WORKER_VERSION = "20260828-batch-v3";
 
 export default {
   async fetch(request, env, ctx) {
@@ -40,6 +40,12 @@ export default {
 
     const target = url.searchParams.get("l") || "zh-CN";
     const src = url.searchParams.get("t") || "google";
+
+    // —— 诊断：?echo=1 时回显收到的原始 body（含长度），用于排查请求体解析 ——
+    if (url.searchParams.get("echo") === "1") {
+      const rawEcho = await request.text();
+      return json({ ok: true, code: "echo", raw: rawEcho, rawLen: String(rawEcho).length, src, error: "" });
+    }
 
     // —— 解析请求体：支持 JSON 批量协议 {texts:[...]} 和裸文本两种形态 ——
     // request.body 只能读一次，先读出来再判断
