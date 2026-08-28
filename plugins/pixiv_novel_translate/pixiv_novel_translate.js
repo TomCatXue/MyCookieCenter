@@ -1,10 +1,10 @@
 /*
 ------------------------------------------
 @Name: Pixiv 小说翻译
-@Version: 1.0.0
+@Version: 1.1.0
 @Desc: 在 Pixiv 小说阅读页注入翻译按钮，支持 Google 免费接口 / 微软翻译 / 百度翻译
 @Author: TomCatXue
-@Date: 2026-08-27
+@Date: 2026-08-28
 
 ===== Loon =====
 [MITM]
@@ -25,7 +25,7 @@ function Env(t) { return new class { constructor(t) { this.name = t, this.startT
 
 const $ = new Env("Pixiv 小说翻译");
 
-const SCRIPT_VERSION = "20260828-r4";
+const SCRIPT_VERSION = "20260828-r5";
 
 const PXTC_LANG_MAP = {
   "zh-CN": { google: "zh-CN", microsoft: "zh-Hans", baidu: "zh" },
@@ -35,9 +35,10 @@ const PXTC_LANG_MAP = {
   "ko": { google: "ko", microsoft: "ko", baidu: "kor" }
 };
 
-// Google 网页接口实测支持 4500+ 字符单次请求；分块上限加大后请求次数显著下降，
-// 从源头降低限流触发概率（一篇 10 万字符小说：350 上限≈285 次 → 1500 上限≈67 次）
-const PXTC_CHUNK_LIMITS = { google: 1500, microsoft: 4500, baidu: 580 };
+// google 默认分块从 1500 降到 400：块更小更贴合小说段落节奏，边翻边显示更顺滑、
+// 阅读体验更好（代价是请求次数增多，配合 googleapis.com 优先 + 限流窗口 + 本地缓存兜底）。
+// 可在 Loon 参数里用 chunk=xxx 调整分块大小（100~3000）。
+const PXTC_CHUNK_LIMITS = { google: 400, microsoft: 4500, baidu: 580 };
 
 function parseArgument() {
   const out = {};
@@ -88,9 +89,14 @@ function getConfig() {
   let target = String(args.target || "zh-CN");
   if (!PXTC_LANG_MAP[target]) target = "zh-CN";
   if (translator !== "microsoft" && translator !== "baidu") translator = "google";
+  // 分块大小：0 = 客户端按各翻译源默认；可在参数里用 chunk=300 全局覆盖（100~3000）
+  let chunk = parseInt(args.chunk, 10);
+  if (Number.isFinite(chunk) && chunk >= 100) chunk = Math.min(chunk, 3000);
+  else chunk = 0;
   return {
     translator: translator,
     target: target,
+    chunk: chunk,
     hasMs: !!(args.ms_key),
     hasBaidu: !!(args.baidu_appid && args.baidu_secret)
   };
@@ -202,18 +208,28 @@ function pxtcSetRateLimit(ms) {
   try { $.setdata(String(until), "pxtc_grl_until"); } catch (e) { }
 }
 
+// 判断是否为 Google 限流响应：HTTP 429，或返回的是 HTML（reCAPTCHA 风控页，body 以 < 开头）
+function pxtcIsRateLimitResponse(status, raw) {
+  if (status === 429) return true;
+  if (typeof raw === "string" && /^\s*</.test(raw)) return true;
+  if (typeof raw === "string" && /unusual traffic|异常流量|automated requests|自动程序/i.test(raw)) return true;
+  return false;
+}
+
 async function googleTranslate(text, target) {
   // 限流窗口内快速失败，避免继续打 Google 加剧限流
   if (pxtcIsRateLimited()) {
     throw new Error("Google 限流中，请稍后再试（已自动暂停约 60 秒）");
   }
   const qs = "client=it&dt=t&otf=3&dj=1&hl=zh_CN&sl=auto&tl=" + encodeURIComponent(target) + "&q=" + encodeURIComponent(text);
+  // 实测 googleapis.com 比 google.hk 更不易被 429（hk 经常返回 reCAPTCHA 页），放最前
   const hosts = [
-    "https://translate.google.hk/translate_a/single",
     "https://translate.googleapis.com/translate_a/single",
-    "https://translate.google.com/translate_a/single"
+    "https://translate.google.com/translate_a/single",
+    "https://translate.google.hk/translate_a/single"
   ];
   let lastError = null;
+  let sawRateLimit = false;
   for (let i = 0; i < hosts.length; i++) {
     try {
       const res = await $.get({
@@ -222,10 +238,12 @@ async function googleTranslate(text, target) {
       });
       const status = res && (res.status || res.statusCode);
       const raw = res && res.body;
-      // 429 或 HTML 响应 = Google 限流
-      if (status === 429 || (typeof raw === "string" && /^\s*</.test(raw))) {
-        pxtcSetRateLimit(60000);
-        throw new Error("Google 限流（429），已自动暂停约 60 秒，请稍后再试");
+      // 单个域名 429 不代表全部域名都限流：先标记、继续试下一个域名，
+      // 避免“hk 429 却把仍可用的 googleapis.com 一起挡掉”（实测 hk 429 时 googleapis.com 仍 200）
+      if (pxtcIsRateLimitResponse(status, raw)) {
+        sawRateLimit = true;
+        lastError = new Error("Google 限流（429）");
+        continue;
       }
       // Loon 的 $httpClient 可能已把合法 JSON 响应 parse 成对象，两种形态都要兼容
       let data;
@@ -247,6 +265,11 @@ async function googleTranslate(text, target) {
     } catch (e) {
       lastError = e;
     }
+  }
+  // 只有全部域名都失败才进入 60 秒限流窗口，避免误伤仍可用的域名
+  if (sawRateLimit) {
+    pxtcSetRateLimit(60000);
+    throw new Error("Google 全部接口均限流（429），已自动暂停约 60 秒，请稍后再试");
   }
   throw lastError || new Error("Google 翻译失败");
 }
@@ -567,7 +590,9 @@ function __pxtc_client() {
         return;
       }
       var paragraphs = splitParagraphs(text);
-      var limit = { google: 1500, microsoft: 4500, baidu: 580 }[cfg.translator] || 1500;
+      // 分块大小：优先用服务端下发的 cfg.chunk（Loon 参数 chunk=xxx），
+      // 未配置时按各翻译源默认（google 400 更贴合小说段落，microsoft/baidu 接口支持大块）
+      var limit = cfg.chunk || { google: 400, microsoft: 4500, baidu: 580 }[cfg.translator] || 400;
       var chunks = buildChunks(paragraphs, limit);
       if (!chunks.length) {
         restore();
