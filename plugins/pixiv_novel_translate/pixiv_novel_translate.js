@@ -25,20 +25,21 @@ function Env(t) { return new class { constructor(t) { this.name = t, this.startT
 
 const $ = new Env("Pixiv 小说翻译");
 
-const SCRIPT_VERSION = "20260828-r5";
+const SCRIPT_VERSION = "20260828-r6";
 
 const PXTC_LANG_MAP = {
-  "zh-CN": { google: "zh-CN", microsoft: "zh-Hans", baidu: "zh" },
-  "zh-TW": { google: "zh-TW", microsoft: "zh-Hant", baidu: "cht" },
-  "en": { google: "en", microsoft: "en", baidu: "en" },
-  "ja": { google: "ja", microsoft: "ja", baidu: "jp" },
-  "ko": { google: "ko", microsoft: "ko", baidu: "kor" }
+  "zh-CN": { google: "zh-CN", microsoft: "zh-Hans", baidu: "zh", deepseek: "Simplified Chinese" },
+  "zh-TW": { google: "zh-TW", microsoft: "zh-Hant", baidu: "cht", deepseek: "Traditional Chinese" },
+  "en": { google: "en", microsoft: "en", baidu: "en", deepseek: "English" },
+  "ja": { google: "ja", microsoft: "ja", baidu: "jp", deepseek: "Japanese" },
+  "ko": { google: "ko", microsoft: "ko", baidu: "kor", deepseek: "Korean" }
 };
 
 // google 默认分块从 1500 降到 400：块更小更贴合小说段落节奏，边翻边显示更顺滑、
 // 阅读体验更好（代价是请求次数增多，配合 googleapis.com 优先 + 限流窗口 + 本地缓存兜底）。
 // 可在 Loon 参数里用 chunk=xxx 调整分块大小（100~3000）。
-const PXTC_CHUNK_LIMITS = { google: 400, microsoft: 4500, baidu: 580 };
+// deepseek 默认 3000：LLM 上下文窗口大，大块减少请求次数且翻译连贯性更好。
+const PXTC_CHUNK_LIMITS = { google: 400, microsoft: 4500, baidu: 580, deepseek: 3000 };
 
 function parseArgument() {
   const out = {};
@@ -88,7 +89,7 @@ function getConfig() {
   let translator = String(args.translator || "google").toLowerCase();
   let target = String(args.target || "zh-CN");
   if (!PXTC_LANG_MAP[target]) target = "zh-CN";
-  if (translator !== "microsoft" && translator !== "baidu") translator = "google";
+  if (translator !== "microsoft" && translator !== "baidu" && translator !== "deepseek") translator = "google";
   // 分块大小：0 = 客户端按各翻译源默认；可在参数里用 chunk=300 全局覆盖（100~3000）
   let chunk = parseInt(args.chunk, 10);
   if (Number.isFinite(chunk) && chunk >= 100) chunk = Math.min(chunk, 3000);
@@ -98,7 +99,8 @@ function getConfig() {
     target: target,
     chunk: chunk,
     hasMs: !!(args.ms_key),
-    hasBaidu: !!(args.baidu_appid && args.baidu_secret)
+    hasBaidu: !!(args.baidu_appid && args.baidu_secret),
+    hasDeepSeek: !!(args.deepseek_api_key)
   };
 }
 
@@ -327,6 +329,51 @@ async function baiduTranslate(text, target, appid, secret) {
   return out;
 }
 
+// DeepSeek（兼容 OpenAI 格式）AI 翻译。沉浸式翻译风格的系统提示，保证文学性 + 保留格式。
+async function deepseekTranslate(text, targetLangName, apiUrl, apiKey, model) {
+  const systemPrompt =
+    "You are a professional literary translator. Translate the following text into " +
+    targetLangName +
+    ". Preserve all formatting, line breaks, and paragraph breaks exactly. " +
+    "Translate naturally and fluently with literary quality. " +
+    "Output ONLY the translated text, no explanations, no quotes around the output.";
+  const res = await $.post({
+    url: apiUrl,
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer " + apiKey
+    },
+    body: JSON.stringify({
+      model: model || "deepseek-chat",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: text }
+      ],
+      temperature: 0.3,
+      stream: false
+    })
+  });
+  const raw = res && res.body;
+  let data;
+  if (typeof raw === "string") {
+    try { data = JSON.parse(raw); } catch (e) {
+      throw new Error("DeepSeek 返回非 JSON（" + (res.status || res.statusCode) + "）");
+    }
+  } else if (raw && typeof raw === "object") {
+    data = raw;
+  } else {
+    throw new Error("DeepSeek 返回空响应");
+  }
+  if (data && data.error) {
+    const errMsg = data.error.message || data.error.code || JSON.stringify(data.error);
+    throw new Error("DeepSeek 错误：" + errMsg);
+  }
+  if (!data || !data.choices || !data.choices[0] || !data.choices[0].message) {
+    throw new Error("DeepSeek 返回格式异常");
+  }
+  return data.choices[0].message.content || "";
+}
+
 const PXTC_CSS = "#pxtc-fab{position:fixed;right:10px;bottom:150px;z-index:2147483647;width:48px;height:48px;border-radius:50%;border:0;background:#0096fa;color:#fff;font-size:16px;font-weight:700;box-shadow:0 4px 14px rgba(0,0,0,.35);cursor:pointer;}" +
   "#pxtc-panel{position:fixed;right:10px;bottom:200px;z-index:2147483646;width:320px;max-width:calc(100vw - 32px);max-height:70vh;overflow:auto;background:#fff;color:#1a1a1a;border-radius:8px;box-shadow:0 8px 28px rgba(0,0,0,.35);font:14px/1.6 -apple-system,'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif;padding:12px 14px;box-sizing:border-box;}" +
   "#pxtc-panel .pxtc-head{display:flex;align-items:center;justify-content:space-between;font-weight:700;margin-bottom:8px;}" +
@@ -345,7 +392,7 @@ const PXTC_CSS = "#pxtc-fab{position:fixed;right:10px;bottom:150px;z-index:21474
 
 function __pxtc_client() {
   (function () {
-    var cfg = window.__PXTC_CONFIG || { translator: "google", target: "zh-CN", hasMs: false, hasBaidu: false };
+    var cfg = window.__PXTC_CONFIG || { translator: "google", target: "zh-CN", hasMs: false, hasBaidu: false, hasDeepSeek: false };
     var root = null;
     var reader = null;
     var originalDisplay = "";
@@ -523,6 +570,7 @@ function __pxtc_client() {
           }
         }
         setStatus("翻译中 " + (i + 1) + "/" + chunks.length, "");
+        // google 需要 300ms 间隔避免限流；AI 接口不需要限流等待
         if (cfg.translator === "google") await sleep(300);
       }
       if (failed) setStatus("完成，失败 " + failed + " 段", "#c0392b");
@@ -584,6 +632,11 @@ function __pxtc_client() {
         busy = false;
         return;
       }
+      if (cfg.translator === "deepseek" && !cfg.hasDeepSeek) {
+        setStatus("请先在插件参数中填写 DeepSeek API Key", "#c0392b");
+        busy = false;
+        return;
+      }
       if (!buildReader()) {
         setStatus("未找到小说正文容器", "#c0392b");
         busy = false;
@@ -592,7 +645,7 @@ function __pxtc_client() {
       var paragraphs = splitParagraphs(text);
       // 分块大小：优先用服务端下发的 cfg.chunk（Loon 参数 chunk=xxx），
       // 未配置时按各翻译源默认（google 400 更贴合小说段落，microsoft/baidu 接口支持大块）
-      var limit = cfg.chunk || { google: 400, microsoft: 4500, baidu: 580 }[cfg.translator] || 400;
+      var limit = cfg.chunk || { google: 400, microsoft: 4500, baidu: 580, deepseek: 3000 }[cfg.translator] || 400;
       var chunks = buildChunks(paragraphs, limit);
       if (!chunks.length) {
         restore();
@@ -649,7 +702,8 @@ function __pxtc_client() {
       var translatorOptions =
         '<option value="google">Google 免费</option>' +
         '<option value="microsoft"' + (cfg.hasMs ? "" : " disabled") + ">微软翻译</option>" +
-        '<option value="baidu"' + (cfg.hasBaidu ? "" : " disabled") + ">百度翻译</option>";
+        '<option value="baidu"' + (cfg.hasBaidu ? "" : " disabled") + ">百度翻译</option>' +
+        '<option value="deepseek"' + (cfg.hasDeepSeek ? "" : " disabled") + ">DeepSeek AI</option>";
       var targetOptions =
         '<option value="zh-CN">简体中文</option>' +
         '<option value="zh-TW">繁體中文</option>' +
@@ -711,7 +765,7 @@ async function handleProxy() {
   let translator = String(query.t || args.translator || "google").toLowerCase();
   let target = String(query.l || args.target || "zh-CN");
   if (!PXTC_LANG_MAP[target]) target = "zh-CN";
-  if (translator !== "microsoft" && translator !== "baidu") translator = "google";
+  if (translator !== "microsoft" && translator !== "baidu" && translator !== "deepseek") translator = "google";
   // http-request / http-response 下 $request.body 都可能是字符串；
   // 若 Loon 按 JSON Content-Type 解析过请求体会是对象，这里统一兜底转字符串
   const rawBody = $request.body;
@@ -727,6 +781,11 @@ async function handleProxy() {
     } else if (translator === "baidu") {
       if (!args.baidu_appid || !args.baidu_secret) throw new Error("未配置百度 AppID / 密钥");
       translation = await baiduTranslate(text, lang.baidu, args.baidu_appid, args.baidu_secret);
+    } else if (translator === "deepseek") {
+      if (!args.deepseek_api_key) throw new Error("未配置 DeepSeek API Key");
+      const apiUrl = args.deepseek_api_url || "https://api.deepseek.com/v1/chat/completions";
+      const model = args.deepseek_model || "deepseek-chat";
+      translation = await deepseekTranslate(text, lang.deepseek, apiUrl, args.deepseek_api_key, model);
     } else {
       translation = await googleTranslate(text, lang.google);
     }
