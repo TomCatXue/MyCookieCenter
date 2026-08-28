@@ -38,7 +38,7 @@ const $ = new Env("Pixiv 小说翻译");
   };
 }
 
-const SCRIPT_VERSION = "20260828-r10";
+const SCRIPT_VERSION = "20260828-r11";
 
 const PXTC_LANG_MAP = {
   "zh-CN": { google: "zh-CN", microsoft: "zh-Hans", baidu: "zh", deepseek: "Simplified Chinese" },
@@ -51,9 +51,9 @@ const PXTC_LANG_MAP = {
 // google 默认分块从 1500 降到 400：块更小更贴合小说段落节奏，边翻边显示更顺滑、
 // 阅读体验更好（代价是请求次数增多，配合 googleapis.com 优先 + 限流窗口 + 本地缓存兜底）。
 // 可在 Loon 参数里用 chunk=xxx 调整分块大小（100~3000）。
-// deepseek 默认 1500：LLM 生成较慢，小块降低单次响应耗时、边翻边显示更顺滑；
-// 想要更连贯的大块可用 chunk=3000 调大（注意单次响应可能超过 5 秒）。
-const PXTC_CHUNK_LIMITS = { google: 400, microsoft: 4500, baidu: 580, deepseek: 1500 };
+// 每请求默认字符上限：google/baidu 支持一次请求带多段（多 q），因此比原来提高；
+// deepseek 默认 1500：LLM 生成较慢，一批 4~6 段降低单次响应耗时。
+const PXTC_CHUNK_LIMITS = { google: 2000, microsoft: 4500, baidu: 2000, deepseek: 1500 };
 
 function parseArgument() {
   const out = {};
@@ -268,25 +268,33 @@ function pxtcIsRateLimitResponse(status, raw) {
   return false;
 }
 
-async function googleTranslate(text, target) {
+// Google 免费接口批量翻译：一次请求带多个 q（POST form 编码），实测
+// translate.googleapis.com / google.com / google.hk 的 /translate_a/t 都支持，
+// 返回与 q 一一对应的 [[译文, 源语言], ...]，一次可翻几十段，请求次数大幅减少，
+// 是避免 429 最有效的办法。
+async function googleTranslateBatch(texts, target) {
   // 限流窗口内快速失败，避免继续打 Google 加剧限流
   if (pxtcIsRateLimited()) {
     throw new Error("Google 限流中，请稍后再试（已自动暂停约 60 秒）");
   }
-  const qs = "client=it&dt=t&otf=3&dj=1&hl=zh_CN&sl=auto&tl=" + encodeURIComponent(target) + "&q=" + encodeURIComponent(text);
+  const arr = texts.map(String);
+  if (!arr.length) return [];
+  const params = "client=gtx&dt=t&sl=auto&tl=" + encodeURIComponent(target);
+  const body = arr.map(function (t) { return "q=" + encodeURIComponent(t); }).join("&");
   // 实测 googleapis.com 比 google.hk 更不易被 429（hk 经常返回 reCAPTCHA 页），放最前
   const hosts = [
-    "https://translate.googleapis.com/translate_a/single",
-    "https://translate.google.com/translate_a/single",
-    "https://translate.google.hk/translate_a/single"
+    "https://translate.googleapis.com/translate_a/t",
+    "https://translate.google.com/translate_a/t",
+    "https://translate.google.hk/translate_a/t"
   ];
   let lastError = null;
   let sawRateLimit = false;
   for (let i = 0; i < hosts.length; i++) {
     try {
-      const res = await $.get({
-        url: hosts[i] + "?" + qs,
-        headers: { "User-Agent": "Mozilla/5.0" }
+      const res = await $.post({
+        url: hosts[i] + "?" + params,
+        headers: { "Content-Type": "application/x-www-form-urlencoded", "User-Agent": "Mozilla/5.0" },
+        body: body
       });
       const status = res && (res.status || res.statusCode);
       const raw = res && res.body;
@@ -308,10 +316,18 @@ async function googleTranslate(text, target) {
       } else {
         throw new Error("Google 返回空响应");
       }
-      if (!data || !Array.isArray(data.sentences)) throw new Error("Google 返回格式异常");
-      let out = "";
-      for (let j = 0; j < data.sentences.length; j++) {
-        if (data.sentences[j] && typeof data.sentences[j].trans === "string") out += data.sentences[j].trans;
+      if (!Array.isArray(data) || data.length !== arr.length) {
+        // 段数对不上：多段时退回逐个翻译，单段直接报格式异常
+        if (arr.length === 1) throw new Error("Google 返回格式异常");
+        const fallback = [];
+        for (let k = 0; k < arr.length; k++) fallback.push(await googleTranslateSingle(arr[k], target));
+        return fallback;
+      }
+      const out = [];
+      for (let j = 0; j < arr.length; j++) {
+        const item = data[j];
+        if (Array.isArray(item) && typeof item[0] === "string") out.push(item[0]);
+        else throw new Error("Google 返回段数不匹配");
       }
       return out;
     } catch (e) {
@@ -326,14 +342,26 @@ async function googleTranslate(text, target) {
   throw lastError || new Error("Google 翻译失败");
 }
 
-async function msTranslate(text, target, key) {
+async function googleTranslateSingle(text, target) {
+  const r = await googleTranslateBatch([text], target);
+  return r[0] || "";
+}
+
+async function googleTranslate(text, target) {
+  return googleTranslateSingle(text, target);
+}
+
+// 微软翻译本身支持一次请求翻译一个数组，批量翻译一次 HTTP 调用即可
+async function msTranslateBatch(texts, target, key) {
+  const arr = texts.map(String);
+  if (!arr.length) return [];
   const res = await $.post({
     url: "https://api.cognitive.microsofttranslator.com/translate?api-version=3.0&to=" + encodeURIComponent(target),
     headers: {
       "Content-Type": "application/json",
       "Ocp-Apim-Subscription-Key": key
     },
-    body: JSON.stringify([{ Text: text }])
+    body: JSON.stringify(arr.map(function (t) { return { Text: t }; }))
   });
   const raw = res && res.body;
   let data;
@@ -344,10 +372,18 @@ async function msTranslate(text, target, key) {
   } else {
     throw new Error("微软翻译返回空响应");
   }
-  if (!Array.isArray(data) || !data[0] || !data[0].translations || !data[0].translations[0]) {
-    throw new Error("微软翻译返回格式异常");
+  if (!Array.isArray(data) || data.length !== arr.length) throw new Error("微软翻译返回格式异常");
+  const out = [];
+  for (let i = 0; i < data.length; i++) {
+    if (!data[i] || !data[i].translations || !data[i].translations[0]) throw new Error("微软翻译返回格式异常");
+    out.push(data[i].translations[0].text);
   }
-  return data[0].translations[0].text;
+  return out;
+}
+
+async function msTranslate(text, target, key) {
+  const r = await msTranslateBatch([text], target, key);
+  return r[0] || "";
 }
 
 async function baiduTranslate(text, target, appid, secret) {
@@ -375,6 +411,16 @@ async function baiduTranslate(text, target, appid, secret) {
   let out = "";
   for (let i = 0; i < data.trans_result.length; i++) {
     if (data.trans_result[i] && data.trans_result[i].dst) out += data.trans_result[i].dst;
+  }
+  return out;
+}
+
+// 百度批量：逐个调用单段接口（签名与多 q 拼接规则不确定，不冒险合并）
+async function baiduTranslateBatch(texts, target, appid, secret) {
+  const arr = texts.map(String);
+  const out = [];
+  for (let i = 0; i < arr.length; i++) {
+    out.push(await baiduTranslate(arr[i], target, appid, secret));
   }
   return out;
 }
@@ -422,6 +468,80 @@ async function deepseekTranslate(text, targetLangName, apiUrl, apiKey, model) {
     throw new Error("DeepSeek 返回格式异常");
   }
   return data.choices[0].message.content || "";
+}
+
+// DeepSeek 批量：把多段打包成 JSON segments 一次请求让模型翻完（沉浸式翻译同思路），
+// 返回按 id 对齐；模型没按 JSON 格式返回时逐个翻译兜底。
+async function deepseekTranslateBatch(texts, targetLangName, apiUrl, apiKey, model) {
+  const arr = texts.map(String);
+  if (!arr.length) return [];
+  if (arr.length === 1) return [await deepseekTranslate(arr[0], targetLangName, apiUrl, apiKey, model)];
+  const systemPrompt =
+    "You are a professional literary translator. You will receive a JSON array of segments, " +
+    "each segment has an \"id\" and a \"text\". Translate every segment's text into " + targetLangName + ". " +
+    "Keep line breaks inside each translation. " +
+    "Respond with ONLY a JSON array of objects, each with \"id\" and \"translation\" (the translated text for that id), " +
+    "one object per segment, in the same order. No explanations, no markdown code fences, no extra text.";
+  const res = await $.post({
+    url: apiUrl,
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer " + apiKey
+    },
+    body: JSON.stringify({
+      model: model || "deepseek-v4-flash",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: JSON.stringify(arr.map(function (t, i) { return { id: i, text: t }; })) }
+      ],
+      temperature: 0.3,
+      stream: false
+    })
+  });
+  const raw = res && res.body;
+  let data;
+  if (typeof raw === "string") {
+    try { data = JSON.parse(raw); } catch (e) {
+      throw new Error("DeepSeek 返回非 JSON（" + (res.status || res.statusCode) + "）");
+    }
+  } else if (raw && typeof raw === "object") {
+    data = raw;
+  } else {
+    throw new Error("DeepSeek 返回空响应");
+  }
+  if (data && data.error) {
+    const errMsg = data.error.message || data.error.code || JSON.stringify(data.error);
+    throw new Error("DeepSeek 错误：" + errMsg);
+  }
+  if (!data || !data.choices || !data.choices[0] || !data.choices[0].message) {
+    throw new Error("DeepSeek 返回格式异常");
+  }
+  let content = String(data.choices[0].message.content || "").trim();
+  content = content.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
+  let parsed = null;
+  try { parsed = JSON.parse(content); } catch (e) { parsed = null; }
+  if (Array.isArray(parsed)) {
+    const map = {};
+    for (let i = 0; i < parsed.length; i++) {
+      const item = parsed[i];
+      if (item && item.id !== undefined) {
+        map[item.id] = item.translation !== undefined ? item.translation : (item.translatedText !== undefined ? item.translatedText : "");
+      }
+    }
+    const out = [];
+    let ok = true;
+    for (let i = 0; i < arr.length; i++) {
+      if (map[i] === undefined) { ok = false; break; }
+      out.push(map[i]);
+    }
+    if (ok) return out;
+  }
+  // JSON 协议失效（模型没按格式返回）时逐个翻译兜底
+  const out = [];
+  for (let i = 0; i < arr.length; i++) {
+    out.push(await deepseekTranslate(arr[i], targetLangName, apiUrl, apiKey, model));
+  }
+  return out;
 }
 
 const PXTC_CSS = "#pxtc-fab{position:fixed;right:10px;bottom:150px;z-index:2147483647;width:48px;height:48px;border-radius:50%;border:0;background:#0096fa;color:#fff;font-size:16px;font-weight:700;box-shadow:0 4px 14px rgba(0,0,0,.35);cursor:pointer;}" +
@@ -516,33 +636,44 @@ function __pxtc_client() {
       return out;
     }
 
-    function buildChunks(paragraphs, max) {
-      var chunks = [];
+    // 每批上限：chars=单请求最大字符数（可用插件参数 chunk 覆盖），segs=单请求最多段落数。
+    // Google/Bing 一次请求可带很多段，AI 一次请求不宜太多段（生成时间随段数增长）。
+    var PXTC_BATCH_LIMITS = {
+      google: { chars: 2000, segs: 20 },
+      microsoft: { chars: 4500, segs: 50 },
+      baidu: { chars: 2000, segs: 10 },
+      deepseek: { chars: 1500, segs: 6 }
+    };
+
+    function buildBatches(paragraphs, limits) {
+      var batches = [];
       var current = [];
       var currentLen = 0;
-      for (var i = 0; i < paragraphs.length; i++) {
-        var p = paragraphs[i];
-        if (p.length > max) {
-          if (current.length) {
-            chunks.push(current.join("\n\n"));
-            current = [];
-            currentLen = 0;
-          }
-          var pieces = splitLongParagraph(p, max);
-          for (var j = 0; j < pieces.length; j++) chunks.push(pieces[j]);
-        } else {
-          var add = current.length ? currentLen + 2 + p.length : p.length;
-          if (current.length && add > max) {
-            chunks.push(current.join("\n\n"));
-            current = [];
-            currentLen = 0;
-          }
-          current.push(p);
-          currentLen = current.length === 1 ? p.length : currentLen + 2 + p.length;
+      function pushCurrent() {
+        if (current.length) {
+          batches.push(current);
+          current = [];
+          currentLen = 0;
         }
       }
-      if (current.length) chunks.push(current.join("\n\n"));
-      return chunks;
+      for (var i = 0; i < paragraphs.length; i++) {
+        var p = paragraphs[i];
+        if (p.length > limits.chars) {
+          pushCurrent();
+          var pieces = splitLongParagraph(p, limits.chars);
+          for (var j = 0; j < pieces.length; j++) {
+            if (current.length && (current.length >= limits.segs || currentLen + pieces[j].length > limits.chars)) pushCurrent();
+            current.push(pieces[j]);
+            currentLen += pieces[j].length;
+          }
+        } else {
+          if (current.length && (current.length >= limits.segs || currentLen + p.length > limits.chars)) pushCurrent();
+          current.push(p);
+          currentLen += p.length;
+        }
+      }
+      pushCurrent();
+      return batches;
     }
 
     function renderParagraphs(text) {
@@ -554,39 +685,71 @@ function __pxtc_client() {
       return html;
     }
 
-    function translateChunk(text) {
-      var url = "/pxtrans?t=" + encodeURIComponent(cfg.translator) + "&l=" + encodeURIComponent(cfg.target);
-      // 本地缓存：重复段落/整篇重翻直接命中，不打 Google，显著减少请求量
-      if (cfg.translator === "google") {
-        try {
-          var ck = cfg.target + ":" + text.length + ":" + text.slice(0, 32);
-          var cached = localStorage.getItem("pxtc-cache");
-          var map = cached ? JSON.parse(cached) : {};
-          if (map[ck]) return Promise.resolve(map[ck]);
-        } catch (e) { }
+    function pxtcCacheKey(text) {
+      return cfg.translator + ":" + cfg.target + ":" + text.length + ":" + text.slice(0, 48);
+    }
+    function pxtcCacheRead(key) {
+      try {
+        var all = localStorage.getItem("pxtc-cache-v2");
+        var map = all ? JSON.parse(all) : {};
+        if (Object.prototype.hasOwnProperty.call(map, key)) return map[key];
+      } catch (e) { }
+      return undefined;
+    }
+    function pxtcCacheWrite(key, value) {
+      try {
+        var all = localStorage.getItem("pxtc-cache-v2");
+        var map = all ? JSON.parse(all) : {};
+        map[key] = value;
+        var keys = Object.keys(map);
+        // 只保留最近 300 条，防止 localStorage 无限增长
+        if (keys.length > 300) {
+          var keep = keys.slice(keys.length - 300);
+          var m = {};
+          for (var i = 0; i < keep.length; i++) m[keep[i]] = map[keep[i]];
+          map = m;
+        }
+        localStorage.setItem("pxtc-cache-v2", JSON.stringify(map));
+      } catch (e) { }
+    }
+
+    // 批量翻译：先查缓存命中段落，未命中的一次 POST 发给服务端批量翻译
+    function translateBatch(texts) {
+      var results = new Array(texts.length);
+      var need = [];
+      var needIdx = [];
+      for (var i = 0; i < texts.length; i++) {
+        var key = pxtcCacheKey(texts[i]);
+        var cached = pxtcCacheRead(key);
+        if (cached !== undefined) {
+          results[i] = cached;
+        } else {
+          need.push(texts[i]);
+          needIdx.push(i);
+        }
       }
-      return fetch(url, { method: "POST", body: text })
+      if (!need.length) return Promise.resolve(results);
+      var url = "/pxtrans?t=" + encodeURIComponent(cfg.translator) + "&l=" + encodeURIComponent(cfg.target);
+      return fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ texts: need })
+      })
         .then(function (res) { return res.json(); })
         .then(function (data) {
           if (!data || !data.ok) throw new Error((data && data.error) || "翻译失败");
-          if (cfg.translator === "google") {
-            try {
-              var ck2 = cfg.target + ":" + text.length + ":" + text.slice(0, 32);
-              var cached2 = localStorage.getItem("pxtc-cache");
-              var map2 = cached2 ? JSON.parse(cached2) : {};
-              map2[ck2] = data.translation || "";
-              var keys2 = Object.keys(map2);
-              // 只保留最近 100 条，防止 localStorage 无限增长
-              if (keys2.length > 100) {
-                var slice2 = keys2.slice(keys2.length - 100);
-                var m2 = {};
-                for (var i2 = 0; i2 < slice2.length; i2++) m2[slice2[i2]] = map2[slice2[i2]];
-                map2 = m2;
-              }
-              localStorage.setItem("pxtc-cache", JSON.stringify(map2));
-            } catch (e) { }
+          var trans = data.translations;
+          if (!Array.isArray(trans) || trans.length !== need.length) {
+            // 兼容旧版服务端单段返回
+            if (data.translation !== undefined && need.length === 1) trans = [data.translation];
+            else throw new Error("翻译返回段数不匹配");
           }
-          return data.translation || "";
+          for (var j = 0; j < need.length; j++) {
+            var v = trans[j] || "";
+            results[needIdx[j]] = v;
+            pxtcCacheWrite(pxtcCacheKey(need[j]), v);
+          }
+          return results;
         });
     }
 
@@ -594,37 +757,56 @@ function __pxtc_client() {
       return new Promise(function (resolve) { setTimeout(resolve, ms); });
     }
 
-    async function runTranslate(chunks) {
+    // 并发翻译：最多 3 批同时在途，每批内部可含多段；完成一批渲染一批（增量显示）。
+    // google 保留一个批次间隔，配合“一批多段”把请求频率压下来，降低 429。
+    async function runTranslate(batches) {
       var sections = [];
-      var done = 0;
-      var failed = 0;
-      for (var i = 0; i < chunks.length; i++) {
-        var section = createEl("section", "pxtc-chunk", '<div class="pxtc-orig">' + renderParagraphs(chunks[i]) + "</div>");
+      for (var i = 0; i < batches.length; i++) {
+        var section = createEl("section", "pxtc-chunk", '<div class="pxtc-orig">' + renderParagraphs(batches[i].join("\n\n")) + "</div>");
         reader.appendChild(section);
         sections.push(section);
       }
-      for (var i = 0; i < chunks.length; i++) {
-        try {
-          var trans = await translateChunk(chunks[i]);
-          sections[i].innerHTML = '<div class="pxtc-orig">' + renderParagraphs(chunks[i]) + '</div><div class="pxtc-trans">' + renderParagraphs(trans) + "</div>";
-          done++;
-        } catch (e) {
-          var errMsg = String((e && e.message) || e);
-          failed++;
-          sections[i].innerHTML = '<div class="pxtc-orig">' + renderParagraphs(chunks[i]) + '</div><div class="pxtc-error">' + esc(errMsg) + "</div>";
-          // 遇到限流立即停止整篇翻译，避免继续请求加剧限流
-          if (errMsg.indexOf("限流") !== -1) {
-            setStatus("Google 限流，已停止本次翻译，请稍后再试", "#c0392b");
-            if (panel) panel.style.display = "none";
-            return;
-          }
-        }
-        setStatus("翻译中 " + (i + 1) + "/" + chunks.length, "");
-        // google 需要 300ms 间隔避免限流；AI 接口不需要限流等待
-        if (cfg.translator === "google") await sleep(300);
+      var done = 0;
+      var failed = 0;
+      var stopped = false;
+      var next = 0;
+      function fill(section, texts, trans) {
+        section.innerHTML = '<div class="pxtc-orig">' + renderParagraphs(texts.join("\n\n")) +
+          '</div><div class="pxtc-trans">' + renderParagraphs(trans.join("\n\n")) + "</div>";
       }
-      if (failed) setStatus("完成，失败 " + failed + " 段", "#c0392b");
-      else setStatus("翻译完成 " + done + "/" + chunks.length, "#1e8449");
+      async function worker() {
+        while (next < batches.length && !stopped) {
+          var idx = next++;
+          try {
+            var texts = batches[idx];
+            var trans = await translateBatch(texts);
+            fill(sections[idx], texts, trans);
+            done++;
+          } catch (e) {
+            var errMsg = String((e && e.message) || e);
+            failed++;
+            sections[idx].innerHTML = '<div class="pxtc-orig">' + renderParagraphs(batches[idx].join("\n\n")) +
+              '</div><div class="pxtc-error">' + esc(errMsg) + "</div>";
+            // 遇到限流立即停止整篇翻译，避免继续请求加剧限流
+            if (errMsg.indexOf("限流") !== -1) {
+              stopped = true;
+              setStatus("Google 限流，已停止本次翻译，请稍后再试", "#c0392b");
+              if (panel) panel.style.display = "none";
+            }
+          }
+          setStatus("翻译中 " + (done + failed) + "/" + batches.length, "");
+          // google 留一点间隔，避免瞬时请求过密触发 429
+          if (cfg.translator === "google") await sleep(450);
+        }
+      }
+      var workers = [];
+      var CONCURRENCY = 3;
+      var count = Math.min(CONCURRENCY, batches.length);
+      for (var w = 0; w < count; w++) workers.push(worker());
+      await Promise.all(workers);
+      if (stopped) return; // 限流提示已在上面显示，不再覆盖
+      if (failed) setStatus("完成，失败 " + failed + " 批", "#c0392b");
+      else setStatus("翻译完成 " + done + "/" + batches.length, "#1e8449");
       // 翻译完成后自动关闭面板
       if (panel) panel.style.display = "none";
     }
@@ -693,18 +875,19 @@ function __pxtc_client() {
         return;
       }
       var paragraphs = splitParagraphs(text);
-      // 分块大小：优先用服务端下发的 cfg.chunk（Loon 参数 chunk=xxx），
-      // 未配置时按各翻译源默认（google 400 更贴合小说段落，microsoft/baidu 接口支持大块）
-      var limit = cfg.chunk || { google: 400, microsoft: 4500, baidu: 580, deepseek: 1500 }[cfg.translator] || 400;
-      var chunks = buildChunks(paragraphs, limit);
-      if (!chunks.length) {
+      // 每批上限：默认按翻译源（google/baidu 一批可带多段），插件参数 chunk=xxx 可覆盖
+      // 每请求最大字符数（100~3000）
+      var limits = PXTC_BATCH_LIMITS[cfg.translator] || PXTC_BATCH_LIMITS.google;
+      if (cfg.chunk && cfg.chunk >= 100) limits = { chars: Math.min(cfg.chunk, 3000), segs: limits.segs };
+      var batches = buildBatches(paragraphs, limits);
+      if (!batches.length) {
         restore();
         setStatus("没有可翻译的正文", "#c0392b");
         busy = false;
         return;
       }
       try {
-        await runTranslate(chunks);
+        await runTranslate(batches);
       } catch (e) {
         setStatus("翻译失败：" + ((e && e.message) || e), "#c0392b");
       }
@@ -822,29 +1005,50 @@ async function handleProxy() {
   let target = String(query.l || pxtcArg(args, "target") || "zh-CN");
   if (!PXTC_LANG_MAP[target]) target = "zh-CN";
   if (translator !== "microsoft" && translator !== "baidu" && translator !== "deepseek") translator = "google";
-  // http-request / http-response 下 $request.body 都可能是字符串；
-  // 若 Loon 按 JSON Content-Type 解析过请求体会是对象，这里统一兜底转字符串
+  // 新协议：客户端一次 POST 一段 JSON {texts:[...]}，服务端批量翻译多段后一次返回；
+  // 兼容旧协议：正文直接作为裸字符串时按单段翻译。
   const rawBody = $request.body;
-  const text = typeof rawBody === "string" ? rawBody : (rawBody && typeof rawBody === "object" ? JSON.stringify(rawBody) : "");
-  const result = { ok: false, translation: "", src: translator, error: "" };
+  const ct = ($request.headers && ($request.headers["Content-Type"] || $request.headers["content-type"])) || "";
+  let texts = null;
+  let text = "";
+  if (typeof rawBody === "object" && rawBody !== null) {
+    if (Array.isArray(rawBody.texts)) texts = rawBody.texts.map(String);
+    else text = JSON.stringify(rawBody);
+  } else if (typeof rawBody === "string") {
+    const trimmed = rawBody.trim();
+    if (ct.indexOf("application/json") !== -1 && /^[\[{]/.test(trimmed)) {
+      try {
+        const parsed = JSON.parse(rawBody);
+        if (parsed && Array.isArray(parsed.texts)) texts = parsed.texts.map(String);
+      } catch (e) { texts = null; }
+    }
+    if (!texts) text = rawBody;
+  }
+  const result = { ok: false, translation: "", translations: [], src: translator, error: "" };
   try {
-    if (!text) throw new Error("空请求体");
+    if (!text && !(texts && texts.length)) throw new Error("空请求体");
     const lang = PXTC_LANG_MAP[target];
     let translation = "";
+    let translations = [];
     if (translator === "microsoft") {
       if (!msKey) throw new Error("未配置微软翻译 Key");
-      translation = await msTranslate(text, lang.microsoft, msKey);
+      if (texts) translations = await msTranslateBatch(texts, lang.microsoft, msKey);
+      else translation = await msTranslate(text, lang.microsoft, msKey);
     } else if (translator === "baidu") {
       if (!baiduAppid || !baiduSecret) throw new Error("未配置百度 AppID / 密钥");
-      translation = await baiduTranslate(text, lang.baidu, baiduAppid, baiduSecret);
+      if (texts) translations = await baiduTranslateBatch(texts, lang.baidu, baiduAppid, baiduSecret);
+      else translation = await baiduTranslate(text, lang.baidu, baiduAppid, baiduSecret);
     } else if (translator === "deepseek") {
       if (!deepseekKey) throw new Error("未配置 DeepSeek API Key");
-      translation = await deepseekTranslate(text, lang.deepseek, deepseekApiUrl, deepseekKey, deepseekModel);
+      if (texts) translations = await deepseekTranslateBatch(texts, lang.deepseek, deepseekApiUrl, deepseekKey, deepseekModel);
+      else translation = await deepseekTranslate(text, lang.deepseek, deepseekApiUrl, deepseekKey, deepseekModel);
     } else {
-      translation = await googleTranslate(text, lang.google);
+      if (texts) translations = await googleTranslateBatch(texts, lang.google);
+      else translation = await googleTranslate(text, lang.google);
     }
     result.ok = true;
     result.translation = translation;
+    result.translations = translations;
   } catch (e) {
     const msg = String((e && e.message) || e);
     result.error = /timeout|超时/i.test(msg)
