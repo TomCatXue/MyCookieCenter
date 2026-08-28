@@ -52,7 +52,7 @@ const $ = new Env("Pixiv 小说翻译");
   };
 }
 
-const SCRIPT_VERSION = "20260828-r13";
+const SCRIPT_VERSION = "20260828-r14";
 
 const PXTC_LANG_MAP = {
   "zh-CN": { google: "zh-CN", microsoft: "zh-Hans", baidu: "zh", deepseek: "Simplified Chinese" },
@@ -318,7 +318,9 @@ async function googleTranslateViaProxy(texts, target, proxy) {
   }
   // 兼容单段返回
   if (data.translation !== undefined && arr.length === 1) return [data.translation];
-  throw new Error("Worker 代理返回段数不匹配");
+  // 多段请求但 Worker 只回了单段 translation：通常是部署了旧版 worker.js
+  // （只支持裸文本单段，会把整个 {texts:[...]} JSON 当一段文本翻译）。
+  throw new Error("Worker 代理返回段数不匹配：请重新部署当前仓库最新 worker.js（支持 {texts:[...]} 批量协议，见 worker/README.md）");
 }
 
 // Google 免费接口批量翻译：一次请求带多个 q（POST form 编码），实测

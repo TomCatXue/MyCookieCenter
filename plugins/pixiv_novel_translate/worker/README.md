@@ -57,7 +57,7 @@ https://pxtc-translate.<你的子域>.workers.dev/translate
 
 ## 验证
 
-在浏览器或终端发一条测试请求：
+在浏览器或终端发一条测试请求（**必须发批量格式 `{texts:[...]}`**，这才是插件实际发送的格式）：
 
 ```bash
 curl -X POST "https://pxtc-translate.xxx.workers.dev/translate?t=google&l=zh-CN" \
@@ -66,11 +66,19 @@ curl -X POST "https://pxtc-translate.xxx.workers.dev/translate?t=google&l=zh-CN"
   -d '{"texts":["こんにちは","テスト"]}'
 ```
 
-正常返回：
+**正确返回**（新版 worker.js，返回 `translations` 数组）：
 
 ```json
 {"ok":true,"translation":"","translations":["你好","测试"],"src":"google","error":""}
 ```
+
+**⚠️ 如果返回的是这个**（单段 `translation`，且值像 `{文本：[你好，测试]}`——把 JSON 本身当文本翻译了）：
+
+```json
+{"ok":true,"translation":"{文本：[你好，测试]}","src":"google","error":""}
+```
+
+说明**部署的是旧版 worker.js**（只支持裸文本单段，不认识 `{texts:[...]}` 批量协议）。请回到 Worker 编辑页，把**当前仓库 `worker/worker.js` 的最新内容**完整粘贴覆盖后重新 Save and Deploy，再跑一次上面的 curl 确认返回 `translations` 数组。
 
 ## 架构
 
