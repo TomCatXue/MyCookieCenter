@@ -344,7 +344,7 @@ async function deepseekTranslate(text, targetLangName, apiUrl, apiKey, model) {
       "Authorization": "Bearer " + apiKey
     },
     body: JSON.stringify({
-      model: model || "deepseek-chat",
+      model: model || "deepseek-v4-flash",
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: text }
@@ -784,7 +784,7 @@ async function handleProxy() {
     } else if (translator === "deepseek") {
       if (!args.deepseek_api_key) throw new Error("未配置 DeepSeek API Key");
       const apiUrl = args.deepseek_api_url || "https://api.deepseek.com/v1/chat/completions";
-      const model = args.deepseek_model || "deepseek-chat";
+      const model = args.deepseek_model || "deepseek-v4-flash";
       translation = await deepseekTranslate(text, lang.deepseek, apiUrl, args.deepseek_api_key, model);
     } else {
       translation = await googleTranslate(text, lang.google);

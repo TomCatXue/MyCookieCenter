@@ -20,7 +20,7 @@ baidu_secret = input,,tag=百度密钥,desc=百度开放平台密钥
 # 选择 deepseek 时填写
 deepseek_api_url = input,https://api.deepseek.com/v1/chat/completions,tag=DeepSeek接口地址,desc=兼容 OpenAI 格式即可
 deepseek_api_key = input,,tag=DeepSeek API Key,desc=DeepSeek 开放平台 API Key
-deepseek_model = input,deepseek-chat,tag=DeepSeek模型,desc=deepseek-chat 通用翻译 deepseek-reasoner 推理模型
+deepseek_model = input,deepseek-v4-flash,tag=DeepSeek模型,desc=deepseek-v4-flash 快速便宜 deepseek-v4-pro 更强更贵
 # 分块大小(字数): 100~3000，不填则按翻译源默认(google 400 / 微软 4500 / 百度 580 / deepseek 3000)
 chunk = input,,tag=分块大小,desc=越小翻译越细、边翻边显示越顺滑，请求次数相应增多
 
