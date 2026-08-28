@@ -66,19 +66,16 @@ curl -X POST "https://pxtc-translate.xxx.workers.dev/translate?t=google&l=zh-CN"
   -d '{"texts":["こんにちは","テスト"]}'
 ```
 
-**正确返回**（新版 worker.js，返回 `translations` 数组）：
+**正确返回**（新版 worker.js，返回 `translations` 数组，且带 `v` 版本字段）：
 
 ```json
-{"ok":true,"translation":"","translations":["你好","测试"],"src":"google","error":""}
+{"v":"20260828-batch-v2","ok":true,"translation":"","translations":["你好","测试"],"src":"google","error":""}
 ```
 
-**⚠️ 如果返回的是这个**（单段 `translation`，且值像 `{文本：[你好，测试]}`——把 JSON 本身当文本翻译了）：
-
-```json
-{"ok":true,"translation":"{文本：[你好，测试]}","src":"google","error":""}
-```
-
-说明**部署的是旧版 worker.js**（只支持裸文本单段，不认识 `{texts:[...]}` 批量协议）。请回到 Worker 编辑页，把**当前仓库 `worker/worker.js` 的最新内容**完整粘贴覆盖后重新 Save and Deploy，再跑一次上面的 curl 确认返回 `translations` 数组。
+**判断部署版本**：
+- 返回里**有 `v` 字段** → 是新版，看 `translations` 数组是否正常
+- 返回里**没有 `v` 字段**，或 `translation` 的值像 `{文本：[你好，测试]}`（把 JSON 当文本翻译了）→ **部署的是旧版**，回 Worker 编辑页把 `worker/worker.js` 最新内容完整粘贴覆盖，重新 Save and Deploy
+- 如果你之前用旧版翻译过同一段文本并绑定了 KV 缓存，新版缓存 key 已加 `v2` 前缀，会**自动绕过旧缓存**，无需手动清理
 
 ## 架构
 

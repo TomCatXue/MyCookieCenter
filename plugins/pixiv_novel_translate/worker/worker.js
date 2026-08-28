@@ -15,6 +15,8 @@
  * 部署说明见同目录 README.md
  */
 const DEFAULT_TOKEN = "CHANGE_ME_PLEASE"; // 仅本机直跑测试用；正式部署用 env.WORKER_TOKEN
+// 版本自证：所有响应带 v 字段。curl 返回里能看到 v=20260828-batch-v2 才说明部署的是新版。
+const WORKER_VERSION = "20260828-batch-v2";
 
 export default {
   async fetch(request, env, ctx) {
@@ -49,6 +51,10 @@ export default {
       try {
         const parsed = JSON.parse(raw);
         if (parsed && Array.isArray(parsed.texts)) texts = parsed.texts.map(String);
+        else if (parsed && typeof parsed === "object") {
+          // 合法 JSON 但不是批量协议：明确报错，避免像旧版那样把整个 JSON 当文本翻译
+          return json({ ok: false, translation: "", src, error: "请求体是 JSON 但缺少 texts 数组：请用 {\"texts\":[...]} 批量格式或发送裸文本" });
+        }
       } catch (e) { texts = null; }
     }
     if (!texts) text = raw;
@@ -61,8 +67,8 @@ export default {
       try {
         const translations = [];
         for (let i = 0; i < texts.length; i++) {
-          // 逐段缓存查询
-          const ck = await sha256(target + "\n" + texts[i]);
+          // 逐段缓存查询（key 带 v2 前缀，绕过旧版缓存污染）
+          const ck = await sha256("v2\n" + target + "\n" + texts[i]);
           if (env.PXTC_CACHE) {
             try {
               const hit = await env.PXTC_CACHE.get(ck);
@@ -86,7 +92,8 @@ export default {
     }
 
     // —— 单段翻译 ——
-    const cacheKey = await sha256(target + "\n" + text);
+    // 缓存 key 带 v2 前缀，绕过旧版缓存污染
+    const cacheKey = await sha256("v2\n" + target + "\n" + text);
     if (env.PXTC_CACHE) {
       try {
         const hit = await env.PXTC_CACHE.get(cacheKey);
@@ -170,7 +177,7 @@ async function sha256(s) {
 }
 
 function json(obj, status = 200) {
-  return new Response(JSON.stringify(obj), {
+  return new Response(JSON.stringify(Object.assign({ v: WORKER_VERSION }, obj)), {
     status,
     headers: {
       "Content-Type": "application/json; charset=utf-8",
