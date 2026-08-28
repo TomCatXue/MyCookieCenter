@@ -58,24 +58,32 @@ https://pxtc-translate.<你的子域>.workers.dev
 
 ## 验证
 
-在浏览器或终端发一条测试请求（**必须发批量格式 `{texts:[...]}`**，这才是插件实际发送的格式）：
+> ⚠️ **Windows PowerShell 用户必读**：`curl.exe --data-raw '{"texts":[...]}'` 里的**双引号会被 PowerShell 剥掉**，实际发出的 body 变成 `{texts:[...]}`（非法 JSON），Worker 会把它当单段文本翻译、返回 `translation:"{文本：...}"`——**这是测试命令的坑，不是代码问题**。请改用**文件方式**发送 JSON body：
+>
+> ```powershell
+> Set-Content -Path body.json -Value '{"texts":["hello","world"]}' -Encoding UTF8
+> curl.exe -X POST "https://pxtc-translate.xxx.workers.dev/translate?t=google&l=zh-CN" -H "Content-Type: application/json" --data-binary "@body.json"
+> ```
+>
+> 插件（Loon）内部用 JS `fetch` 发请求，引号不会丢，不受此问题影响。
+
+在终端发一条批量测试请求（**必须发批量格式 `{texts:[...]}`**，这才是插件实际发送的格式）：
 
 ```bash
 curl -X POST "https://pxtc-translate.xxx.workers.dev/translate?t=google&l=zh-CN" \
   -H "Content-Type: application/json" \
-  -H "x-worker-token: 你的TOKEN" \
   -d '{"texts":["こんにちは","テスト"]}'
 ```
 
 **正确返回**（新版 worker.js，返回 `translations` 数组，且带 `v` 版本字段）：
 
 ```json
-{"v":"20260828-batch-v2","ok":true,"translation":"","translations":["你好","测试"],"src":"google","error":""}
+{"v":"20260828-batch-v3","ok":true,"translation":"","translations":["你好","测试"],"src":"google","error":""}
 ```
 
 **判断部署版本**：
-- 返回里**有 `v` 字段** → 是新版，看 `translations` 数组是否正常
-- 返回里**没有 `v` 字段**，或 `translation` 的值像 `{文本：[你好，测试]}`（把 JSON 当文本翻译了）→ **部署的是旧版**，回 Worker 编辑页把 `worker/worker.js` 最新内容完整粘贴覆盖，重新 Save and Deploy
+- 返回里**有 `v` 字段且为 `20260828-batch-v3`** → 是最新版，看 `translations` 数组是否正常
+- 返回里 `translation` 的值像 `{文本：[你好，测试]}`（把 JSON 当文本翻译了）→ 先检查是否 **PowerShell 剥引号**（改用上面文件方式重试）；若文件方式仍如此才是**部署了旧版**，回 Worker 编辑页把 `worker/worker.js` 最新内容完整粘贴覆盖，重新 Save and Deploy
 - 如果你之前用旧版翻译过同一段文本并绑定了 KV 缓存，新版缓存 key 已加 `v2` 前缀，会**自动绕过旧缓存**，无需手动清理
 
 ## 架构
