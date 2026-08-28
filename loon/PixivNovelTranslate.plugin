@@ -29,9 +29,9 @@ hostname = app-api.pixiv.net
 
 [Script]
 # 页面注入：往小说阅读页插入“译”按钮
-http-response ^https://app-api\.pixiv\.net/webview/v2/novel script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/pixiv_novel_translate/pixiv_novel_translate.js?v=20260828-r7, requires-body=true, timeout=30, tag=Pixiv 小说翻译-页面注入, enable={pixiv_novel_translate}
+http-response ^https://app-api\.pixiv\.net/webview/v2/novel script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/pixiv_novel_translate/pixiv_novel_translate.js?v=20260828-r8, requires-body=true, timeout=30, tag=Pixiv 小说翻译-页面注入, enable={pixiv_novel_translate}
 
 # 翻译中转：拦截 pxtrans 请求，由脚本直接返回 JSON 响应（不经过 Pixiv 上游）。
 # 注意：Loon 的 http-request 中 $done({status,headers,body}) 会被当作“修改请求”发往上游，
 # 导致上游返回 404、页面显示 [object Object]；必须用 $done({response:{...}}) 直接返回。
-http-request ^https://app-api\.pixiv\.net/pxtrans script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/pixiv_novel_translate/pixiv_novel_translate.js?v=20260828-r7, requires-body=true, timeout=120, tag=Pixiv 小说翻译-翻译中转, enable={pixiv_novel_translate}
+http-request ^https://app-api\.pixiv\.net/pxtrans script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/pixiv_novel_translate/pixiv_novel_translate.js?v=20260828-r8, requires-body=true, timeout=120, tag=Pixiv 小说翻译-翻译中转, enable={pixiv_novel_translate}

@@ -1,7 +1,7 @@
 /*
 ------------------------------------------
 @Name: Pixiv 小说翻译
-@Version: 1.2.0
+@Version: 1.3.0
 @Desc: 在 Pixiv 小说阅读页注入翻译按钮，支持 Google 免费接口 / 微软翻译 / 百度翻译 / DeepSeek AI
 @Author: TomCatXue
 @Date: 2026-08-28
@@ -25,7 +25,7 @@ function Env(t) { return new class { constructor(t) { this.name = t, this.startT
 
 const $ = new Env("Pixiv 小说翻译");
 
-const SCRIPT_VERSION = "20260828-r7";
+const SCRIPT_VERSION = "20260828-r8";
 
 const PXTC_LANG_MAP = {
   "zh-CN": { google: "zh-CN", microsoft: "zh-Hans", baidu: "zh", deepseek: "Simplified Chinese" },
@@ -43,6 +43,15 @@ const PXTC_CHUNK_LIMITS = { google: 400, microsoft: 4500, baidu: 580, deepseek: 
 
 function parseArgument() {
   const out = {};
+  // Loon 新版可能把 argument=[{...}] 替换后的 $argument 传成对象，两种形态都支持
+  if (typeof $argument === "object" && $argument !== null) {
+    const keys = Object.keys($argument);
+    for (let i = 0; i < keys.length; i++) {
+      const v = $argument[keys[i]];
+      out[keys[i]] = v === undefined || v === null ? "" : String(v);
+    }
+    return out;
+  }
   const arg = typeof $argument === "string" ? $argument : "";
   if (!arg) return out;
   const pairs = arg.split("&");
@@ -60,6 +69,17 @@ function parseArgument() {
     out[key] = value;
   }
   return out;
+}
+
+// Loon 插件 [Argument] 段的值由 Loon 写入 $persistentStore（key = 参数名），
+// 而 $argument 只包含规则行 argument="..." 的静态内容（未写 argument= 时为空）。
+// 因此统一先看 $argument、再回退 $persistentStore，兼容 Loon 各版本及其它平台。
+function pxtcArg(args, key) {
+  let v = args[key];
+  if (v === undefined || v === "") {
+    try { v = $.getdata(key); } catch (e) { }
+  }
+  return v === undefined || v === null ? "" : String(v);
 }
 
 function parseQuery(url) {
@@ -86,21 +106,21 @@ function parseQuery(url) {
 
 function getConfig() {
   const args = parseArgument();
-  let translator = String(args.translator || "google").toLowerCase();
-  let target = String(args.target || "zh-CN");
+  let translator = String(pxtcArg(args, "translator") || "google").toLowerCase();
+  let target = String(pxtcArg(args, "target") || "zh-CN");
   if (!PXTC_LANG_MAP[target]) target = "zh-CN";
   if (translator !== "microsoft" && translator !== "baidu" && translator !== "deepseek") translator = "google";
   // 分块大小：0 = 客户端按各翻译源默认；可在参数里用 chunk=300 全局覆盖（100~3000）
-  let chunk = parseInt(args.chunk, 10);
+  let chunk = parseInt(pxtcArg(args, "chunk"), 10);
   if (Number.isFinite(chunk) && chunk >= 100) chunk = Math.min(chunk, 3000);
   else chunk = 0;
   return {
     translator: translator,
     target: target,
     chunk: chunk,
-    hasMs: !!(args.ms_key),
-    hasBaidu: !!(args.baidu_appid && args.baidu_secret),
-    hasDeepSeek: !!(args.deepseek_api_key)
+    hasMs: !!(pxtcArg(args, "ms_key")),
+    hasBaidu: !!(pxtcArg(args, "baidu_appid") && pxtcArg(args, "baidu_secret")),
+    hasDeepSeek: !!(pxtcArg(args, "deepseek_api_key"))
   };
 }
 
@@ -762,8 +782,14 @@ function doneWithResponse(status, headers, body) {
 async function handleProxy() {
   const args = parseArgument();
   const query = parseQuery($request.url);
-  let translator = String(query.t || args.translator || "google").toLowerCase();
-  let target = String(query.l || args.target || "zh-CN");
+  const msKey = pxtcArg(args, "ms_key");
+  const baiduAppid = pxtcArg(args, "baidu_appid");
+  const baiduSecret = pxtcArg(args, "baidu_secret");
+  const deepseekKey = pxtcArg(args, "deepseek_api_key");
+  const deepseekApiUrl = pxtcArg(args, "deepseek_api_url") || "https://api.deepseek.com/v1/chat/completions";
+  const deepseekModel = pxtcArg(args, "deepseek_model") || "deepseek-v4-flash";
+  let translator = String(query.t || pxtcArg(args, "translator") || "google").toLowerCase();
+  let target = String(query.l || pxtcArg(args, "target") || "zh-CN");
   if (!PXTC_LANG_MAP[target]) target = "zh-CN";
   if (translator !== "microsoft" && translator !== "baidu" && translator !== "deepseek") translator = "google";
   // http-request / http-response 下 $request.body 都可能是字符串；
@@ -776,16 +802,14 @@ async function handleProxy() {
     const lang = PXTC_LANG_MAP[target];
     let translation = "";
     if (translator === "microsoft") {
-      if (!args.ms_key) throw new Error("未配置微软翻译 Key");
-      translation = await msTranslate(text, lang.microsoft, args.ms_key);
+      if (!msKey) throw new Error("未配置微软翻译 Key");
+      translation = await msTranslate(text, lang.microsoft, msKey);
     } else if (translator === "baidu") {
-      if (!args.baidu_appid || !args.baidu_secret) throw new Error("未配置百度 AppID / 密钥");
-      translation = await baiduTranslate(text, lang.baidu, args.baidu_appid, args.baidu_secret);
+      if (!baiduAppid || !baiduSecret) throw new Error("未配置百度 AppID / 密钥");
+      translation = await baiduTranslate(text, lang.baidu, baiduAppid, baiduSecret);
     } else if (translator === "deepseek") {
-      if (!args.deepseek_api_key) throw new Error("未配置 DeepSeek API Key");
-      const apiUrl = args.deepseek_api_url || "https://api.deepseek.com/v1/chat/completions";
-      const model = args.deepseek_model || "deepseek-v4-flash";
-      translation = await deepseekTranslate(text, lang.deepseek, apiUrl, args.deepseek_api_key, model);
+      if (!deepseekKey) throw new Error("未配置 DeepSeek API Key");
+      translation = await deepseekTranslate(text, lang.deepseek, deepseekApiUrl, deepseekKey, deepseekModel);
     } else {
       translation = await googleTranslate(text, lang.google);
     }
