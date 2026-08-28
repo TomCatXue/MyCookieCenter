@@ -1,7 +1,7 @@
 /*
 ------------------------------------------
 @Name: Pixiv 小说翻译
-@Version: 1.3.0
+@Version: 1.4.0
 @Desc: 在 Pixiv 小说阅读页注入翻译按钮，支持 Google 免费接口 / 微软翻译 / 百度翻译 / DeepSeek AI
 @Author: TomCatXue
 @Date: 2026-08-28
@@ -25,7 +25,7 @@ function Env(t) { return new class { constructor(t) { this.name = t, this.startT
 
 const $ = new Env("Pixiv 小说翻译");
 
-const SCRIPT_VERSION = "20260828-r8";
+const SCRIPT_VERSION = "20260828-r9";
 
 const PXTC_LANG_MAP = {
   "zh-CN": { google: "zh-CN", microsoft: "zh-Hans", baidu: "zh", deepseek: "Simplified Chinese" },
@@ -54,6 +54,21 @@ function parseArgument() {
   }
   const arg = typeof $argument === "string" ? $argument : "";
   if (!arg) return out;
+  // 兼容以 JSON 字符串传入的 $argument（某些平台/版本形态）
+  const trimmed = arg.trim();
+  if (trimmed.charAt(0) === "{" || trimmed.charAt(0) === "[") {
+    try {
+      const obj = JSON.parse(trimmed);
+      if (obj && typeof obj === "object") {
+        const keys = Object.keys(obj);
+        for (let i = 0; i < keys.length; i++) {
+          const v = obj[keys[i]];
+          out[keys[i]] = v === undefined || v === null ? "" : String(v);
+        }
+        return out;
+      }
+    } catch (e) { /* 不是 JSON，按 query 字符串继续解析 */ }
+  }
   const pairs = arg.split("&");
   for (let i = 0; i < pairs.length; i++) {
     const pair = pairs[i];
@@ -79,7 +94,8 @@ function pxtcArg(args, key) {
   if (v === undefined || v === "") {
     try { v = $.getdata(key); } catch (e) { }
   }
-  return v === undefined || v === null ? "" : String(v);
+  v = v === undefined || v === null ? "" : String(v);
+  return v.trim();
 }
 
 function parseQuery(url) {
@@ -643,17 +659,17 @@ function __pxtc_client() {
       if (selT) cfg.translator = selT.value;
       if (selL) cfg.target = selL.value;
       if (cfg.translator === "microsoft" && !cfg.hasMs) {
-        setStatus("微软翻译未配置：请到 Loon 插件参数填写「微软翻译Key」", "#c0392b");
+        setStatus("微软翻译未配置：请到 Loon 插件参数填写「微软翻译Key」，填写后重新导入插件并刷新页面", "#c0392b");
         busy = false;
         return;
       }
       if (cfg.translator === "baidu" && !cfg.hasBaidu) {
-        setStatus("百度翻译未配置：请到 Loon 插件参数填写「百度AppID」和「百度密钥」", "#c0392b");
+        setStatus("百度翻译未配置：请到 Loon 插件参数填写「百度AppID」和「百度密钥」，填写后重新导入插件并刷新页面", "#c0392b");
         busy = false;
         return;
       }
       if (cfg.translator === "deepseek" && !cfg.hasDeepSeek) {
-        setStatus("DeepSeek 未配置：请到 Loon 插件参数填写「DeepSeek API Key」", "#c0392b");
+        setStatus("DeepSeek 未配置：请到 Loon 插件参数填写「DeepSeek API Key」，填写后重新导入插件并刷新页面", "#c0392b");
         busy = false;
         return;
       }
@@ -831,6 +847,9 @@ function handleInject() {
     return;
   }
   const cfg = getConfig();
+  // 诊断日志：仅输出是否已配置，不含密钥明文；在 Loon 脚本日志中搜索 [pxtc] 可排查
+  $.log("[pxtc] 注入配置: translator=" + cfg.translator + " target=" + cfg.target + " chunk=" + cfg.chunk +
+    " hasMs=" + cfg.hasMs + " hasBaidu=" + cfg.hasBaidu + " hasDeepSeek=" + cfg.hasDeepSeek);
   const clientSrc = "window.__PXTC_CONFIG=" + JSON.stringify(cfg) + ";\n(" + __pxtc_client.toString() + ")();";
   const inject = '<style id="pxtc-style">' + PXTC_CSS + '</style><script id="pxtc-script">' + clientSrc + "</script>";
   let newBody;
