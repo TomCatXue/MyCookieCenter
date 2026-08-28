@@ -25,7 +25,20 @@ function Env(t) { return new class { constructor(t) { this.name = t, this.startT
 
 const $ = new Env("Pixiv 小说翻译");
 
-const SCRIPT_VERSION = "20260828-r9";
+// Loon/Surge/Stash 的 $httpClient 请求超时默认只有 5 秒，而 DeepSeek 等 AI 接口
+// 单次响应常要 5~10 秒，导致页面报 "Request timeout"。这里给所有出站请求显式加
+// timeout=60（秒）。新版 Loon/Stash 支持该参数；不支持的版本会忽略它，无副作用。
+{
+  const pxtcSend = $.send.bind($);
+  $.send = function (opts, method) {
+    if (opts && typeof opts === "object" && opts.timeout == null) {
+      opts = Object.assign({}, opts, { timeout: 60 });
+    }
+    return pxtcSend(opts, method);
+  };
+}
+
+const SCRIPT_VERSION = "20260828-r10";
 
 const PXTC_LANG_MAP = {
   "zh-CN": { google: "zh-CN", microsoft: "zh-Hans", baidu: "zh", deepseek: "Simplified Chinese" },
@@ -38,8 +51,9 @@ const PXTC_LANG_MAP = {
 // google 默认分块从 1500 降到 400：块更小更贴合小说段落节奏，边翻边显示更顺滑、
 // 阅读体验更好（代价是请求次数增多，配合 googleapis.com 优先 + 限流窗口 + 本地缓存兜底）。
 // 可在 Loon 参数里用 chunk=xxx 调整分块大小（100~3000）。
-// deepseek 默认 3000：LLM 上下文窗口大，大块减少请求次数且翻译连贯性更好。
-const PXTC_CHUNK_LIMITS = { google: 400, microsoft: 4500, baidu: 580, deepseek: 3000 };
+// deepseek 默认 1500：LLM 生成较慢，小块降低单次响应耗时、边翻边显示更顺滑；
+// 想要更连贯的大块可用 chunk=3000 调大（注意单次响应可能超过 5 秒）。
+const PXTC_CHUNK_LIMITS = { google: 400, microsoft: 4500, baidu: 580, deepseek: 1500 };
 
 function parseArgument() {
   const out = {};
@@ -681,7 +695,7 @@ function __pxtc_client() {
       var paragraphs = splitParagraphs(text);
       // 分块大小：优先用服务端下发的 cfg.chunk（Loon 参数 chunk=xxx），
       // 未配置时按各翻译源默认（google 400 更贴合小说段落，microsoft/baidu 接口支持大块）
-      var limit = cfg.chunk || { google: 400, microsoft: 4500, baidu: 580, deepseek: 3000 }[cfg.translator] || 400;
+      var limit = cfg.chunk || { google: 400, microsoft: 4500, baidu: 580, deepseek: 1500 }[cfg.translator] || 400;
       var chunks = buildChunks(paragraphs, limit);
       if (!chunks.length) {
         restore();
@@ -832,7 +846,10 @@ async function handleProxy() {
     result.ok = true;
     result.translation = translation;
   } catch (e) {
-    result.error = String((e && e.message) || e);
+    const msg = String((e && e.message) || e);
+    result.error = /timeout|超时/i.test(msg)
+      ? "翻译接口请求超时：接口响应太慢，请重试；若仍超时可在插件参数里调小 chunk 分块，或更换更快的翻译源"
+      : msg;
   }
   doneWithResponse(200, {
     "Content-Type": "application/json; charset=utf-8",
@@ -885,6 +902,3 @@ function handleInject() {
     }
   } catch (err) { }
 });
-
-
-
