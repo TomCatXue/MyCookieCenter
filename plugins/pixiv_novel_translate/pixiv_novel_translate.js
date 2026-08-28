@@ -52,7 +52,7 @@ const $ = new Env("Pixiv 小说翻译");
   };
 }
 
-const SCRIPT_VERSION = "20260828-r14";
+const SCRIPT_VERSION = "20260828-r15";
 
 const PXTC_LANG_MAP = {
   "zh-CN": { google: "zh-CN", microsoft: "zh-Hans", baidu: "zh", deepseek: "Simplified Chinese" },
@@ -291,10 +291,14 @@ let _pxtcGoogleProxy = null;
 async function googleTranslateViaProxy(texts, target, proxy) {
   const arr = texts.map(String);
   if (!arr.length) return [];
+  // 自动补全 /translate 路径：允许用户填裸域名（https://xxx.workers.dev）
+  // 或带路径（https://xxx.workers.dev/translate），避免请求落到根路径返回 not found。
+  let base = String(proxy.url || "").replace(/\/+$/, "");
+  if (!/\/translate$/.test(base)) base += "/translate";
   const headers = { "Content-Type": "application/json" };
   if (proxy.token) headers["x-worker-token"] = proxy.token;
   const res = await $.post({
-    url: proxy.url + "?t=google&l=" + encodeURIComponent(target),
+    url: base + "?t=google&l=" + encodeURIComponent(target),
     headers: headers,
     body: JSON.stringify({ texts: arr })
   });

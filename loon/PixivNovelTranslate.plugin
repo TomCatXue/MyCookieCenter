@@ -22,7 +22,7 @@ deepseek_api_url = input,https://api.deepseek.com/v1/chat/completions,tag=DeepSe
 deepseek_api_key = input,,tag=DeepSeek API Key,desc=DeepSeek 开放平台 API Key（不填则面板中该翻译源标记为未配置）
 deepseek_model = input,deepseek-v4-flash,tag=DeepSeek模型,desc=deepseek-v4-flash 快速便宜 deepseek-v4-pro 更强更贵
 # Google Worker 代理（可选）：填了 Google 翻译走 Worker 代理，不直连 Google；缓解设备 IP 被 429
-google_proxy_url = input,,tag=Google代理地址,desc=Cloudflare Worker 地址（如 https://xxx.workers.dev/translate），不填则直连 Google
+google_proxy_url = input,,tag=Google代理地址,desc=Cloudflare Worker 地址（如 https://xxx.workers.dev，插件自动补全 /translate），不填则直连 Google
 google_proxy_token = input,,tag=Google代理Token,desc=Worker 鉴权 Token（部署 Worker 时设置的 WORKER_TOKEN）
 # 单批最大字符数: 100~3000，不填则按翻译源默认(google 2000 / 微软 4500 / 百度 2000 / deepseek 1500)；每批会自动合并多段一次请求
 chunk = input,,tag=单批字符数,desc=越大每批能装越多内容、请求次数越少；越小越细粒度、边翻边显示更顺滑
@@ -32,9 +32,9 @@ hostname = app-api.pixiv.net
 
 [Script]
 # 页面注入：往小说阅读页插入“译”按钮
-http-response ^https://app-api\.pixiv\.net/webview/v2/novel script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/pixiv_novel_translate/pixiv_novel_translate.js?v=20260828-r14, requires-body=true, timeout=30, tag=Pixiv 小说翻译-页面注入, enable={pixiv_novel_translate}, argument=[{translator},{target},{chunk},{ms_key},{baidu_appid},{baidu_secret},{deepseek_api_url},{deepseek_api_key},{deepseek_model},{google_proxy_url},{google_proxy_token}]
+http-response ^https://app-api\.pixiv\.net/webview/v2/novel script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/pixiv_novel_translate/pixiv_novel_translate.js?v=20260828-r15, requires-body=true, timeout=30, tag=Pixiv 小说翻译-页面注入, enable={pixiv_novel_translate}, argument=[{translator},{target},{chunk},{ms_key},{baidu_appid},{baidu_secret},{deepseek_api_url},{deepseek_api_key},{deepseek_model},{google_proxy_url},{google_proxy_token}]
 
 # 翻译中转：拦截 pxtrans 请求，由脚本直接返回 JSON 响应（不经过 Pixiv 上游）。
 # 注意：Loon 的 http-request 中 $done({status,headers,body}) 会被当作“修改请求”发往上游，
 # 导致上游返回 404、页面显示 [object Object]；必须用 $done({response:{...}}) 直接返回。
-http-request ^https://app-api\.pixiv\.net/pxtrans script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/pixiv_novel_translate/pixiv_novel_translate.js?v=20260828-r14, requires-body=true, timeout=120, tag=Pixiv 小说翻译-翻译中转, enable={pixiv_novel_translate}, argument=[{translator},{target},{chunk},{ms_key},{baidu_appid},{baidu_secret},{deepseek_api_url},{deepseek_api_key},{deepseek_model},{google_proxy_url},{google_proxy_token}]
+http-request ^https://app-api\.pixiv\.net/pxtrans script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/pixiv_novel_translate/pixiv_novel_translate.js?v=20260828-r15, requires-body=true, timeout=120, tag=Pixiv 小说翻译-翻译中转, enable={pixiv_novel_translate}, argument=[{translator},{target},{chunk},{ms_key},{baidu_appid},{baidu_secret},{deepseek_api_url},{deepseek_api_key},{deepseek_model},{google_proxy_url},{google_proxy_token}]

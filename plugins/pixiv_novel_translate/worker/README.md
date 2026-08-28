@@ -39,10 +39,11 @@ Google 免费翻译接口会按 IP 维度限流（429）。Worker 的价值：
 部署后 Worker 的地址形如：
 
 ```
-https://pxtc-translate.<你的子域>.workers.dev/translate
+https://pxtc-translate.<你的子域>.workers.dev
 ```
 
-（注意末尾带 `/translate`）
+> 插件会自动补全 `/translate` 路径，这里填裸域名即可（填带 `/translate` 的完整地址也兼容）。
+> 自己用 curl 测试时 URL 要**手动带** `/translate`。
 
 ### 5. 在 Loon 插件中配置
 
@@ -50,7 +51,7 @@ https://pxtc-translate.<你的子域>.workers.dev/translate
 
 | 参数 | 填什么 |
 |---|---|
-| `Google代理地址` | 上面的 Worker 地址（含 `/translate`） |
+| `Google代理地址` | 上面的 Worker 地址（裸域名即可，`/translate` 会自动补全） |
 | `Google代理Token` | 步骤 2 中设置的 `WORKER_TOKEN`（没设置就留空） |
 
 保存后重新导入插件、刷新小说页即可。**不填代理地址则直连 Google**（原有行为不变）。
