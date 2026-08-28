@@ -1,8 +1,8 @@
 /*
 ------------------------------------------
 @Name: Pixiv 小说翻译
-@Version: 1.1.0
-@Desc: 在 Pixiv 小说阅读页注入翻译按钮，支持 Google 免费接口 / 微软翻译 / 百度翻译
+@Version: 1.2.0
+@Desc: 在 Pixiv 小说阅读页注入翻译按钮，支持 Google 免费接口 / 微软翻译 / 百度翻译 / DeepSeek AI
 @Author: TomCatXue
 @Date: 2026-08-28
 
@@ -25,7 +25,7 @@ function Env(t) { return new class { constructor(t) { this.name = t, this.startT
 
 const $ = new Env("Pixiv 小说翻译");
 
-const SCRIPT_VERSION = "20260828-r6";
+const SCRIPT_VERSION = "20260828-r7";
 
 const PXTC_LANG_MAP = {
   "zh-CN": { google: "zh-CN", microsoft: "zh-Hans", baidu: "zh", deepseek: "Simplified Chinese" },
@@ -623,17 +623,17 @@ function __pxtc_client() {
       if (selT) cfg.translator = selT.value;
       if (selL) cfg.target = selL.value;
       if (cfg.translator === "microsoft" && !cfg.hasMs) {
-        setStatus("请先在插件参数中填写微软 Key", "#c0392b");
+        setStatus("微软翻译未配置：请到 Loon 插件参数填写「微软翻译Key」", "#c0392b");
         busy = false;
         return;
       }
       if (cfg.translator === "baidu" && !cfg.hasBaidu) {
-        setStatus("请先填写百度 AppID 和密钥", "#c0392b");
+        setStatus("百度翻译未配置：请到 Loon 插件参数填写「百度AppID」和「百度密钥」", "#c0392b");
         busy = false;
         return;
       }
       if (cfg.translator === "deepseek" && !cfg.hasDeepSeek) {
-        setStatus("请先在插件参数中填写 DeepSeek API Key", "#c0392b");
+        setStatus("DeepSeek 未配置：请到 Loon 插件参数填写「DeepSeek API Key」", "#c0392b");
         busy = false;
         return;
       }
@@ -701,9 +701,9 @@ function __pxtc_client() {
       panel.style.display = "none";
       var translatorOptions =
         '<option value="google">Google 免费</option>' +
-        '<option value="microsoft"' + (cfg.hasMs ? "" : " disabled") + ">微软翻译</option>" +
-        '<option value="baidu"' + (cfg.hasBaidu ? "" : " disabled") + ">百度翻译</option>" +
-        '<option value="deepseek"' + (cfg.hasDeepSeek ? "" : " disabled") + ">DeepSeek AI</option>";
+        '<option value="microsoft">微软翻译' + (cfg.hasMs ? "" : "（未配置）") + "</option>" +
+        '<option value="baidu">百度翻译' + (cfg.hasBaidu ? "" : "（未配置）") + "</option>" +
+        '<option value="deepseek">DeepSeek AI' + (cfg.hasDeepSeek ? "" : "（未配置）") + "</option>";
       var targetOptions =
         '<option value="zh-CN">简体中文</option>' +
         '<option value="zh-TW">繁體中文</option>' +

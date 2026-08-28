@@ -1,10 +1,11 @@
 # Pixiv 小说翻译
 
-在 Pixiv 小说阅读页右下角注入一个“译”按钮，点击后弹出翻译面板，支持三种翻译源：
+在 Pixiv 小说阅读页右下角注入一个“译”按钮，点击后弹出翻译面板，支持四种翻译源：
 
 - **Google 免费接口**：`translate.google.hk/translate_a/single`，无需 Key，有频率限制
 - **微软翻译**：Azure Translator 文本翻译 API，需要 `Ocp-Apim-Subscription-Key`
 - **百度翻译**：通用文本翻译 API，需要 AppID 和密钥
+- **DeepSeek AI**：兼容 OpenAI 格式的 Chat Completions 接口，需要 API Key
 
 ## 安装
 
@@ -17,14 +18,17 @@
 
 | 参数 | 默认值 | 说明 |
 |---|---|---|
-| `translator` | `google` | 默认翻译源：`google` / `microsoft` / `baidu` |
+| `translator` | `google` | 默认翻译源：`google` / `microsoft` / `baidu` / `deepseek` |
 | `target` | `zh-CN` | 目标语言：`zh-CN` / `zh-TW` / `en` / `ja` / `ko` |
 | `ms_key` | 空 | 选择微软翻译时填写订阅 Key |
 | `baidu_appid` | 空 | 选择百度翻译时填写应用 ID |
 | `baidu_secret` | 空 | 选择百度翻译时填写密钥 |
-| `chunk` | 按翻译源 | 分块大小（字数），范围 100~3000；不填时 google 默认 400、微软 4500、百度 580。调小会让译文更细粒度、边翻边显示更顺滑（请求次数相应增多） |
+| `deepseek_api_url` | `https://api.deepseek.com/v1/chat/completions` | 选择 DeepSeek 时填写接口地址（兼容 OpenAI 格式即可） |
+| `deepseek_api_key` | 空 | 选择 DeepSeek 时填写 API Key |
+| `deepseek_model` | `deepseek-v4-flash` | 选择 DeepSeek 时填写模型名；`deepseek-v4-flash` 快速便宜，`deepseek-v4-pro` 更强更贵 |
+| `chunk` | 按翻译源 | 分块大小（字数），范围 100~3000；不填时 google 默认 400、微软 4500、百度 580、deepseek 3000。调小会让译文更细粒度、边翻边显示更顺滑（请求次数相应增多） |
 
-页面面板内也可临时切换翻译源和目标语言；需要 Key 的翻译源只有配置了对应参数才会可用。
+页面面板内可切换翻译源和目标语言；未配置密钥的翻译源会标注“（未配置）”，选中后点击“翻译全文”会提示到 Loon 插件参数中填写对应密钥。
 
 ## 目标语言
 
@@ -48,5 +52,5 @@
 ## 注意
 
 - Google 免费接口是网页版接口，非商用 API，调用过于频繁会被限流（返回 429 + HTML 页面，Loon 侧会显示 `JSON Parse error: Unrecognized token '<'`）。已内置多层防御：`translate.googleapis.com` 优先 + 三条域名轮换 + 页面本地缓存（重复段落不打 Google）+ 限流识别与 60 秒持久化退避（**仅当全部域名都 429 才进入窗口**，单个域名 429 会继续尝试下一个可用域名）+ 窗口内快速失败并停止整篇翻译。429 属于 IP 维度风控，若经常触发，最有效的手段是更换代理节点（换个出口 IP）
-- 微软翻译与百度翻译为付费/限额 API，密钥只在 Loon 脚本侧使用，不会下发到页面
-- 需要 Loon 保持脚本最新版，插件内已带 `?v=20260828-r5` 版本参数
+- 微软翻译、百度翻译与 DeepSeek 为付费/限额 API，密钥只在 Loon 脚本侧使用，不会下发到页面
+- 需要 Loon 保持脚本最新版，插件内已带 `?v=20260828-r7` 版本参数
