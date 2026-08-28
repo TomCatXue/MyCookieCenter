@@ -702,7 +702,7 @@ function __pxtc_client() {
       var translatorOptions =
         '<option value="google">Google 免费</option>' +
         '<option value="microsoft"' + (cfg.hasMs ? "" : " disabled") + ">微软翻译</option>" +
-        '<option value="baidu"' + (cfg.hasBaidu ? "" : " disabled") + ">百度翻译</option>' +
+        '<option value="baidu"' + (cfg.hasBaidu ? "" : " disabled") + ">百度翻译</option>" +
         '<option value="deepseek"' + (cfg.hasDeepSeek ? "" : " disabled") + ">DeepSeek AI</option>";
       var targetOptions =
         '<option value="zh-CN">简体中文</option>' +
