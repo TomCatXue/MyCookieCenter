@@ -822,6 +822,9 @@ function __pxtc_client() {
 
     // 并发翻译：最多 3 批同时在途，每批内部可含多段；完成一批渲染一批（增量显示）。
     // google 保留一个批次间隔，配合“一批多段”把请求频率压下来，降低 429。
+    // 并发翻译：Google/微软/百度可并发 3 批；DeepSeek 等 AI 接口有严格 RPM 限制，
+    // 并发会触发 "rpm exhausted"，降到串行（1 批），每批之间天然有时间间隔。
+    // 遇限流时自动重试一次（等 20s），而非直接放弃整篇翻译。
     async function runTranslate(batches) {
       var sections = [];
       for (var i = 0; i < batches.length; i++) {
@@ -847,14 +850,34 @@ function __pxtc_client() {
             done++;
           } catch (e) {
             var errMsg = String((e && e.message) || e);
-            failed++;
-            sections[idx].innerHTML = '<div class="pxtc-orig">' + renderParagraphs(batches[idx].join("\n\n")) +
-              '</div><div class="pxtc-error">' + esc(errMsg) + "</div>";
-            // 遇到限流立即停止整篇翻译，避免继续请求加剧限流
-            if (errMsg.indexOf("限流") !== -1) {
-              stopped = true;
-              setStatus("Google 限流，已停止本次翻译，请稍后再试", "#c0392b");
-              if (panel) panel.style.display = "none";
+            // 遇到限流（Google 429 / DeepSeek rpm exhausted）：等 20s 重试一次，
+            // 而非直接放弃——RPM 限制通常 1 分钟内恢复，重试大概率成功
+            if (/限流|429|rpm|rate.?limit/i.test(errMsg) && !stopped) {
+              setStatus("翻译源限流，等待 20 秒后重试…", "#c0392b");
+              await sleep(20000);
+              if (stopped) break;
+              try {
+                var texts2 = batches[idx];
+                var trans2 = await translateBatch(texts2);
+                fill(sections[idx], texts2, trans2);
+                done++;
+                // 重试成功后如果还是限流类翻译源，降速继续
+              } catch (e2) {
+                var errMsg2 = String((e2 && e2.message) || e2);
+                failed++;
+                sections[idx].innerHTML = '<div class="pxtc-orig">' + renderParagraphs(batches[idx].join("\n\n")) +
+                  '</div><div class="pxtc-error">' + esc(errMsg2) + "</div>";
+                // 重试仍失败，停止整篇翻译
+                if (/限流|429|rpm|rate.?limit/i.test(errMsg2)) {
+                  stopped = true;
+                  setStatus("翻译源持续限流，已停止，请稍后再试", "#c0392b");
+                  if (panel) panel.style.display = "none";
+                }
+              }
+            } else {
+              failed++;
+              sections[idx].innerHTML = '<div class="pxtc-orig">' + renderParagraphs(batches[idx].join("\n\n")) +
+                '</div><div class="pxtc-error">' + esc(errMsg) + "</div>";
             }
           }
           setStatus("翻译中 " + (done + failed) + "/" + batches.length, "");
@@ -863,7 +886,8 @@ function __pxtc_client() {
         }
       }
       var workers = [];
-      var CONCURRENCY = 3;
+      // AI 翻译源（deepseek）有 RPM 限制，并发会触发限流；其他翻译源可并发 3 批
+      var CONCURRENCY = (cfg.translator === "deepseek") ? 1 : 3;
       var count = Math.min(CONCURRENCY, batches.length);
       for (var w = 0; w < count; w++) workers.push(worker());
       await Promise.all(workers);
