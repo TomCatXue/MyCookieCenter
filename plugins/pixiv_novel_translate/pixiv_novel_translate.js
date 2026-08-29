@@ -1123,9 +1123,16 @@ async function handleProxy() {
     if (msg.indexOf("__PXTC_TIMEOUT__") !== -1) {
       // 真正的 60 秒超时：接口确实响应太慢
       result.error = "翻译接口请求超时：接口响应太慢，请重试；若仍超时可在插件参数里调小 chunk 分块，或更换更快的翻译源";
+    } else if (/rpm exhausted|rate.?limit|429|限流/i.test(msg)) {
+      // 翻译源自身的限流（DeepSeek RPM、Google 429 等），不是连接问题
+      result.error = msg + "（翻译源限流，请降低翻译频率或更换翻译源）";
+    } else if (/\b(ECONNREFUSED|ENOTFOUND|ETIMEDOUT|ECONNRESET|socket|network)\b/i.test(msg) ||
+               /status.0|请求失败|请求超时/.test(msg)) {
+      // 连接失败（代理节点不可用等）：提示检查节点
+      result.error = msg + "（请检查 Loon 代理节点是否可用，或配置 Google Worker 代理）";
     } else if (msg && msg !== "[object Object]") {
-      // 非超时错误（连接失败/代理节点不可用等）：保留原始错误，避免误导为“接口太慢/调 chunk”
-      result.error = msg + "（若为连接失败，请检查 Loon 代理节点是否可用，或配置 Google Worker 代理）";
+      // 其他 API 错误（DeepSeek error 等）：保留原始错误，不追加误导提示
+      result.error = msg;
     } else {
       result.error = "翻译请求失败：请检查 Loon 代理节点是否可用，或配置 Google Worker 代理（插件参数 google_proxy_url）";
     }
