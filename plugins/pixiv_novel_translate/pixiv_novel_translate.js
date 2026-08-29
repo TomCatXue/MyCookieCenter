@@ -66,8 +66,9 @@ const PXTC_LANG_MAP = {
 // 阅读体验更好（代价是请求次数增多，配合 googleapis.com 优先 + 限流窗口 + 本地缓存兜底）。
 // 可在 Loon 参数里用 chunk=xxx 调整分块大小（100~3000）。
 // 每请求默认字符上限：google/baidu 支持一次请求带多段（多 q），因此比原来提高；
-// deepseek 默认 1500：LLM 生成较慢，一批 4~6 段降低单次响应耗时。
-const PXTC_CHUNK_LIMITS = { google: 2000, microsoft: 4500, baidu: 2000, deepseek: 1500 };
+// deepseek 默认 3000：LLM 有固定请求开销，大批量更高效（批数减半，总耗时下降）；
+// 串行/低并发下 RPM 不是瓶颈，不会触发限流。
+const PXTC_CHUNK_LIMITS = { google: 2000, microsoft: 4500, baidu: 2000, deepseek: 3000 };
 
 function parseArgument() {
   const out = {};
@@ -705,7 +706,7 @@ function __pxtc_client() {
       google: { chars: 2000, segs: 20 },
       microsoft: { chars: 4500, segs: 50 },
       baidu: { chars: 2000, segs: 10 },
-      deepseek: { chars: 1500, segs: 6 }
+      deepseek: { chars: 3000, segs: 12 }
     };
 
     function buildBatches(paragraphs, limits) {
@@ -853,8 +854,8 @@ function __pxtc_client() {
             // 遇到限流（Google 429 / DeepSeek rpm exhausted）：等 20s 重试一次，
             // 而非直接放弃——RPM 限制通常 1 分钟内恢复，重试大概率成功
             if (/限流|429|rpm|rate.?limit/i.test(errMsg) && !stopped) {
-              setStatus("翻译源限流，等待 20 秒后重试…", "#c0392b");
-              await sleep(20000);
+              setStatus("翻译源限流，等待 15 秒后重试…", "#c0392b");
+              await sleep(15000);
               if (stopped) break;
               try {
                 var texts2 = batches[idx];
@@ -886,10 +887,10 @@ function __pxtc_client() {
         }
       }
       var workers = [];
-      // AI 翻译源（deepseek）有 RPM 限制，并发会触发限流；其他翻译源可并发 3 批
-      var CONCURRENCY = (cfg.translator === "deepseek") ? 1 : 3;
+      // AI 翻译源（deepseek）并发 2（错开 3 秒避免同时触发 RPM）；其他翻译源可并发 3 批
+      var CONCURRENCY = (cfg.translator === "deepseek") ? 2 : 3;
       var count = Math.min(CONCURRENCY, batches.length);
-      for (var w = 0; w < count; w++) workers.push(worker());
+      for (var w = 0; w < count; w++) { if (w > 0) await sleep(3000); workers.push(worker()); }
       await Promise.all(workers);
       if (stopped) return; // 限流提示已在上面显示，不再覆盖
       if (failed) setStatus("完成，失败 " + failed + " 批", "#c0392b");
@@ -1151,7 +1152,7 @@ async function handleProxy() {
       // 翻译源自身的限流（DeepSeek RPM、Google 429 等），不是连接问题
       result.error = msg + "（翻译源限流，请降低翻译频率或更换翻译源）";
     } else if (/\b(ECONNREFUSED|ENOTFOUND|ETIMEDOUT|ECONNRESET|socket|network)\b/i.test(msg) ||
-               /status.0|请求失败|请求超时/.test(msg)) {
+      /status.0|请求失败|请求超时/.test(msg)) {
       // 连接失败（代理节点不可用等）：提示检查节点
       result.error = msg + "（请检查 Loon 代理节点是否可用，或配置 Google Worker 代理）";
     } else if (msg && msg !== "[object Object]") {
