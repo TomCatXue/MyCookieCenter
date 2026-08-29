@@ -1018,7 +1018,7 @@ function __pxtc_client() {
       selL.value = cfg.target;
       statusEl = panel.querySelector(".pxtc-status");
       panel.querySelector(".pxtc-close").addEventListener("click", function () { panel.style.display = "none"; });
-      panel.querySelector(".pxtc-primary").addEventListener("click", doTranslate);
+      panel.querySelector(".pxtc-primary").addEventListener("click", function () { panel.style.display = "none"; doTranslate(); });
       panel.querySelectorAll(".pxtc-btn")[1].addEventListener("click", restore);
       document.body.appendChild(panel);
     }
