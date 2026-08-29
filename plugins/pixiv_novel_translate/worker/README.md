@@ -78,11 +78,11 @@ curl -X POST "https://pxtc-translate.xxx.workers.dev/translate?t=google&l=zh-CN"
 **正确返回**（新版 worker.js，返回 `translations` 数组，且带 `v` 版本字段）：
 
 ```json
-{"v":"20260828-batch-v3","ok":true,"translation":"","translations":["你好","测试"],"src":"google","error":""}
+{"v":"20260829-batch-v4","ok":true,"translation":"","translations":["你好","测试"],"src":"google","error":""}
 ```
 
 **判断部署版本**：
-- 返回里**有 `v` 字段且为 `20260828-batch-v3`** → 是最新版，看 `translations` 数组是否正常
+- 返回里**有 `v` 字段且为 `20260829-batch-v4`** → 是最新版，看 `translations` 数组是否正常
 - 返回里 `translation` 的值像 `{文本：[你好，测试]}`（把 JSON 当文本翻译了）→ 先检查是否 **PowerShell 剥引号**（改用上面文件方式重试）；若文件方式仍如此才是**部署了旧版**，回 Worker 编辑页把 `worker/worker.js` 最新内容完整粘贴覆盖，重新 Save and Deploy
 - 如果你之前用旧版翻译过同一段文本并绑定了 KV 缓存，新版缓存 key 已加 `v2` 前缀，会**自动绕过旧缓存**，无需手动清理
 
@@ -100,6 +100,6 @@ curl -X POST "https://pxtc-translate.xxx.workers.dev/translate?t=google&l=zh-CN"
 ## 注意
 
 - Worker 免费版每天 10 万次请求，小说翻译一般够用
-- Worker 的 Google 接口用的是 `/translate_a/single`（单段 GET），不像 Loon 脚本直连用 `/translate_a/t`（多段 POST）。因此 Worker 模式下批量翻译是逐段调用 Google，请求数比直连多。好处是 Worker IP 不容易被 429
+- Worker 的 Google 接口**v4 起改用 `/translate_a/t`（client=gtx，POST 多 q 批量）**，与 Loon 脚本直连逻辑一致：10 段 = 1 次 Google 请求（旧版 v3 是逐段 `/single` 调用，10 段 = 10 次请求，容易 429）
 - 如果 Worker 也被 429，可以在 Worker 代码里调整 `hosts` 数组顺序或添加更多 Google 域名
 - `google_proxy_url` 只对 Google 翻译源生效，微软/百度/DeepSeek 不走 Worker

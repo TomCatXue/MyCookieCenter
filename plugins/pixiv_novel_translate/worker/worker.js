@@ -15,8 +15,8 @@
  * 部署说明见同目录 README.md
  */
 const DEFAULT_TOKEN = "CHANGE_ME_PLEASE"; // 仅本机直跑测试用；正式部署用 env.WORKER_TOKEN
-// 版本自证：所有响应带 v 字段。curl 返回里能看到 v=20260828-batch-v3 才说明部署的是最新版。
-const WORKER_VERSION = "20260828-batch-v3";
+// 版本自证：所有响应带 v 字段。curl 返回里能看到 v=20260829-batch-v4 才说明部署的是最新版。
+const WORKER_VERSION = "20260829-batch-v4";
 
 export default {
   async fetch(request, env, ctx) {
@@ -71,20 +71,33 @@ export default {
     // —— 批量翻译（多段）——
     if (texts) {
       try {
-        const translations = [];
+        const translations = new Array(texts.length).fill(null);
+        const needIdx = [];
+        const need = [];
+        // 1) 逐段查 KV 缓存，命中直接填充
         for (let i = 0; i < texts.length; i++) {
-          // 逐段缓存查询（key 带 v2 前缀，绕过旧版缓存污染）
           const ck = await sha256("v2\n" + target + "\n" + texts[i]);
           if (env.PXTC_CACHE) {
             try {
               const hit = await env.PXTC_CACHE.get(ck);
-              if (hit !== null) { translations.push(hit); continue; }
+              if (hit !== null) { translations[i] = hit; continue; }
             } catch (e) { /* 缓存不可用则跳过 */ }
           }
-          const t = await googleTranslate(texts[i], target);
-          translations.push(t);
-          if (env.PXTC_CACHE && t) {
-            try { await env.PXTC_CACHE.put(ck, t, { expirationTtl: 30 * 24 * 3600 }); } catch (e) { }
+          needIdx.push(i);
+          need.push(texts[i]);
+        }
+        // 2) 未命中缓存的段打包成一次 /translate_a/t 批量请求（client=gtx，多 q），
+        //    10 段 = 1 次 Google 请求，而非旧的 10 次逐段调用，大幅降低 429 概率
+        if (need.length) {
+          const batchResult = await googleTranslateBatch(need, target);
+          for (let j = 0; j < batchResult.length; j++) {
+            translations[needIdx[j]] = batchResult[j];
+            if (env.PXTC_CACHE && batchResult[j]) {
+              try {
+                const ck = await sha256("v2\n" + target + "\n" + need[j]);
+                await env.PXTC_CACHE.put(ck, batchResult[j], { expirationTtl: 30 * 24 * 3600 });
+              } catch (e) { }
+            }
           }
         }
         return json({ ok: true, translation: "", translations, src, error: "" });
@@ -126,6 +139,63 @@ export default {
   }
 };
 
+// 批量翻译：用 /translate_a/t（client=gtx，POST 多 q），一次请求翻多段，
+// 10 段 = 1 次 Google 请求，是避免 429 最有效的办法（与插件直连逻辑一致）。
+async function googleTranslateBatch(texts, target) {
+  const arr = texts.map(String);
+  if (!arr.length) return [];
+  const params = new URLSearchParams({ client: "gtx", dt: "t", sl: "auto", tl: target });
+  const body = arr.map(function (t) { return "q=" + encodeURIComponent(t); }).join("&");
+  // googleapis.com 最不易 429，放最前；hk 经常返回 reCAPTCHA 页
+  const hosts = [
+    "https://translate.googleapis.com/translate_a/t",
+    "https://translate.google.com/translate_a/t",
+    "https://translate.google.hk/translate_a/t"
+  ];
+  let lastErr = null;
+  let sawRateLimit = false;
+  for (let i = 0; i < hosts.length; i++) {
+    try {
+      const res = await fetch(hosts[i] + "?" + params, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded", "User-Agent": "Mozilla/5.0" },
+        body: body,
+        cf: { cacheTtl: 0 }
+      });
+      const raw = await res.text();
+      if (res.status === 429 || /^\s*</.test(raw) || /unusual traffic|异常流量/i.test(raw)) {
+        sawRateLimit = true;
+        lastErr = new Error("Google 限流（429）");
+        continue;
+      }
+      let data;
+      try { data = JSON.parse(raw); } catch (e) {
+        lastErr = new Error("Google 返回非 JSON");
+        continue;
+      }
+      if (!Array.isArray(data) || data.length !== arr.length) {
+        // 段数不匹配：退回逐段翻译
+        const fallback = [];
+        for (let k = 0; k < arr.length; k++) fallback.push(await googleTranslate(arr[k], target));
+        return fallback;
+      }
+      const out = [];
+      for (let j = 0; j < arr.length; j++) {
+        const item = data[j];
+        if (Array.isArray(item) && typeof item[0] === "string") out.push(item[0]);
+        else if (typeof item === "string") out.push(item);
+        else { lastErr = new Error("Google 返回段数不匹配"); break; }
+      }
+      if (out.length === arr.length) return out;
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  if (sawRateLimit) throw new Error("Google 限流（429）");
+  throw lastErr || new Error("Google 翻译失败");
+}
+
+// 单段翻译：用 /translate_a/single（client=it），作为批量接口段数不匹配时的兜底
 async function googleTranslate(text, target) {
   const hosts = [
     "https://translate.google.hk/translate_a/single",
