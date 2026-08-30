@@ -85,8 +85,8 @@ AND, ((DOMAIN-SUFFIX, chat.bilibili.com), (OR, ((DOMAIN-KEYWORD, stun), (DOMAIN-
 # 分区列表修复 (来自 BiliUniverse 完整数据，带官方高分辨率图标与 uri 跳转路由)
 http-request ^https?:\/\/app\.bili(bili\.com|api\.net)\/x\/v2\/(channel\/region\/list|region\/index)\? script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/bilibili/bilibili_region.js, requires-body=true, timeout=10, tag=[哔哩哔哩]分区列表修复
 
-# 扫码登录修复 (使用 $httpClient 代理转发纯净 Web 授权请求，确保服务端数据库真正确认登录入库)
-http-request ^https:\/\/passport\.bilibili\.com\/x\/passport-login\/web\/qrcode\/(check|confirm|scene) script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/bilibili/bilibili_qrcode.js, requires-body=true, tag=[哔哩哔哩]扫码登录修复
+# 扫码登录修复 (精确解锁确认按钮，并通过 $httpClient 代理完成真实服务端授权入库)
+http-request ^https:\/\/passport\.bilibili\.com\/x\/passport-login\/web\/qrcode\/(check|confirm|scene) script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/bilibili/bilibili_qrcode.js, requires-body=true, timeout=10, tag=[哔哩哔哩]扫码登录修复
 
 # 空降助手与评论区/动态净化 (完全采用 Kelee / Sparkle 官方 master 脚本)
 http-request ^https:\/\/(?:grpc\.biliapi\.net|app\.bilibili\.com)\/bilibili\.community\.service\.dm\.v1\.DM\/DmSegMobile$ script-path = https://raw.githubusercontent.com/kokoryh/Sparkle/master/dist/bilibili.protobuf.request.js, requires-body = true, binary-body-mode = true, timeout=10, tag = [哔哩哔哩]空降助手, enable={sponsorBlock}, argument=[{logLevel}]
