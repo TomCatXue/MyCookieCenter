@@ -29,17 +29,16 @@ DOMAIN-SUFFIX,hdslb.com,DIRECT
 #  URL Rewrite — 分区修复 / 消息推送修复 / 会员解锁
 # ===========================================================
 [URL Rewrite]
-# --- 分区修复（region/list 已废弃返回 404，mock 返回有效分区列表，解决分区显示未知） ---
+# --- 分区修复（仅分区列表接口） ---
+# 旧版 JSON 分区列表：region/list 已废弃返回 404，mock 返回有效分区列表兜底
 ^https?:\/\/app\.bilibili\.com\/x\/v2\/channel\/region\/list\? mock-response-body data-type=text status-code=200 data='{"code":0,"message":"0","ttl":1,"data":[{"tid":1,"reid":0,"name":"动画"},{"tid":13,"reid":0,"name":"番剧"},{"tid":167,"reid":0,"name":"国创"},{"tid":3,"reid":0,"name":"音乐"},{"tid":129,"reid":0,"name":"舞蹈"},{"tid":4,"reid":0,"name":"游戏"},{"tid":36,"reid":0,"name":"知识"},{"tid":188,"reid":0,"name":"科技"},{"tid":234,"reid":0,"name":"运动"},{"tid":223,"reid":0,"name":"汽车"},{"tid":160,"reid":0,"name":"生活"},{"tid":211,"reid":0,"name":"美食"},{"tid":217,"reid":0,"name":"动物圈"},{"tid":119,"reid":0,"name":"鬼畜"},{"tid":155,"reid":0,"name":"时尚"},{"tid":5,"reid":0,"name":"娱乐"},{"tid":181,"reid":0,"name":"影视"},{"tid":177,"reid":0,"name":"纪录片"},{"tid":23,"reid":0,"name":"电影"},{"tid":11,"reid":0,"name":"电视剧"}]}'
-# --- 分区修复（番剧频道 mobi_app 修正） ---
-^https:\/\/api\.bilibili\.com\/pgc\/page\/channel\?(.*)\&mobi_app=iphone\&(.*)$ header https://api.bilibili.com/pgc/page/channel?$1&mobi_app=iphone_i&$2
+# 新版 gRPC 分区列表：RegionIndex（分区首页）/ RegionList（分区列表）/ RankRegionList（分区排行）补 grpc-status 头
+^https:\/\/grpc\.biliapi\.net\/bilibili\.app\.show\.v1\.(Mixture\/(RegionIndex|RegionList)|Rank\/RankRegionList)$ response-header-add grpc-status 0
 
 # --- 消息推送修复（P2P tracker 清洗） ---
 ^https:\/\/api\.bilibili\.com\/x\/pd-proxy\/tracker\? response-body-json-jq '.data[][]?="stun.chat.bilibili.com:3478"'
 # --- 消息推送修复（tracker 配置强制走 wss，官方配置） ---
 ^https:\/\/api\.live\.bilibili\.com\/xlive\/open-interface\/v2\/tracker\/conf\? response-body-json-jq '.data.domains=["wss://tracker.chat.bilibili.com"]'
-# --- 分区修复（gRPC 分区接口补 grpc-status 头，防止 App 解析失败显示未知） ---
-^https:\/\/grpc\.biliapi\.net\/bilibili\.app\.show\.v1\.(Mixture\/(RegionIndex|RegionList)|Rank\/RankRegionList)$ response-header-add grpc-status 0
 
 # --- 会员解锁（账号 VIP 状态显示） ---
 ^https:\/\/app\.bilibili\.com\/x\/v2\/account\/myinfo\? response-body-json-jq '.data.vip |= if . != null and .status == 0 then . + { status: 1, type: 2, due_date: 9005270400000, role: 15 } else . end'
