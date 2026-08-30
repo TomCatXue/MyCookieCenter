@@ -8,7 +8,7 @@
 
 [Argument]
 sponsorBlock = switch,true,tag=空降助手,desc=跳过插播/OP/ED/高能空降等段落
-VIP = switch,true,tag=[启用]会员,desc=开启解锁高画质
+VIP = switch,false,tag=[启用]会员,desc=开启解锁高画质(开启前请务必填写下方凭证，否则会弹窗报警)
 Authorization = input,"",tag=Authorization,desc=填入抓包获取的 authorization 凭证
 UserAgent = input,"",tag=UserAgent,desc=填入抓包获取的 user-agent 凭证(可选)
 displayUpList = select,"show","hide","auto",tag=[动态]中[最常访问]的显示方式
@@ -21,7 +21,7 @@ logLevel = select,"error","warn","info","debug","off",tag=日志等级
 DOMAIN,bsbsb.top,DIRECT
 # B站接口禁用/拦截
 DOMAIN,api.biliapi.com,REJECT
-DOMAIN,app.biliapi.com,REJECT
+DOMAIN,app.bilibili.com,REJECT
 DOMAIN,api.biliapi.net,REJECT
 DOMAIN,app.biliapi.net,REJECT
 # 过滤P2P/STUN
@@ -68,12 +68,12 @@ http-request ^https:\/\/(grpc\.biliapi\.net|app\.bilibili\.com)\/bilibili\.commu
 http-request ^https:\/\/(grpc\.biliapi\.net|app\.bilibili\.com)\/bilibili\.(app\.viewunite\.v1\.View\/View|main\.community\.reply\.v1\.Reply\/MainList)$ script-path=https://raw.githubusercontent.com/kokoryh/Sparkle/refs/heads/master/dist/bilibili.protobuf.request.js, argument=[{purifyComment}, {logLevel}], requires-body=true, binary-body-mode=true, timeout=10, enable={optimizeRequest}, tag=bilibili.request
 http-response ^https:\/\/api\.live\.bilibili\.com\/xlive\/(app-interface\/v2\/index\/feed|app-room\/v1\/index\/getInfoBy(Room|User))\? script-path=https://raw.githubusercontent.com/kokoryh/Sparkle/refs/heads/master/dist/bilibili.json.js, requires-body=true, tag=bilibili.live
 http-response ^https:\/\/www\.bilibili\.com\/blackboard\/era\/.+\.html\? script-path=https://raw.githubusercontent.com/kokoryh/Sparkle/refs/heads/master/dist/webpage.bilibili.js, requires-body=true, tag=bilibili.webpage
-http-response ^https:\/\/(grpc\.biliapi\.net|app\.bilibili\.com)\/bilibili\.(app\.(show\.v1\.Popular\/Index|dynamic\.v2\.Dynamic\/DynAll|view(unite)?\.v1\.View\/(View|ViewProgress|RelatesFeed|AIRelateAsync)|playurl\.v1\.PlayURL\/PlayView|playerunite\.v1\.Player\/PlayViewUnite)|polymer\.app\.search\.v1\.Search\/SearchAll|community\.service\.dm\.v1\.DM\/DmView|main\.community\.reply\.v1\.Reply\/MainList|pgc\.gateway\.player\.v2\.PlayURL\/PlayView)$ script-path=https://raw.githubusercontent.com/kokoryh/Sparkle/refs/heads/master/dist/bilibili.protobuf.response.js, argument=[displayUpList={displayUpList}, purifyComment={purifyComment}, sponsorBlock={sponsorBlock}, logLevel={logLevel}], requires-body=true, binary-body-mode=true, tag=bilibili.protobuf
+http-response ^https:\/\/(grpc\.biliapi\.net|app\.bilibili\.com)\/bilibili\.(app\.(show\.v1\.Popular\/Index|dynamic\.v2\.Dynamic\/DynAll|view(unite)?\.v1\.View\/(View|ViewProgress|RelatesFeed|AIRelateAsync)|playurl\.v1\.PlayURL\/PlayView|playerunite\.v1\.Player\/PlayViewUnite)|polymer\.app\.search\.v1\.Search\/SearchAll|community\.service\.dm\.v1\.DM\/DmView|main\.community\.reply\.v1\.Reply\/MainList|pgc\.gateway\.player\.v2\.PlayURL\/PlayView)$ script-path=https://raw.githubusercontent.com/kokoryh/Sparkle/refs/heads/master/dist/bilibili.protobuf.response.js, argument=[{displayUpList}, {purifyComment}, {sponsorBlock}, {logLevel}], requires-body=true, binary-body-mode=true, tag=bilibili.protobuf
 
 # 大会员画质解锁播放增强 (注入 VIP 授权凭证)
-http-request ^https?:\/\/(?:grpc\.biliapi\.net|app\.bilibili\.com|app\.biliapi\.net)\/(?:bilibili\.app\.(?:playerunite\.v1\.Player\/PlayViewUnite|playurl\.v1\.PlayURL\/PlayView)|bilibili\.pgc\.gateway\.player\.v2\.PlayURL\/PlayView) script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/bilibili/bilibili_vip.js, binary-body-mode=true, requires-body=true, timeout=60, tag=大会员播放, enable={VIP}, argument=[Authorization={Authorization},UserAgent={UserAgent}]
+http-request ^https?:\/\/(?:grpc\.biliapi\.net|app\.bilibili\.com|app\.biliapi\.net)\/(?:bilibili\.app\.(?:playerunite\.v1\.Player\/PlayViewUnite|playurl\.v1\.PlayURL\/PlayView)|bilibili\.pgc\.gateway\.player\.v2\.PlayURL\/PlayView) script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/bilibili/bilibili_vip.js, binary-body-mode=true, requires-body=true, timeout=60, tag=大会员播放, enable={VIP}, argument=[{Authorization},{UserAgent}]
 # 大会员接口请求增强 (注入 VIP 授权凭证)
-http-request ^https?:\/\/app\.bilibili\.com\/x\/v\d\/(account\/(myinfo|mine)|feed\/index)\? script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/bilibili/bilibili_vip.js, requires-body=true, timeout=60, tag=大会员接口, enable={VIP}, argument=[Authorization={Authorization},UserAgent={UserAgent}]
+http-request ^https?:\/\/app\.bilibili\.com\/x\/v\d\/(account\/(myinfo|mine)|feed\/index)\? script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/bilibili/bilibili_vip.js, requires-body=true, timeout=60, tag=大会员接口, enable={VIP}, argument=[{Authorization},{UserAgent}]
 
 [MITM]
 hostname = grpc.biliapi.net, app.bilibili.com, api.bilibili.com, api.live.bilibili.com, www.bilibili.com, line3-h5-mobile-api.biligame.com, app.biliapi.net
