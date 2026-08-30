@@ -1,5 +1,5 @@
 #!name = 哔哩哔哩 𝕏
-#!desc = 哔哩哔哩增强版：包含SponsorBlock空降助手、全部分区修复(可点击跳转)、扫码登录原生签名修复、1080P高码率画质解锁、大会员凭证解锁，不含页面布局修改。
+#!desc = 哔哩哔哩增强版：包含SponsorBlock空降助手、全部分区修复(含港澳台及修复跳转)、扫码登录原生签名修复、1080P高码率画质解锁、大会员凭证解锁，不含页面布局修改。
 #!openUrl = https://apps.apple.com/app/id736536022
 #!author = TomCatXue
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
@@ -45,6 +45,11 @@ AND, ((DOMAIN-SUFFIX, chat.bilibili.com), (OR, ((DOMAIN-KEYWORD, stun), (DOMAIN-
 
 # 移除大会员广告、移除右上角活动入口
 ^https:\/\/ap[ip]\.bilibili\.com\/x\/(?:resource\/(?:top\/activity|patch\/tab(?:\/v2)?)|v2\/search\/square|vip\/ads\/materials)\? mock-response-body data-type=text status-code=200 data="{\"code\":-404,\"message\":\"-404\",\"ttl\":1,\"data\":null}"
+
+# 修复废弃专题中心/公开课/新歌热榜接口与H5重定向
+^https:\/\/api\.bilibili\.com\/topic\/getlist\? mock-response-body data-type=text status-code=200 data="{\"code\":0,\"message\":\"0\",\"ttl\":1,\"data\":{\"list\":[],\"total\":0}}"
+^https:\/\/www\.bilibili\.com\/h5\/mooc header 302 https://m.bilibili.com/cheese/home?navhide=1
+^https:\/\/www\.bilibili\.com\/h5\/musicplus header 302 https://www.bilibili.com/v/popular/rank/music
 
 # 移除播放页开通会员横幅
 ^https:\/\/api\.bilibili\.com\/pgc\/activity\/deliver\/material\/receive\? mock-response-body data-type=text status-code=200 data="{\"code\":0,\"data\":{\"closeType\":\"close_win\",\"container\":[],\"showTime\":\"\"},\"message\":\"success\"}"
@@ -105,4 +110,4 @@ http-response ^https:\/\/api\.live\.bilibili\.com\/xlive\/(?:app-interface\/v2\/
 http-request ^https?:\/\/(?:grpc\.biliapi\.net|app\.bilibili\.com|app\.biliapi\.net)\/(?:bilibili\.app\.(?:playerunite\.v1\.Player\/PlayViewUnite|playurl\.v1\.PlayURL\/PlayView)|bilibili\.pgc\.gateway\.player\.v2\.PlayURL\/PlayView) script-path = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/bilibili/bilibili_vip.js, binary-body-mode = true, requires-body = true, timeout = 60, tag = [哔哩哔哩]大会员凭证注入, enable={VIP}, argument=[{Authorization},{UserAgent}]
 
 [MITM]
-hostname = grpc.biliapi.net, app.bilibili.com, api.bilibili.com, api.live.bilibili.com, passport.bilibili.com, line3-h5-mobile-api.biligame.com
+hostname = grpc.biliapi.net, app.bilibili.com, api.bilibili.com, api.live.bilibili.com, passport.bilibili.com, line3-h5-mobile-api.biligame.com, www.bilibili.com
