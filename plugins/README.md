@@ -26,6 +26,8 @@
 |---|---|---|---|---|
 | — | QQ空间·清净 | 广告退散，空间清净（纯规则型，无需脚本） | [`loon/QzoneAdBlock.plugin`](../loon/QzoneAdBlock.plugin) | ✅ 已验证 |
 | [`wxread/`](./wxread/) | 微信读书·优雅收录 | 轻触订阅人数，好书即刻入架 | [`loon/WeReadEnhance.plugin`](../loon/WeReadEnhance.plugin) | ✅ 已验证 |
+| [`github_push_time/`](./github_push_time/) | GitHub·星标推送时间 | 在 GitHub App 星标列表语言后显示最近推送时间 | [`loon/GitHubPushTime.plugin`](../loon/GitHubPushTime.plugin) | ✅ 已验证 |
+| [`pixiv_novel_translate/`](./pixiv_novel_translate/) | Pixiv·小说翻译 | 在 Pixiv 小说阅读页注入翻译按钮，支持 Google / 微软 / 百度 | [`loon/PixivNovelTranslate.plugin`](../loon/PixivNovelTranslate.plugin) | ✅ 已验证 |
 
 ---
 
@@ -48,5 +50,5 @@ feat(plugins): 新增 <插件名> 插件(<一句话功能>)
 
 ## 致谢
 
-- `qzone/` 广告屏蔽规则源自 [zqzess/rule_for_quantumultX](https://github.com/zqzess/rule_for_quantumultX)（MIT License）
+- `QzoneAdBlock` 广告屏蔽规则源自 [zqzess/rule_for_quantumultX](https://github.com/zqzess/rule_for_quantumultX)（MIT License）
 - `wxread/` 微信读书优雅收录脚本，基于社区脚本重构整合

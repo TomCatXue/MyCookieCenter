@@ -17,6 +17,8 @@
 4. `plugins/README.md` —— 在插件清单表格追加一行
 5. 根目录 `README.md` —— 在"特殊功能插件"章节追加一行
 
+> **命名例外**：PascalCase 约定适用于本仓库自维护的插件。`loon/camscanner.plugin` 为外部依赖入口（脚本与图标指向上游仓库 [MaYIHEI/paperclip](https://github.com/MaYIHEI/paperclip) / [MaYIHEI/pin](https://github.com/MaYIHEI/pin)），为与上游一致保留小写命名，不在此规范约束内。
+
 ---
 
 ## 第 1 步：创建脚本目录
@@ -40,7 +42,7 @@ mkdir plugins/myplugin
 
 ## 第 4 步：创建 Loon 插件文件
 
-在 `loon/` 下新建 `MyPlugin.plugin`（PascalCase 命名），包含元信息 + 参数开关 + MITM + Script 规则：
+在 `loon/` 下新建 `MyPlugin.plugin`（PascalCase 命名；外部依赖入口如 `camscanner.plugin` 例外），包含元信息 + 参数开关 + MITM + Script 规则：
 
 ```ini
 #!name = 插件显示名

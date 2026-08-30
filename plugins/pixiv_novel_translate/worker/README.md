@@ -1,0 +1,105 @@
+# Cloudflare Worker 部署指南
+
+## 作用
+
+Google 免费翻译接口会按 IP 维度限流（429）。Worker 的价值：
+
+- **换 IP**：把 Google 请求从你的设备/代理节点 IP 转移到 Cloudflare Worker IP
+- **服务端缓存**：KV 缓存译文，重复段落 0 上游请求
+
+## 部署步骤
+
+### 1. 创建 Worker
+
+1. 登录 [Cloudflare Dashboard](https://dash.cloudflare.com) → Workers & Pages → Create
+2. 随便取个名字（如 `pxtc-translate`），点 **Deploy**
+3. 点 **Edit Code**，把 [`worker.js`](./worker.js) 的内容粘贴进去，覆盖默认代码
+4. 点 **Save and Deploy**
+
+### 2. 设置鉴权 Token（可选但建议）
+
+在 Worker 编辑页 → **Settings** → **Variables** → 添加：
+
+| 变量名 | 值 | 说明 |
+|---|---|---|
+| `WORKER_TOKEN` | 自定义一串随机字符串 | 鉴权 Token，防止他人盗用 |
+
+> 如果不设置，Worker 用默认值 `CHANGE_ME_PLEASE`，此时**不鉴权**，任何人都能调用。正式使用建议设置。
+
+### 3. 创建 KV 缓存（可选）
+
+1. Dashboard → Workers & Pages → **KV** → Create a namespace，取名 `PXTC_CACHE`
+2. 回到 Worker → **Settings** → **Bindings** → Add binding
+3. Variable name 填 `PXTC_CACHE`，KV namespace 选刚创建的
+
+> 不绑定 KV 也能用，只是没有服务端缓存。
+
+### 4. 获取 Worker 地址
+
+部署后 Worker 的地址形如：
+
+```
+https://pxtc-translate.<你的子域>.workers.dev
+```
+
+> 插件会自动补全 `/translate` 路径，这里填裸域名即可（填带 `/translate` 的完整地址也兼容）。
+> 自己用 curl 测试时 URL 要**手动带** `/translate`。
+
+### 5. 在 Loon 插件中配置
+
+打开 Loon → 插件 → Pixiv 小说翻译 → 参数设置：
+
+| 参数 | 填什么 |
+|---|---|
+| `Google代理地址` | 上面的 Worker 地址（裸域名即可，`/translate` 会自动补全） |
+| `Google代理Token` | 步骤 2 中设置的 `WORKER_TOKEN`（没设置就留空） |
+
+保存后重新导入插件、刷新小说页即可。**不填代理地址则直连 Google**（原有行为不变）。
+
+## 验证
+
+> ⚠️ **Windows PowerShell 用户必读**：`curl.exe --data-raw '{"texts":[...]}'` 里的**双引号会被 PowerShell 剥掉**，实际发出的 body 变成 `{texts:[...]}`（非法 JSON），Worker 会把它当单段文本翻译、返回 `translation:"{文本：...}"`——**这是测试命令的坑，不是代码问题**。请改用**文件方式**发送 JSON body：
+>
+> ```powershell
+> Set-Content -Path body.json -Value '{"texts":["hello","world"]}' -Encoding UTF8
+> curl.exe -X POST "https://pxtc-translate.xxx.workers.dev/translate?t=google&l=zh-CN" -H "Content-Type: application/json" --data-binary "@body.json"
+> ```
+>
+> 插件（Loon）内部用 JS `fetch` 发请求，引号不会丢，不受此问题影响。
+
+在终端发一条批量测试请求（**必须发批量格式 `{texts:[...]}`**，这才是插件实际发送的格式）：
+
+```bash
+curl -X POST "https://pxtc-translate.xxx.workers.dev/translate?t=google&l=zh-CN" \
+  -H "Content-Type: application/json" \
+  -d '{"texts":["こんにちは","テスト"]}'
+```
+
+**正确返回**（新版 worker.js，返回 `translations` 数组，且带 `v` 版本字段）：
+
+```json
+{"v":"20260829-batch-v4","ok":true,"translation":"","translations":["你好","测试"],"src":"google","error":""}
+```
+
+**判断部署版本**：
+- 返回里**有 `v` 字段且为 `20260829-batch-v4`** → 是最新版，看 `translations` 数组是否正常
+- 返回里 `translation` 的值像 `{文本：[你好，测试]}`（把 JSON 当文本翻译了）→ 先检查是否 **PowerShell 剥引号**（改用上面文件方式重试）；若文件方式仍如此才是**部署了旧版**，回 Worker 编辑页把 `worker/worker.js` 最新内容完整粘贴覆盖，重新 Save and Deploy
+- 如果你之前用旧版翻译过同一段文本并绑定了 KV 缓存，新版缓存 key 已加 `v2` 前缀，会**自动绕过旧缓存**，无需手动清理
+
+## 架构
+
+```
+没有 Worker：
+  Pixiv 页面 → Loon 脚本 → 直连 Google → 429（你的 IP 被限流）
+
+有 Worker：
+  Pixiv 页面 → Loon 脚本 → Worker → Google
+                                ↑ KV 缓存命中时直接返回，不打 Google
+```
+
+## 注意
+
+- Worker 免费版每天 10 万次请求，小说翻译一般够用
+- Worker 的 Google 接口**v4 起改用 `/translate_a/t`（client=gtx，POST 多 q 批量）**，与 Loon 脚本直连逻辑一致：10 段 = 1 次 Google 请求（旧版 v3 是逐段 `/single` 调用，10 段 = 10 次请求，容易 429）
+- 如果 Worker 也被 429，可以在 Worker 代码里调整 `hosts` 数组顺序或添加更多 Google 域名
+- `google_proxy_url` 只对 Google 翻译源生效，微软/百度/DeepSeek 不走 Worker

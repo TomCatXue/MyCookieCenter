@@ -5,6 +5,9 @@ keys.local.json
 .env
 .env.local
 
+# HAR 抓包文件（含 vid/skey/refreshToken 等真实凭据，禁止入库）
+*.har
+
 # 本地逆向笔记（不进公开仓库）
 project.md
 notes/
