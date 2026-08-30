@@ -1,0 +1,53 @@
+#!name = 哔哩哔哩 𝕏
+#!desc = B站功能修复：会员解锁、分区修复、消息推送修复；不修改页面布局。
+#!author = TomCatXue
+#!homepage = https://github.com/TomCatXue/MyCookieCenter
+#!icon = https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/a9/db/da/a9dbdad4-a3de-2916-3676-178b353e8767/AppIcon-0-0-1x_U007epad-0-1-0-85-220.png/400x400bb.webp
+#!tag = Bilibili,会员,分区修复,消息推送
+
+# ===========================================================
+#  用户可配置开关
+# ===========================================================
+[Argument]
+VIP = switch, false, tag=[启用]会员, desc = 关闭开关将不对此选项生效
+Authorization = input, "", tag=Authorization, desc = 选填
+UserAgent = input, "", tag=UserAgent, desc = 选填
+
+# ===========================================================
+#  规则 — 消息推送修复（阻止 STUN/P2P 干扰聊天推送）
+# ===========================================================
+[Rule]
+# 阻止 chat.bilibili.com 的 STUN/tracker 请求，修复消息推送
+AND,((DOMAIN-SUFFIX,chat.bilibili.com), (OR,((DOMAIN-KEYWORD,stun), (DOMAIN-KEYWORD,tracker)))),REJECT
+
+# ===========================================================
+#  Rewrite — 分区修复 / 消息推送修复 / 会员解锁
+# ===========================================================
+[Rewrite]
+# --- 分区修复（番剧频道 mobi_app 修正） ---
+^https:\/\/api\.bilibili\.com\/pgc\/page\/channel\?(.*)\&mobi_app=iphone\&(.*)$ header https://api.bilibili.com/pgc/page/channel?$1&mobi_app=iphone_i&$2
+
+# --- 消息推送修复（P2P tracker 清洗） ---
+^https:\/\/api\.bilibili\.com\/x\/pd-proxy\/tracker\? response-body-json-jq '.data[][]?="stun.chat.bilibili.com:3478"'
+
+# --- 会员解锁（账号 VIP 状态显示） ---
+^https:\/\/app\.bilibili\.com\/x\/v2\/account\/myinfo\? response-body-json-jq '.data.vip |= if . != null and .status == 0 then . + { status: 1, type: 2, due_date: 9005270400000, role: 15 } else . end'
+
+# --- 番剧付费墙（删除付费信息） ---
+^https:\/\/api\.bilibili\.com\/pgc\/view\/v2\/app\/season\? response-body-json-jq 'del(.data.payment)'
+
+# ===========================================================
+#  Script — 会员解锁
+# ===========================================================
+[Script]
+# 会员解锁（播放请求注入 Authorization）
+http-request ^https?:\/\/(?:grpc\.biliapi\.net|app\.bilibili\.com|app\.biliapi\.net)\/(?:bilibili\.app\.(?:playerunite\.v1\.Player\/PlayViewUnite|playurl\.v1\.PlayURL\/PlayView)|bilibili\.pgc\.gateway\.player\.v2\.PlayURL\/PlayView) script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/bilibili/bilibili_vip.js, binary-body-mode=true, requires-body=true, timeout=60, tag=会员, enable={VIP}, argument=[{Authorization},{UserAgent}]
+
+# 会员解锁（画质提升响应）
+http-response ^https?:\/\/app\.bilibili\.com\/x\/v\d\/(account\/(myinfo|mine)|(feed\/index))\? script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/bilibili/bilibili_vip.js, requires-body=true, timeout=60, tag=画质, enable={VIP}, argument=[{Authorization},{UserAgent}]
+
+# ===========================================================
+#  MITM
+# ===========================================================
+[MITM]
+hostname = *.bilibili.*,*.biliapi.*,*.biligame.*
