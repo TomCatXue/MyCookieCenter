@@ -10,6 +10,17 @@
  *   http-response ^...account/myinfo|mine|feed/index... script-path=bilibili_vip.js, enable={VIP}, argument=[{Authorization},{UserAgent}]
  */
 
+// ============================================================
+// http-response（画质/会员状态）模式：仅需透传，不检查参数、不弹通知
+// ============================================================
+if (typeof $response !== 'undefined') {
+    $done({});
+    return;
+}
+
+// ============================================================
+// http-request（播放请求注入 Authorization）模式
+// ============================================================
 const header = $request.headers;
 
 let authorization = $argument?.Authorization;

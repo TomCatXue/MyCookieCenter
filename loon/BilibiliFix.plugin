@@ -29,8 +29,6 @@ DOMAIN-SUFFIX,hdslb.com,DIRECT
 #  URL Rewrite — 分区修复 / 消息推送修复 / 会员解锁
 # ===========================================================
 [URL Rewrite]
-# --- 分区修复（废弃接口 region/list 404，mock 空数据） ---
-^https?:\/\/app\.bilibili\.com\/x\/v2\/channel\/region\/list\? mock-response-body data-type=text data='{"code":0,"message":"0","ttl":1,"data":[]}' status-code=200
 # --- 分区修复（番剧频道 mobi_app 修正） ---
 ^https:\/\/api\.bilibili\.com\/pgc\/page\/channel\?(.*)\&mobi_app=iphone\&(.*)$ header https://api.bilibili.com/pgc/page/channel?$1&mobi_app=iphone_i&$2
 
