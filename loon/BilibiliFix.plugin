@@ -1,29 +1,36 @@
 #!name = 哔哩哔哩 𝕏
-#!desc = B站功能修复：会员解锁、分区修复、消息推送修复；不修改页面布局。
+#!desc = B站功能修复：空降助手、会员解锁、分区修复、消息推送修复；不修改页面布局。
 #!author = TomCatXue
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/a9/db/da/a9dbdad4-a3de-2916-3676-178b353e8767/AppIcon-0-0-1x_U007epad-0-1-0-85-220.png/400x400bb.webp
-#!tag = Bilibili,会员,分区修复,消息推送
+#!tag = Bilibili,空降助手,会员,分区修复,消息推送
 
 # ===========================================================
 #  用户可配置开关
 # ===========================================================
 [Argument]
+sponsorBlock = switch, true, tag=跳过[视频-插播], desc = 关闭开关将不对此选项生效
 VIP = switch, false, tag=[启用]会员, desc = 关闭开关将不对此选项生效
 Authorization = input, "", tag=Authorization, desc = 选填
 UserAgent = input, "", tag=UserAgent, desc = 选填
 
 # ===========================================================
-#  规则 — 消息推送修复（阻止 STUN/P2P 干扰聊天推送）
+#  规则 — 空降助手 API 直连 / 消息推送修复 / fawkes 功能开关放行
 # ===========================================================
 [Rule]
+# bsbsb.top = 空降助手 SponsorBlock API 服务器，需直连
+DOMAIN,bsbsb.top,DIRECT
 # 阻止 chat.bilibili.com 的 STUN/tracker 请求，修复消息推送
 AND,((DOMAIN-SUFFIX,chat.bilibili.com), (OR,((DOMAIN-KEYWORD,stun), (DOMAIN-KEYWORD,tracker)))),REJECT
+# 放行 hdslb.com（fawkes 功能开关），修复消息推送红点
+DOMAIN-SUFFIX,hdslb.com,DIRECT
 
 # ===========================================================
-#  Rewrite — 分区修复 / 消息推送修复 / 会员解锁
+#  URL Rewrite — 分区修复 / 消息推送修复 / 会员解锁
 # ===========================================================
-[Rewrite]
+[URL Rewrite]
+# --- 分区修复（废弃接口 region/list 404，mock 空数据） ---
+^https?:\/\/app\.bilibili\.com\/x\/v2\/channel\/region\/list\? mock-response-body data-type=text data='{"code":0,"message":"0","ttl":1,"data":[]}' status-code=200
 # --- 分区修复（番剧频道 mobi_app 修正） ---
 ^https:\/\/api\.bilibili\.com\/pgc\/page\/channel\?(.*)\&mobi_app=iphone\&(.*)$ header https://api.bilibili.com/pgc/page/channel?$1&mobi_app=iphone_i&$2
 
@@ -37,9 +44,15 @@ AND,((DOMAIN-SUFFIX,chat.bilibili.com), (OR,((DOMAIN-KEYWORD,stun), (DOMAIN-KEYW
 ^https:\/\/api\.bilibili\.com\/pgc\/view\/v2\/app\/season\? response-body-json-jq 'del(.data.payment)'
 
 # ===========================================================
-#  Script — 会员解锁
+#  Script — 空降助手 / 会员解锁
 # ===========================================================
 [Script]
+# 空降助手（插播跳过 — 弹幕分段请求，注入空降弹幕）
+http-request ^https:\/\/(grpc\.biliapi\.net|app\.bilibili\.com)\/bilibili\.community\.service\.dm\.v1\.DM\/DmSegMobile$ script-path=https://raw.githubusercontent.com/kokoryh/Sparkle/master/dist/bilibili.protobuf.request.js, requires-body=true, binary-body-mode=true, timeout=10, enable={sponsorBlock}, tag=空降助手
+
+# 空降助手（插播跳过 — 视频进度响应，修补 chronos 校验使空降弹幕生效）
+http-response ^https:\/\/(grpc\.biliapi\.net|app\.bilibili\.com)\/bilibili\.(view(unite)?\.v1\.View\/ViewProgress)$ script-path=https://raw.githubusercontent.com/kokoryh/Sparkle/master/dist/bilibili.protobuf.response.js, argument=[{sponsorBlock}], requires-body=true, binary-body-mode=true, tag=空降助手
+
 # 会员解锁（播放请求注入 Authorization）
 http-request ^https?:\/\/(?:grpc\.biliapi\.net|app\.bilibili\.com|app\.biliapi\.net)\/(?:bilibili\.app\.(?:playerunite\.v1\.Player\/PlayViewUnite|playurl\.v1\.PlayURL\/PlayView)|bilibili\.pgc\.gateway\.player\.v2\.PlayURL\/PlayView) script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/bilibili/bilibili_vip.js, binary-body-mode=true, requires-body=true, timeout=60, tag=会员, enable={VIP}, argument=[{Authorization},{UserAgent}]
 
