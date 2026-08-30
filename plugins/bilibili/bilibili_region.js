@@ -1,6 +1,6 @@
 /**
- * B站全部分区列表修复脚本 (包含港澳台专属分区与各子项跳转修复) - Loon
- * 来源：BiliUniverse/Enhanced 官方完整数据与 URI 结构
+ * B站全部分区列表修复脚本 (包含港澳台专属分区，已剔除B站官方废弃失效子项) - Loon
+ * 来源：BiliUniverse/Enhanced 官方完整数据与原生客户端 URI 结构
  */
 
 const regionList = [
@@ -329,16 +329,6 @@ const regionList = [
         "type": 0
     },
     {
-        "tid": 65557,
-        "reid": 0,
-        "name": "公开课",
-        "logo": "http://i0.hdslb.com/bfs/feed-admin/99366a6ea47d7790f57699112bc1d0c6d5f0d302.png",
-        "goto": "",
-        "param": "",
-        "uri": "https://m.bilibili.com/cheese/home?navhide=1",
-        "type": 0
-    },
-    {
         "tid": 65559,
         "reid": 0,
         "name": "VLOG",
@@ -356,26 +346,6 @@ const regionList = [
         "goto": "",
         "param": "",
         "uri": "https://m.bilibili.com/cheese/home?navhide=1",
-        "type": 0
-    },
-    {
-        "tid": 65561,
-        "reid": 0,
-        "name": "专题中心",
-        "logo": "http://i0.hdslb.com/bfs/archive/5c15009ace7f8bbb22c5b46cee3995525bbd9ed0.png",
-        "goto": "",
-        "param": "",
-        "uri": "https://www.bilibili.com/blackboard/activity-list.html?navhide=1",
-        "type": 0
-    },
-    {
-        "tid": 65563,
-        "reid": 0,
-        "name": "新歌热榜",
-        "logo": "http://i0.hdslb.com/bfs/archive/518ba4a46b8ca94c0f29397e09acb345020fb867.png",
-        "goto": "",
-        "param": "",
-        "uri": "https://www.bilibili.com/v/popular/rank/music",
         "type": 0
     },
     {
