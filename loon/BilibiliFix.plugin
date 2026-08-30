@@ -85,7 +85,8 @@ AND, ((DOMAIN-SUFFIX, chat.bilibili.com), (OR, ((DOMAIN-KEYWORD, stun), (DOMAIN-
 # 分区列表修复 (来自 BiliUniverse 完整数据，带官方高分辨率图标与 uri 跳转路由)
 http-request ^https?:\/\/app\.bili(bili\.com|api\.net)\/x\/v2\/(channel\/region\/list|region\/index)\? script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/bilibili/bilibili_region.js, requires-body=true, timeout=10, tag=[哔哩哔哩]分区列表修复
 
-# 扫码登录修复 (响应阶段修正 code: -3 签名错误，杜绝请求被中断)
+# 扫码登录修复 (清理GET多余Content-Length防400错误，并修正签名错误)
+http-request ^https:\/\/passport\.bilibili\.com\/x\/passport-login\/web\/qrcode\/(check|confirm|scene) script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/bilibili/bilibili_qrcode.js, tag=[哔哩哔哩]扫码请求修复
 http-response ^https:\/\/passport\.bilibili\.com\/x\/passport-login\/web\/qrcode\/(check|confirm|scene) script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/bilibili/bilibili_qrcode.js, requires-body=true, tag=[哔哩哔哩]扫码响应修复
 
 # 空降助手与评论区/动态净化 (完全采用 Kelee / Sparkle 官方 master 脚本)
