@@ -18,7 +18,7 @@ logLevel = select,"error","warn","info","debug","off",tag=日志等级
 
 [Rule]
 # SponsorBlock服务器
-DOMAIN,bsbsb.top,PROXY
+DOMAIN,bsbsb.top,DIRECT
 # B站接口禁用/拦截
 DOMAIN,api.biliapi.com,REJECT
 DOMAIN,app.biliapi.com,REJECT
@@ -30,6 +30,12 @@ AND,((DOMAIN-SUFFIX,chat.bilibili.com), (OR,((DOMAIN-KEYWORD,stun), (DOMAIN-KEYW
 [Rewrite]
 # 修复分区列表(老版返回404，mock空数据以触发新版feed/index fallback)
 ^https:\/\/app\.bilibili\.com\/x\/v2\/channel\/region\/list\? mock-response-body data-type=text status-code=200 data='{"code":0,"message":"0","ttl":1,"data":[]}'
+
+# 新版分区接口(gRPC)状态修复，防止因代理拦截或修改导致 gRPC 抛出 transport 异常
+^https:\/\/grpc\.biliapi\.net\/bilibili\.app\.show\.v1\.(Mixture\/(RegionIndex|RegionList)|Rank\/RankRegionList)$ response-header-add grpc-status 0
+
+# 转换渠道请求为国际版，绕过区域限制或部分广告
+^https:\/\/api\.bilibili\.com\/pgc\/page\/channel\?(.*)&mobi_app=iphone&(.*)$ header https://api.bilibili.com/pgc/page/channel?$1&mobi_app=iphone_i&$2
 
 # 修复消息推送(修正fawkes配置拦截导致的推送失效。注意：不能拦截 fawkes)
 # 修正部分tracker服务器配置
