@@ -71,6 +71,7 @@ https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/<目�
 | 插件 | 功能 | 状态 |
 |---|---|---|
 | [QQ空间·清净](./loon/QzoneAdBlock.plugin) | 广告退散，空间清净（纯规则型） | ✅ 已验证 |
+| [哔哩哔哩·增强版 𝕏](./loon/BilibiliFix.plugin) | 空降助手 + 分区修复 + 扫码登录 + 1080P高码率解锁 | ✅ 已验证 |
 | [微信读书·优雅收录](./loon/WeReadEnhance.plugin) | 轻触订阅人数，好书即刻入架 | ✅ 已验证 |
 | [微信读书·自动领取](./loon/WeReadClaim.plugin) | 定时领取阅读奖励 + 每周翻牌 | ✅ 已验证 |
 | [GitHub·星标推送时间](./loon/GitHubPushTime.plugin) | 在 GitHub App 星标列表语言后显示最近推送时间 | ✅ 已验证 |

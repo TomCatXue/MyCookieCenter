@@ -22,6 +22,7 @@
 | 文件 | 说明 | 类型 |
 |---|---|---|
 | [`QzoneAdBlock.plugin`](./QzoneAdBlock.plugin) | QQ空间·清净 — 广告退散，空间清净 | 规则型（无脚本） |
+| [`BilibiliFix.plugin`](./BilibiliFix.plugin) | 哔哩哔哩·增强版 𝕏 — 空降助手、分区修复、扫码登录、画质解锁 | 脚本型 · [`plugins/bilibili/`](../plugins/bilibili/) |
 | [`WeReadEnhance.plugin`](./WeReadEnhance.plugin) | 微信读书·优雅收录 — 轻触订阅人数，好书即刻入架 | 脚本型 · [`plugins/wxread/`](../plugins/wxread/) |
 | [`WeReadClaim.plugin`](./WeReadClaim.plugin) | 微信读书·自动领取 — 定时领取阅读奖励（书币/体验卡）+ 每周翻牌 | 脚本型 · [`app/weread_claim/`](../app/weread_claim/) |
 | [`GitHubPushTime.plugin`](./GitHubPushTime.plugin) | GitHub·星标推送时间 — 在 GitHub App 星标列表语言后显示最近推送时间 | 脚本型 · [`plugins/github_push_time/`](../plugins/github_push_time/) |
