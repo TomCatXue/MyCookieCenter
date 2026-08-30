@@ -1,5 +1,5 @@
 #!name = 哔哩哔哩 𝕏
-#!desc = 哔哩哔哩增强版：包含SponsorBlock空降助手、全部分区修复(可点击跳转)、扫码登录修复(支持Web端真正登录成功)、消息推送修复、大会员画质解锁，不含页面布局修改。
+#!desc = 哔哩哔哩增强版：包含SponsorBlock空降助手、全部分区修复(可点击跳转)、扫码登录修复(完美登录Web端)、消息推送修复、大会员画质解锁，不含页面布局修改。
 #!openUrl = https://apps.apple.com/app/id736536022
 #!author = TomCatXue
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
@@ -31,6 +31,9 @@ DOMAIN, app.biliapi.net, REJECT
 AND, ((DOMAIN-SUFFIX, chat.bilibili.com), (OR, ((DOMAIN-KEYWORD, stun), (DOMAIN-KEYWORD, tracker), (DOMAIN-KEYWORD, p2p)))), REJECT
 
 [Rewrite]
+# 修复扫码登录：将存在签名Bug的 account-h5 扫码页重定向到官方纯Web授权扫码页，绕过客户端Native签名缺失
+^https:\/\/account\.bilibili\.com\/h5\/account-h5\/auth\/scan-web\?(.*)$ 302 https://passport.bilibili.com/h5-app/passport/login/scan?$1
+
 # 移除直播广告
 ^https:\/\/api\.live\.bilibili\.com\/xlive\/e-commerce-interface\/v1\/ecommerce-user\/get_shopping_info\? reject-dict
 ^https:\/\/api\.live\.bilibili\.com\/xlive\/open-interface\/v2\/tracker\/conf\? response-body-json-jq '.data.domains=["wss://tracker.chat.bilibili.com"]'
@@ -85,9 +88,6 @@ AND, ((DOMAIN-SUFFIX, chat.bilibili.com), (OR, ((DOMAIN-KEYWORD, stun), (DOMAIN-
 # 分区列表修复 (来自 BiliUniverse 完整数据，带官方高分辨率图标与 uri 跳转路由)
 http-request ^https?:\/\/app\.bili(bili\.com|api\.net)\/x\/v2\/(channel\/region\/list|region\/index)\? script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/bilibili/bilibili_region.js, requires-body=true, timeout=10, tag=[哔哩哔哩]分区列表修复
 
-# 扫码登录修复 (精确解锁确认按钮，并通过 $httpClient 代理完成真实服务端授权入库)
-http-request ^https:\/\/passport\.bilibili\.com\/x\/passport-login\/web\/qrcode\/(check|confirm|scene) script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/bilibili/bilibili_qrcode.js, requires-body=true, timeout=10, tag=[哔哩哔哩]扫码登录修复
-
 # 空降助手与评论区/动态净化 (完全采用 Kelee / Sparkle 官方 master 脚本)
 http-request ^https:\/\/(?:grpc\.biliapi\.net|app\.bilibili\.com)\/bilibili\.community\.service\.dm\.v1\.DM\/DmSegMobile$ script-path = https://raw.githubusercontent.com/kokoryh/Sparkle/master/dist/bilibili.protobuf.request.js, requires-body = true, binary-body-mode = true, timeout=10, tag = [哔哩哔哩]空降助手, enable={sponsorBlock}, argument=[{logLevel}]
 
@@ -102,4 +102,4 @@ http-request ^https?:\/\/(?:grpc\.biliapi\.net|app\.bilibili\.com|app\.biliapi\.
 http-response ^https?:\/\/app\.bilibili\.com\/x\/v\d\/(account\/(myinfo|mine)|(feed\/index))\? script-path = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/bilibili/bilibili_vip.js, requires-body = true, timeout = 60, tag = [哔哩哔哩]大会员画质, enable={VIP}, argument=[{Authorization},{UserAgent}]
 
 [MITM]
-hostname = grpc.biliapi.net, app.bilibili.com, api.bilibili.com, api.live.bilibili.com, passport.bilibili.com, line3-h5-mobile-api.biligame.com
+hostname = grpc.biliapi.net, app.bilibili.com, api.bilibili.com, api.live.bilibili.com, passport.bilibili.com, account.bilibili.com, line3-h5-mobile-api.biligame.com
