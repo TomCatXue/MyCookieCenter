@@ -1,69 +1,251 @@
-#!name = 哔哩哔哩 𝕏
-#!desc = B站功能修复：空降助手、会员解锁、分区修复、消息推送修复；不修改页面布局。
+#!name = 哔哩哔哩增强版 𝕏
+#!desc = B站增强：空降助手、SponsorBlock、分区修复、消息推送修复、播放优化、VIP状态修复
 #!author = TomCatXue
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
-#!icon = https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/a9/db/da/a9dbdad4-a3de-2916-3676-178b353e8767/AppIcon-0-0-1x_U007epad-0-1-0-85-220.png/400x400bb.webp
-#!tag = Bilibili,空降助手,会员,分区修复,消息推送
+#!tag = Bilibili,SponsorBlock,修复增强
+
 
 # ===========================================================
-#  用户可配置开关
+# 用户配置
 # ===========================================================
+
 [Argument]
-sponsorBlock = switch, true, tag=跳过[视频-插播], desc = 关闭开关将不对此选项生效
-VIP = switch, false, tag=[启用]会员, desc = 关闭开关将不对此选项生效
-Authorization = input, "", tag=Authorization, desc = 选填
-UserAgent = input, "", tag=UserAgent, desc = 选填
+
+sponsorBlock = switch,true,tag=空降助手
+
+VIP = switch,true,tag=VIP接口增强
+
+Authorization = input,"",tag=Authorization
+
+UserAgent = input,"",tag=UserAgent
+
+
 
 # ===========================================================
-#  规则 — 空降助手 API / 消息推送修复 / fawkes 功能开关放行
+# 规则
 # ===========================================================
+
 [Rule]
-# bsbsb.top = 空降助手 SponsorBlock API 服务器（官方配置用 PROXY）
+
+
+# SponsorBlock服务器
 DOMAIN,bsbsb.top,PROXY
-# 阻止 chat.bilibili.com 的 STUN/tracker/p2p 请求，修复消息推送
-AND,((DOMAIN-SUFFIX,chat.bilibili.com), (OR,((DOMAIN-KEYWORD,stun), (DOMAIN-KEYWORD,tracker), (DOMAIN-KEYWORD,p2p)))),REJECT
-# 放行 hdslb.com（fawkes 功能开关），修复消息推送红点
-DOMAIN-SUFFIX,hdslb.com,DIRECT
+
+
+# B站CDN直连
+
+DOMAIN-SUFFIX,bilivideo.com,DIRECT
+
+DOMAIN-SUFFIX,bilivideo.cn,DIRECT
+
+
+# B站接口
+
+DOMAIN-SUFFIX,bilibili.com,DIRECT
+
+DOMAIN-SUFFIX,biliapi.net,DIRECT
+
+
+
+# 清理P2P/STUN
+
+AND,((DOMAIN-SUFFIX,chat.bilibili.com),(OR,((DOMAIN-KEYWORD,stun),(DOMAIN-KEYWORD,tracker),(DOMAIN-KEYWORD,p2p)))),REJECT
+
+
 
 # ===========================================================
-#  URL Rewrite — 分区修复 / 消息推送修复 / 会员解锁
+# URL Rewrite
 # ===========================================================
+
 [URL Rewrite]
-# --- 分区修复（仅分区列表接口） ---
-# 旧版 JSON 分区列表：region/list 已废弃返回 404，mock 返回有效分区列表兜底
-^https?:\/\/app\.bilibili\.com\/x\/v2\/channel\/region\/list\? mock-response-body data-type=text status-code=200 data='{"code":0,"message":"0","ttl":1,"data":[{"tid":1,"reid":0,"name":"动画"},{"tid":13,"reid":0,"name":"番剧"},{"tid":167,"reid":0,"name":"国创"},{"tid":3,"reid":0,"name":"音乐"},{"tid":129,"reid":0,"name":"舞蹈"},{"tid":4,"reid":0,"name":"游戏"},{"tid":36,"reid":0,"name":"知识"},{"tid":188,"reid":0,"name":"科技"},{"tid":234,"reid":0,"name":"运动"},{"tid":223,"reid":0,"name":"汽车"},{"tid":160,"reid":0,"name":"生活"},{"tid":211,"reid":0,"name":"美食"},{"tid":217,"reid":0,"name":"动物圈"},{"tid":119,"reid":0,"name":"鬼畜"},{"tid":155,"reid":0,"name":"时尚"},{"tid":5,"reid":0,"name":"娱乐"},{"tid":181,"reid":0,"name":"影视"},{"tid":177,"reid":0,"name":"纪录片"},{"tid":23,"reid":0,"name":"电影"},{"tid":11,"reid":0,"name":"电视剧"}]}'
-# 新版 gRPC 分区列表：RegionIndex（分区首页）/ RegionList（分区列表）/ RankRegionList（分区排行）补 grpc-status 头
-^https:\/\/grpc\.biliapi\.net\/bilibili\.app\.show\.v1\.(Mixture\/(RegionIndex|RegionList)|Rank\/RankRegionList)$ response-header-add grpc-status 0
 
-# --- 消息推送修复（P2P tracker 清洗） ---
-^https:\/\/api\.bilibili\.com\/x\/pd-proxy\/tracker\? response-body-json-jq '.data[][]?="stun.chat.bilibili.com:3478"'
-# --- 消息推送修复（tracker 配置强制走 wss，官方配置） ---
-^https:\/\/api\.live\.bilibili\.com\/xlive\/open-interface\/v2\/tracker\/conf\? response-body-json-jq '.data.domains=["wss://tracker.chat.bilibili.com"]'
 
-# --- 会员解锁（账号 VIP 状态显示） ---
-^https:\/\/app\.bilibili\.com\/x\/v2\/account\/myinfo\? response-body-json-jq '.data.vip |= if . != null and .status == 0 then . + { status: 1, type: 2, due_date: 9005270400000, role: 15 } else . end'
 
-# --- 番剧付费墙（删除付费信息） ---
-^https:\/\/api\.bilibili\.com\/pgc\/view\/v2\/app\/season\? response-body-json-jq 'del(.data.payment)'
+# ---------------------------
+# 分区修复
+# ---------------------------
+
+
+^https:\/\/app\.bilibili\.com\/x\/v2\/channel\/region\/list\?
+mock-response-body data-type=text status-code=200 data='{"code":0,"message":"0","ttl":1,"data":[{"tid":1,"name":"动画"},{"tid":13,"name":"番剧"},{"tid":167,"name":"国创"},{"tid":3,"name":"音乐"},{"tid":129,"name":"舞蹈"},{"tid":4,"name":"游戏"},{"tid":36,"name":"知识"},{"tid":188,"name":"科技"},{"tid":234,"name":"运动"},{"tid":223,"name":"汽车"},{"tid":160,"name":"生活"},{"tid":211,"name":"美食"},{"tid":217,"name":"动物圈"},{"tid":119,"name":"鬼畜"},{"tid":155,"name":"时尚"},{"tid":5,"name":"娱乐"},{"tid":181,"name":"影视"}]}'
+
+
+
+# grpc分区状态修复
+
+^https:\/\/grpc\.biliapi\.net\/bilibili\.app\.show\.v1\.(Mixture\/(RegionIndex|RegionList)|Rank\/RankRegionList)$
+
+response-header-add grpc-status 0
+
+
+
+
+
+# ---------------------------
+# 消息推送修复
+# ---------------------------
+
+
+^https:\/\/api\.bilibili\.com\/x\/pd-proxy\/tracker\?
+
+response-body-json-jq '.data[][]?="wss://tracker.chat.bilibili.com"'
+
+
+
+^https:\/\/api\.live\.bilibili\.com\/xlive\/open-interface\/v2\/tracker\/conf\?
+
+response-body-json-jq '.data.domains=["wss://tracker.chat.bilibili.com"]'
+
+
+
+
+# ---------------------------
+# VIP状态
+# ---------------------------
+
+
+^https:\/\/app\.bilibili\.com\/x\/v2\/account\/myinfo\?
+
+response-body-json-jq '.data.vip |= if . != null then . + {"status":1,"type":2} else . end'
+
+
+
+
+
+# ---------------------------
+# 番剧支付字段
+# ---------------------------
+
+
+^https:\/\/api\.bilibili\.com\/pgc\/view\/v2\/app\/season\?
+
+response-body-json-jq 'del(.data.payment)'
+
+
+
+
 
 # ===========================================================
-#  Script — 空降助手 / 会员解锁
+# Script
 # ===========================================================
+
+
 [Script]
-# 空降助手（插播跳过 — 弹幕分段请求，注入空降弹幕）
-http-request ^https:\/\/(grpc\.biliapi\.net|app\.bilibili\.com)\/bilibili\.community\.service\.dm\.v1\.DM\/DmSegMobile$ script-path=https://raw.githubusercontent.com/kokoryh/Sparkle/master/dist/bilibili.protobuf.request.js, argument=[{sponsorBlock}], requires-body=true, binary-body-mode=true, timeout=10, enable={sponsorBlock}, tag=空降助手
 
-# 空降助手（插播跳过 — 视频进度响应，修补 chronos 校验使空降弹幕生效）
-http-response ^https:\/\/(grpc\.biliapi\.net|app\.bilibili\.com)\/bilibili\.(view(unite)?\.v1\.View\/ViewProgress)$ script-path=https://raw.githubusercontent.com/kokoryh/Sparkle/master/dist/bilibili.protobuf.response.js, argument=[{sponsorBlock}], requires-body=true, binary-body-mode=true, tag=空降助手
 
-# 会员解锁（播放请求注入 Authorization）
-http-request ^https?:\/\/(?:grpc\.biliapi\.net|app\.bilibili\.com|app\.biliapi\.net)\/(?:bilibili\.app\.(?:playerunite\.v1\.Player\/PlayViewUnite|playurl\.v1\.PlayURL\/PlayView)|bilibili\.pgc\.gateway\.player\.v2\.PlayURL\/PlayView) script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/bilibili/bilibili_vip.js, binary-body-mode=true, requires-body=true, timeout=60, tag=会员, enable={VIP}, argument=[{Authorization},{UserAgent}]
 
-# 会员解锁（画质提升响应）
-http-response ^https?:\/\/app\.bilibili\.com\/x\/v\d\/(account\/(myinfo|mine)|(feed\/index))\? script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/bilibili/bilibili_vip.js, requires-body=true, timeout=60, tag=画质, enable={VIP}, argument=[{Authorization},{UserAgent}]
+# ===========================
+# SponsorBlock
+# ===========================
+
+
+http-request ^https:\/\/grpc\.biliapi\.net\/bilibili\.community\.service\.dm\.v1\.DM\/DmView$
+
+script-path=https://raw.githubusercontent.com/kokoryh/Sparkle/master/dist/bilibili.protobuf.request.js
+
+argument=[{sponsorBlock}]
+
+requires-body=true
+
+binary-body-mode=true
+
+timeout=10
+
+enable={sponsorBlock}
+
+tag=空降助手-DmView
+
+
+
+
+
+http-request ^https:\/\/(grpc\.biliapi\.net|app\.bilibili\.com|app\.biliapi\.net)\/bilibili\.community\.service\.dm\.v1\.DM\/DmSegMobile$
+
+script-path=https://raw.githubusercontent.com/kokoryh/Sparkle/master/dist/bilibili.protobuf.request.js
+
+argument=[{sponsorBlock}]
+
+requires-body=true
+
+binary-body-mode=true
+
+timeout=10
+
+enable={sponsorBlock}
+
+tag=空降助手-DmSegMobile
+
+
+
+
+
+http-response ^https:\/\/grpc\.biliapi\.net\/bilibili\.(view(unite)?\.v1\.View|app\.view\.v1\.View)\/ViewProgress$
+
+script-path=https://raw.githubusercontent.com/kokoryh/Sparkle/master/dist/bilibili.protobuf.response.js
+
+argument=[{sponsorBlock}]
+
+requires-body=true
+
+binary-body-mode=true
+
+timeout=10
+
+enable={sponsorBlock}
+
+tag=空降助手-Progress
+
+
+
+
+
+# ===========================
+# 播放增强
+# ===========================
+
+
+http-request ^https:\/\/(grpc\.biliapi\.net|app\.bilibili\.com|app\.biliapi\.net)\/.*Play(View|URL).*$
+
+script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/bilibili/bilibili_vip.js
+
+argument=[{Authorization},{UserAgent}]
+
+binary-body-mode=true
+
+requires-body=true
+
+timeout=60
+
+enable={VIP}
+
+tag=播放增强
+
+
+
+
+
+http-response ^https:\/\/app\.bilibili\.com\/x\/v\d\/(account\/(myinfo|mine)|feed\/index)\?
+
+script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/bilibili/bilibili_vip.js
+
+argument=[{Authorization},{UserAgent}]
+
+requires-body=true
+
+timeout=60
+
+enable={VIP}
+
+tag=画质增强
+
+
+
 
 # ===========================================================
-#  MITM
+# MITM
 # ===========================================================
+
+
 [MITM]
-hostname = grpc.biliapi.net, app.bilibili.com, api.bilibili.com, api.live.bilibili.com
+
+hostname = grpc.biliapi.net,*.bilibili.com,*.biliapi.net
