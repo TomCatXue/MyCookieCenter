@@ -1,5 +1,5 @@
 #!name = 哔哩哔哩 𝕏
-#!desc = 哔哩哔哩增强版：包含SponsorBlock空降助手、全部分区修复(可点击跳转)、扫码登录修复、1080P高码率画质解锁、大会员凭证解锁，不含页面布局修改。
+#!desc = 哔哩哔哩增强版：包含SponsorBlock空降助手、全部分区修复(可点击跳转)、扫码登录修复、消息推送修复(直连实时长连接)、1080P高码率画质解锁、大会员凭证解锁，不含页面布局修改。
 #!openUrl = https://apps.apple.com/app/id736536022
 #!author = TomCatXue
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
@@ -21,6 +21,9 @@ logLevel = select, "error", "warn", "info", "debug", "off", tag = 日志等级, 
 [Rule]
 # 空降助手服务器 (必须走代理以防连接超时)
 DOMAIN, bsbsb.top, PROXY
+
+# B站实时消息与动态推送长连接通道 (强制直连，防止代理节点阻断7824端口导致推送失效)
+DOMAIN, broadcast.chat.bilibili.com, DIRECT
 
 # 阻止B站备用域名访问
 DOMAIN, api.biliapi.com, REJECT
