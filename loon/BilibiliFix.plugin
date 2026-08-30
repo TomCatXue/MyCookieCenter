@@ -1,251 +1,73 @@
 #!name = 哔哩哔哩增强版 𝕏
-#!desc = B站增强：空降助手、SponsorBlock、分区修复、消息推送修复、播放优化、VIP状态修复
+#!desc = B站修复与增强：包含空降助手(SponsorBlock)、分区接口修复(解决404/冷启动异常)、消息推送修复(放行fawkes，修正动态推送失效)以及大会员画质解锁。不包含任何修改页面布局的规则。
 #!author = TomCatXue
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
+#!icon = https://raw.githubusercontent.com/luestr/IconResource/main/App_icon/120px/Bilibili.png
 #!tag = Bilibili,SponsorBlock,修复增强
-
-
-# ===========================================================
-# 用户配置
-# ===========================================================
+#!date = 2026-08-30
 
 [Argument]
-
-sponsorBlock = switch,true,tag=空降助手
-
-VIP = switch,true,tag=VIP接口增强
-
-Authorization = input,"",tag=Authorization
-
-UserAgent = input,"",tag=UserAgent
-
-
-
-# ===========================================================
-# 规则
-# ===========================================================
+sponsorBlock = switch,true,tag=空降助手,desc=跳过插播/OP/ED/高能空降等段落
+VIP = switch,true,tag=[启用]会员,desc=开启解锁高画质
+Authorization = input,"",tag=Authorization,desc=填入抓包获取的 authorization 凭证
+UserAgent = input,"",tag=UserAgent,desc=填入抓包获取的 user-agent 凭证(可选)
+displayUpList = select,"show","hide","auto",tag=[动态]中[最常访问]的显示方式
+purifyComment = switch,true,tag=[评论区]过滤置顶评论广告
+optimizeRequest = switch,true,tag=优化评论区加载
+logLevel = select,"error","warn","info","debug","off",tag=日志等级
 
 [Rule]
-
-
 # SponsorBlock服务器
 DOMAIN,bsbsb.top,PROXY
+# B站接口禁用/拦截
+DOMAIN,api.biliapi.com,REJECT
+DOMAIN,app.biliapi.com,REJECT
+DOMAIN,api.biliapi.net,REJECT
+DOMAIN,app.biliapi.net,REJECT
+# 过滤P2P/STUN
+AND,((DOMAIN-SUFFIX,chat.bilibili.com), (OR,((DOMAIN-KEYWORD,stun), (DOMAIN-KEYWORD,tracker), (DOMAIN-KEYWORD,p2p)))),REJECT
 
+[Rewrite]
+# 修复分区列表(老版返回404，mock空数据以触发新版feed/index fallback)
+^https:\/\/app\.bilibili\.com\/x\/v2\/channel\/region\/list\? mock-response-body data-type=text status-code=200 data='{"code":0,"message":"0","ttl":1,"data":[]}'
 
-# B站CDN直连
+# 修复消息推送(修正fawkes配置拦截导致的推送失效。注意：不能拦截 fawkes)
+# 修正部分tracker服务器配置
+^https:\/\/api\.bilibili\.com\/x\/pd-proxy\/tracker\? response-body-json-jq '.data[][]?="stun.chat.bilibili.com:3478"'
+^https:\/\/api\.live\.bilibili\.com\/xlive\/open-interface\/v2\/tracker\/conf\? response-body-json-jq '.data.domains=["wss://tracker.chat.bilibili.com"]'
 
-DOMAIN-SUFFIX,bilivideo.com,DIRECT
+# 拦截及屏蔽无用及广告接口
+^https:\/\/api\.live\.bilibili\.com\/xlive\/e-commerce-interface\/v1\/ecommerce-user\/get_shopping_info\? reject-dict
+^https:\/\/line3-h5-mobile-api\.biligame\.com\/game\/live\/large_card_material\? reject-dict
+^https:\/\/app\.bilibili\.com\/x\/v2\/splash\/list\? mock-response-body data-type=text status-code=200 data='{"code":0,"message":"OK","ttl":1,"data":{"max_time":0,"min_interval":31536000,"pull_interval":31536000,"keep_ids":[],"show":[],"list":[{}],"splash_request_id":""}}'
+^https:\/\/ap[ip]\.bilibili\.com\/x\/(resource\/(top\/activity|patch\/tab(\/v2)?)|v2\/search\/square|vip\/ads\/materials)\? mock-response-body data-type=text status-code=200 data='{"code":-404,"message":"-404","ttl":1,"data":null}'
+^https:\/\/api\.bilibili\.com\/pgc\/activity\/deliver\/material\/receive\? mock-response-body data-type=text status-code=200 data='{"code":0,"data":{"closeType":"close_win","container":[],"showTime":""},"message":"success"}'
+^https:\/\/grpc\.biliapi\.net\/bilibili\.app\.interface\.v1\.Teenagers\/ModeStatus$ mock-response-body data-type=text data="AAAAABMKEQgCEgl0ZWVuYWdlcnMgAioA" mock-data-is-base64=true
+^https:\/\/grpc\.biliapi\.net\/bilibili\.app\.interface\.v1\.Search\/DefaultWords$ mock-response-body data-type=text data="AAAAACEaHeaQnOe0ouinhumikeOAgeeVquWJp+aIlnVw5Li7KAE=" mock-data-is-base64=true
+^https:\/\/grpc\.biliapi\.net\/bilibili\.app\.(view\.v1\.View\/TFInfo|viewunite\.v1\.View\/(PlayPause|ViewEndPage))$ mock-response-body data-type=text data="AAAAAAA=" mock-data-is-base64=true
+^https:\/\/grpc\.biliapi\.net\/bilibili\.app\.(interface\.v1\.(Teenagers\/ModeStatus|Search\/DefaultWords)|view\.v1\.View\/TFInfo|viewunite\.v1\.View\/(PlayPause|ViewEndPage))$ response-header-add grpc-status 0
+^https:\/\/api\.bilibili\.com\/pgc\/view\/v2\/app\/season\? response-body-json-jq 'del(.data.payment)'
+^https:\/\/api\.bilibili\.com\/pgc\/page\/channel\? response-body-json-jq '.data.modules |= map(select(.type != "TIP") | if .type == "BANNER" then .module_data.items |= map(select(.url | startswith("https://www.bilibili.com/blackboard/era/") | not)) else . end)'
+^https:\/\/app\.bilibili\.com\/x\/resource\/show\/skin\? response-body-json-del data.common_equip
+^https:\/\/app\.bilibili\.com\/x\/v2\/splash\/(show|event\/list2)\? response-body-json-jq '.data |= with_entries(if .key | IN("show", "event_list") then .value = [] else . end)'
+^https:\/\/app\.bilibili\.com\/x\/v2\/feed\/index\? response-body-json-jq 'if .data.items then .data.items |= map(select((.banner_item == null) and (.ad_info == null) and (.card_goto == "av") and (.card_type | IN("small_cover_v2", "large_cover_single_v9", "large_cover_v1")))) end'
+^https:\/\/app\.bilibili\.com\/x\/v2\/feed\/index\/story\? response-body-json-jq 'if .data.items then .data.items |= map(select((.ad_info == null) and (.card_goto | IN("vertical_ad_av", "vertical_ad_live", "vertical_ad_picture") | not)) | del(.story_cart_icon, .free_flow_toast, .image_infos, .course_info, .game_info)) end'
 
-DOMAIN-SUFFIX,bilivideo.cn,DIRECT
-
-
-# B站接口
-
-DOMAIN-SUFFIX,bilibili.com,DIRECT
-
-DOMAIN-SUFFIX,biliapi.net,DIRECT
-
-
-
-# 清理P2P/STUN
-
-AND,((DOMAIN-SUFFIX,chat.bilibili.com),(OR,((DOMAIN-KEYWORD,stun),(DOMAIN-KEYWORD,tracker),(DOMAIN-KEYWORD,p2p)))),REJECT
-
-
-
-# ===========================================================
-# URL Rewrite
-# ===========================================================
-
-[URL Rewrite]
-
-
-
-# ---------------------------
-# 分区修复
-# ---------------------------
-
-
-^https:\/\/app\.bilibili\.com\/x\/v2\/channel\/region\/list\?
-mock-response-body data-type=text status-code=200 data='{"code":0,"message":"0","ttl":1,"data":[{"tid":1,"name":"动画"},{"tid":13,"name":"番剧"},{"tid":167,"name":"国创"},{"tid":3,"name":"音乐"},{"tid":129,"name":"舞蹈"},{"tid":4,"name":"游戏"},{"tid":36,"name":"知识"},{"tid":188,"name":"科技"},{"tid":234,"name":"运动"},{"tid":223,"name":"汽车"},{"tid":160,"name":"生活"},{"tid":211,"name":"美食"},{"tid":217,"name":"动物圈"},{"tid":119,"name":"鬼畜"},{"tid":155,"name":"时尚"},{"tid":5,"name":"娱乐"},{"tid":181,"name":"影视"}]}'
-
-
-
-# grpc分区状态修复
-
-^https:\/\/grpc\.biliapi\.net\/bilibili\.app\.show\.v1\.(Mixture\/(RegionIndex|RegionList)|Rank\/RankRegionList)$
-
-response-header-add grpc-status 0
-
-
-
-
-
-# ---------------------------
-# 消息推送修复
-# ---------------------------
-
-
-^https:\/\/api\.bilibili\.com\/x\/pd-proxy\/tracker\?
-
-response-body-json-jq '.data[][]?="wss://tracker.chat.bilibili.com"'
-
-
-
-^https:\/\/api\.live\.bilibili\.com\/xlive\/open-interface\/v2\/tracker\/conf\?
-
-response-body-json-jq '.data.domains=["wss://tracker.chat.bilibili.com"]'
-
-
-
-
-# ---------------------------
-# VIP状态
-# ---------------------------
-
-
-^https:\/\/app\.bilibili\.com\/x\/v2\/account\/myinfo\?
-
-response-body-json-jq '.data.vip |= if . != null then . + {"status":1,"type":2} else . end'
-
-
-
-
-
-# ---------------------------
-# 番剧支付字段
-# ---------------------------
-
-
-^https:\/\/api\.bilibili\.com\/pgc\/view\/v2\/app\/season\?
-
-response-body-json-jq 'del(.data.payment)'
-
-
-
-
-
-# ===========================================================
-# Script
-# ===========================================================
-
+# VIP状态显示本地修改(使客户端允许选择高画质)
+^https:\/\/app\.bilibili\.com\/x\/v2\/account\/myinfo\? response-body-json-jq '.data.vip |= if . != null and .status == 0 then . + { status: 1, type: 2, due_date: 9005270400000, role: 15 } else . end'
 
 [Script]
-
-
-
-# ===========================
-# SponsorBlock
-# ===========================
-
-
-http-request ^https:\/\/grpc\.biliapi\.net\/bilibili\.community\.service\.dm\.v1\.DM\/DmView$
-
-script-path=https://raw.githubusercontent.com/kokoryh/Sparkle/master/dist/bilibili.protobuf.request.js
-
-argument=[{sponsorBlock}]
-
-requires-body=true
-
-binary-body-mode=true
-
-timeout=10
-
-enable={sponsorBlock}
-
-tag=空降助手-DmView
-
-
-
-
-
-http-request ^https:\/\/(grpc\.biliapi\.net|app\.bilibili\.com|app\.biliapi\.net)\/bilibili\.community\.service\.dm\.v1\.DM\/DmSegMobile$
-
-script-path=https://raw.githubusercontent.com/kokoryh/Sparkle/master/dist/bilibili.protobuf.request.js
-
-argument=[{sponsorBlock}]
-
-requires-body=true
-
-binary-body-mode=true
-
-timeout=10
-
-enable={sponsorBlock}
-
-tag=空降助手-DmSegMobile
-
-
-
-
-
-http-response ^https:\/\/grpc\.biliapi\.net\/bilibili\.(view(unite)?\.v1\.View|app\.view\.v1\.View)\/ViewProgress$
-
-script-path=https://raw.githubusercontent.com/kokoryh/Sparkle/master/dist/bilibili.protobuf.response.js
-
-argument=[{sponsorBlock}]
-
-requires-body=true
-
-binary-body-mode=true
-
-timeout=10
-
-enable={sponsorBlock}
-
-tag=空降助手-Progress
-
-
-
-
-
-# ===========================
-# 播放增强
-# ===========================
-
-
-http-request ^https:\/\/(grpc\.biliapi\.net|app\.bilibili\.com|app\.biliapi\.net)\/.*Play(View|URL).*$
-
-script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/bilibili/bilibili_vip.js
-
-argument=[{Authorization},{UserAgent}]
-
-binary-body-mode=true
-
-requires-body=true
-
-timeout=60
-
-enable={VIP}
-
-tag=播放增强
-
-
-
-
-
-http-response ^https:\/\/app\.bilibili\.com\/x\/v\d\/(account\/(myinfo|mine)|feed\/index)\?
-
-script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/bilibili/bilibili_vip.js
-
-argument=[{Authorization},{UserAgent}]
-
-requires-body=true
-
-timeout=60
-
-enable={VIP}
-
-tag=画质增强
-
-
-
-
-# ===========================================================
-# MITM
-# ===========================================================
-
+# SponsorBlock 空降助手和评论区/动态净化 (使用 Sparkle 官方 protobuf 脚本)
+http-request ^https:\/\/(grpc\.biliapi\.net|app\.bilibili\.com)\/bilibili\.community\.service\.dm\.v1\.DM\/DmSegMobile$ script-path=https://raw.githubusercontent.com/kokoryh/Sparkle/refs/heads/master/dist/bilibili.protobuf.request.js, argument=[{logLevel}], requires-body=true, binary-body-mode=true, timeout=10, enable={sponsorBlock}, tag=bilibili.airborne
+http-request ^https:\/\/(grpc\.biliapi\.net|app\.bilibili\.com)\/bilibili\.(app\.viewunite\.v1\.View\/View|main\.community\.reply\.v1\.Reply\/MainList)$ script-path=https://raw.githubusercontent.com/kokoryh/Sparkle/refs/heads/master/dist/bilibili.protobuf.request.js, argument=[{purifyComment}, {logLevel}], requires-body=true, binary-body-mode=true, timeout=10, enable={optimizeRequest}, tag=bilibili.request
+http-response ^https:\/\/api\.live\.bilibili\.com\/xlive\/(app-interface\/v2\/index\/feed|app-room\/v1\/index\/getInfoBy(Room|User))\? script-path=https://raw.githubusercontent.com/kokoryh/Sparkle/refs/heads/master/dist/bilibili.json.js, requires-body=true, tag=bilibili.live
+http-response ^https:\/\/www\.bilibili\.com\/blackboard\/era\/.+\.html\? script-path=https://raw.githubusercontent.com/kokoryh/Sparkle/refs/heads/master/dist/webpage.bilibili.js, requires-body=true, tag=bilibili.webpage
+http-response ^https:\/\/(grpc\.biliapi\.net|app\.bilibili\.com)\/bilibili\.(app\.(show\.v1\.Popular\/Index|dynamic\.v2\.Dynamic\/DynAll|view(unite)?\.v1\.View\/(View|ViewProgress|RelatesFeed|AIRelateAsync)|playurl\.v1\.PlayURL\/PlayView|playerunite\.v1\.Player\/PlayViewUnite)|polymer\.app\.search\.v1\.Search\/SearchAll|community\.service\.dm\.v1\.DM\/DmView|main\.community\.reply\.v1\.Reply\/MainList|pgc\.gateway\.player\.v2\.PlayURL\/PlayView)$ script-path=https://raw.githubusercontent.com/kokoryh/Sparkle/refs/heads/master/dist/bilibili.protobuf.response.js, argument=[displayUpList={displayUpList}, purifyComment={purifyComment}, sponsorBlock={sponsorBlock}, logLevel={logLevel}], requires-body=true, binary-body-mode=true, tag=bilibili.protobuf
+
+# 大会员画质解锁播放增强 (注入 VIP 授权凭证)
+http-request ^https?:\/\/(?:grpc\.biliapi\.net|app\.bilibili\.com|app\.biliapi\.net)\/(?:bilibili\.app\.(?:playerunite\.v1\.Player\/PlayViewUnite|playurl\.v1\.PlayURL\/PlayView)|bilibili\.pgc\.gateway\.player\.v2\.PlayURL\/PlayView) script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/bilibili/bilibili_vip.js, binary-body-mode=true, requires-body=true, timeout=60, tag=大会员播放, enable={VIP}, argument=[Authorization={Authorization},UserAgent={UserAgent}]
+# 大会员接口请求增强 (注入 VIP 授权凭证)
+http-request ^https?:\/\/app\.bilibili\.com\/x\/v\d\/(account\/(myinfo|mine)|feed\/index)\? script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/bilibili/bilibili_vip.js, requires-body=true, timeout=60, tag=大会员接口, enable={VIP}, argument=[Authorization={Authorization},UserAgent={UserAgent}]
 
 [MITM]
-
-hostname = grpc.biliapi.net,*.bilibili.com,*.biliapi.net
+hostname = grpc.biliapi.net, app.bilibili.com, api.bilibili.com, api.live.bilibili.com, www.bilibili.com, line3-h5-mobile-api.biligame.com, app.biliapi.net
