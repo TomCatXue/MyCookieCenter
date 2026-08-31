@@ -1,5 +1,5 @@
 #!name = 哔哩哔哩 𝕏
-#!desc = 哔哩哔哩增强版：包含SponsorBlock空降助手、全部分区修复(含港澳台及修复跳转)、扫码登录原生签名修复、1080P高码率画质解锁、大会员凭证解锁，不含页面布局修改。
+#!desc = 哔哩哔哩增强版：包含SponsorBlock空降助手、全部分区修复(含港澳台及修复跳转)、扫码登录原生签名修复、新版多Tab分类收藏升级、1080P高码率画质解锁、大会员凭证解锁。
 #!openUrl = https://apps.apple.com/app/id736536022
 #!author = TomCatXue
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
@@ -84,8 +84,8 @@ AND, ((DOMAIN-SUFFIX, chat.bilibili.com), (OR, ((DOMAIN-KEYWORD, stun), (DOMAIN-
 # 移除竖屏视频广告
 ^https:\/\/app\.bilibili\.com\/x\/v2\/feed\/index\/story\? response-body-json-jq 'if .data.items then .data.items |= map(select((.ad_info == null) and (.card_goto | IN("vertical_ad_av", "vertical_ad_live", "vertical_ad_picture") | not)) | del(.story_cart_icon, .free_flow_toast, .image_infos, .course_info, .game_info)) end'
 
-# 个人页面彻底移除大会员开通与续费大横幅，并升级我的收藏为新版多Tab聚合页面 (保留全部原生服务)
-^https:\/\/app\.bilibili\.com\/x\/v2\/account\/mine(?:\/ipad)?\? response-body-json-jq '.data |= (del(.vip_section, .vip_section_v2) | .use_modular_vip_section = true | .modular_vip_section = {} | .vip_type = 2 | .vip |= if . != null and .status == 0 then . + { status: 1, type: 2, due_date: 9005270400000, role: 15 } else . end | if .sections_v2 then .sections_v2 |= map(.items |= map(if .title == "我的收藏" or .id == 496 or .id == 3072 then .uri = "bilibili://user_center/favourite?version=2" else . end)) end | if .ipad_sections then .ipad_sections |= map(if .title == "我的收藏" or .id == 749 then .uri = "bilibili://user_center/favourite?version=2" else . end) end)'
+# 个人页面我的收藏升级为新版多Tab聚合页面 (开启全部/追番/合集/视频分类)
+^https:\/\/app\.bilibili\.com\/x\/v2\/account\/mine(?:\/ipad)?\? response-body-json-jq 'if .data.sections_v2 then .data.sections_v2 |= map(.items |= map(if .title == "我的收藏" or .id == 496 or .id == 3072 then .uri = "bilibili://user_center/favourite?version=2" else . end)) end | if .data.ipad_sections then .data.ipad_sections |= map(if .title == "我的收藏" or .id == 749 then .uri = "bilibili://user_center/favourite?version=2" else . end) end'
 
 # 非会员开启会员专属清晰度 (本地UI显示)
 ^https:\/\/app\.bilibili\.com\/x\/v2\/account\/myinfo\? response-body-json-jq '.data.vip |= if . != null and .status == 0 then . + { status: 1, type: 2, due_date: 9005270400000, role: 15 } else . end'
