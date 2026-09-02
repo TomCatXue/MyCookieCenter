@@ -34,8 +34,8 @@ function handleCapture() {
 
       sendNotify(
         '中国电信 · 权益中心',
-        '活动凭据已同步',
-        `活动批次：${code}\n鉴权状态：会话已就绪，探针已就位\n轻触此通知可快捷返回中国电信`,
+        '📡 云开通信畅，会话已同步',
+        `活动批次：${code}\n鉴权状态：凭据已归囊，探针已就位\n👉 轻触此通知可快捷返回中国电信`,
         'ctclient://'
       );
       console.log('[电信福利] 捕获活动凭据成功: ' + url);
@@ -93,23 +93,23 @@ async function handleProbe() {
 
     if (msg.includes('已参与本期活动')) {
       if (!isCron) {
-        // 手动测试：展示优雅结构化报告，并绑定跳转 Scheme
+        // 手动测试：展示雅致排版，融合诗意副标
         sendNotify(
           '中国电信 · 探针自检',
-          '服务通信正常 · 凭据有效',
-          `活动批次：${lastCode}\n当前状态：本期权益已领取（状态正常）\n监控计划：每月 1~8 号自动静默轮询\n👉 轻触通知可直接打开中国电信`,
+          '📡 云开通信畅，权益已归囊',
+          `活动批次：${lastCode}\n当前状态：本期已领（额度充足且正常）\n守护计划：每月 1~8 号自动静默轮询\n👉 轻触通知直达中国电信 APP`,
           'ctclient://'
         );
       } else {
         console.log('[电信探针] 服务端状态平稳，保持静默监控...');
       }
     } else {
-      // 状态发生变化（新批次上线 / 资格重置 / 活动放水）
+      // 状态跃迁：新活动上线放水
       $persistentStore.write(currentYearMonth, 'sx_monitor_notified_month');
       sendNotify(
-        '中国电信 · 权益放水提醒',
-        '🎁 腾讯视频会员已开抢！',
-        `活动反馈：${msg || '新一期活动已上线'}\n限量名额：腾讯视频 VIP 限量 1,000 份\n👉 轻触此通知立即打开电信 APP 秒杀`,
+        '中国电信 · 权益中心',
+        '🎁 好礼今朝至，千份待君来',
+        `腾讯视频 VIP 现已正式开抢！\n活动批次：${lastCode}\n限量名额：全省仅 1,000 份，先到先得\n👉 轻触此通知立即打开电信 APP 秒杀`,
         'ctclient://'
       );
       console.log('[电信探针] 检测到服务端状态跃迁，已推送直达通知！');
@@ -132,7 +132,6 @@ async function handleProbe() {
 // ==================== 统一通知封装（优雅排版 + 点击直达） ====================
 function sendNotify(title, subtitle, body, targetUrl = 'ctclient://') {
   if (typeof $notification !== 'undefined') {
-    // Loon 原生第 4 个参数直接传入跳转 URL 字符串
     $notification.post(title, subtitle, body, targetUrl);
   }
 }
