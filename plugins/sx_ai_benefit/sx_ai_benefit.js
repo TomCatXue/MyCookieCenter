@@ -27,15 +27,14 @@ function handleCapture() {
       $persistentStore.write(ua, 'sx_benefit_ua');
 
       const match = url.match(/(HD\d{8}[A-Za-z0-9]+)/i);
-      const code = match ? match[1] : '当前批次';
       if (match && match[1]) {
         $persistentStore.write(match[1], 'sx_monitor_current_code');
       }
 
       sendNotify(
         '中国电信 · 权益中心',
-        '📡 云开通信畅，会话已同步',
-        `活动批次：${code}\n鉴权状态：凭据已归囊，探针已就位\n👉 轻触此通知可快捷返回中国电信`,
+        '📡 云开通信畅，会话已同步。',
+        '当前状态：凭据已归囊，探针就绪待命。',
         'ctclient://'
       );
       console.log('[电信福利] 捕获活动凭据成功: ' + url);
@@ -49,13 +48,12 @@ async function handleProbe() {
   const cookie = $persistentStore.read('sx_benefit_cookie');
   const activityUrl = $persistentStore.read('sx_benefit_url');
   const ua = $persistentStore.read('sx_benefit_ua') || 'CtClient;13.2.0;iOS;26.6.1;iPhone 16e';
-  const lastCode = $persistentStore.read('sx_monitor_current_code') || '当前批次';
 
   if (!cookie || !activityUrl) {
     sendNotify(
       '中国电信 · 权益中心',
-      '未检测到活动会话',
-      '请先在电信 APP 搜索“领福利”进入一次活动页面完成自动同步。',
+      '⚠️ 未检测到有效活动会话。',
+      '当前状态：请在电信APP搜“领福利”进入同步。',
       'ctclient://'
     );
     $done({});
@@ -93,23 +91,23 @@ async function handleProbe() {
 
     if (msg.includes('已参与本期活动')) {
       if (!isCron) {
-        // 手动测试：展示雅致排版，融合诗意副标
+        // 手动测试：极简双行通知（一行诗词，一行状态）
         sendNotify(
-          '中国电信 · 探针自检',
-          '📡 云开通信畅，权益已归囊',
-          `活动批次：${lastCode}\n当前状态：本期已领（额度充足且正常）\n守护计划：每月 1~8 号自动静默轮询\n👉 轻触通知直达中国电信 APP`,
+          '中国电信 · 权益中心',
+          '📡 云开通信畅，权益已归囊。',
+          '当前状态：本期权益已领取，探针守护中。',
           'ctclient://'
         );
       } else {
         console.log('[电信探针] 服务端状态平稳，保持静默监控...');
       }
     } else {
-      // 状态跃迁：新活动上线放水
+      // 状态跃迁：新活动上线放水（一行诗词，一行状态）
       $persistentStore.write(currentYearMonth, 'sx_monitor_notified_month');
       sendNotify(
         '中国电信 · 权益中心',
-        '🎁 好礼今朝至，千份待君来',
-        `腾讯视频 VIP 现已正式开抢！\n活动批次：${lastCode}\n限量名额：全省仅 1,000 份，先到先得\n👉 轻触此通知立即打开电信 APP 秒杀`,
+        '🎁 好礼今朝至，千份待君来。',
+        '当前状态：腾讯视频会员已开抢，速去抢兑！',
         'ctclient://'
       );
       console.log('[电信探针] 检测到服务端状态跃迁，已推送直达通知！');
@@ -118,9 +116,9 @@ async function handleProbe() {
     console.log('[电信探针] 探测失败: ' + err.message);
     if (!isCron) {
       sendNotify(
-        '中国电信 · 探针自检',
-        '通信连接失败',
-        `异常信息：${err.message}\n请检查网络或重新进入活动页面刷新会话。`,
+        '中国电信 · 权益中心',
+        '⚠️ 服务端探测连接失败。',
+        `当前状态：${err.message}`,
         'ctclient://'
       );
     }
@@ -129,7 +127,7 @@ async function handleProbe() {
   }
 }
 
-// ==================== 统一通知封装（优雅排版 + 点击直达） ====================
+// ==================== 统一通知封装（极简两行 + 点击直达） ====================
 function sendNotify(title, subtitle, body, targetUrl = 'ctclient://') {
   if (typeof $notification !== 'undefined') {
     $notification.post(title, subtitle, body, targetUrl);
