@@ -1,0 +1,17 @@
+#!name = 山西电信·体验AI领福利
+#!desc = 每月1~8号无规则低频随机监控电信活动上线，发现新批次秒弹通知并直达APP抢腾讯视频会员；通知发出后当月彻底休眠，零封号风险
+#!author = Codex
+#!homepage = https://github.com/TomCatXue/MyCookieCenter
+#!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/189.png
+#!tag = 山西电信,上线监控,视频会员,福利抢兑
+
+[MITM]
+hostname = client.189.cn, api.189.cn, waphub.189.cn, *.189.cn, wx.sx.189.cn
+
+[Script]
+# 1. 自动录制与凭证捕获：在电信APP搜索“领福利”或访问活动页面时自动触发
+http-request ^https?:\/\/(client|api|waphub)\.189\.cn\/.*(search|query).* script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/sx_ai_benefit/sx_ai_benefit.js, requires-body=true, tag=山西电信·录制搜索接口, enable=true
+http-request ^https:\/\/wx\.sx\.189\.cn\/sx_ai_benefit\/h5\/HD script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/sx_ai_benefit/sx_ai_benefit.js, requires-body=false, tag=山西电信·捕获活动凭据, enable=true
+
+# 2. 随机轮询引擎：每月 1 号至 8 号，每天 08:00 至 20:00 唤醒评估（内部动态25~50分钟随机发包，查到当月活动即停止）
+cron "*/10 8-19 1-8 * *" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/sx_ai_benefit/sx_ai_benefit.js, tag=山西电信·新活动上线监控, enable=true
