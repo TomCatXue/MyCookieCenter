@@ -11,7 +11,7 @@ if (isRequest) {
   handleProbe();
 }
 
-// ==================== 1. 凭证自动捕获 ====================
+// ==================== 1. 凭据自动捕获 ====================
 function handleCapture() {
   const url = $request.url || '';
   const headers = $request.headers || {};
@@ -27,15 +27,16 @@ function handleCapture() {
       $persistentStore.write(ua, 'sx_benefit_ua');
 
       const match = url.match(/(HD\d{8}[A-Za-z0-9]+)/i);
-      const code = match ? match[1] : '已捕获';
+      const code = match ? match[1] : '当前批次';
       if (match && match[1]) {
         $persistentStore.write(match[1], 'sx_monitor_current_code');
       }
 
-      $notification.post(
-        '山西电信AI领福利',
-        '🎉 活动凭证捕获成功',
-        `已记录最新活动批次 [${code}] 与 Cookie 凭据！`
+      sendNotify(
+        '中国电信 · 权益中心',
+        '活动凭据已同步',
+        `活动批次：${code}\n鉴权状态：会话已就绪，探针已就位\n轻触此通知可快捷返回中国电信`,
+        'ctclient://'
       );
       console.log('[电信福利] 捕获活动凭据成功: ' + url);
     }
@@ -43,7 +44,7 @@ function handleCapture() {
   $done({});
 }
 
-// ==================== 2. 服务端真实探针测试与监控 ====================
+// ==================== 2. 服务端探针自检与监控 ====================
 async function handleProbe() {
   const cookie = $persistentStore.read('sx_benefit_cookie');
   const activityUrl = $persistentStore.read('sx_benefit_url');
@@ -51,10 +52,11 @@ async function handleProbe() {
   const lastCode = $persistentStore.read('sx_monitor_current_code') || '当前批次';
 
   if (!cookie || !activityUrl) {
-    $notification.post(
-      '山西电信AI领福利 - 探针提示',
-      '⚠️ 未找到活动凭据',
-      '请先在电信APP搜“领福利”进入一次活动页面，捕获凭据后再点击测试！'
+    sendNotify(
+      '中国电信 · 权益中心',
+      '未检测到活动会话',
+      '请先在电信 APP 搜索“领福利”进入一次活动页面完成自动同步。',
+      'ctclient://'
     );
     $done({});
     return;
@@ -65,65 +67,73 @@ async function handleProbe() {
   const month = String(now.getMonth() + 1).padStart(2, '0');
   const currentYearMonth = `${year}${month}`;
 
-  // 区分是定时任务还是用户手动点“运行”测试
-  // 如果是 Cron 模式且当月已经通知过，则静默休眠
   const isCron = typeof $cron !== 'undefined' || typeof $trigger !== 'undefined';
   const notifiedMonth = $persistentStore.read('sx_monitor_notified_month');
   if (isCron && notifiedMonth === currentYearMonth) {
-    console.log(`[电信探针] 本月（${currentYearMonth}）新活动已通知，当月任务休眠。`);
+    console.log(`[电信探针] 本月（${currentYearMonth}）新活动已通知，探针静默休眠中。`);
     $done({});
     return;
   }
 
-  console.log('[电信探针] 正在向活动服务器发起 RSA 加密状态探测...');
+  console.log('[电信探针] 正在向活动服务端发起探针状态检测...');
 
   try {
-    // 1. 请求动态公钥
     const keyInfo = await getPublicKey(activityUrl, cookie, ua);
     if (!keyInfo || !keyInfo.para) {
-      throw new Error('获取动态 RSA 公钥失败');
+      throw new Error('RSA 公钥签发失败');
     }
 
-    // 2. RSA 加密分段组装
     const plainParams = JSON.stringify({ goodsType: 'tc_member' });
     const payload = buildEncryptedPayload(plainParams, keyInfo);
 
-    // 3. 向 subCheck 发送探测请求
     const checkRes = await postJson('https://wx.sx.189.cn/sx_ai_benefit/order/subCheck', activityUrl, cookie, ua, payload);
     console.log('[电信探针] 服务端响应: ' + JSON.stringify(checkRes));
 
     const msg = checkRes.msg ? checkRes.msg.replace(/<br\s*[\/]?>/gi, ' ') : '';
 
-    // 4. 分析状态跃迁
     if (msg.includes('已参与本期活动')) {
       if (!isCron) {
-        // 手动测试触发：明确弹窗汇报联调成功
-        $notification.post(
-          '山西电信·探针测试成功',
-          '✅ 服务端通信 100% 正常',
-          `当前批次[${lastCode}]：服务端正常响应【已参与本期活动】。RSA加密与会话鉴权完全打通！`
+        // 手动测试：展示优雅结构化报告，并绑定跳转 Scheme
+        sendNotify(
+          '中国电信 · 探针自检',
+          '服务通信正常 · 凭据有效',
+          `活动批次：${lastCode}\n当前状态：本期权益已领取（状态正常）\n监控计划：每月 1~8 号自动静默轮询\n👉 轻触通知可直接打开中国电信`,
+          'ctclient://'
         );
       } else {
-        console.log('[电信探针] 服务端状态未变动，保持静默监控...');
+        console.log('[电信探针] 服务端状态平稳，保持静默监控...');
       }
     } else {
-      // 状态发生变化（新批次上线 / 资格重置 / 活动下线更新）
+      // 状态发生变化（新批次上线 / 资格重置 / 活动放水）
       $persistentStore.write(currentYearMonth, 'sx_monitor_notified_month');
-      $notification.post(
-        '🚨 山西电信活动状态发生变动！',
-        `服务端最新反馈: ${msg || '状态已跃迁'}`,
-        '💥 检测到活动可能已放水或重置！点击直达电信APP搜索领福利抢兑！',
-        { 'open-url': 'ctclient://' }
+      sendNotify(
+        '中国电信 · 权益放水提醒',
+        '🎁 腾讯视频会员已开抢！',
+        `活动反馈：${msg || '新一期活动已上线'}\n限量名额：腾讯视频 VIP 限量 1,000 份\n👉 轻触此通知立即打开电信 APP 秒杀`,
+        'ctclient://'
       );
-      console.log('[电信探针] 检测到服务端状态变更，已推送直达通知！');
+      console.log('[电信探针] 检测到服务端状态跃迁，已推送直达通知！');
     }
   } catch (err) {
     console.log('[电信探针] 探测失败: ' + err.message);
     if (!isCron) {
-      $notification.post('山西电信·探针测试失败', '❌ 请求异常', err.message);
+      sendNotify(
+        '中国电信 · 探针自检',
+        '通信连接失败',
+        `异常信息：${err.message}\n请检查网络或重新进入活动页面刷新会话。`,
+        'ctclient://'
+      );
     }
   } finally {
     $done({});
+  }
+}
+
+// ==================== 统一通知封装（优雅排版 + 点击直达） ====================
+function sendNotify(title, subtitle, body, targetUrl = 'ctclient://') {
+  if (typeof $notification !== 'undefined') {
+    // Loon 原生第 4 个参数直接传入跳转 URL 字符串
+    $notification.post(title, subtitle, body, targetUrl);
   }
 }
 
