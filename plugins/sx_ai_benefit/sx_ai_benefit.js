@@ -48,6 +48,7 @@ async function handleProbe() {
   const cookie = $persistentStore.read('sx_benefit_cookie');
   const activityUrl = $persistentStore.read('sx_benefit_url');
   const ua = $persistentStore.read('sx_benefit_ua') || 'CtClient;13.2.0;iOS;26.6.1;iPhone 16e';
+  const lastCode = $persistentStore.read('sx_monitor_current_code') || '当前批次';
 
   if (!cookie || !activityUrl) {
     sendNotify(
@@ -63,12 +64,15 @@ async function handleProbe() {
   const now = new Date();
   const year = now.getFullYear();
   const month = String(now.getMonth() + 1).padStart(2, '0');
-  const currentYearMonth = `${year}${month}`;
+  const currentYearMonth = `${year}${month}`; // 例如 "202610"
 
   const isCron = typeof $cron !== 'undefined' || typeof $trigger !== 'undefined';
   const notifiedMonth = $persistentStore.read('sx_monitor_notified_month');
+
+  // 【核心机制：当月终结熔断】
+  // 如果本月已经通知过放水，或者本月已经确认领过，Cron 模式下直接永久休眠，直到下个月初自动重置
   if (isCron && notifiedMonth === currentYearMonth) {
-    console.log(`[电信探针] 本月（${currentYearMonth}）新活动已通知，探针静默休眠中。`);
+    console.log(`[电信探针] 本月（${currentYearMonth}）任务已完成，探针深度休眠至下月1号。`);
     $done({});
     return;
   }
@@ -90,6 +94,12 @@ async function handleProbe() {
     const msg = checkRes.msg ? checkRes.msg.replace(/<br\s*[\/]?>/gi, ' ') : '';
 
     if (msg.includes('已参与本期活动')) {
+      // 如果当前批次属于当月，说明当月福利已完成领取，直接锁定本月休眠，不再发包
+      if (lastCode.includes(currentYearMonth)) {
+        $persistentStore.write(currentYearMonth, 'sx_monitor_notified_month');
+        console.log(`[电信探针] 确认本月（${currentYearMonth}）已完成领取，自动锁定休眠至下月初。`);
+      }
+
       if (!isCron) {
         // 手动测试：极简双行通知（一行诗词，一行状态）
         sendNotify(
@@ -99,10 +109,10 @@ async function handleProbe() {
           'ctclient://'
         );
       } else {
-        console.log('[电信探针] 服务端状态平稳，保持静默监控...');
+        console.log('[电信探针] 服务端状态为已参与，保持静默...');
       }
     } else {
-      // 状态跃迁：新活动上线放水（一行诗词，一行状态）
+      // 状态跃迁：新活动上线放水
       $persistentStore.write(currentYearMonth, 'sx_monitor_notified_month');
       sendNotify(
         '中国电信 · 权益中心',
@@ -110,7 +120,7 @@ async function handleProbe() {
         '当前状态：腾讯视频会员已开抢，速去抢兑！',
         'ctclient://'
       );
-      console.log('[电信探针] 检测到服务端状态跃迁，已推送直达通知！');
+      console.log('[电信探针] 检测到服务端状态跃迁，已推送直达通知并锁定当月！');
     }
   } catch (err) {
     console.log('[电信探针] 探测失败: ' + err.message);
