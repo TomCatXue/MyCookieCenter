@@ -1,5 +1,7 @@
 /**
  * 山西电信体验AI领福利 - 极简静默监控与凭证捕获脚本
+ * @version 1.2.0
+ * @date 2026-09-03
  * GitHub: https://github.com/TomCatXue/MyCookieCenter
  * 
  * 严格静默规则：
@@ -302,3 +304,4 @@ function getQueryParam(rawUrl, name) {
   const r = rawUrl.split('?')[1]?.match(reg);
   return r != null ? unescape(r[2]) : null;
 }
+

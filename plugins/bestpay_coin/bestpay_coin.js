@@ -1,5 +1,7 @@
 /**
  * 翼支付 · 权益币与做任务秒刷助手 (Loon 响应注入型)
+ * @version 1.1.0
+ * @date 2026-09-03
  * GitHub: https://github.com/TomCatXue/MyCookieCenter
  */
 
@@ -292,3 +294,4 @@ function handleNotificationTrigger() {
     $done({});
   }
 }
+
