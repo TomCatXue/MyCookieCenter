@@ -1,13 +1,6 @@
 /**
  * 翼支付 · 权益币与做任务秒刷助手 (Loon 响应注入型)
  * GitHub: https://github.com/TomCatXue/MyCookieCenter
- * 
- * 功能特性：
- * 1. 自动收币：打开赚钱专区/绿色能量页面瞬间，全自动一键收取所有漂浮的权益币与能量球
- * 2. 自动签到：自动触发每日签到发奖
- * 3. 自动做任务：自动扫描并秒完成所有浏览类任务，直接提交领奖
- * 4. 自动开宝箱：自动开启每日福利宝箱
- * 5. 双重反馈：页面顶部原生拟态玻璃 HUD 实时进度展示 + iOS 震动横幅系统通知
  */
 
 const isResponse = typeof $response !== 'undefined';
@@ -34,11 +27,11 @@ function handleResponse() {
   if (window.__bestpay_auto_injected__) return;
   window.__bestpay_auto_injected__ = true;
 
-  // 1. 创建优雅拟态浮窗 HUD
+  // 1. 创建显眼拟态浮窗 HUD（位于导航栏下方安全区域，避免被灵动岛遮挡）
   const hud = document.createElement('div');
   hud.id = 'bestpay_auto_hud';
-  hud.style.cssText = 'position:fixed;top:18px;left:15px;right:15px;z-index:999999;background:rgba(20,25,35,0.92);backdrop-filter:blur(12px);border:1px solid rgba(255,215,0,0.3);border-radius:14px;padding:12px 16px;color:#fff;font-family:-apple-system,sans-serif;font-size:13px;line-height:1.5;box-shadow:0 8px 24px rgba(0,0,0,0.35);transition:all 0.3s ease;';
-  hud.innerHTML = '<div style="display:flex;align-items:center;font-weight:600;color:#FFD700;margin-bottom:4px;"><span style="font-size:16px;margin-right:6px;">⚡</span> 翼支付权益助手 · 正在自动秒刷...</div><div id="bestpay_hud_msg" style="color:#E0E0E0;font-size:12px;">正在连接原生容器...</div>';
+  hud.style.cssText = 'position:fixed;top:calc(env(safe-area-inset-top, 44px) + 50px);left:12px;right:12px;z-index:2147483647;background:rgba(18,22,33,0.96);backdrop-filter:blur(16px);border:1.5px solid #FFD700;border-radius:14px;padding:12px 16px;color:#fff;font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;line-height:1.5;box-shadow:0 10px 30px rgba(0,0,0,0.5);transition:all 0.3s ease;';
+  hud.innerHTML = '<div style="display:flex;align-items:center;font-weight:700;color:#FFD700;margin-bottom:4px;font-size:14px;"><span style="font-size:16px;margin-right:6px;">⚡</span> 翼支付权益助手 · 自动秒刷中...</div><div id="bestpay_hud_msg" style="color:#B0B8C4;font-size:12px;">正在连接原生容器，请稍候...</div>';
   
   function updateHud(text, isDone = false) {
     const el = document.getElementById('bestpay_hud_msg');
@@ -48,7 +41,7 @@ function handleResponse() {
         hud.style.opacity = '0';
         hud.style.transform = 'translateY(-20px)';
         setTimeout(() => hud.remove(), 400);
-      }, 4500);
+      }, 5000);
     }
   }
 
@@ -59,7 +52,7 @@ function handleResponse() {
 
   function waitBridge() {
     return new Promise(resolve => {
-      if (window.AlipayJSBridge || window.BestpayHtml5) return resolve();
+      if (window.AlipayJSBridge && window.AlipayJSBridge.call) return resolve();
       document.addEventListener('AlipayJSBridgeReady', resolve, false);
       setTimeout(resolve, 2000);
     });
@@ -99,33 +92,61 @@ function handleResponse() {
 
   async function runAutoTasks() {
     await waitBridge();
-    await sleep(600);
+    await sleep(700);
 
     const summary = [];
 
-    // 动作 1：一键收取悬浮权益币与能量球
-    updateHud('正在一键收取所有悬浮权益币...');
+    // ==================== 1. 一键收取所有权益币/能量球 ====================
+    updateHud('正在获取能量配置与待收权益币...');
     try {
-      const starRes = await rpc('com.bestpay.marketingadapter.api.y2025.score.market.ScoreMarketService.starReceive', {});
-      if (starRes && (starRes.success || starRes.code === '1000' || starRes.result)) {
-        summary.push('权益币已全收');
+      // 先调 greenEnergyHomePage 获取活动编号
+      const homeRes = await rpc('com.bestpay.marketingadapter.api.y2025.score.market.ScoreMarketService.greenEnergyHomePage', {});
+      const scoreActivityNo = (homeRes && homeRes.result) ? (homeRes.result.scoreActivityNo || '') : '';
+      
+      if (scoreActivityNo) {
+        // 查待收取记录
+        const starQueryRes = await rpc('com.bestpay.marketingadapter.api.y2025.score.market.ScoreMarketService.starReceiveQuery', { scoreActivityNo });
+        const recordList = (starQueryRes && starQueryRes.result) ? (starQueryRes.result.receiveInitSuccessRecordNoList || []) : [];
+        
+        if (recordList.length > 0) {
+          updateHud('发现 ' + recordList.length + ' 个待收权益币，正在一键收取...');
+          const recvRes = await rpc('com.bestpay.marketingadapter.api.y2025.score.market.ScoreMarketService.starReceive', {
+            scoreActivityNo: scoreActivityNo,
+            recordList: recordList
+          });
+          if (recvRes && (recvRes.success || recvRes.code === '1000')) {
+            summary.push('收取 ' + recordList.length + ' 个权益币');
+          }
+        } else {
+          summary.push('暂无待收权益币');
+        }
       }
-    } catch(e) {}
+    } catch(e) {
+      console.log('收币异常:', e);
+    }
     await sleep(350);
 
-    // 动作 2：每日自动签到打卡
-    updateHud('正在执行每日自动签到...');
+    // ==================== 2. 每日签到打卡 ====================
+    updateHud('正在检测每日签到状态...');
     try {
-      const signRes = await rpc('com.bestpay.marketingadapter.api.y2025.sign.SignInPopupService.distributePrize', {});
-      if (signRes && (signRes.success || signRes.code === '1000')) {
-        summary.push('今日签到成功');
+      const popRes = await rpc('com.bestpay.marketingadapter.api.y2025.sign.SignInPopupService.querySigInPopUpDetail', {});
+      const { awardPoolNo, prizeNo } = (popRes && popRes.result) ? popRes.result : {};
+      
+      if (awardPoolNo && prizeNo) {
+        const signRes = await rpc('com.bestpay.marketingadapter.api.y2025.sign.SignInPopupService.distributePrize', {
+          awardPoolNo: awardPoolNo,
+          prizeNo: prizeNo
+        });
+        if (signRes && (signRes.success || signRes.code === '1000')) {
+          summary.push('签到成功');
+        }
       } else {
         summary.push('今日已签过到');
       }
     } catch(e) {}
     await sleep(350);
 
-    // 动作 3：自动开启每日福利宝箱
+    // ==================== 3. 自动开启每日宝箱 ====================
     updateHud('正在开启每日福利宝箱...');
     try {
       const boxRes = await rpc('com.bestpay.minsheng.mkt.api.money.MakeMoneyService.openTreasureBox', {});
@@ -135,47 +156,75 @@ function handleResponse() {
     } catch(e) {}
     await sleep(350);
 
-    // 动作 4：自动遍历并秒完成所有可浏览任务
-    updateHud('正在扫描并自动完成浏览任务...');
+    // ==================== 4. 扫描并自动完成所有浏览任务 ====================
+    updateHud('正在检索当月任务列表...');
     let finishCount = 0;
     try {
-      const taskListRes = await rpc('com.bestpay.marketingadapter.api.y2024.mission.MissionService.newQueryTheMonthTaskList', { sceneNo: 'MONEYMAKINGCOMBINEDTASK' });
-      const tasks = (taskListRes && taskListRes.result) ? (taskListRes.result.subMissionList || taskListRes.result.allTaskList || []) : [];
+      const taskListRes = await rpc('com.bestpay.marketingadapter.api.y2024.mission.MissionService.newQueryTheMonthTaskList', {
+        channel: 'App',
+        requestKey: 'NEW_LIST_KEY',
+        sceneType: ''
+      });
       
-      for (const t of tasks) {
-        if (t && (t.status === 'INITIAL' || t.status === 'OPEN' || t.status === 'DOWN')) {
-          // 提交秒完成浏览
+      let allTasks = [];
+      if (taskListRes && taskListRes.result) {
+        const mList = taskListRes.result.missionList || [];
+        for (const item of mList) {
+          allTasks.push(item);
+          if (item.subMissionList && Array.isArray(item.subMissionList)) {
+            allTasks = allTasks.concat(item.subMissionList);
+          }
+        }
+      }
+
+      for (const t of allTasks) {
+        if (!t || !t.taskNo) continue;
+        
+        // 尚未完成的任务 -> 秒完成浏览
+        if (t.status === 'INITIAL' || t.status === 'OPEN') {
+          updateHud('正在秒完成: ' + (t.taskName || '浏览任务') + '...');
           await rpc('com.bestpay.redbag.product.api.y2022.mission.service.MissionTaskService.sendTaskMessAge', {
             notifyType: 'FINISH',
             missionType: t.businessType || 'MMS_MONEY_ADV',
             taskNo: t.taskNo
           });
-          await sleep(250);
+          await sleep(300);
+          
           // 提交领奖
           await rpc('com.bestpay.marketingadapter.api.y2024.mission.MissionService.newGetReward', {
             channel: 'App',
             taskNo: t.taskNo
           });
           finishCount++;
-          await sleep(250);
+          await sleep(300);
+        } else if (t.status === 'DOWN') {
+          // 已达标但未领奖
+          await rpc('com.bestpay.marketingadapter.api.y2024.mission.MissionService.newGetReward', {
+            channel: 'App',
+            taskNo: t.taskNo
+          });
+          finishCount++;
+          await sleep(300);
         }
       }
       if (finishCount > 0) {
-        summary.push('秒清 ' + finishCount + ' 个任务');
+        summary.push('秒做 ' + finishCount + ' 个任务');
       }
-    } catch(e) {}
+    } catch(e) {
+      console.log('任务流转异常:', e);
+    }
     await sleep(350);
 
-    // 动作 5：领取累计任务奖励
+    // ==================== 5. 领取累计任务奖励 ====================
     try {
       await rpc('com.bestpay.minsheng.mkt.api.money.MakeMoneyService.receiveCumulativeTaskAward', {});
     } catch(e) {}
 
-    // 全部完成：更新浮窗展示并发送通知
+    // 全部执行完毕
     const resultText = summary.join(' · ') || '今日任务均已全部完成';
-    updateHud('<span style="color:#00E676;font-weight:600;">🎉 今日任务已全部搞定！</span><br><span style="color:#B0B0B0;font-size:11px;">' + resultText + '</span>', true);
+    updateHud('<div style="color:#00E676;font-weight:700;font-size:13px;margin-bottom:2px;">🎉 今日任务已全部搞定！</div><div style="color:#D1D5DB;font-size:11px;">' + resultText + '</div>', true);
 
-    // 触发 Loon 系统通知
+    // 触发系统通知
     fetch('https://render.bestpay.cn/__bestpay_notify__?msg=' + encodeURIComponent(resultText)).catch(() => {});
   }
 
