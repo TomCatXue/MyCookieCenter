@@ -14,9 +14,9 @@
 
 ## 一、抓 Cookie（用 Loon 自身）
 
-最简单的方式：本项目 `app/` 目录下每个脚本已配好 MITM 规则（见对应 `README.md` 的 Loon 段），只需：
+最简单的方式：使用本仓库的 [`loon/CookieCenter.plugin`](../loon/CookieCenter.plugin)（微信读书 / 山西电信 / 翼支付）；其余脚本按其 `README.md` 中的平台配置段设置，只需：
 
-1. 按脚本 README 配置重写规则 + cron（或安装 `loon/CookieCenter.plugin` 汇总插件）。
+1. 安装 [`loon/CookieCenter.plugin`](../loon/CookieCenter.plugin)（微信读书 / 山西电信 / 翼支付已内置 MITM 与 cron）；独立功能脚本按其 README 配置重写规则。
 2. 信任 Loon 的 CA 证书（设置 → 通用 → VPN 与设备管理）。
 3. 打开目标 App（如 bilibili）进行一次登录态请求。
 4. 收到 `✅ <显示名> Cookie 获取成功` 通知即抓取成功，Cookie 自动存入持久化存储 / BoxJS。

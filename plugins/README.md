@@ -1,9 +1,9 @@
 # 特殊功能插件
 
-本目录收录**解锁会员、首页净化、请求改写**等非签到类脚本，与 [`app/`](../app/) 签到体系完全独立。
+本目录收录两类内容：
 
-> **签到体系**（`app/`）：抓 Cookie + cron 执行，需持久化、跨平台运行框架。
-> **功能插件**（`plugins/`）：通常无状态、被动拦截请求头/响应体，每个插件独立开关，实时生效。
+1. **CookieCenter 受管权益脚本**（`sx_ai_benefit/`、`bestpay_coin/`）：由 [`loon/CookieCenter.plugin`](../loon/CookieCenter.plugin) 与 [`boxjs/CookieCenter.boxjs.json`](../boxjs/CookieCenter.boxjs.json) 统一管理；
+2. **独立功能插件**：解锁会员、首页净化、请求改写等非签到类脚本，与 CookieCenter 体系相互独立。
 
 ---
 
@@ -31,6 +31,15 @@
 | [`pixiv_novel_translate/`](./pixiv_novel_translate/) | Pixiv·小说翻译 | 在 Pixiv 小说阅读页注入翻译按钮，支持 Google / 微软 / 百度 | [`loon/PixivNovelTranslate.plugin`](../loon/PixivNovelTranslate.plugin) | ✅ 已验证 |
 
 ---
+
+## CookieCenter 受管目录
+
+| 目录 | 名称 | 功能 | Loon 入口 | BoxJS |
+|---|---|---|---|---|
+| [`sx_ai_benefit/`](./sx_ai_benefit/) | 山西电信·体验AI领福利 | 凭证捕获 + 每月 1~8 号放水探针监控 | [`loon/CookieCenter.plugin`](../loon/CookieCenter.plugin) | [`boxjs/CookieCenter.boxjs.json`](../boxjs/CookieCenter.boxjs.json) |
+| [`bestpay_coin/`](./bestpay_coin/) | 翼支付·权益币与绿色能量 | 进页面自动收币、签到与开宝箱 | [`loon/CookieCenter.plugin`](../loon/CookieCenter.plugin) | [`boxjs/CookieCenter.boxjs.json`](../boxjs/CookieCenter.boxjs.json) |
+
+> 这两个目录原本作为独立 `.plugin` 发布，现其 MITM 与 cron 规则已合并进 `CookieCenter.plugin`，不再单独提供 Loon 插件入口。
 
 ## 新增插件规范
 

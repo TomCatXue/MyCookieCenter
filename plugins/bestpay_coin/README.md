@@ -26,7 +26,6 @@
 ## 使用方法
 
 ### 方式 A：通过 BoxJS 统一管理（推荐）
-在 Loon 中安装 `CookieCenter.plugin`，在 BoxJS 中订阅 `MyCookieCenter`，即可在“翼支付·权益币助手”面板中管理开关。
+在 Loon 中安装 [`loon/CookieCenter.plugin`](../../loon/CookieCenter.plugin)，在 BoxJS 中订阅 [`boxjs/CookieCenter.boxjs.json`](../../boxjs/CookieCenter.boxjs.json)，即可在“翼支付·权益币助手”面板中管理开关。
 
-### 方式 B：独立插件使用
-在 Loon 中通过 URL 添加并开启 `BestpayCoin.plugin`，直接打开 App 赚钱专区即可秒收。
+> 原先独立的 `BestpayCoin.plugin` 已合并进 `loon/CookieCenter.plugin`，不再单独发布。

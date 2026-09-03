@@ -2,20 +2,20 @@
 
 本目录存放所有 Loon 专用的 `.plugin` 文件，按功能分两类：
 
-- **Cookie 抓取插件** — `CookieCenter.plugin`，多平台 Cookie 抓取 + 签到，独立开关
+- **统一签到 / 权益插件** — `CookieCenter.plugin`，整合微信读书、山西电信、翼支付的凭据捕获与后台定时任务
 - **独立功能插件** — 对应 `plugins/` 下的解锁/净化脚本，各自独立开关
 
-> 签到/羊毛 cron 任务不在 Loon 插件中，由 BoxJS 订阅统一管理。
+> `CookieCenter.plugin` 内已内置 cron 任务开关；[BoxJS 订阅](../boxjs/README.md)负责 Cookie 持久化与参数面板。
 
 ---
 
 ## 插件清单
 
-### Cookie 抓取
+### CookieCenter（统一签到 / 权益）
 
 | 文件 | 说明 | 脚本来源 |
 |---|---|---|
-| [`CookieCenter.plugin`](./CookieCenter.plugin) | 多平台凭据静默捕获（微信读书 / 山西电信 / 翼支付等） | `app/` 下各脚本目录 |
+| [`CookieCenter.plugin`](./CookieCenter.plugin) | 微信读书 / 山西电信 / 翼支付的凭据捕获 + cron 定时任务 | [`app/weread_claim/`](../app/weread_claim/)、[`plugins/sx_ai_benefit/`](../plugins/sx_ai_benefit/)、[`plugins/bestpay_coin/`](../plugins/bestpay_coin/) |
 
 ### 独立功能
 
@@ -24,12 +24,9 @@
 | [`QzoneAdBlock.plugin`](./QzoneAdBlock.plugin) | QQ空间·清净 — 广告退散，空间清净 | 规则型（无脚本） |
 | [`BilibiliFix.plugin`](./BilibiliFix.plugin) | 哔哩哔哩·增强版 𝕏 — 空降助手、分区修复、扫码登录、画质解锁 | 脚本型 · [`plugins/bilibili/`](../plugins/bilibili/) |
 | [`WeReadEnhance.plugin`](./WeReadEnhance.plugin) | 微信读书·优雅收录 — 轻触订阅人数，好书即刻入架 | 脚本型 · [`plugins/wxread/`](../plugins/wxread/) |
-| [`WeReadClaim.plugin`](./WeReadClaim.plugin) | 微信读书·自动领取 — 定时领取阅读奖励（书币/体验卡）+ 每周翻牌 | 脚本型 · [`app/weread_claim/`](../app/weread_claim/) |
 | [`GitHubPushTime.plugin`](./GitHubPushTime.plugin) | GitHub·星标推送时间 — 在 GitHub App 星标列表语言后显示最近推送时间 | 脚本型 · [`plugins/github_push_time/`](../plugins/github_push_time/) |
 | [`PixivNovelTranslate.plugin`](./PixivNovelTranslate.plugin) | Pixiv·小说翻译 — 小说阅读页一键翻译，支持 Google 免费接口 / 微软 / 百度 | 脚本型 · [`plugins/pixiv_novel_translate/`](../plugins/pixiv_novel_translate/) |
 | [`camscanner.plugin`](./camscanner.plugin) | 扫描全能王·签到 — 抓取 Cookie + 每日签到 | 脚本型 · 抓取内化 [`plugins/camscanner/`](../plugins/camscanner/) / 签到外部 |
-| [`SxAiBenefit.plugin`](./SxAiBenefit.plugin) | 山西电信·体验AI领福利 — 每月1~8号低频随机监控新活动上线并直达抢兑 | 脚本型 · [`plugins/sx_ai_benefit/`](../plugins/sx_ai_benefit/) |
-| [`BestpayCoin.plugin`](./BestpayCoin.plugin) | 翼支付·权益币秒刷助手 — 进页面全自动秒收权益币、签到与开宝箱 | 脚本型 · [`plugins/bestpay_coin/`](../plugins/bestpay_coin/) |
 
 > `camscanner.plugin` 的**抓取脚本**已内化至 [`plugins/camscanner/`](../plugins/camscanner/)（静默版：进 App 不弹通知，失效由签到通知）；**签到脚本**与图标仍引用外部仓库（[MaYIHEI/paperclip](https://github.com/MaYIHEI/paperclip)、[MaYIHEI/pin](https://github.com/MaYIHEI/pin)）。
 
@@ -44,7 +41,7 @@
    https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/loon/CookieCenter.plugin
    ```
 
-3. 导入后在插件设置中按需打开开关（默认全关）
-4. **Cookie 抓取**：打开对应 App 开关 → 进入 App 触发接口 → 收到通知即成功 → 建议关闭开关减少 MITM
-5. **签到/羊毛**：通过 [BoxJS 订阅](../boxjs/README.md) 管理 cron 任务
+3. 导入后可在插件设置中按需调整开关（捕获与 cron 默认开启）
+4. **凭据捕获**：打开对应 App 开关 → 进入 App 触发接口 → 收到通知即成功 → 捕获完成后可关闭对应开关减少 MITM
+5. **参数面板 / 手动运行**：通过 [BoxJS 订阅](../boxjs/README.md) 查看与配置 Cookie 和偏好
 

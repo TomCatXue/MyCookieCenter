@@ -1,44 +1,20 @@
 /*
-#!name=微信读书自动领取奖励
-#!desc=定时自动领取已达标阅读时长奖励（书币/体验卡），可切换偏好；每周二 20:00 自动翻牌游戏
+#!name=微信读书·自动领取（每日签到）
+#!desc=微信读书阅读奖励自动领取（每日 23:00）。本文件默认执行每日领取，参数 task=flip 时执行翻牌；通知标题为「WeRead · 每日签到」。
 #!author=Codex
 #!homepage=https://github.com/TomCatXue/MyCookieCenter
 #!icon=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/weread.png
-#!tag=微信读书,自动领取,阅读奖励,翻牌游戏
+#!tag=微信读书,自动领取,阅读奖励
 
-[Argument]
-# 奖励偏好: 1=优先体验卡, 2=优先书币
-prefer_coin = input,2,tag=奖励选择,desc=1=优先体验卡 2=优先书币
-# 抓取Cookie: 开=自动抓取登录信息(vid/skey/refreshToken), 关=不抓取（需手动配置）
-capture_cookie = switch,true,tag=抓取Cookie,desc=开启：自动抓取登录信息 / 关闭：不抓取
-
-[MITM]
-hostname = i.weread.qq.com, weread.qq.com
-
-[Script]
-# 捕获鉴权信息（vid + skey，而非 Cookie）：打开微信读书 App 随便刷一下（几乎任何页面都会触发）
-http-request ^https?://i\.weread\.qq\.com/.* script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260827-flipfix6, tag=WeReadClaim Auth, requires-body=false, enable={capture_cookie}
-
-# 捕获 /login 请求体（Base64 编码），提取 deviceId
-http-request POST ^https?://i\.weread\.qq\.com/login script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260827-flipfix6, tag=WeReadClaim Login, requires-body=true, enable={capture_cookie}
-
-# 捕获 /login 响应体，提取 vid/skey/refreshToken（自动刷新的前置条件）
-http-response POST ^https?://i\.weread\.qq\.com/login script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260827-flipfix6, tag=WeReadClaim LoginResp, requires-body=true, enable={capture_cookie}
-
-# 捕获 weread.qq.com Cookie（wr_skey/wr_vid，翻牌游戏用）
-http-request ^https?://weread\.qq\.com/.* script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260827-flipfix6, tag=WeReadClaim FlipCookie, requires-body=false, enable={capture_cookie}
-
-# 定时领取：每晚 23:00 自动检查并领取
-# 不设 argument=，让 Loon 自动把 [Argument] 值注入 $argument；http-request 中转存储兜底
-cron "0 23 * * *" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260827-flipfix6, tag=WeReadClaim 签到, enable=true
-
-# 翻牌游戏：每周二 20:00 自动翻牌
-cron "0 20 * * 2" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js?v=20260827-flipfix6, argument="task=flip", tag=WeReadClaim 翻牌, enable=true
+MITM 与 cron 规则统一由 loon/CookieCenter.plugin 配置：
+- 每日领取 cron -> 本文件（每日 23:00）
+- 周二翻牌 cron -> weread_flip.js（每周二 20:00）
+参数面板由 boxjs/CookieCenter.boxjs.json 订阅提供。
 */
 
 const AUTH_KEY = "weread_auth_v2";
 const FLIP_STATE_KEY = "weread_flip_state_v1";
-const SCRIPT_VERSION = "2026-08-27-flipfix6";
+const SCRIPT_VERSION = "2026-09-03-task-split";
 const API = "https://i.weread.qq.com";
 const FLIP_API = "https://weread.qq.com/flip-card-game/api";
 const PF = "weread_wx-2001-iap-2001-iphone";
@@ -55,11 +31,13 @@ async function main() {
             return;
         }
 
-        // cron 任务：通过 $argument 区分任务类型
+        // cron 任务：通过 $argument 区分任务类型（翻牌也可调用本文件）
         let arg = parseArgument(typeof $argument !== "undefined" ? $argument : {});
         if (arg.task === "flip") {
+            $.name = "WeRead · 周二翻牌";
             await runFlipCard();
         } else {
+            $.name = "WeRead · 每日签到";
             await runClaim();
         }
     } catch (e) {
@@ -1184,7 +1162,7 @@ function Env(name) {
     this.msg = function (t, s, b) {
 
         if (typeof $notification !== "undefined")
-            $notification.post(t, s, b);
+            $notification.post(this.name, s, b);
 
     };
 
