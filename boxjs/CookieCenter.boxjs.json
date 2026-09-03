@@ -2,10 +2,10 @@
   "id": "mycookiecenter.app.sub",
   "name": "MyCookieCenter 签到与权益中心",
   "author": "@MyCookieCenter",
-  "icon": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/icon.png",
+  "icon": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/icon.png?v=20260903",
   "icons": [
-    "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/icon.png",
-    "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/icon.png"
+    "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/icon.png?v=20260903",
+    "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/icon.png?v=20260903"
   ],
   "repo": "https://github.com/TomCatXue/MyCookieCenter",
   "apps": [
@@ -18,10 +18,10 @@
         "prefer_coin"
       ],
       "author": "@Codex",
-      "icon": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/weread.png",
+      "icon": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/weread.png?v=20260903",
       "icons": [
-        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/weread.png",
-        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/weread.png"
+        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/weread.png?v=20260903",
+        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/weread.png?v=20260903"
       ],
       "repo": "https://github.com/TomCatXue/MyCookieCenter",
       "settings": [
@@ -79,10 +79,10 @@
         "sx_prefer_benefit"
       ],
       "author": "@Codex",
-      "icon": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/189.png",
+      "icon": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/189.png?v=20260903",
       "icons": [
-        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/189.png",
-        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/189.png"
+        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/189.png?v=20260903",
+        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/189.png?v=20260903"
       ],
       "repo": "https://github.com/TomCatXue/MyCookieCenter",
       "settings": [
@@ -141,10 +141,10 @@
         "bestpay_auto_box"
       ],
       "author": "@Codex",
-      "icon": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/bestpay_coin.png",
+      "icon": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/bestpay_coin.png?v=20260903",
       "icons": [
-        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/bestpay_coin.png",
-        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/bestpay_coin.png"
+        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/bestpay_coin.png?v=20260903",
+        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/bestpay_coin.png?v=20260903"
       ],
       "repo": "https://github.com/TomCatXue/MyCookieCenter",
       "settings": [
@@ -189,3 +189,4 @@
     }
   ]
 }
+
