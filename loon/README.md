@@ -29,6 +29,7 @@
 | [`PixivNovelTranslate.plugin`](./PixivNovelTranslate.plugin) | Pixiv·小说翻译 — 小说阅读页一键翻译，支持 Google 免费接口 / 微软 / 百度 | 脚本型 · [`plugins/pixiv_novel_translate/`](../plugins/pixiv_novel_translate/) |
 | [`camscanner.plugin`](./camscanner.plugin) | 扫描全能王·签到 — 抓取 Cookie + 每日签到 | 脚本型 · 抓取内化 [`plugins/camscanner/`](../plugins/camscanner/) / 签到外部 |
 | [`SxAiBenefit.plugin`](./SxAiBenefit.plugin) | 山西电信·体验AI领福利 — 每月1~8号低频随机监控新活动上线并直达抢兑 | 脚本型 · [`plugins/sx_ai_benefit/`](../plugins/sx_ai_benefit/) |
+| [`BestpayCoin.plugin`](./BestpayCoin.plugin) | 翼支付·权益币秒刷助手 — 进页面全自动收币、签到、秒做浏览任务与开宝箱 | 脚本型 · [`plugins/bestpay_coin/`](../plugins/bestpay_coin/) |
 
 > `camscanner.plugin` 的**抓取脚本**已内化至 [`plugins/camscanner/`](../plugins/camscanner/)（静默版：进 App 不弹通知，失效由签到通知）；**签到脚本**与图标仍引用外部仓库（[MaYIHEI/paperclip](https://github.com/MaYIHEI/paperclip)、[MaYIHEI/pin](https://github.com/MaYIHEI/pin)）。
 
