@@ -1,6 +1,6 @@
 /**
  * 翼支付 · 权益币与做任务秒刷助手 (Loon 响应注入型)
- * @version 1.1.0
+ * @version 1.2.0
  * @date 2026-09-03
  * GitHub: https://github.com/TomCatXue/MyCookieCenter
  */
@@ -29,17 +29,11 @@ function handleResponse() {
   if (window.__bestpay_auto_injected__) return;
   window.__bestpay_auto_injected__ = true;
 
-  // 防短时间重复执行（1分钟内只跑一次）
-  const lastRun = sessionStorage.getItem('__bestpay_last_run__');
-  if (lastRun && Date.now() - parseInt(lastRun, 10) < 60000) {
-    return;
-  }
-
-  // 1. 创建醒目拟态浮窗 HUD
+  // 1. 创建显眼拟态浮窗 HUD
   const hud = document.createElement('div');
   hud.id = 'bestpay_auto_hud';
-  hud.style.cssText = 'position:fixed;top:calc(env(safe-area-inset-top, 44px) + 50px);left:12px;right:12px;z-index:2147483647;background:rgba(18,22,33,0.96);backdrop-filter:blur(16px);border:1.5px solid #FFD700;border-radius:14px;padding:12px 16px;color:#fff;font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;line-height:1.5;box-shadow:0 10px 30px rgba(0,0,0,0.5);transition:all 0.3s ease;';
-  hud.innerHTML = '<div style="display:flex;align-items:center;font-weight:700;color:#FFD700;margin-bottom:4px;font-size:14px;"><span style="font-size:16px;margin-right:6px;">⚡</span> 翼支付权益助手 · 正在秒刷任务...</div><div id="bestpay_hud_msg" style="color:#B0B8C4;font-size:12px;">正在连接原生容器...</div>';
+  hud.style.cssText = 'position:fixed;top:calc(env(safe-area-inset-top, 44px) + 50px);left:12px;right:12px;z-index:2147483647;background:rgba(15,20,30,0.96);backdrop-filter:blur(16px);border:1.5px solid #FFD700;border-radius:14px;padding:12px 16px;color:#fff;font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;line-height:1.5;box-shadow:0 10px 30px rgba(0,0,0,0.5);transition:all 0.3s ease;';
+  hud.innerHTML = '<div style="display:flex;align-items:center;font-weight:700;color:#FFD700;margin-bottom:4px;font-size:14px;"><span style="font-size:16px;margin-right:6px;">⚡</span> 翼支付权益助手 · 正在秒刷任务...</div><div id="bestpay_hud_msg" style="color:#B0B8C4;font-size:12px;">正在连接原生容器与登录会话...</div>';
   
   function updateHud(text, isDone = false) {
     const el = document.getElementById('bestpay_hud_msg');
@@ -49,7 +43,7 @@ function handleResponse() {
         hud.style.opacity = '0';
         hud.style.transform = 'translateY(-20px)';
         setTimeout(() => hud.remove(), 400);
-      }, 4000);
+      }, 5000);
     }
   }
 
@@ -58,12 +52,66 @@ function handleResponse() {
   });
   if (document.body) document.body.appendChild(hud);
 
+  function sleep(ms) {
+    return new Promise(r => setTimeout(r, ms));
+  }
+
   function waitBridge() {
     return new Promise(resolve => {
       if (window.AlipayJSBridge && window.AlipayJSBridge.call) return resolve();
       document.addEventListener('AlipayJSBridgeReady', resolve, false);
-      setTimeout(resolve, 2000);
+      setTimeout(resolve, 2500);
     });
+  }
+
+  // 提取用户真实凭证信息
+  function getAuth() {
+    let sessionKey = '';
+    let productNo = '';
+    let ipTId = '';
+    let ipRId = '';
+    let appType = '45';
+
+    try {
+      const raw = localStorage.getItem('BestpayHtml5_userInfo');
+      if (raw) {
+        const u = JSON.parse(raw);
+        sessionKey = u.sessionKey || sessionKey;
+        productNo = u.productNo || productNo;
+        ipTId = u.ipTId || ipTId;
+        ipRId = u.ipRId || ipRId;
+        appType = u.appType || appType;
+      }
+      const sk = localStorage.getItem('BestpayHtml5_sessionKey');
+      if (sk) sessionKey = sk;
+    } catch(e) {}
+
+    if (!ipTId) {
+      const m = document.cookie.match(/ipTId=([^;]+)/);
+      if (m) ipTId = m[1];
+    }
+
+    return { sessionKey, productNo, ipTId, ipRId, appType };
+  }
+
+  async function waitForSession() {
+    for (let i = 0; i < 15; i++) {
+      const a = getAuth();
+      if (a.sessionKey) return a;
+      await sleep(300);
+    }
+    // 兜底调用桥接主动获取
+    if (window.BestpayHtml5 && window.BestpayHtml5.User && window.BestpayHtml5.User.getSessionKey) {
+      await new Promise(r => {
+        window.BestpayHtml5.User.getSessionKey({ noAutoLogin: true }, res => {
+          if (res && res.sessionKey) {
+            localStorage.setItem('BestpayHtml5_sessionKey', res.sessionKey);
+          }
+          r();
+        }, r);
+      });
+    }
+    return getAuth();
   }
 
   function rpc(operationType, params = {}) {
@@ -71,13 +119,42 @@ function handleResponse() {
       if (!window.AlipayJSBridge || !window.AlipayJSBridge.call) {
         return resolve({ success: false, error: 'no_bridge' });
       }
+
+      const auth = getAuth();
+      const mergedParams = {
+        ...params,
+        sessionKey: auth.sessionKey || '',
+        productNo: auth.productNo || '',
+        ipTId: auth.ipTId || '',
+        ipRId: auth.ipRId || ''
+      };
+
+      const w = {
+        "00": "8901010699000000",
+        "45": "8901010699000045",
+        "117": "8901010699000117",
+        "116": "8901010699000116",
+        "115": "8901010699000115",
+        "130": "8901010699000130",
+        "133": "8901010699000133"
+      };
+
+      const headers = {
+        sessionKey: auth.sessionKey || '',
+        authSsuCode: w[auth.appType] || '8901010699000045',
+        'event-context': JSON.stringify({
+          env: 'PRD',
+          tntId: '0101',
+          ipTId: auth.ipTId || '',
+          ipRId: auth.ipRId || ''
+        })
+      };
+
       try {
         window.AlipayJSBridge.call('rpc', {
           operationType: operationType,
-          requestData: [params],
-          headers: {
-            'event-context': JSON.stringify({ env: 'PRD', tntId: '0101' })
-          }
+          requestData: [mergedParams],
+          headers: headers
         }, function(res) {
           if (!res) return resolve({ success: false });
           let data = res;
@@ -94,19 +171,16 @@ function handleResponse() {
     });
   }
 
-  function sleep(ms) {
-    return new Promise(r => setTimeout(r, ms));
-  }
-
   async function runAutoTasks() {
-    sessionStorage.setItem('__bestpay_last_run__', String(Date.now()));
     await waitBridge();
-    await sleep(600);
+    updateHud('正在确认账号会话就绪...');
+    const auth = await waitForSession();
+    console.log('[翼支付助手] 当前会话状态:', auth.sessionKey ? '已获取 sessionKey' : '未获取到 sessionKey');
 
     const summary = [];
 
     // ==================== 1. 一键收取悬浮权益币与能量球 ====================
-    updateHud('正在收取所有悬浮权益币...');
+    updateHud('正在获取能量配置与待收权益币...');
     try {
       const homeRes = await rpc('com.bestpay.marketingadapter.api.y2025.score.market.ScoreMarketService.greenEnergyHomePage', {});
       const scoreActivityNo = (homeRes && homeRes.result) ? (homeRes.result.scoreActivityNo || '') : '';
@@ -116,6 +190,7 @@ function handleResponse() {
         const recordList = (starQueryRes && starQueryRes.result) ? (starQueryRes.result.receiveInitSuccessRecordNoList || []) : [];
         
         if (recordList.length > 0) {
+          updateHud('发现 ' + recordList.length + ' 个待收权益币，正在全收...');
           const recvRes = await rpc('com.bestpay.marketingadapter.api.y2025.score.market.ScoreMarketService.starReceive', {
             scoreActivityNo: scoreActivityNo,
             recordList: recordList
@@ -123,13 +198,15 @@ function handleResponse() {
           if (recvRes && (recvRes.success || recvRes.code === '1000')) {
             summary.push('权益币全收');
           }
+        } else {
+          summary.push('权益币已全收');
         }
       }
     } catch(e) {}
-    await sleep(300);
+    await sleep(350);
 
     // ==================== 2. 每日签到打卡 ====================
-    updateHud('正在执行每日自动签到...');
+    updateHud('正在检测每日签到状态...');
     try {
       const popRes = await rpc('com.bestpay.marketingadapter.api.y2025.sign.SignInPopupService.querySigInPopUpDetail', {});
       const { awardPoolNo, prizeNo } = (popRes && popRes.result) ? popRes.result : {};
@@ -146,7 +223,7 @@ function handleResponse() {
         summary.push('今日已签到');
       }
     } catch(e) {}
-    await sleep(300);
+    await sleep(350);
 
     // ==================== 3. 开启每日宝箱 ====================
     updateHud('正在开启每日福利宝箱...');
@@ -156,10 +233,10 @@ function handleResponse() {
         summary.push('宝箱已开');
       }
     } catch(e) {}
-    await sleep(300);
+    await sleep(350);
 
     // ==================== 4. 扫描并执行任务完整状态机 ====================
-    updateHud('正在扫描所有可做任务...');
+    updateHud('正在检索当月任务列表...');
     let finishCount = 0;
     try {
       // 场景 A：赚钱专区组合任务
@@ -184,7 +261,6 @@ function handleResponse() {
         rawList = rawList.concat(normalRes.result.missionList);
       }
 
-      // 展平父子任务并去重
       let taskMap = new Map();
       for (const item of rawList) {
         if (!item || !item.taskNo) continue;
@@ -197,13 +273,13 @@ function handleResponse() {
       }
 
       const tasksToProcess = Array.from(taskMap.values()).filter(t => t.status !== 'FINISH');
-      console.log('待处理任务总数:', tasksToProcess.length);
+      console.log('[翼支付助手] 待处理任务数:', tasksToProcess.length);
 
       for (let i = 0; i < tasksToProcess.length; i++) {
         const t = tasksToProcess[i];
         const tName = t.taskName || ('任务 ' + (i + 1));
         
-        // 步骤 1：如果处于 INITIAL，必须先执行 newOpenTask 开启任务
+        // 步骤 1：未开启任务先调用 newOpenTask
         if (t.status === 'INITIAL') {
           updateHud('[' + (i + 1) + '/' + tasksToProcess.length + '] 开启: ' + tName);
           await rpc('com.bestpay.marketingadapter.api.y2024.mission.MissionService.newOpenTask', {
@@ -213,14 +289,15 @@ function handleResponse() {
           await sleep(300);
         }
 
-        // 步骤 2：如果不是已完成，发送完成浏览通知
+        // 步骤 2：发送完成浏览通知
         if (t.status !== 'DOWN') {
           updateHud('[' + (i + 1) + '/' + tasksToProcess.length + '] 秒做: ' + tName);
-          await rpc('com.bestpay.redbag.product.api.y2022.mission.service.MissionTaskService.sendTaskMessAge', {
+          const sendRes = await rpc('com.bestpay.redbag.product.api.y2022.mission.service.MissionTaskService.sendTaskMessAge', {
             notifyType: 'FINISH',
             missionType: t.businessType || 'MMS_MONEY_ADV',
             taskNo: t.taskNo
           });
+          console.log('[翼支付助手] sendTaskMessAge 返回:', tName, JSON.stringify(sendRes));
           await sleep(350);
         }
 
@@ -230,6 +307,8 @@ function handleResponse() {
           channel: 'App',
           taskNo: t.taskNo
         });
+        console.log('[翼支付助手] newGetReward 返回:', tName, JSON.stringify(rewRes));
+        
         if (rewRes && (rewRes.success || rewRes.code === '1000' || (rewRes.result && rewRes.result.status === 'FINISH'))) {
           finishCount++;
         }
@@ -237,12 +316,12 @@ function handleResponse() {
       }
 
       if (finishCount > 0) {
-        summary.push('搞定 ' + finishCount + ' 个任务');
+        summary.push('秒清 ' + finishCount + ' 个任务');
       }
     } catch(e) {
-      console.log('任务处理出错:', e);
+      console.log('[翼支付助手] 任务异常:', e);
     }
-    await sleep(300);
+    await sleep(350);
 
     // ==================== 5. 领取累计任务奖励 ====================
     try {
@@ -251,17 +330,10 @@ function handleResponse() {
 
     // 全部执行完毕
     const resultText = summary.join(' · ') || '今日任务均已全部完成';
-    updateHud('<div style="color:#00E676;font-weight:700;font-size:13px;margin-bottom:2px;">🎉 今日任务已全部秒清搞定！</div><div style="color:#D1D5DB;font-size:11px;">' + resultText + '</div>', true);
+    updateHud('<div style="color:#00E676;font-weight:700;font-size:13px;margin-bottom:2px;">🎉 今日任务已全部搞定！</div><div style="color:#D1D5DB;font-size:11px;">' + resultText + '</div>', true);
 
     // 触发系统通知
     fetch('https://render.bestpay.cn/__bestpay_notify__?msg=' + encodeURIComponent(resultText)).catch(() => {});
-
-    // 如果完成了新任务，延迟 1.5 秒自动刷新一次页面展示最新到账金币与勾选状态
-    if (finishCount > 0) {
-      setTimeout(() => {
-        window.location.reload();
-      }, 1800);
-    }
   }
 
   runAutoTasks();
@@ -294,4 +366,3 @@ function handleNotificationTrigger() {
     $done({});
   }
 }
-
