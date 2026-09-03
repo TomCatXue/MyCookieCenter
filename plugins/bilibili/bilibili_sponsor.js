@@ -1,169 +1,309 @@
 /**
- * B站空降助手 (SponsorBlock + 弹幕双引擎) - Loon Script
- * 拦截视频 view 接口，注入 SponsorBlock 社区片段与弹幕高能标记到播放器进度条
- *
- * 特性：
- * 1. 优先查询 SponsorBlock 数据库 (bsbsb.top) 获取精准跳过片段 (广告/片头/片尾/无用内容)
- * 2. 若 SponsorBlock 无数据，自动解析弹幕 XML 提取高能/空降时间点
- * 3. 原生注入到 view_points 和 high_energy，兼容所有 B站 App 版本 (国内版/国际版/iPad/HD)
+ * B站空降助手·进度条看点打点脚本 (方案A: ViewPoints 原生刻度标记) - Loon
+ * 
+ * 功能：
+ * 1. 拦截播放进度请求 (gRPC ViewProgress 与 JSON x/v2/view)
+ * 2. 自动提取当前视频 aid / cid 并无损计算真实 BVID
+ * 3. 异步查询 SponsorBlock 官方社区数据库 (bsbsb.top)
+ * 4. 自动在进度条对应的广告、片头、片尾区间生成原生看点断点 (Point) 与悬浮标签文字
+ * 5. 设置 point_permanent: true，常驻在播放进度条上，进视频一眼即知有无广告
  */
 
-const AIRDROP_KEYWORDS = /空降|高能预警|前方高能|高能|空降成功|空降指引|空降地址|空降位置|空降点|跳过|空降倒计时|高能进度/i;
-const TIME_PATTERN = /(\d{1,2})\s*[:：分]\s*(\d{1,2})\s*秒?/;
+const XOR_CODE = 23442827791579n;
+const MAX_AID = 1n << 51n;
+const BASE = 58n;
+const BVID_CHARS = "FcwAPNKTMug3GV5Lj7EJnHpWsx4tb8haYeviqBz6rkCy12mUSDQX9RdoZf";
 
-let body = $response.body;
-let data;
-
-try {
-    data = JSON.parse(body);
-} catch (e) {
-    $done({});
-}
-
-if (!data || data.code !== 0 || !data.data) {
-    $done({});
-}
-
-const d = data.data;
-const bvid = d.bvid || "";
-const cid = d.cid || 0;
-const aid = d.aid || 0;
-const duration = d.duration || 0;
-
-if (!d.view_points) d.view_points = [];
-if (!d.high_energy) d.high_energy = { show: true, segments: [] };
-d.high_energy.show = true;
-
-// 1. 优先查询 SponsorBlock API
-if (bvid) {
-    const sbUrl = `https://bsbsb.top/api/skipSegments?videoID=${bvid}`;
-    $httpClient.get({
-        url: sbUrl,
-        timeout: 3000
-    }, function (err, res, resBody) {
-        if (!err && resBody) {
-            try {
-                const segments = JSON.parse(resBody);
-                if (Array.isArray(segments) && segments.length > 0) {
-                    segments.forEach(function (s) {
-                        if (!s.segment || s.segment.length < 2) return;
-                        const start = Math.floor(s.segment[0]);
-                        const end = Math.ceil(s.segment[1]);
-                        const category = s.category;
-                        const label = category === 'sponsor' ? '广告/赞助' :
-                                      category === 'intro' ? '片头' :
-                                      category === 'outro' ? '片尾' :
-                                      category === 'selfpromo' ? '自推' : '空降片段';
-                        d.view_points.push({
-                            from: start,
-                            to: end,
-                            type: 1,
-                            content: label,
-                            icon_url: "",
-                            image_url: ""
-                        });
-                        d.high_energy.segments.push({
-                            start: start,
-                            end: end,
-                            text: label
-                        });
-                    });
-                    $done({ body: JSON.stringify(data) });
-                    return;
-                }
-            } catch (e) {}
+function toBvid(avid) {
+    if (!avid) return "";
+    try {
+        const bytes = ["B", "V", "1", "0", "0", "0", "0", "0", "0", "0", "0", "0"];
+        let bvIndex = bytes.length - 1;
+        let tmp = (MAX_AID | BigInt(avid)) ^ XOR_CODE;
+        while (tmp > 0n) {
+            bytes[bvIndex] = BVID_CHARS[Number(tmp % BASE)];
+            tmp = tmp / BASE;
+            bvIndex -= 1;
         }
-
-        // 2. SponsorBlock 无数据时，回退到弹幕 XML 解析
-        fallbackDanmakuAnalysis();
-    });
-} else {
-    fallbackDanmakuAnalysis();
+        [bytes[3], bytes[9]] = [bytes[9], bytes[3]];
+        [bytes[4], bytes[7]] = [bytes[7], bytes[4]];
+        return bytes.join("");
+    } catch (e) {
+        return "";
+    }
 }
 
-function fallbackDanmakuAnalysis() {
-    if (!cid) {
-        $done({ body: JSON.stringify(data) });
+function formatTime(sec) {
+    const m = Math.floor(sec / 60);
+    const s = Math.floor(sec % 60);
+    return (m < 10 ? "0" + m : m) + ":" + (s < 10 ? "0" + s : s);
+}
+
+function getCategoryLabel(cat) {
+    switch (cat) {
+        case "sponsor": return "【广告插播】";
+        case "intro": return "【片头】";
+        case "outro": return "【片尾】";
+        case "selfpromo": return "【自推广告】";
+        case "interaction": return "【求三连互动】";
+        default: return "【空降片段】";
+    }
+}
+
+function encodeVarint(n) {
+    const bytes = [];
+    let val = BigInt(n);
+    while (true) {
+        const b = Number(val & 0x7fn);
+        val >>= 7n;
+        if (val > 0n) {
+            bytes.push(b | 0x80);
+        } else {
+            bytes.push(b);
+            break;
+        }
+    }
+    return bytes;
+}
+
+function makeTag(fieldNum, wireType) {
+    return encodeVarint((fieldNum << 3) | wireType);
+}
+
+function encodeUtf8(str) {
+    const encoded = unescape(encodeURIComponent(str));
+    const bytes = [];
+    for (let i = 0; i < encoded.length; i++) {
+        bytes.push(encoded.charCodeAt(i));
+    }
+    return bytes;
+}
+
+function encodePointField(fromSec, toSec, label) {
+    const p = [];
+    p.push(...makeTag(1, 0), ...encodeVarint(1));
+    p.push(...makeTag(2, 0), ...encodeVarint(fromSec));
+    p.push(...makeTag(3, 0), ...encodeVarint(toSec));
+    const contentBytes = encodeUtf8(label);
+    p.push(...makeTag(4, 2), ...encodeVarint(contentBytes.length), ...contentBytes);
+
+    const res = [];
+    res.push(...makeTag(3, 2), ...encodeVarint(p.length), ...p);
+    return res;
+}
+
+function encodePointPermanentField() {
+    return [...makeTag(5, 0), ...encodeVarint(1)];
+}
+
+function parseAidCidFromGrpc(rawBytes) {
+    let aid = 0;
+    let cid = 0;
+    if (!rawBytes || rawBytes.length < 6) return { aid, cid };
+    
+    let pos = 5;
+    const len = rawBytes.length;
+    while (pos < len) {
+        let tagVal = 0;
+        let shift = 0;
+        while (pos < len) {
+            const b = rawBytes[pos++];
+            tagVal |= (b & 0x7f) << shift;
+            shift += 7;
+            if (!(b & 0x80)) break;
+        }
+        const fieldNum = tagVal >> 3;
+        const wireType = tagVal & 0x7;
+        
+        if (wireType === 0) {
+            let val = 0n;
+            let valShift = 0n;
+            while (pos < len) {
+                const b = rawBytes[pos++];
+                val |= BigInt(b & 0x7f) << valShift;
+                valShift += 7n;
+                if (!(b & 0x80)) break;
+            }
+            if (fieldNum === 1) aid = val.toString();
+            else if (fieldNum === 2) cid = val.toString();
+        } else if (wireType === 2) {
+            let strLen = 0;
+            let lenShift = 0;
+            while (pos < len) {
+                const b = rawBytes[pos++];
+                strLen |= (b & 0x7f) << lenShift;
+                lenShift += 7;
+                if (!(b & 0x80)) break;
+            }
+            pos += strLen;
+        } else {
+            break;
+        }
+    }
+    return { aid, cid };
+}
+
+const url = typeof $request !== "undefined" && $request.url ? $request.url : "";
+
+if (url.includes("ViewProgress")) {
+    handleGrpcViewProgress();
+} else {
+    handleJsonView();
+}
+
+function handleGrpcViewProgress() {
+    let reqBytes = null;
+    let respBytes = null;
+
+    if (typeof $request !== "undefined" && $request.bodyBytes) {
+        reqBytes = new Uint8Array($request.bodyBytes);
+    } else if (typeof $request !== "undefined" && typeof $request.body === "string") {
+        reqBytes = new Uint8Array(Array.from($request.body).map(c => c.charCodeAt(0)));
+    }
+
+    if (typeof $response !== "undefined" && $response.bodyBytes) {
+        respBytes = new Uint8Array($response.bodyBytes);
+    } else if (typeof $response !== "undefined" && typeof $response.body === "string") {
+        respBytes = new Uint8Array(Array.from($response.body).map(c => c.charCodeAt(0)));
+    }
+
+    if (!reqBytes || !respBytes || respBytes.length < 5) {
+        $done({});
         return;
     }
 
-    const dmUrl = `https://comment.bilibili.com/${cid}.xml`;
+    const { aid, cid } = parseAidCidFromGrpc(reqBytes);
+    const bvid = toBvid(aid);
+
+    if (!bvid) {
+        $done({});
+        return;
+    }
+
+    const sbUrl = "https://bsbsb.top/api/skipSegments?videoID=" + bvid + "&cid=" + (cid || "");
     $httpClient.get({
-        url: dmUrl,
+        url: sbUrl,
         headers: {
-            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15",
-            "Referer": "https://www.bilibili.com/video/av" + aid
+            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)",
+            "Referer": "https://www.bilibili.com"
         },
-        timeout: 3000
-    }, function (error, response, dmBody) {
-        if (error || !dmBody) {
-            $done({ body: JSON.stringify(data) });
+        timeout: 2500
+    }, function (err, res, resBody) {
+        if (err || !resBody) {
+            $done({});
             return;
         }
 
-        const points = parseDanmakuForAirdrop(dmBody);
-        if (points.length > 0) {
-            points.forEach(function (p) {
-                d.view_points.push({
-                    from: p.time,
-                    to: p.time + 8,
-                    type: 1,
-                    content: p.text.length > 20 ? p.text.substring(0, 20) + "..." : p.text,
-                    icon_url: "",
-                    image_url: ""
-                });
-                d.high_energy.segments.push({
-                    start: p.time,
-                    end: p.time + 8,
-                    text: p.text.length > 10 ? p.text.substring(0, 10) + "..." : p.text
-                });
+        try {
+            const segments = JSON.parse(resBody);
+            if (!Array.isArray(segments) || segments.length === 0) {
+                $done({});
+                return;
+            }
+
+            const extraBytes = [];
+            segments.forEach(function (s) {
+                if (!s.segment || s.segment.length < 2) return;
+                const start = Math.floor(s.segment[0]);
+                const end = Math.ceil(s.segment[1]);
+                const label = getCategoryLabel(s.category) + " " + formatTime(start) + " - " + formatTime(end);
+                extraBytes.push(...encodePointField(start, end, label));
             });
+
+            extraBytes.push(...encodePointPermanentField());
+
+            if (extraBytes.length === 0) {
+                $done({});
+                return;
+            }
+
+            const oldPayloadLen = (respBytes[1] << 24) | (respBytes[2] << 16) | (respBytes[3] << 8) | respBytes[4];
+            const newPayloadLen = oldPayloadLen + extraBytes.length;
+
+            const finalBytes = new Uint8Array(respBytes.length + extraBytes.length);
+            finalBytes.set(respBytes, 0);
+            finalBytes.set(extraBytes, respBytes.length);
+
+            finalBytes[1] = (newPayloadLen >> 24) & 0xff;
+            finalBytes[2] = (newPayloadLen >> 16) & 0xff;
+            finalBytes[3] = (newPayloadLen >> 8) & 0xff;
+            finalBytes[4] = newPayloadLen & 0xff;
+
+            $done({ bodyBytes: finalBytes.buffer });
+        } catch (e) {
+            $done({});
         }
-        $done({ body: JSON.stringify(data) });
     });
 }
 
-function parseDanmakuForAirdrop(xml) {
-    const points = [];
-    const danmakuRegex = /<d\s+p="([\d.]+)[^"]*"[^>]*>([\s\S]*?)<\/d>/g;
-    let match;
-    let count = 0;
-
-    while ((match = danmakuRegex.exec(xml)) !== null && count < 5000) {
-        count++;
-        const time = parseFloat(match[1]);
-        const text = match[2].trim();
-
-        if (!AIRDROP_KEYWORDS.test(text)) continue;
-        AIRDROP_KEYWORDS.lastIndex = 0;
-
-        const timeMatch = text.match(TIME_PATTERN);
-        if (timeMatch) {
-            const min = parseInt(timeMatch[1]);
-            const sec = parseInt(timeMatch[2]);
-            const targetTime = min * 60 + sec;
-            if (targetTime > 0 && targetTime < (duration > 0 ? duration : 99999)) {
-                points.push({ time: targetTime, text: text });
-                continue;
-            }
-        }
-
-        if (time > 0 && time < (duration > 0 ? duration : 99999)) {
-            points.push({ time: time, text: text });
-        }
+function handleJsonView() {
+    if (typeof $response === "undefined" || !$response.body) {
+        $done({});
+        return;
     }
 
-    points.sort(function (a, b) { return a.time - b.time; });
+    let data;
+    try {
+        data = JSON.parse($response.body);
+    } catch (e) {
+        $done({});
+        return;
+    }
 
-    const unique = [];
-    const seen = {};
-    points.forEach(function (p) {
-        const key = Math.floor(p.time / 5);
-        if (!seen[key]) {
-            seen[key] = true;
-            unique.push(p);
+    if (!data || data.code !== 0 || !data.data) {
+        $done({});
+        return;
+    }
+
+    const d = data.data;
+    const bvid = d.bvid || toBvid(d.aid);
+    const cid = d.cid || 0;
+
+    if (!bvid) {
+        $done({});
+        return;
+    }
+
+    const sbUrl = "https://bsbsb.top/api/skipSegments?videoID=" + bvid + "&cid=" + cid;
+    $httpClient.get({
+        url: sbUrl,
+        headers: {
+            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)",
+            "Referer": "https://www.bilibili.com"
+        },
+        timeout: 2500
+    }, function (err, res, resBody) {
+        if (err || !resBody) {
+            $done({});
+            return;
         }
-    });
 
-    return unique;
+        try {
+            const segments = JSON.parse(resBody);
+            if (Array.isArray(segments) && segments.length > 0) {
+                if (!d.view_points) d.view_points = [];
+                d.point_permanent = true;
+
+                segments.forEach(function (s) {
+                    if (!s.segment || s.segment.length < 2) return;
+                    const start = Math.floor(s.segment[0]);
+                    const end = Math.ceil(s.segment[1]);
+                    const label = getCategoryLabel(s.category) + " " + formatTime(start) + " - " + formatTime(end);
+                    d.view_points.push({
+                        type: 1,
+                        from: start,
+                        to: end,
+                        content: label,
+                        imgUrl: "",
+                        logoUrl: ""
+                    });
+                });
+
+                $done({ body: JSON.stringify(data) });
+                return;
+            }
+        } catch (e) {}
+
+        $done({});
+    });
 }
