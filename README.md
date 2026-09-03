@@ -30,7 +30,7 @@ MyCookieCenter/
 
 | 体系 | 目录 | 特点 |
 |---|---|---|
-| **签到 / 权益体系** | `loon/CookieCenter.plugin`(抓 Cookie + cron) + `boxjs/`(BoxJS 面板) | 脚本位于 `app/weread_claim/`、`plugins/sx_ai_benefit/`、`plugins/bestpay_coin/`，需持久化 |
+| **签到 / 权益体系** | `loon/CookieCenter.plugin`(凭据捕获) + `boxjs/`(定时任务与面板) | 脚本位于 `app/weread_claim/`、`plugins/sx_ai_benefit/`、`plugins/bestpay_coin/`，需持久化 |
 | **功能插件** | `plugins/` + `loon/*.plugin`（独立） | 无状态请求/响应改写，实时生效，独立开关 |
 
 ---
@@ -74,7 +74,7 @@ https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/<目�
 | 山西电信·体验AI领福利 | [`plugins/sx_ai_benefit/`](./plugins/sx_ai_benefit/) | [`loon/CookieCenter.plugin`](./loon/CookieCenter.plugin) | [`boxjs/CookieCenter.boxjs.json`](./boxjs/CookieCenter.boxjs.json) |
 | 翼支付·权益币与绿色能量 | [`plugins/bestpay_coin/`](./plugins/bestpay_coin/) | [`loon/CookieCenter.plugin`](./loon/CookieCenter.plugin) | [`boxjs/CookieCenter.boxjs.json`](./boxjs/CookieCenter.boxjs.json) |
 
-> 微信读书、山西电信、翼支付原先的独立插件已合并进 [`loon/CookieCenter.plugin`](./loon/CookieCenter.plugin)，安装一个插件即可同时获得凭据捕获与后台定时任务；Cookie、偏好等配置在 [`boxjs/CookieCenter.boxjs.json`](./boxjs/CookieCenter.boxjs.json) 面板管理。
+> 微信读书、山西电信、翼支付原先的独立插件已合并进 [`loon/CookieCenter.plugin`](./loon/CookieCenter.plugin)，安装一个插件即可获得三平台凭据捕获；定时签到任务由 [`boxjs/CookieCenter.boxjs.json`](./boxjs/CookieCenter.boxjs.json) 订阅统一调度，Cookie、偏好等配置在 BoxJS 面板管理。
 
 ## 特殊功能插件
 

@@ -2,20 +2,20 @@
 
 本目录存放所有 Loon 专用的 `.plugin` 文件，按功能分两类：
 
-- **统一签到 / 权益插件** — `CookieCenter.plugin`，整合微信读书、山西电信、翼支付的凭据捕获与后台定时任务
+- **统一凭据捕获插件** — `CookieCenter.plugin`，专职整合微信读书、山西电信、翼支付的凭据捕获与页面注入
 - **独立功能插件** — 对应 `plugins/` 下的解锁/净化脚本，各自独立开关
 
-> `CookieCenter.plugin` 内已内置 cron 任务开关；[BoxJS 订阅](../boxjs/README.md)负责 Cookie 持久化与参数面板。
+> `CookieCenter.plugin` 只负责凭据捕获与页面处理，不含任何 cron；微信读书 / 山西电信的定时签到任务由 [BoxJS 订阅](../boxjs/README.md)统一调度，面板负责 Cookie 持久化与参数设置。
 
 ---
 
 ## 插件清单
 
-### CookieCenter（统一签到 / 权益）
+### CookieCenter（统一凭据捕获）
 
 | 文件 | 说明 | 脚本来源 |
 |---|---|---|
-| [`CookieCenter.plugin`](./CookieCenter.plugin) | 微信读书 / 山西电信 / 翼支付的凭据捕获 + cron 定时任务 | [`app/weread_claim/`](../app/weread_claim/)、[`plugins/sx_ai_benefit/`](../plugins/sx_ai_benefit/)、[`plugins/bestpay_coin/`](../plugins/bestpay_coin/) |
+| [`CookieCenter.plugin`](./CookieCenter.plugin) | 微信读书 / 山西电信 / 翼支付的凭据捕获（定时任务见 [BoxJS 订阅](../boxjs/README.md)） | [`app/weread_claim/`](../app/weread_claim/)、[`plugins/sx_ai_benefit/`](../plugins/sx_ai_benefit/)、[`plugins/bestpay_coin/`](../plugins/bestpay_coin/) |
 
 ### 独立功能
 
@@ -41,7 +41,7 @@
    https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/loon/CookieCenter.plugin
    ```
 
-3. 导入后可在插件设置中按需调整开关（捕获与 cron 默认开启）
+3. 导入后可在插件设置中按需调整各平台捕获开关（默认开启）
 4. **凭据捕获**：打开对应 App 开关 → 进入 App 触发接口 → 收到通知即成功 → 捕获完成后可关闭对应开关减少 MITM
 5. **参数面板 / 手动运行**：通过 [BoxJS 订阅](../boxjs/README.md) 查看与配置 Cookie 和偏好
 

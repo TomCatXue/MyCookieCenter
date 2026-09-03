@@ -16,7 +16,7 @@
 | 状态 | 需 BoxJS / `$persistentStore` 持久化 | 一般无状态 |
 | Loon 插件 | `loon/CookieCenter.plugin` 聚合 | 每插件独立 `loon/<Name>.plugin` |
 | BoxJS | ✅ 纳入 `boxjs/` 订阅 | ❌ 不纳入，通过插件自身 `#!switch` 管理 |
-| 开关粒度 | 每脚本 capture + sign 双开关 | 每插件单开关 |
+| 开关粒度 | 插件仅保留凭据捕获开关，定时任务由 BoxJS 订阅管理 | 每插件单开关 |
 
 ---
 
@@ -39,7 +39,7 @@
 | [`sx_ai_benefit/`](./sx_ai_benefit/) | 山西电信·体验AI领福利 | 凭证捕获 + 每月 1~8 号放水探针监控 | [`loon/CookieCenter.plugin`](../loon/CookieCenter.plugin) | [`boxjs/CookieCenter.boxjs.json`](../boxjs/CookieCenter.boxjs.json) |
 | [`bestpay_coin/`](./bestpay_coin/) | 翼支付·权益币与绿色能量 | 进页面自动收币、签到与开宝箱 | [`loon/CookieCenter.plugin`](../loon/CookieCenter.plugin) | [`boxjs/CookieCenter.boxjs.json`](../boxjs/CookieCenter.boxjs.json) |
 
-> 这两个目录原本作为独立 `.plugin` 发布，现其 MITM 与 cron 规则已合并进 `CookieCenter.plugin`，不再单独提供 Loon 插件入口。
+> 这两个目录原本作为独立 `.plugin` 发布；现其 MITM 捕获/注入规则已并入 `CookieCenter.plugin`，定时任务规则由 BoxJS 订阅维护，不再单独提供 Loon 插件入口。
 
 ## 新增插件规范
 
