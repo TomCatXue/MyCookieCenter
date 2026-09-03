@@ -2,7 +2,11 @@
   "id": "mycookiecenter.app.sub",
   "name": "MyCookieCenter 签到与权益中心",
   "author": "@MyCookieCenter",
-  "icon": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/icon.png",
+  "icon": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/icon.png",
+  "icons": [
+    "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/icon.png",
+    "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/icon.png"
+  ],
   "repo": "https://github.com/TomCatXue/MyCookieCenter",
   "apps": [
     {
@@ -14,9 +18,12 @@
         "prefer_coin"
       ],
       "author": "@Codex",
-      "icon": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/weread.png",
+      "icon": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/weread.png",
+      "icons": [
+        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/weread.png",
+        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/weread.png"
+      ],
       "repo": "https://github.com/TomCatXue/MyCookieCenter",
-      "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js",
       "settings": [
         {
           "id": "prefer_coin",
@@ -32,30 +39,30 @@
       ],
       "scripts": [
         {
-          "name": "手动领阅读奖励",
-          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js"
+          "name": "领取阅读达标奖励",
+          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/app/weread_claim/weread_claim.js"
         },
         {
-          "name": "手动翻牌抽奖",
-          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js"
+          "name": "周二翻牌抽奖游戏",
+          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/app/weread_claim/weread_flip.js"
         }
       ],
       "tasks": [
         {
-          "name": "每日阅读奖励自动领取",
+          "name": "每日阅读达标奖励自动领取",
           "cron": "0 23 * * *",
-          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js"
+          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/app/weread_claim/weread_claim.js"
         },
         {
-          "name": "每周二自动翻牌抽奖",
+          "name": "每周二翻牌抽奖自动运行",
           "cron": "0 20 * * 2",
-          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js"
+          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/app/weread_claim/weread_flip.js"
         }
       ],
       "descs_html": [
         "<span><b>凭证捕获：</b>开启 CookieCenter 插件后，在微信读书 App 内阅读或刷新任一页面，即可自动捕获 vid、skey 与 refreshToken。</span>",
-        "<span><b>阅读签到：</b>每日 23:00 自动检查阅读时长，达标后自动领取书币或体验卡。</span>",
-        "<span><b>周二翻牌：</b>每周二晚 20:00 自动参与翻牌抽奖游戏。</span>"
+        "<span><b>阅读奖励：</b>每日 23:00 自动检查阅读时长，达标后自动领取书币或体验卡。</span>",
+        "<span><b>周二翻牌：</b>每周二晚 20:00 自动执行翻牌抽奖游戏。</span>"
       ]
     },
     {
@@ -72,9 +79,12 @@
         "sx_prefer_benefit"
       ],
       "author": "@Codex",
-      "icon": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/189.png",
+      "icon": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/189.png",
+      "icons": [
+        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/189.png",
+        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/189.png"
+      ],
       "repo": "https://github.com/TomCatXue/MyCookieCenter",
-      "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/sx_ai_benefit/sx_ai_benefit.js",
       "settings": [
         {
           "id": "sx_prefer_benefit",
@@ -105,21 +115,21 @@
       ],
       "scripts": [
         {
-          "name": "执行探针探测 / 状态自检",
-          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/sx_ai_benefit/sx_ai_benefit.js"
+          "name": "执行探针自检 / 通信测试",
+          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/sx_ai_benefit/sx_ai_benefit.js"
         }
       ],
       "tasks": [
         {
-          "name": "每月1-8号放水监控与探针",
+          "name": "每月1-8号放水智能监控",
           "cron": "*/20 8-19 1-8 * *",
-          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/sx_ai_benefit/sx_ai_benefit.js"
+          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/sx_ai_benefit/sx_ai_benefit.js"
         }
       ],
       "descs_html": [
-        "<span><b>凭据捕获：</b>开启 CookieCenter 插件后，在电信 APP 首页 AI 搜索“领福利”进入活动，自动记录凭证（新批次单次提示）。</span>",
-        "<span><b>智能监控：</b>每月 1~8 号自动低频随机监控服务端放水状态，绝不报任何证书错误。</span>",
-        "<span><b>单次提醒：</b>一旦检测到新批次放水立即发送直达通知，点击直通电信 APP 极速抢兑；当月完成即深度休眠。</span>"
+        "<span><b>凭据捕获：</b>开启 CookieCenter 插件后，在电信 APP 首页 AI 搜索“领福利”进入活动，自动记录凭据（新批次单次提醒）。</span>",
+        "<span><b>智能监控：</b>每月 1~8 号后台自动探测活动服务器放水状态，绝不报任何证书错误。</span>",
+        "<span><b>单次提醒：</b>一旦检测到新批次放水立即发送直达通知，点击直通电信 APP 极速抢兑；当月已领或通知后即深度休眠。</span>"
       ]
     },
     {
@@ -131,9 +141,12 @@
         "bestpay_auto_box"
       ],
       "author": "@Codex",
-      "icon": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/bestpay_coin.png",
+      "icon": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/bestpay_coin.png",
+      "icons": [
+        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/bestpay_coin.png",
+        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/bestpay_coin.png"
+      ],
       "repo": "https://github.com/TomCatXue/MyCookieCenter",
-      "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/bestpay_coin/bestpay_coin.js",
       "settings": [
         {
           "id": "bestpay_auto_star",
@@ -159,12 +172,17 @@
       ],
       "scripts": [
         {
+          "name": "🚀 直达 App 权益币界面",
+          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/bestpay_coin/bestpay_open.js"
+        },
+        {
           "name": "一键收币与签到自检",
-          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/bestpay_coin/bestpay_coin.js"
+          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/bestpay_coin/bestpay_coin.js"
         }
       ],
       "descs_html": [
-        "<span><b>免抓包注入：</b>由 CookieCenter 插件拦截 H5 页面并注入轻量执行引擎。</span>",
+        "<span><b>免抓包注入：</b>由 CookieCenter 插件拦截 H5 页面并注入轻量秒刷引擎。</span>",
+        "<span><b>直达按钮：</b>在 BoxJS 中点击「🚀 直达 App 权益币界面」运行，即可弹出横幅直达 App 页面！</span>",
         "<span><b>秒级搞定：</b>打开翼支付 App “赚钱专区”或“绿色能量”页面瞬间，全自动一键收光所有权益币、自动签到、自动开宝箱。</span>",
         "<span><b>官方通道：</b>通过 App 内置已鉴权的官方 JSBridge 调度，零风控、零证书报错。</span>"
       ]

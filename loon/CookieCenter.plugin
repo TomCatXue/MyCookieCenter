@@ -2,7 +2,7 @@
 #!desc = 专职凭据捕获：一站式静默捕获微信读书(skey/vid)、山西电信(cookie/url)、翼支付等各平台鉴权凭证存入 BoxJS。日常签到与薅羊毛任务由 BoxJS 订阅统一调度。
 #!author = TomCatXue
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
-#!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/icon.png
+#!icon = https://avatars.githubusercontent.com/u/138953496?v=4
 #!tag = Cookie,凭证捕获,BoxJS
 #!version = 2.0.0
 #!date = 2026-09-03
@@ -34,3 +34,5 @@ http-request ^https:\/\/wx\.sx\.189\.cn\/sx_ai_benefit\/h5\/HD script-path=https
 # --- 翼支付 · 权益币与绿色能量 (进入页面响应注入自动收币签到) ---
 http-response ^https:\/\/render\.bestpay\.cn\/marketing-h5\/index\.html script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/bestpay_coin/bestpay_coin.js, tag=翼支付·收币签到注入, requires-body=true, enable={bestpay_capture}
 http-request ^https:\/\/render\.bestpay\.cn\/__bestpay_notify__ script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/bestpay_coin/bestpay_coin.js, tag=翼支付·完成通知, requires-body=false, enable={bestpay_capture}
+
+
