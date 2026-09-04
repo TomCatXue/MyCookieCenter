@@ -35,7 +35,7 @@
 | 翻牌游戏 | `0 20 * * 2` | 每周二 20:00 自动翻牌 |
 
 > 领取与翻牌为两个独立脚本入口：`weread_claim.js` 默认执行每日领取，`weread_flip.js` 默认执行翻牌。运行通知标题分别显示「WeRead · 每日签到」与「WeRead · 周二翻牌」，便于区分。
-> 以上 cron 任务随 BoxJS 订阅统一调度，`CookieCenter.plugin` 仅负责凭据捕获，无需在插件中配置时间。
+> 以上 cron 任务内置在 [`loon/CookieCenter.plugin`](../../loon/CookieCenter.plugin) 中由 Loon 负责后台自动定时调度；BoxJS 订阅用于配置奖励偏好、查看凭据与手动触发测试。
 
 ## 鉴权模型
 
