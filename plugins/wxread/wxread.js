@@ -1,16 +1,16 @@
 /*
 ------------------------------------------
-@Description: 轻触订阅人数或在读人数，好书即刻入架 · 微信读书优雅收录
-@Author: TomCatXue (重构整合)
+@Description: 微信读书·优雅收录（下架好书一键入架）
+@Author: TomCatXue (重构优化)
 @OriginalAuthor: 水君
 @Fixed: 
-  1. 修复 i.weread.qq.com 传输层强制 Base64 编码导致入架失败的问题
-  2. 扩展触发支持现代微信读书的「在读人数/阅读统计」接口 (/book/readingStat)
-  3. 增加请求头 App 凭证自动透传与 30 秒防抖防重复机制
+  1. 修复 i.weread.qq.com 传输层强制 Base64 编码与解码
+  2. 修复下架书籍 (soldout=1) 专有 490081 辅助书批处理入架机制
+  3. 移除产生 404 报错的无效 /shelf/get 请求，改用 getProgress / 幂等入架
+  4. 智能识别：仅对无“加入书架”按钮的下架/受限书籍执行强制收录，正常在售图书不滥用弹窗
 ------------------------------------------
-触发：在微信读书中，点击任意书籍的「在读人数」或「订阅人数」
-流程：提取 bookId → 校验防抖 → 查书籍信息 → 校验上架 → Base64编码请求加入书架 → 推送通知
-用法：安装插件，进入微信读书点按即用
+触发：在微信读书中，打开任意下架好书详情页，或点击「订阅人数」
+流程：校验书籍状态 → 针对下架书执行辅助书入架 → 自动清理辅助书 → 发送收录通知
 */
 
 console.log("\u2705 [微信读书·优雅收录] 脚本已加载，等待触发...");
@@ -47,7 +47,6 @@ function b64decode(str) {
     return str;
 }
 
-// 构建请求头：优先复用当前 App 请求的 vid/skey，备用本地缓存
 function buildHeaders() {
     let orig = (typeof $request !== "undefined" && $request.headers) ? $request.headers : {};
     let auth = {};
@@ -80,35 +79,37 @@ async function getBookInfo(bookId) {
             type: "get",
             headers: buildHeaders(),
         };
-        $.log(`[INFO] 正在查询书籍[${bookId}]的基础信息...`);
+        $.log(`[INFO] 正在查询书籍[${bookId}]基础信息...`);
         const res = await Request(opts);
         const data = res?.bookInfo || res;
         const title = data?.title || "";
         const author = data?.author || "";
+        const soldout = data?.soldout === 1 || data?.soldout === true;
+        const totalWords = typeof data?.totalWords !== "undefined" ? data.totalWords : -1;
 
-        if (data && data.totalWords === 0) {
-            $.log(`[INFO] 书籍[${bookId}](${title})的 totalWords 为 0，说明该书籍暂无排版内容。`);
-            return { available: false, title, author };
+        if (totalWords === 0) {
+            $.log(`[INFO] 书籍[${bookId}](${title}) totalWords=0，暂无排版内容`);
+            return { available: false, title, author, soldout, totalWords };
         }
 
-        $.log(`[INFO] 书籍[${bookId}](${title})信息正常，准备加入书架。`);
-        return { available: true, title, author };
+        $.log(`[INFO] 书籍[${bookId}](${title}) 信息查询成功，soldout=${soldout}`);
+        return { available: true, title, author, soldout, totalWords };
     } catch (e) {
-        $.log(`[WARN] 查询书籍信息异常，默认尝试添加书架: ${e}`);
-        return { available: true, title: "", author: "" };
+        $.log(`[WARN] 查询书籍信息异常: ${e}`);
+        return { available: true, title: "", author: "", soldout: true, totalWords: -1 };
     }
 }
 
 async function isBookOnShelf(bookId) {
     try {
         const opts = {
-            url: `https://i.weread.qq.com/shelf/get?bookIds=${bookId}`,
+            url: `https://i.weread.qq.com/book/getProgress?bookId=${bookId}`,
             type: "get",
             headers: buildHeaders(),
         };
         const res = await Request(opts);
-        if (res && res.data && Array.isArray(res.data) && res.data.length > 0) {
-            return res.data[0].onShelf === 1;
+        if (res && res.book && res.book.isStartReading === 1) {
+            return true;
         }
         return false;
     } catch {
@@ -116,8 +117,27 @@ async function isBookOnShelf(bookId) {
     }
 }
 
-async function addBook(bookId) {
-    const bookList = [String(bookId)];
+async function cleanBuiltinBook() {
+    const builtinBookId = "490081";
+    try {
+        const opts = {
+            url: "https://i.weread.qq.com/shelf/delete",
+            type: "post",
+            dataType: "json",
+            headers: buildHeaders(),
+            body: { bookIds: [builtinBookId] },
+        };
+        await Request(opts);
+        $.log(`[INFO] 辅助书籍[${builtinBookId}]已成功清理`);
+    } catch (e) {
+        $.log(`[WARN] 清理辅助书籍异常(可忽略): ${e}`);
+    }
+}
+
+async function addBook(bookId, isSoldout) {
+    const builtinBookId = "490081";
+    // 下架书籍必须通过包含辅助书(490081)的批处理才能成功入架
+    const bookList = isSoldout ? [builtinBookId, String(bookId)] : [String(bookId)];
 
     try {
         const opts = {
@@ -128,11 +148,15 @@ async function addBook(bookId) {
             body: { bookIds: bookList },
         };
 
-        $.log(`[INFO] 发起加书架请求，bookId: ${bookId}`);
+        $.log(`[INFO] 正在将书籍加入书架: ${bookId} (下架书籍模式=${isSoldout})`);
         const res = await Request(opts);
-        $.log(`[INFO] 服务器响应: ${JSON.stringify(res)}\n`);
+        $.log(`[INFO] 服务器入架响应: ${JSON.stringify(res)}\n`);
 
         if (res && (res.succ === 1 || res.succ === true || res.errcode === -2449)) {
+            if (isSoldout) {
+                // 异步清理临时占位的辅助书
+                await cleanBuiltinBook();
+            }
             return { succ: true };
         }
 
@@ -155,7 +179,7 @@ async function addBook(bookId) {
             return;
         }
 
-        // 30 秒防抖去重：避免同一个页面多次触发连续加书架与通知
+        // 30 秒防抖去重：避免同一本书在页面切换时多次触发
         let lastCache = $.getdata(CACHE_KEY);
         if (lastCache) {
             try {
@@ -166,29 +190,41 @@ async function addBook(bookId) {
                 }
             } catch (e) { }
         }
-        $.setdata(JSON.stringify({ bookId: String(bookId), time: Date.now() }), CACHE_KEY);
 
         const info = await getBookInfo(bookId);
         const label = info.title ? `《${info.title}》` : `ID: ${bookId}`;
 
         if (!info.available) {
-            $.msg($.name, "📕 暂未上架", `${label}（暂无正版排版数据）`);
+            $.msg($.name, "📕 无法收录", `${label}（该书暂无正版排版数据）`);
             return;
         }
+
+        const isFromSubscription = ($request.url || "").includes("subscription");
+        const isSoldout = info.soldout === true;
+
+        // 关键逻辑：正常在售图书在 App 内自带“加入书架”按钮，不予打扰
+        // 仅当下架图书（soldout=1，无加书架按钮）或用户从订阅入口进入时，才执行优雅收录
+        if (!isSoldout && !isFromSubscription) {
+            $.log(`[INFO] 书籍[${bookId}](${label})为正常在售书籍，App原生已有加书架入口，不进行静默干预`);
+            return;
+        }
+
+        $.setdata(JSON.stringify({ bookId: String(bookId), time: Date.now() }), CACHE_KEY);
 
         const onShelf = await isBookOnShelf(bookId);
         if (onShelf) {
-            $.log(`[INFO] 书籍[${bookId}]已在书架中，无需重复添加`);
+            $.log(`[INFO] 书籍[${bookId}]已经在书架中，跳过添加`);
             return;
         }
 
-        const res = await addBook(bookId);
+        const res = await addBook(bookId, isSoldout);
 
         if (res && res.succ) {
             const authorPart = info.author ? ` / ${info.author}` : "";
-            $.msg($.name, "📖 已加入书架", `${label}${authorPart}`);
+            const prefix = isSoldout ? "📕 已收录下架好书" : "📖 已加入书架";
+            $.msg($.name, prefix, `${label}${authorPart}`);
         } else {
-            $.log(`[WARN] 书籍[${bookId}]添加未返回成功标志: ${JSON.stringify(res)}`);
+            $.log(`[WARN] 书籍[${bookId}]入架失败: ${JSON.stringify(res)}`);
         }
     } catch (e) {
         $.logErr(e);

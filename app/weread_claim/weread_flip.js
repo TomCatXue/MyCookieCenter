@@ -136,147 +136,6 @@ function hmacSha256Hex(keyStr, dataStr) {
 }
 
 
-function saveAuth() {
-    let h = $request.headers || {};
-    let url = ($request.url || "");
-
-    // --- weread.qq.com (非 i.weread.qq.com): Cookie-based auth (wr_vid / wr_skey) ---
-    // 注意：不能用 indexOf("weread.qq.com")，因为 i.weread.qq.com 也含此子串
-    // 用 "://weread.qq.com" 精确匹配协议后的域名开头
-    if (url.indexOf("://weread.qq.com") !== -1) {
-        let cookie = getHeader(h, "cookie") || "";
-        if (!cookie) return;
-
-        let wrVid = "", wrSkey = "";
-        cookie.split(";").forEach(pair => {
-            let eq = pair.indexOf("=");
-            if (eq > 0) {
-                let name = decodeURIComponent(pair.slice(0, eq).trim());
-                let val = decodeURIComponent(pair.slice(eq + 1).trim());
-                if (name === "wr_vid") wrVid = val;
-                if (name === "wr_skey") wrSkey = val;
-            }
-        });
-
-        if (wrVid && wrSkey) {
-            // 翻牌游戏的 wr_vid/wr_skey 存到独立字段，不覆盖 i.weread.qq.com 的 vid/skey
-            let existing = getAuth() || {};
-            let auth = {
-                vid: existing.vid || "",
-                skey: existing.skey || "",
-                wrVid: wrVid,
-                wrSkey: wrSkey,
-                flipUa: h["user-agent"] || existing.flipUa || existing.ua || "",
-                refreshToken: existing.refreshToken || "",
-                deviceId: existing.deviceId || "",
-                basever: existing.basever || "",
-                channelid: existing.channelid || "",
-                ua: existing.ua || "",
-                authTime: Date.now()
-            };
-
-            $.setdata(JSON.stringify(auth), AUTH_KEY);
-            $.log("[WeRead] weread.qq.com Cookie saved: wrVid=" + wrVid.slice(0, 8) + "...");
-        }
-        return;
-    }
-
-    // --- /login 响应：从 RESPONSE body 提取 vid/skey/refreshToken ---
-    // /login 请求本身不带 vid/skey header（它们在响应中返回），必须在下方 vid/skey 检查之前处理
-    if (url.indexOf("/login") !== -1 && typeof $response !== "undefined" && $response.body) {
-        let loginData = decode($response.body);
-        if (loginData && loginData.vid && loginData.skey) {
-            let existing = getAuth() || {};
-            let auth = {
-                vid: loginData.vid,
-                skey: loginData.skey,
-                refreshToken: loginData.refreshToken || existing.refreshToken || "",
-                deviceId: existing.deviceId || "",
-                openId: loginData.openId || existing.openId || "",
-                basever: existing.basever || "",
-                channelid: existing.channelid || "",
-                ua: existing.ua || "",
-                wrVid: existing.wrVid || "",
-                wrSkey: existing.wrSkey || ""
-            };
-            // 从请求体补充 deviceId
-            if (typeof $request !== "undefined" && $request.body) {
-                let reqBody = decode($request.body);
-                if (reqBody && reqBody.deviceId) auth.deviceId = reqBody.deviceId;
-            }
-            auth.authTime = Date.now();
-            $.setdata(JSON.stringify(auth), AUTH_KEY);
-            $.log("[WeRead] /login response saved: vid=" + String(loginData.vid).slice(0, 8)
-                + "..., refreshToken=" + (auth.refreshToken ? "present" : "missing")
-                + ", deviceId=" + (auth.deviceId ? "present" : "missing"));
-        }
-        return;
-    }
-
-    // --- /login 请求：从 REQUEST body 提取 deviceId + refreshToken ---
-    // /login 请求本身不带 vid/skey header，必须在下方 vid/skey 检查之前处理
-    if (url.indexOf("/login") !== -1 && typeof $request !== "undefined" && $request.body) {
-        let reqBody = decode($request.body);
-        if (reqBody) {
-            let existing = getAuth() || {};
-            let updated = false;
-            if (reqBody.deviceId && !existing.deviceId) {
-                existing.deviceId = reqBody.deviceId;
-                updated = true;
-            }
-            if (reqBody.refreshToken && !existing.refreshToken) {
-                existing.refreshToken = reqBody.refreshToken;
-                updated = true;
-            }
-            if (updated) {
-                $.setdata(JSON.stringify(existing), AUTH_KEY);
-                $.log("[WeRead] /login request: deviceId=" + (existing.deviceId ? "present" : "missing")
-                    + ", refreshToken=" + (existing.refreshToken ? "present" : "missing"));
-            }
-        }
-        return;
-    }
-
-    // --- i.weread.qq.com: Header-based auth (vid / skey) ---
-    let vid, skey;
-    for (let k in h) {
-        let key = k.toLowerCase();
-        if (key === "vid") vid = h[k];
-        if (key === "skey") skey = h[k];
-    }
-
-    if (!vid || !skey) return;
-
-    // Skip if auth already saved with same credentials — avoid redundant writes
-    let existing = getAuth() || {};
-    if (existing.vid === vid && existing.skey === skey) return;
-
-    // Auth is new or changed — extract all fields and save
-    let auth = { vid, skey };
-    // 保留已有的翻牌凭证和刷新字段
-    if (existing.wrVid) auth.wrVid = existing.wrVid;
-    if (existing.wrSkey) auth.wrSkey = existing.wrSkey;
-    if (existing.refreshToken) auth.refreshToken = existing.refreshToken;
-    if (existing.deviceId) auth.deviceId = existing.deviceId;
-    if (existing.openId) auth.openId = existing.openId;
-    for (let k in h) {
-        let key = k.toLowerCase();
-        if (key === "basever") auth.basever = h[k];
-        if (key === "channelid") auth.channelid = h[k];
-        if (key === "user-agent") auth.ua = h[k];
-        if (key === "deviceid") auth.deviceId = h[k];
-    }
-
-    // /login 响应和请求已在上方独立处理（vid/skey 检查之前），此处不会到达
-
-    auth.authTime = Date.now();
-    $.setdata(JSON.stringify(auth), AUTH_KEY);
-    $.log("[WeRead] auth saved, deviceId=" + (auth.deviceId ? "present" : "missing")
-        + ", refreshToken=" + (auth.refreshToken ? "present" : "missing"));
-
-}
-
-
 function getHeader(headers, name) {
     let target = String(name).toLowerCase();
     for (let key in (headers || {})) {
@@ -704,6 +563,10 @@ async function runFlipCardDirect(auth) {
     $.log("[WeRead] 翻牌游戏 — 开始... version=" + SCRIPT_VERSION);
 
     if (!auth) auth = getAuth();
+    $.log("[WeRead] 当前凭证状态: vid=" + (auth && auth.vid ? "已存" : "无")
+        + ", wrSkey=" + (auth && auth.wrSkey ? "已存" : "无")
+        + ", refreshToken=" + (auth && auth.refreshToken ? "已存" : "无")
+        + ", deviceId=" + (auth && auth.deviceId ? "已存" : "无"));
 
     // ⚠️ 翻牌必须用 weread.qq.com 捕获的真实 Cookie（wr_skey/wr_vid）。
     // 不能 fallback 到 App 的 vid/skey：诊断（2026-08-23）已确认 App skey ≠ 网页 wr_skey，
@@ -721,7 +584,7 @@ async function runFlipCardDirect(auth) {
     if (!auth || !auth.wrVid || !auth.wrSkey) {
         $.log("[WeRead] 翻牌 — 未捕获 weread.qq.com Cookie. wrVid="
             + (auth && auth.wrVid ? "有" : "无") + ", wrSkey=" + (auth && auth.wrSkey ? "有" : "无"));
-        $.msg("WeRead", "翻牌", "未捕获到 weread.qq.com 登录 Cookie（wr_skey/wr_vid）且自动刷新失败\n请在微信读书 App 打开「翻牌游戏」页面一次，再重新运行");
+        $.msg("WeRead · 周二翻牌", "翻牌", "未捕获到 weread.qq.com 登录 Cookie（wr_skey/wr_vid）且自动刷新失败\n请在微信读书 App 打开「翻牌游戏」页面一次，再重新运行");
         return;
     }
 
@@ -730,18 +593,30 @@ async function runFlipCardDirect(auth) {
     // 导致服务器/WAF 校验参数非法直接断开（HTTP 499）。
     let listRes = await get(FLIP_API + "/flipCardList?pf=ios&platform=ios_html", getFlipHeaders(auth));
     if (listRes.status !== 200) {
-        if (auth && auth.refreshToken && auth.deviceId && (listRes.status === 401 || listRes.status === 403 || listRes.status === 499)) {
-            $.log("[WeRead] 翻牌 — flipCardList 返回 HTTP " + listRes.status + "，尝试通过 /login 自动刷新 wr_skey 并重试...");
-            let refreshedAuth = await tryRefreshLogin(auth);
-            if (refreshedAuth && refreshedAuth.wrSkey) {
-                auth = refreshedAuth;
-                listRes = await get(FLIP_API + "/flipCardList?pf=ios&platform=ios_html", getFlipHeaders(auth));
+        if (listRes.status === 401 || listRes.status === 403 || listRes.status === 499) {
+            if (auth && auth.refreshToken && auth.deviceId) {
+                $.log("[WeRead] 翻牌 — flipCardList 返回 HTTP " + listRes.status + " (登录超时)，正在通过 /login 签名接口自动换票刷新...");
+                let refreshedAuth = await tryRefreshLogin(auth);
+                if (refreshedAuth && refreshedAuth.wrSkey) {
+                    auth = refreshedAuth;
+                    listRes = await get(FLIP_API + "/flipCardList?pf=ios&platform=ios_html", getFlipHeaders(auth));
+                    $.log("[WeRead] 自动换票刷新成功！重试 flipCardList HTTP " + listRes.status);
+                }
+            } else {
+                let missing = [];
+                if (!auth?.refreshToken) missing.push("refreshToken(脱机换票凭证)");
+                if (!auth?.deviceId) missing.push("deviceId(设备标识)");
+                $.log("[WeRead] 翻牌 — 遇到 " + listRes.status + " 登录超时，但由于本地缺少 [" + missing.join(", ") + "]，无法触发脱机自动换票！");
+                $.log("[WeRead] 【如何激活脱机自动换票】：在微信读书 App 中「退出登录并重新登录」一次，让 Loon 拦截 /login 即可永久激活；");
+                $.log("[WeRead] 【临时应急解决办法】：在微信读书 App 打开一次「翻牌游戏」H5 页面，Loon 将直接捕获最新的 wr_skey。");
+                $.msg("WeRead · 周二翻牌", "翻牌凭据已过期", "缺少脱机换票凭证，无法自动刷新\n👉 请在 App 退出并重新登录一次以永久激活全自动换票；或打开翻牌页面更新 Cookie");
+                return;
             }
         }
         if (listRes.status !== 200) {
         $.log("[WeRead] 翻牌 — flipCardList 查询失败 HTTP " + listRes.status
             + "，body=" + String(listRes.body || "").slice(0, 100));
-        $.msg("WeRead", "翻牌失败", "查询卡片列表失败 (HTTP " + listRes.status + ")\n若为 401/403/499，请打开微信读书 App 的「翻牌游戏」页面一次重新捕获 Cookie");
+        $.msg("WeRead · 周二翻牌", "翻牌失败", "查询卡片列表失败 (HTTP " + listRes.status + ")\n若为 401/403/499，请打开微信读书 App 的「翻牌游戏」页面一次重新捕获 Cookie");
         return;
         }
     }
@@ -998,16 +873,10 @@ let $ = new Env("WeRead · 周二翻牌");
 
 async function main() {
     try {
-        if (typeof $request !== "undefined") {
-            $done({});
-            return;
-        }
-
         await runFlipCard();
     } catch (e) {
         $.msg("WeRead · 周二翻牌", "执行异常", String(e));
     }
-
     $done({});
 }
 

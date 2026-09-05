@@ -207,147 +207,6 @@ function computeLoginSignature(refreshToken, deviceId, body) {
 }
 
 
-function saveAuth() {
-    let h = $request.headers || {};
-    let url = ($request.url || "");
-
-    // --- weread.qq.com (非 i.weread.qq.com): Cookie-based auth (wr_vid / wr_skey) ---
-    // 注意：不能用 indexOf("weread.qq.com")，因为 i.weread.qq.com 也含此子串
-    // 用 "://weread.qq.com" 精确匹配协议后的域名开头
-    if (url.indexOf("://weread.qq.com") !== -1) {
-        let cookie = getHeader(h, "cookie") || "";
-        if (!cookie) return;
-
-        let wrVid = "", wrSkey = "";
-        cookie.split(";").forEach(pair => {
-            let eq = pair.indexOf("=");
-            if (eq > 0) {
-                let name = decodeURIComponent(pair.slice(0, eq).trim());
-                let val = decodeURIComponent(pair.slice(eq + 1).trim());
-                if (name === "wr_vid") wrVid = val;
-                if (name === "wr_skey") wrSkey = val;
-            }
-        });
-
-        if (wrVid && wrSkey) {
-            // 翻牌游戏的 wr_vid/wr_skey 存到独立字段，不覆盖 i.weread.qq.com 的 vid/skey
-            let existing = getAuth() || {};
-            let auth = {
-                vid: existing.vid || "",
-                skey: existing.skey || "",
-                wrVid: wrVid,
-                wrSkey: wrSkey,
-                flipUa: h["user-agent"] || existing.flipUa || existing.ua || "",
-                refreshToken: existing.refreshToken || "",
-                deviceId: existing.deviceId || "",
-                basever: existing.basever || "",
-                channelid: existing.channelid || "",
-                ua: existing.ua || "",
-                authTime: Date.now()
-            };
-
-            $.setdata(JSON.stringify(auth), AUTH_KEY);
-            $.log("[WeRead] weread.qq.com Cookie saved: wrVid=" + wrVid.slice(0, 8) + "...");
-        }
-        return;
-    }
-
-    // --- /login 响应：从 RESPONSE body 提取 vid/skey/refreshToken ---
-    // /login 请求本身不带 vid/skey header（它们在响应中返回），必须在下方 vid/skey 检查之前处理
-    if (url.indexOf("/login") !== -1 && typeof $response !== "undefined" && $response.body) {
-        let loginData = decode($response.body);
-        if (loginData && loginData.vid && loginData.skey) {
-            let existing = getAuth() || {};
-            let auth = {
-                vid: loginData.vid,
-                skey: loginData.skey,
-                refreshToken: loginData.refreshToken || existing.refreshToken || "",
-                deviceId: existing.deviceId || "",
-                openId: loginData.openId || existing.openId || "",
-                basever: existing.basever || "",
-                channelid: existing.channelid || "",
-                ua: existing.ua || "",
-                wrVid: existing.wrVid || "",
-                wrSkey: existing.wrSkey || ""
-            };
-            // 从请求体补充 deviceId
-            if (typeof $request !== "undefined" && $request.body) {
-                let reqBody = decode($request.body);
-                if (reqBody && reqBody.deviceId) auth.deviceId = reqBody.deviceId;
-            }
-            auth.authTime = Date.now();
-            $.setdata(JSON.stringify(auth), AUTH_KEY);
-            $.log("[WeRead] /login response saved: vid=" + String(loginData.vid).slice(0, 8)
-                + "..., refreshToken=" + (auth.refreshToken ? "present" : "missing")
-                + ", deviceId=" + (auth.deviceId ? "present" : "missing"));
-        }
-        return;
-    }
-
-    // --- /login 请求：从 REQUEST body 提取 deviceId + refreshToken ---
-    // /login 请求本身不带 vid/skey header，必须在下方 vid/skey 检查之前处理
-    if (url.indexOf("/login") !== -1 && typeof $request !== "undefined" && $request.body) {
-        let reqBody = decode($request.body);
-        if (reqBody) {
-            let existing = getAuth() || {};
-            let updated = false;
-            if (reqBody.deviceId && !existing.deviceId) {
-                existing.deviceId = reqBody.deviceId;
-                updated = true;
-            }
-            if (reqBody.refreshToken && !existing.refreshToken) {
-                existing.refreshToken = reqBody.refreshToken;
-                updated = true;
-            }
-            if (updated) {
-                $.setdata(JSON.stringify(existing), AUTH_KEY);
-                $.log("[WeRead] /login request: deviceId=" + (existing.deviceId ? "present" : "missing")
-                    + ", refreshToken=" + (existing.refreshToken ? "present" : "missing"));
-            }
-        }
-        return;
-    }
-
-    // --- i.weread.qq.com: Header-based auth (vid / skey) ---
-    let vid, skey;
-    for (let k in h) {
-        let key = k.toLowerCase();
-        if (key === "vid") vid = h[k];
-        if (key === "skey") skey = h[k];
-    }
-
-    if (!vid || !skey) return;
-
-    // Skip if auth already saved with same credentials — avoid redundant writes
-    let existing = getAuth() || {};
-    if (existing.vid === vid && existing.skey === skey) return;
-
-    // Auth is new or changed — extract all fields and save
-    let auth = { vid, skey };
-    // 保留已有的翻牌凭证和刷新字段
-    if (existing.wrVid) auth.wrVid = existing.wrVid;
-    if (existing.wrSkey) auth.wrSkey = existing.wrSkey;
-    if (existing.refreshToken) auth.refreshToken = existing.refreshToken;
-    if (existing.deviceId) auth.deviceId = existing.deviceId;
-    if (existing.openId) auth.openId = existing.openId;
-    for (let k in h) {
-        let key = k.toLowerCase();
-        if (key === "basever") auth.basever = h[k];
-        if (key === "channelid") auth.channelid = h[k];
-        if (key === "user-agent") auth.ua = h[k];
-        if (key === "deviceid") auth.deviceId = h[k];
-    }
-
-    // /login 响应和请求已在上方独立处理（vid/skey 检查之前），此处不会到达
-
-    auth.authTime = Date.now();
-    $.setdata(JSON.stringify(auth), AUTH_KEY);
-    $.log("[WeRead] auth saved, deviceId=" + (auth.deviceId ? "present" : "missing")
-        + ", refreshToken=" + (auth.refreshToken ? "present" : "missing"));
-
-}
-
-
 function getHeader(headers, name) {
     let target = String(name).toLowerCase();
     for (let key in (headers || {})) {
@@ -978,17 +837,10 @@ let $ = new Env("WeRead · 每日签到");
 
 async function main() {
     try {
-        if (typeof $request !== "undefined") {
-            saveAuth();
-            $done({});
-            return;
-        }
-
         await runClaim();
     } catch (e) {
         $.msg("WeRead · 每日签到", "执行异常", String(e));
     }
-
     $done({});
 }
 

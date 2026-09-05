@@ -15,7 +15,8 @@
       "keys": [
         "weread_auth_v2",
         "weread_flip_state_v1",
-        "prefer_coin"
+        "prefer_coin",
+        "weread_web_cookie"
       ],
       "author": "@Codex",
       "icon": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/weread.png?v=20260903",
@@ -31,10 +32,30 @@
           "val": "2",
           "type": "select",
           "items": [
-            { "key": "1", "label": "优先体验卡" },
-            { "key": "2", "label": "优先书币 (推荐)" }
+            {
+              "key": "1",
+              "label": "优先体验卡"
+            },
+            {
+              "key": "2",
+              "label": "优先书币 (推荐)"
+            }
           ],
           "desc": "设置阅读时长达标奖励偏好。设为优先书币时自动转换书币。"
+        },
+        {
+          "id": "weread_web_cookie",
+          "name": "微信读书网页端 Cookie",
+          "val": "",
+          "type": "textarea",
+          "desc": "包含 wr_vid 与 wr_skey 的网页端完整 Cookie，由抓取插件自动保存或在此手动配置。"
+        },
+        {
+          "id": "weread_auth_v2",
+          "name": "微信读书 App 全量凭据",
+          "val": "",
+          "type": "textarea",
+          "desc": "包含 vid、skey、refreshToken、deviceId 的 JSON 数据，由抓取插件自动捕获保存。"
         }
       ],
       "scripts": [
@@ -69,10 +90,11 @@
         }
       ],
       "descs_html": [
-        "<span><b>凭证捕获：</b>开启 CookieCenter 插件后，在微信读书 App 内阅读或刷新任一页面，即可自动捕获 vid、skey 与 refreshToken。</span>",
-        "<span><b>阅读奖励：</b>每日 23:00 自动检查阅读时长，达标后自动领取书币或体验卡。</span>",
-        "<span><b>周二翻牌：</b>每周二晚 20:00 自动执行翻牌抽奖游戏。</span>",
-        "<span><b>限免入架：</b>每周五 10:00 自动拉取官方最新限免书库与推荐好书，批量加入书架防错过。</span>"
+        "<span><b>架构分离：</b>遵循 Cookie 抓取与签到执行彻底分离模式。Loon 插件仅负责抓取凭据，本 BoxJS 订阅统一管理所有签到任务与手动执行。</span>",
+        "<span><b>自动更新鉴权：</b>任务执行脚本仅读取已存储的 Cookie/凭证。当凭证过期时，内置纯 JS 逆向签名算法自动脱机调用 /login 换票更新鉴权，无需手动干预。</span>",
+        "<span><b>每日签到：</b>每晚 23:00 自动检查阅读时长与天数，达标后自动领取书币或体验卡。</span>",
+        "<span><b>周二翻牌：</b>每周二晚 20:00 自动参与翻牌抽奖，若 Cookie 超时自动同步换票重试。</span>",
+        "<span><b>免费图书馆：</b>每周五 10:00 自动对接免费图书馆书单，精选好书批量入架。</span>"
       ]
     },
     {
@@ -102,9 +124,18 @@
           "val": "tc_member",
           "type": "select",
           "items": [
-            { "key": "tc_member", "label": "腾讯视频 VIP 会员 31 天 (限量1000份·需短信)" },
-            { "key": "tc_flow", "label": "3GB 国内流量包 (当月有效·免验证码秒到)" },
-            { "key": "tc_tele", "label": "1~20 元随机话费满减券 (需翼支付实名)" }
+            {
+              "key": "tc_member",
+              "label": "腾讯视频 VIP 会员 31 天 (限量1000份·需短信)"
+            },
+            {
+              "key": "tc_flow",
+              "label": "3GB 国内流量包 (当月有效·免验证码秒到)"
+            },
+            {
+              "key": "tc_tele",
+              "label": "1~20 元随机话费满减券 (需翼支付实名)"
+            }
           ],
           "desc": "每人每月限领一项。推荐视频会员，亦可选择免验证的 3GB 流量。"
         },
@@ -199,4 +230,3 @@
     }
   ]
 }
-
