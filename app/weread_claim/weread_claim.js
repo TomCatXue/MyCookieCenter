@@ -379,145 +379,17 @@ function encode(obj) {
 
 
 function decode(str) {
+    if (!str) return null;
+    try {
+        return JSON.parse(str);
+    } catch (e) { }
     try {
         if (typeof $base64 !== "undefined") {
             return JSON.parse($base64.decode(str));
         }
-
-        return JSON.parse(str);
-    } catch (e) {
-        return null;
-    }
+    } catch (e) { }
+    return null;
 }
-
-
-// Build a human-readable description for a claimed reward
-function describeChoice(choice, resp) {
-    // Try to extract detail from exchange response first
-    if (resp && resp.body) {
-        let ex = decode(resp.body);
-        if (ex) {
-            if (ex.awardName) return ex.awardName;
-            if (ex.exchangeName) return ex.exchangeName;
-            if (ex.desc) return ex.desc;
-            if (ex.choiceName) return ex.choiceName;
-        }
-    }
-    // Then try fields on the choice object itself
-    if (choice.choiceName) return choice.choiceName;
-    if (choice.name) return choice.name;
-    if (choice.desc) return choice.desc;
-    // Fallback to choiceType-based description
-    if (choice.choiceType === 2) return "书币";
-    if (choice.choiceType === 1) return "体验卡";
-    return "奖励";
-}
-
-
-// 解析奖励偏好 prefer_coin。
-// Loon [Argument] 段的值通过 $persistentStore.read("prefer_coin") 读取（见 Env.getdata），
-// 返回用户选择的 "1"(优先体验卡) / "2"(优先书币) 字符串；兼容个别版本带 "input," 前缀。
-// 1=优先体验卡, 2=优先书币（默认）。
-function resolvePreferCoin(rawPrefer) {
-    let preferVal = rawPrefer;
-    if (typeof preferVal === "string") {
-        preferVal = preferVal.replace(/^(input|switch),/, "");
-    }
-    let preferCoin = true; // 默认书币优先
-    if (preferVal === 1 || preferVal === "1" || preferVal === false || preferVal === "false") {
-        preferCoin = false; // 体验卡优先
-    }
-    return {
-        raw: rawPrefer,
-        preferCoin: preferCoin,
-        firstType: preferCoin ? 2 : 1,
-        secondType: preferCoin ? 1 : 2
-    };
-}
-
-
-// ============================================================
-// /login 签名计算（逆向还原自 WeRead 10.2.0 ARM64 sub_1004d7878）
-// ============================================================
-
-const WE_READ_TABLE_HEX = "34ca55401db693c63130293532a7b811c2b516fa8bb124a4109004e908f83b8a9c8c44f9bc5c69e2a1dad2d37589f71e2d5056d77253bf22fb200f012e45876e6648f2e0cdfe67a943f49451cea54aee13268eccaa33145d0e39bbcf912b814dea99ec1a2c85c5d936744b18e1f13d9d419fb4170dd64cbedcaf972877f062ff71c1c8278f6c68a89be6591c1b1209984e3f063700ba1f0a192fc9d5d057496ffd25e4610c42cb96645fdbad60238d9a6dc3c45e3eb9926abd5b077f7695ed4fab847a80e778c7e5eb73836bfc38467d4765b352633a05d1efa3a6de9e3c02aeb27ba0f6f32ac0ac86035a540bf582d47ee3dfb0d8dd21e87c88a2795870b715";
-const WE_READ_TABLE = new Uint8Array(256);
-for (let i = 0; i < 256; i++) {
-    WE_READ_TABLE[i] = parseInt(WE_READ_TABLE_HEX.substr(i * 2, 2), 16);
-}
-
-function subBytes(str) {
-    const b = strToBytes(str);
-    const out = new Uint8Array(b.length);
-    for (let i = 0; i < b.length; i++) {
-        out[i] = WE_READ_TABLE[b[i]];
-    }
-    return out;
-}
-
-function simRotateBytes(arr, shift) {
-    const L = arr.length;
-    if (L === 0) return new Uint8Array(0);
-    const dest = new Uint8Array(L);
-    let curr = shift;
-    for (let i = 0; i < L; i++) {
-        dest[curr % L] = arr[i];
-        curr++;
-    }
-    return dest;
-}
-
-function xorSumBytes(arr) {
-    let res = 0;
-    for (let i = 0; i < arr.length; i++) res ^= arr[i];
-    return res;
-}
-
-function compareByteArrays(a, b) {
-    const len = Math.min(a.length, b.length);
-    for (let i = 0; i < len; i++) {
-        if (a[i] !== b[i]) return a[i] - b[i];
-    }
-    return a.length - b.length;
-}
-
-// 生产级：与 App 原生 +[WRAppUtils signatureForLoginRenewalWithRefreshToken:] 100% 对齐
-function computeLoginSignature(refreshToken, deviceId, body) {
-    let random = body.random;
-    let ts = body.timestamp;
-    let logoToken = "5ecdcfd7f";
-
-    const s0 = subBytes(String(ts));
-    const s1 = subBytes(String(random));
-    const s2 = subBytes(logoToken);
-    const s3 = subBytes(deviceId);
-    const s4 = strToBytes("5a6f1");
-    const s5 = subBytes(refreshToken);
-
-    const list = [s0, s1, s2, s3, s4, s5];
-    list.sort(compareByteArrays);
-
-    let totalLen = 0;
-    for (let i = 0; i < list.length; i++) totalLen += list[i].length;
-    const concat = new Uint8Array(totalLen);
-    let off = 0;
-    for (let i = 0; i < list.length; i++) {
-        concat.set(list[i], off);
-        off += list[i].length;
-    }
-
-    const shift1 = xorSumBytes(concat) % 11;
-    const rot1 = simRotateBytes(concat, shift1);
-
-    const hash1Hex = bytesToHex(sha256Uint8(rot1));
-    const hex1Ascii = strToBytes(hash1Hex);
-
-    const shift2 = xorSumBytes(hex1Ascii) % 11;
-    const rot2 = simRotateBytes(hex1Ascii, shift2);
-
-    return bytesToHex(sha256Uint8(rot2));
-}
-
 
 function post(url, body, headers) {
     return new Promise((resolve, reject) => {
@@ -1330,24 +1202,81 @@ function extractBooks(data) {
     return list;
 }
 
+async function checkFreeQualify(auth) {
+    try {
+        let res = await get(API + "/checkfreequalify?type=book&vid=" + auth.vid, getHeaders(auth));
+        let data = decode(res.body);
+        if (data && typeof data.reachedMax !== "undefined") {
+            return data;
+        }
+    } catch (e) {
+        $.log("[WeRead] checkfreequalify 请求异常: " + String(e));
+    }
+    return { reachedMax: 0 };
+}
+
+function extractBooks(data) {
+    let list = [];
+    if (!data) return list;
+    let rawList = data.books || data.data || data.items || data.freeBooks || (Array.isArray(data) ? data : []);
+    rawList.forEach(b => {
+        let bid = b.bookId || b.id || b.bookInfo?.bookId || b.book?.bookId;
+        let title = b.title || b.bookInfo?.title || b.book?.title || "";
+        let received = typeof b.received !== "undefined" ? b.received : 0;
+        if (bid) {
+            list.push({ bookId: String(bid), title: String(title), received: received });
+        }
+    });
+    return list;
+}
+
+async function checkFreeQualify(auth) {
+    try {
+        let res = await get(API + "/checkfreequalify?type=book&vid=" + auth.vid, getHeaders(auth));
+        let data = decode(res.body);
+        if (data && typeof data.reachedMax !== "undefined") {
+            return data;
+        }
+    } catch (e) {
+        $.log("[WeRead] checkfreequalify 请求异常: " + String(e));
+    }
+    return { reachedMax: 0 };
+}
+
+function extractBooks(data) {
+    let list = [];
+    if (!data) return list;
+    let rawList = data.books || data.data || data.items || data.freeBooks || (Array.isArray(data) ? data : []);
+    rawList.forEach(b => {
+        let bid = b.bookId || b.id || b.bookInfo?.bookId || b.book?.bookId;
+        let title = b.title || b.bookInfo?.title || b.book?.title || "";
+        let received = typeof b.received !== "undefined" ? b.received : 0;
+        if (bid) {
+            list.push({ bookId: String(bid), title: String(title), received: received });
+        }
+    });
+    return list;
+}
+
 async function fetchLimitFreeBooks(auth) {
     let books = [];
 
     // 1. 优先获取福利界面「免费图书馆」书单（每期免费领 2 本电子书）
+    // 关键对齐：必须携带完整查询参数 ?count=120&receiveStatus=1&type=book&v=2，否则触发服务端 HTTP 499 拦截
     try {
-        let res1 = await get(API + "/free/library/list", getHeaders(auth));
+        let res1 = await get(API + "/free/library/list?count=120&receiveStatus=1&type=book&v=2", getHeaders(auth));
         if (res1.status === 401) {
             let refreshed = await tryRefreshLogin(auth);
             if (refreshed) {
                 auth = refreshed;
-                res1 = await get(API + "/free/library/list", getHeaders(auth));
+                res1 = await get(API + "/free/library/list?count=120&receiveStatus=1&type=book&v=2", getHeaders(auth));
             }
         }
         if (res1.status === 200) {
-            let data = decode(res1.body) || JSON.parse(res1.body || "{}");
+            let data = decode(res1.body);
             let list = extractBooks(data);
             books = books.concat(list);
-            $.log("[WeRead] /free/library/list 成功提取到 " + list.length + " 本免费好书" + (data.intro ? " (" + data.intro + ")" : ""));
+            $.log("[WeRead] /free/library/list 成功提取到 " + list.length + " 本免费好书" + (data && data.intro ? " (" + data.intro + ")" : ""));
         } else {
             $.log("[WeRead] /free/library/list HTTP " + res1.status);
         }
@@ -1355,33 +1284,31 @@ async function fetchLimitFreeBooks(auth) {
         $.log("[WeRead] /free/library/list 请求异常: " + String(e));
     }
 
-    // 2. 获取限免/新人免费书单 /newUser/limitFree
+    // 2. 备选源：限免/新人免费书单 /newUser/limitFree
     try {
         let res2 = await get(API + "/newUser/limitFree?cmd=0", getHeaders(auth));
         if (res2.status === 200) {
-            let data = decode(res2.body) || JSON.parse(res2.body || "{}");
+            let data = decode(res2.body);
             let list = extractBooks(data);
             books = books.concat(list);
-            $.log("[WeRead] /newUser/limitFree 提取到 " + list.length + " 本书籍");
+            if (list.length > 0) $.log("[WeRead] /newUser/limitFree 提取到 " + list.length + " 本书籍");
         }
-    } catch (e) {
-        $.log("[WeRead] /newUser/limitFree 请求异常: " + String(e));
-    }
+    } catch (e) { }
 
     // 3. 备用推荐源 /exchange/bookrecommend
     if (books.length === 0) {
         try {
             let res3 = await get(API + "/exchange/bookrecommend", getHeaders(auth));
             if (res3.status === 200) {
-                let data = decode(res3.body) || JSON.parse(res3.body || "{}");
+                let data = decode(res3.body);
                 let list = extractBooks(data);
                 books = books.concat(list);
-                $.log("[WeRead] /exchange/bookrecommend 备用源提取到 " + list.length + " 本");
+                if (list.length > 0) $.log("[WeRead] /exchange/bookrecommend 提取到 " + list.length + " 本书籍");
             }
         } catch (e) { }
     }
 
-    // 去重
+    // 按 bookId 去重
     let uniqueMap = new Map();
     books.forEach(b => {
         if (b.bookId && !uniqueMap.has(b.bookId)) {
@@ -1398,16 +1325,7 @@ async function batchAddShelf(auth, bookList) {
     }
 
     let bookIds = bookList.map(b => b.bookId);
-    $.log("[WeRead] 准备批量加入书架，共 " + bookIds.length + " 本...");
-
-    // 尝试调用限免赠领通道 /act/sendgift (xsmfs: 限时免费送)
-    try {
-        await post(
-            API + "/act/sendgift",
-            encode({ act: "xsmfs", actType: 1, bookIds: bookIds }),
-            getHeaders(auth)
-        );
-    } catch (e) { }
+    $.log("[WeRead] 准备领取加入书架，共 " + bookIds.length + " 本: " + bookIds.join(", "));
 
     let addPayload = { bookIds: bookIds };
     let res = await post(
@@ -1428,8 +1346,8 @@ async function batchAddShelf(auth, bookList) {
         }
     }
 
-    let resData = decode(res.body) || JSON.parse(res.body || "{}");
-    $.log("[WeRead] /shelf/add 响应: " + JSON.stringify(resData).slice(0, 150));
+    let resData = decode(res.body);
+    $.log("[WeRead] /shelf/add 响应 HTTP " + res.status + ": " + JSON.stringify(resData || {}).slice(0, 150));
 
     if (resData && (resData.succ || resData.errcode === -2449 || res.status === 200)) {
         let titles = bookList.map(b => b.title ? `《${b.title}》` : `ID:${b.bookId}`).filter(Boolean);
@@ -1447,21 +1365,37 @@ async function runFreeBooks() {
     }
 
     $.log("[WeRead] 限免好书入架任务启动... version=" + SCRIPT_VERSION);
+
+    // 1. 检查领书资格与本期配额（每期最多 2 本）
+    let qualify = await checkFreeQualify(auth);
+    if (qualify && qualify.reachedMax === 1) {
+        $.log("[WeRead] 本期免费图书馆领书配额已达上限 (reachedMax=1)");
+        $.msg("WeRead · 限免入架", "本期配额已满", qualify.hint || "每期最多领取2本书，下期再来吧");
+        return;
+    }
+
+    // 2. 抓取书单
     let { books, auth: updatedAuth } = await fetchLimitFreeBooks(auth);
     auth = updatedAuth;
 
     if (!books || books.length === 0) {
-        $.msg("WeRead · 限免入架", "暂无可用限免书单", "本周官方限免书库暂未更新或当前列表为空");
+        $.msg("WeRead · 限免入架", "暂无可用限免书单", "未获取到本周免费图书馆书籍，请稍后重试");
         return;
     }
 
-    let result = await batchAddShelf(auth, books);
+    // 3. 优先挑选未领取过的书籍 (received === 0)
+    let unreceived = books.filter(b => b.received !== 1);
+    let candidates = unreceived.length > 0 ? unreceived : books;
+
+    // 每期领 2 本，挑出前 2 本入架
+    let targetBooks = candidates.slice(0, 2);
+    let result = await batchAddShelf(auth, targetBooks);
+
     if (result.success) {
-        let preview = result.titles.slice(0, 3).join("、");
-        if (result.titles.length > 3) preview += ` 等共 ${result.count} 本`;
-        $.msg("WeRead · 限免入架", `成功添加 ${result.count} 本好书`, preview);
+        let preview = result.titles.join("、");
+        $.msg("WeRead · 限免入架", `成功领取 ${result.count} 本免费好书`, preview);
     } else {
-        $.msg("WeRead · 限免入架", "批量添加失败", result.errMsg || "请检查网络");
+        $.msg("WeRead · 限免入架", "领取失败", result.errMsg || "请检查网络");
     }
 }
 
