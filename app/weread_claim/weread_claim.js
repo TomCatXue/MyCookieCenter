@@ -218,13 +218,34 @@ function getHeader(headers, name) {
 
 function getAuth() {
     let data = $.getdata(AUTH_KEY);
-    if (!data) return null;
-
-    try {
-        return JSON.parse(data);
-    } catch (e) {
-        return null;
+    let auth = null;
+    if (data) {
+        try { auth = JSON.parse(data); } catch (e) { }
     }
+    // 回退机制：若缺少 App 端凭据，自动从网页端 Cookie (weread_web_cookie) 提取 wr_vid 与 wr_skey
+    if (!auth || (!auth.vid && !auth.skey)) {
+        let webCookie = $.getdata("weread_web_cookie");
+        if (webCookie) {
+            let wrVid = "", wrSkey = "";
+            webCookie.split(";").forEach(pair => {
+                let eq = pair.indexOf("=");
+                if (eq > 0) {
+                    let k = decodeURIComponent(pair.slice(0, eq).trim());
+                    let v = decodeURIComponent(pair.slice(eq + 1).trim());
+                    if (k === "wr_vid") wrVid = v;
+                    if (k === "wr_skey") wrSkey = v;
+                }
+            });
+            if (wrVid && wrSkey) {
+                auth = auth || {};
+                auth.vid = wrVid;
+                auth.skey = wrSkey;
+                auth.wrVid = wrVid;
+                auth.wrSkey = wrSkey;
+            }
+        }
+    }
+    return auth;
 }
 
 
