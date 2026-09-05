@@ -1,13 +1,18 @@
-#!name = 微信读书 · 优雅收录
-#!desc = 轻触下架好书详情页或订阅人数，好书即刻自动入架。专为下架与待上架好书收录设计。
-#!author = 水君 (原作) + TomCatXue (重构优化)
+#!name = 微信读书 · 防强更净化
+#!desc = 专为 8.2.6 等老版本微信读书设计：改写 feature 特性配置，彻底屏蔽“发现新版本”更新弹窗与强更通知，锁定纯净免费 AI 听书体验。
+#!author = TomCatXue
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/weread.png
-#!tag = 微信读书,好书收录,优雅工具
+#!tag = 微信读书,防强更,去弹窗,AI听书
+#!version = 3.4.0
+#!date = 2026-09-05
+
+[Argument]
+weread_anti_upgrade = switch,true,tag=屏蔽版本强更,desc=开启后彻底屏蔽官方强更弹窗与更新公告，安心停留在8.2.6免费AI听书
 
 [MITM]
 hostname = i.weread.qq.com
 
 [Script]
-# 轻触下架好书或订阅人数 → 自动收录入架
-http-request ^https:\/\/i\.weread\.qq\.com\/(subscription\/users|book\/readingStat) script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/wxread/wxread.js, tag=微信读书·优雅收录, enable=true
+# 拦截改写 feature 响应体，屏蔽升级弹窗并扩充特性
+http-response ^https:\/\/i\.weread\.qq\.com\/feature script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/wxread/wxread.js, tag=微信读书·防强更, requires-body=true, enable={weread_anti_upgrade}
