@@ -2,7 +2,7 @@
 #!desc = 一键抓取 MyCookieCenter 维护的平台凭据（微信读书全业务凭据、山西电信、翼支付），每个应用一个独立开关（默认全关，按需打开）。仅含「抓取」规则，不含 cron 签到——签到任务由 BoxJs 订阅统一管理。打开对应开关后，进入相应 App 或网页触发即可，收到「✅ <名称> Cookie 获取成功」通知即成功。
 #!author = TomCatXue
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
-#!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/icon.png
+#!icon = https://avatars.githubusercontent.com/u/138953496?v=4
 #!tag = 签到, Cookie, 凭据捕获
 #!version = 3.1.0
 #!date = 2026-09-05
