@@ -1,10 +1,10 @@
-#!name = CookieCenter · 统一凭据捕获与签到中心
+﻿#!name = CookieCenter · 统一凭据捕获与签到中心
 #!desc = 一站式中心：整合微信读书、山西电信、翼支付。代码层抓取与执行彻底分离，Loon 后台负责自动定时唤醒与脱机自动换票，数据存入 Loon 原生持久化（BoxJS 亦可可视化查看与修改）。
 #!author = TomCatXue
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://avatars.githubusercontent.com/u/138953496?v=4
 #!tag = 签到, Cookie, 凭据捕获, 定时任务
-#!version = 3.2.0
+#!version = 3.2.1
 #!date = 2026-09-05
 
 # =================== 1. 凭据抓取独立开关 (默认关闭，按需开启) ===================
@@ -27,7 +27,8 @@ sx_benefit_cron = switch,true,tag=山西电信·月初放水监控,desc=每月 1
 
 [Script]
 # --- 【抓取层】专职凭据捕获 (无执行代码，捕获存入 Loon 持久化) ---
-http-request ^https?:\/\/(i\.)?weread\.qq\.com\/(web\/|flip-card-game|user\/|feature|mobileSync|readdata\/|pay\/|free\/library|checkfreequalify) script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/app/weread_claim/weread_cookie.js, tag=微信读书·凭据捕获, requires-body=false, enable={weread_capture}
+# 匹配已收窄到核心接口：去掉 mobileSync/readdata/pay 等进页面高频调用，配合脚本去重，进入页面仅触发一次有效处理
+http-request ^https?:\/\/(i\.)?weread\.qq\.com\/(web\/|flip-card-game|user\/|feature|free\/library|checkfreequalify) script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/app/weread_claim/weread_cookie.js, tag=微信读书·凭据捕获, requires-body=false, enable={weread_capture}
 http-request POST ^https?:\/\/i\.weread\.qq\.com\/login script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/app/weread_claim/weread_cookie.js, tag=微信读书·登录请求, requires-body=true, enable={weread_capture}
 http-response POST ^https?:\/\/i\.weread\.qq\.com\/login script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/app/weread_claim/weread_cookie.js, tag=微信读书·登录响应, requires-body=true, enable={weread_capture}
 http-request ^https:\/\/wx\.sx\.189\.cn\/sx_ai_benefit\/h5\/HD script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/sx_ai_benefit/sx_ai_benefit.js, tag=山西电信·活动凭证捕获, requires-body=false, enable={sx_benefit_capture}

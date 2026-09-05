@@ -10,6 +10,9 @@
 3. 微信读书App端常用接口 -> 捕获日常 vid, skey, basever, channelid
 4. 微信读书免费图书馆 -> 捕获免费图书领书凭证
 5. 微信读书翻牌游戏 -> 捕获翻牌 H5 Cookie (wr_vid, wr_skey)
+
+去重策略：所有捕获分支仅在鉴权数据「发生变化」时才写入存储/弹通知/打日志，
+否则直接空转返回。因此进页面虽会命中多次请求，实际只有首次（或登录态变化时）真正生效。
 */
 
 const AUTH_KEY = "weread_auth_v2";
@@ -77,18 +80,19 @@ function parseCookieStr(cookieStr) {
         if (cookie) {
             let c = parseCookieStr(cookie);
             if (c.wr_vid && c.wr_skey) {
+                // 去重：仅当鉴权变化才写存储/通知/打日志
                 let changed = (existing.webVid !== c.wr_vid || existing.webSkey !== c.wr_skey);
-                existing.webVid = c.wr_vid;
-                existing.webSkey = c.wr_skey;
-                if (!existing.vid) existing.vid = c.wr_vid;
-                existing.webUa = headers["user-agent"] || headers["User-Agent"] || existing.webUa || "";
-                existing.webTime = Date.now();
-                $.setdata(cookie, WEB_COOKIE_KEY);
-                saveAuth(existing);
                 if (changed) {
+                    existing.webVid = c.wr_vid;
+                    existing.webSkey = c.wr_skey;
+                    if (!existing.vid) existing.vid = c.wr_vid;
+                    existing.webUa = headers["user-agent"] || headers["User-Agent"] || existing.webUa || "";
+                    existing.webTime = Date.now();
+                    $.setdata(cookie, WEB_COOKIE_KEY);
+                    saveAuth(existing);
                     $.msg("微信读书 · 网页端", "✅ Cookie 获取成功", "wr_vid: " + c.wr_vid + "\nwr_skey: " + c.wr_skey.slice(0, 8) + "...");
+                    $.log("[WeRead] 网页端 Cookie 已捕获: wr_vid=" + c.wr_vid);
                 }
-                $.log("[WeRead] 网页端 Cookie 已捕获: wr_vid=" + c.wr_vid);
             }
         }
         $done({});
@@ -103,17 +107,18 @@ function parseCookieStr(cookieStr) {
         if (cookie) {
             let c = parseCookieStr(cookie);
             if (c.wr_vid && c.wr_skey) {
+                // 去重：仅当鉴权变化才写存储/通知/打日志
                 let changed = (existing.wrVid !== c.wr_vid || existing.wrSkey !== c.wr_skey);
-                existing.wrVid = c.wr_vid;
-                existing.wrSkey = c.wr_skey;
-                if (!existing.vid) existing.vid = c.wr_vid;
-                existing.flipUa = headers["user-agent"] || headers["User-Agent"] || existing.flipUa || "";
-                existing.flipTime = Date.now();
-                saveAuth(existing);
                 if (changed) {
+                    existing.wrVid = c.wr_vid;
+                    existing.wrSkey = c.wr_skey;
+                    if (!existing.vid) existing.vid = c.wr_vid;
+                    existing.flipUa = headers["user-agent"] || headers["User-Agent"] || existing.flipUa || "";
+                    existing.flipTime = Date.now();
+                    saveAuth(existing);
                     $.msg("微信读书 · 翻牌游戏", "✅ Cookie 获取成功", "wr_vid: " + c.wr_vid + "\nwr_skey: " + c.wr_skey.slice(0, 8) + "...");
+                    $.log("[WeRead] 翻牌游戏 Cookie 已捕获: wr_vid=" + c.wr_vid);
                 }
-                $.log("[WeRead] 翻牌游戏 Cookie 已捕获: wr_vid=" + c.wr_vid);
             }
         }
         $done({});
@@ -177,17 +182,27 @@ function parseCookieStr(cookieStr) {
     if (url.indexOf("/free/library/list") !== -1 || url.indexOf("/checkfreequalify") !== -1) {
         let vid = getHeader(headers, "vid");
         let skey = getHeader(headers, "skey");
-        if (vid) existing.vid = String(vid);
-        if (skey) existing.skey = skey;
+        let basever = "", channelid = "", ua = "";
         for (let k in headers) {
             let lk = k.toLowerCase();
-            if (lk === "basever") existing.basever = headers[k];
-            if (lk === "channelid") existing.channelid = headers[k];
-            if (lk === "user-agent") existing.ua = headers[k];
+            if (lk === "basever") basever = headers[k];
+            if (lk === "channelid") channelid = headers[k];
+            if (lk === "user-agent") ua = headers[k];
         }
-        existing.freeTime = Date.now();
-        saveAuth(existing);
-        $.log("[WeRead] 免费图书馆凭据已校验记录: vid=" + vid);
+        // 去重：任一字段变化才保存
+        let changed = (vid && existing.vid !== String(vid)) || (skey && existing.skey !== skey)
+            || (basever && existing.basever !== basever) || (channelid && existing.channelid !== channelid)
+            || (ua && existing.ua !== ua);
+        if (changed) {
+            if (vid) existing.vid = String(vid);
+            if (skey) existing.skey = skey;
+            if (basever) existing.basever = basever;
+            if (channelid) existing.channelid = channelid;
+            if (ua) existing.ua = ua;
+            existing.freeTime = Date.now();
+            saveAuth(existing);
+            $.log("[WeRead] 免费图书馆凭据已校验记录: vid=" + vid);
+        }
         $done({});
         return;
     }
@@ -199,27 +214,35 @@ function parseCookieStr(cookieStr) {
     let skey = getHeader(headers, "skey");
 
     if (vid && skey) {
-        let isFirstOrChanged = (existing.vid !== String(vid) || existing.skey !== skey);
-        existing.vid = String(vid);
-        existing.skey = skey;
+        let basever = "", channelid = "", ua = "", deviceId = "";
         for (let k in headers) {
             let lk = k.toLowerCase();
-            if (lk === "basever") existing.basever = headers[k];
-            if (lk === "channelid") existing.channelid = headers[k];
-            if (lk === "user-agent") existing.ua = headers[k];
-            if (lk === "deviceid") existing.deviceId = headers[k];
+            if (lk === "basever") basever = headers[k];
+            if (lk === "channelid") channelid = headers[k];
+            if (lk === "user-agent") ua = headers[k];
+            if (lk === "deviceid") deviceId = headers[k];
         }
 
         // 尝试从日志或追踪 URL 中捕获 device_id
-        if (!existing.deviceId) {
+        if (!deviceId) {
             let m = url.match(/[?&]device_?id=([a-zA-Z0-9_-]+)/i);
-            if (m) existing.deviceId = m[1];
+            if (m) deviceId = m[1];
         }
 
-        existing.authTime = Date.now();
-        saveAuth(existing);
+        // 去重：仅当任一字段变化才写入/通知，进页面反复触发也只处理一次
+        let changed = (existing.vid !== String(vid) || existing.skey !== skey
+            || (basever && existing.basever !== basever) || (channelid && existing.channelid !== channelid)
+            || (ua && existing.ua !== ua) || (deviceId && existing.deviceId !== deviceId));
 
-        if (isFirstOrChanged) {
+        if (changed) {
+            existing.vid = String(vid);
+            existing.skey = skey;
+            if (basever) existing.basever = basever;
+            if (channelid) existing.channelid = channelid;
+            if (ua) existing.ua = ua;
+            if (deviceId) existing.deviceId = deviceId;
+            existing.authTime = Date.now();
+            saveAuth(existing);
             $.msg("微信读书 · App端", "✅ App 凭据获取成功", "vid: " + vid + "\nskey: " + skey.slice(0, 4) + "****");
             $.log("[WeRead] App 基础凭据已更新: vid=" + vid);
         }
