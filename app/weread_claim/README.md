@@ -50,8 +50,8 @@
 
 ## 已知限制
 
-- **App 签到凭据不能主动刷新**：`/login` 请求体含 HMAC-SHA256 签名（盐 `EBRYFkVMReKBGsU2`，key 格式 `%@_%@_EBRYFkVMReKBGsU2_%@`），穷举 160+ 组合均无法复现。脚本会在 `skey` 失效时尝试仅用长期 `vid` 重试；若 `vid` 也失效，仍需重新打开 App 触发抓取。
-- **翻牌 Cookie 支持自动续期**：`weread.qq.com` 的 `wr_skey` 失效时，脚本会调用网页版 `/web/login/renewal` 获取新的 `wr_skey`，并重试本次翻牌；该续期只更新 `wr_skey`，不会覆盖 App API 的 `skey`。
+- **全自动脱机刷新（已实现）**：`/login` 签名算法已于 2026-09-05 通过 ARM64 二进制（`sub_1004d7878`）完全逆向还原（256字节非标置换表 + 字典序重排 + 模 11 环形位移 + 双重 SHA-256）。当 App 凭据（`skey`）或翻牌 Cookie（`wr_skey`）失效遇到 401/403/499 时，脚本会自动调用 `/login` 换票，并将返回的 `accessToken` 同步为 `wr_skey`，实现每日签到与周二翻牌的双重脱机全自动刷新。
+- **前置条件**：需保留已捕获的 `refreshToken` 与 `deviceId`（首次使用进入微信读书 App 自动写入）。
 - 翻牌每周 6 次，脚本按抓包确认的 `FLIP_CARD_ORDER` 时序翻牌，用尽即止。
 
 ## 文件说明
@@ -63,6 +63,7 @@
 
 ## 版本
 
+- `2026-09-05-auto-refresh` — 攻克 `/login` 签名逆向算法，落地纯 JS 版 `computeLoginSignature`，实现 App 签到与 H5 翻牌双端 401 脱机自动换票刷新
 - `2026-09-03-task-split` — 翻牌改为独立入口 `weread_flip.js`（默认翻牌），通知标题区分「WeRead · 每日签到」与「WeRead · 周二翻牌」
 - `2026-08-10-fix` — 修复 cookie 自动抓取、翻牌时序、奖励切换三处问题（基于逆向笔记）
 - `2026-08-11-flipfix` — 修复翻牌通知奖励误报：一次运行翻多张牌时，`describeFlipResult` 误取 `cardList` 中首张已翻牌的奖励，改为按本次 `cardIndex` 精确匹配

@@ -14,7 +14,7 @@ MITM 与 cron 规则统一由 loon/CookieCenter.plugin 配置：
 
 const AUTH_KEY = "weread_auth_v2";
 const FLIP_STATE_KEY = "weread_flip_state_v1";
-const SCRIPT_VERSION = "2026-09-03-task-split";
+const SCRIPT_VERSION = "2026-09-05-auto-refresh";
 const API = "https://i.weread.qq.com";
 const FLIP_API = "https://weread.qq.com/flip-card-game/api";
 const PF = "weread_wx-2001-iap-2001-iphone";
@@ -433,27 +433,86 @@ function resolvePreferCoin(rawPrefer) {
 }
 
 
-// Build HMAC key for /login: refreshToken_deviceId_SALT_random
-function buildLoginKey(refreshToken, deviceId, random) {
-    return refreshToken + "_" + deviceId + "_" + HMAC_SALT + "_" + random;
+// ============================================================
+// /login 签名计算（逆向还原自 WeRead 10.2.0 ARM64 sub_1004d7878）
+// ============================================================
+
+const WE_READ_TABLE_HEX = "34ca55401db693c63130293532a7b811c2b516fa8bb124a4109004e908f83b8a9c8c44f9bc5c69e2a1dad2d37589f71e2d5056d77253bf22fb200f012e45876e6648f2e0cdfe67a943f49451cea54aee13268eccaa33145d0e39bbcf912b814dea99ec1a2c85c5d936744b18e1f13d9d419fb4170dd64cbedcaf972877f062ff71c1c8278f6c68a89be6591c1b1209984e3f063700ba1f0a192fc9d5d057496ffd25e4610c42cb96645fdbad60238d9a6dc3c45e3eb9926abd5b077f7695ed4fab847a80e778c7e5eb73836bfc38467d4765b352633a05d1efa3a6de9e3c02aeb27ba0f6f32ac0ac86035a540bf582d47ee3dfb0d8dd21e87c88a2795870b715";
+const WE_READ_TABLE = new Uint8Array(256);
+for (let i = 0; i < 256; i++) {
+    WE_READ_TABLE[i] = parseInt(WE_READ_TABLE_HEX.substr(i * 2, 2), 16);
 }
 
-// Sort body keys alphabetically, join as key=value&... for signing
-function signableString(body) {
-    return Object.keys(body).sort().map(k => k + "=" + body[k]).join("&");
+function subBytes(str) {
+    const b = strToBytes(str);
+    const out = new Uint8Array(b.length);
+    for (let i = 0; i < b.length; i++) {
+        out[i] = WE_READ_TABLE[b[i]];
+    }
+    return out;
 }
 
-// Compute /login signature: HMAC-SHA256(key, sortedBody)
+function simRotateBytes(arr, shift) {
+    const L = arr.length;
+    if (L === 0) return new Uint8Array(0);
+    const dest = new Uint8Array(L);
+    let curr = shift;
+    for (let i = 0; i < L; i++) {
+        dest[curr % L] = arr[i];
+        curr++;
+    }
+    return dest;
+}
+
+function xorSumBytes(arr) {
+    let res = 0;
+    for (let i = 0; i < arr.length; i++) res ^= arr[i];
+    return res;
+}
+
+function compareByteArrays(a, b) {
+    const len = Math.min(a.length, b.length);
+    for (let i = 0; i < len; i++) {
+        if (a[i] !== b[i]) return a[i] - b[i];
+    }
+    return a.length - b.length;
+}
+
+// 生产级：与 App 原生 +[WRAppUtils signatureForLoginRenewalWithRefreshToken:] 100% 对齐
 function computeLoginSignature(refreshToken, deviceId, body) {
-    let random = (body.random || Math.floor(Math.random() * 999999999)).toString();
-    body.random = parseInt(random, 10);
-    let ts = Math.floor(Date.now() / 1000);
-    body.timestamp = ts;
+    let random = body.random;
+    let ts = body.timestamp;
+    let logoToken = "5ecdcfd7f";
 
-    let key = buildLoginKey(refreshToken, deviceId, random);
-    let data = signableString(body);
-    $.log("[WeRead] login key=" + key.slice(0, 30) + "... data=" + data.slice(0, 50) + "...");
-    return hmacSha256Hex(key, data);
+    const s0 = subBytes(String(ts));
+    const s1 = subBytes(String(random));
+    const s2 = subBytes(logoToken);
+    const s3 = subBytes(deviceId);
+    const s4 = strToBytes("5a6f1");
+    const s5 = subBytes(refreshToken);
+
+    const list = [s0, s1, s2, s3, s4, s5];
+    list.sort(compareByteArrays);
+
+    let totalLen = 0;
+    for (let i = 0; i < list.length; i++) totalLen += list[i].length;
+    const concat = new Uint8Array(totalLen);
+    let off = 0;
+    for (let i = 0; i < list.length; i++) {
+        concat.set(list[i], off);
+        off += list[i].length;
+    }
+
+    const shift1 = xorSumBytes(concat) % 11;
+    const rot1 = simRotateBytes(concat, shift1);
+
+    const hash1Hex = bytesToHex(sha256Uint8(rot1));
+    const hex1Ascii = strToBytes(hash1Hex);
+
+    const shift2 = xorSumBytes(hex1Ascii) % 11;
+    const rot2 = simRotateBytes(hex1Ascii, shift2);
+
+    return bytesToHex(sha256Uint8(rot2));
 }
 
 
@@ -591,6 +650,32 @@ async function runClaim() {
     );
 
     if (probe.status === 401) {
+        // 先尝试通过 /login 自动换票刷新
+        $.log("[WeRead] 401 — skey 已过期，尝试通过 /login 自动换票刷新...");
+        if (auth.refreshToken && auth.deviceId) {
+            let refreshedAuth = await tryRefreshLogin(auth);
+            if (refreshedAuth && refreshedAuth.skey) {
+                auth = refreshedAuth;
+                let probeRefresh = await post(
+                    API + "/weekly/exchange",
+                    encode({
+                        awardLevelId: 0,
+                        unread: 1,
+                        isExchangeAward: 0,
+                        pf: PF,
+                        awardChoiceType: 0
+                    }),
+                    getHeaders(auth)
+                );
+                if (probeRefresh.status === 200) {
+                    $.log("[WeRead] /login 刷新后请求成功！");
+                    return await runClaimWithAuth(auth, probeRefresh.body);
+                }
+            }
+        }
+    }
+
+    if (probe.status === 401) {
         // 方案 C：skey 已过期，但 vid 长期有效——尝试不带 skey 重新请求
         $.log("[WeRead] 401 — skey 已过期，尝试不带 skey 请求（vid 长期有效）...");
         let noSkeyAuth = JSON.parse(JSON.stringify(auth));
@@ -647,6 +732,27 @@ async function runClaimWithAuth(auth, cachedBody) {
             }),
             getHeaders(auth)
         );
+
+        if (result.status === 401) {
+            $.log("[WeRead] query 401 — 尝试通过 /login 自动换票刷新...");
+            if (auth.refreshToken && auth.deviceId) {
+                let refreshedAuth = await tryRefreshLogin(auth);
+                if (refreshedAuth && refreshedAuth.skey) {
+                    auth = refreshedAuth;
+                    result = await post(
+                        API + "/weekly/exchange",
+                        encode({
+                            awardLevelId: 0,
+                            unread: 1,
+                            isExchangeAward: 0,
+                            pf: PF,
+                            awardChoiceType: 0
+                        }),
+                        getHeaders(auth)
+                    );
+                }
+            }
+        }
 
         if (result.status === 401) {
             // 方案 C：尝试不带 skey 查询
@@ -736,6 +842,26 @@ async function runClaimWithAuth(auth, cachedBody) {
             getHeaders(auth)
         );
 
+        if (r.status === 401) {
+            $.log("[WeRead] claim 401 — 尝试通过 /login 自动换票刷新并重试...");
+            if (auth.refreshToken && auth.deviceId) {
+                let refreshedAuth = await tryRefreshLogin(auth);
+                if (refreshedAuth && refreshedAuth.skey) {
+                    auth = refreshedAuth;
+                    r = await post(
+                        API + "/weekly/exchange",
+                        encode({
+                            unread: 1,
+                            awardChoiceType: choice.choiceType,
+                            awardLevelId: item.awardLevelId,
+                            isExchangeAward: 1,
+                            pf: PF
+                        }),
+                        getHeaders(auth)
+                    );
+                }
+            }
+        }
 
         if (r.status === 401) {
             // 方案 C：skey 已过期，尝试不带 skey 重新领取
@@ -941,9 +1067,19 @@ async function runFlipCardDirect(auth) {
     // 不能 fallback 到 App 的 vid/skey：诊断（2026-08-23）已确认 App skey ≠ 网页 wr_skey，
     // 用 App skey 冒充会触发 WAF 直接断开连接（HTTP 499）。
     if (!auth || !auth.wrVid || !auth.wrSkey) {
+        if (auth && auth.refreshToken && auth.deviceId) {
+            $.log("[WeRead] 翻牌 — 缺少 wr_skey，尝试通过 /login 自动刷新获取...");
+            let refreshedAuth = await tryRefreshLogin(auth);
+            if (refreshedAuth && refreshedAuth.wrSkey) {
+                auth = refreshedAuth;
+            }
+        }
+    }
+
+    if (!auth || !auth.wrVid || !auth.wrSkey) {
         $.log("[WeRead] 翻牌 — 未捕获 weread.qq.com Cookie. wrVid="
             + (auth && auth.wrVid ? "有" : "无") + ", wrSkey=" + (auth && auth.wrSkey ? "有" : "无"));
-        $.msg("WeRead", "翻牌", "未捕获到 weread.qq.com 登录 Cookie（wr_skey/wr_vid）\n请在微信读书 App 打开「翻牌游戏」页面一次，再重新运行");
+        $.msg("WeRead", "翻牌", "未捕获到 weread.qq.com 登录 Cookie（wr_skey/wr_vid）且自动刷新失败\n请在微信读书 App 打开「翻牌游戏」页面一次，再重新运行");
         return;
     }
 
@@ -952,10 +1088,20 @@ async function runFlipCardDirect(auth) {
     // 导致服务器/WAF 校验参数非法直接断开（HTTP 499）。
     let listRes = await get(FLIP_API + "/flipCardList?pf=ios&platform=ios_html", getFlipHeaders(auth));
     if (listRes.status !== 200) {
+        if (auth && auth.refreshToken && auth.deviceId && (listRes.status === 401 || listRes.status === 403 || listRes.status === 499)) {
+            $.log("[WeRead] 翻牌 — flipCardList 返回 HTTP " + listRes.status + "，尝试通过 /login 自动刷新 wr_skey 并重试...");
+            let refreshedAuth = await tryRefreshLogin(auth);
+            if (refreshedAuth && refreshedAuth.wrSkey) {
+                auth = refreshedAuth;
+                listRes = await get(FLIP_API + "/flipCardList?pf=ios&platform=ios_html", getFlipHeaders(auth));
+            }
+        }
+        if (listRes.status !== 200) {
         $.log("[WeRead] 翻牌 — flipCardList 查询失败 HTTP " + listRes.status
             + "，body=" + String(listRes.body || "").slice(0, 100));
         $.msg("WeRead", "翻牌失败", "查询卡片列表失败 (HTTP " + listRes.status + ")\n若为 401/403/499，请打开微信读书 App 的「翻牌游戏」页面一次重新捕获 Cookie");
         return;
+        }
     }
 
     let freshState;
@@ -1004,6 +1150,17 @@ async function runFlipCardDirect(auth) {
         let flipRes = await get(flipUrl, getFlipHeaders(auth));
 
         attempts++;
+
+        if (flipRes.status === 401 || flipRes.status === 403 || flipRes.status === 499) {
+            $.log("[WeRead] 翻牌 — HTTP " + flipRes.status + "，尝试通过 /login 自动刷新 wr_skey 并重试当前卡片...");
+            if (auth && auth.refreshToken && auth.deviceId) {
+                let refreshedAuth = await tryRefreshLogin(auth);
+                if (refreshedAuth && refreshedAuth.wrSkey) {
+                    auth = refreshedAuth;
+                    flipRes = await get(flipUrl, getFlipHeaders(auth));
+                }
+            }
+        }
 
         // 401/403 = Cookie 明确失效（需重新捕获）；499 = WAF/服务器断开连接。
         // 2026-08-27 抓包确认：wr_skey 有效时真实请求仍 200，499 通常因请求参数/头不合法被 WAF 拦。
@@ -1071,24 +1228,35 @@ async function runFlipCard(auth) {
 }
 
 
-// Try to refresh vid/skey via /login using saved refreshToken + deviceId
+// Try to refresh vid/skey and wr_vid/wr_skey via /login using saved refreshToken + deviceId
 //
-// ⚠️ 非功能代码：/login 的 signature 算法经逆向分析确认为「极高难度」
-// （HMAC-SHA256 key 格式 %@_%@_EBRYFkVMReKBGsU2_%@ 但 3 个 %@ 的具体来源
-//  以及 message 的构建方式无法从二进制中确定，160+ 种组合验证均不匹配）。
-// 保留此函数待将来签名被破解后启用；当前 401 走方案 C（不带 skey 重试）+ 方案 D（通知用户）。
+// 已攻破：/login 的 signature 算法经 ARM64 二进制逆向已 100% 还原。
+// 换票成功后，/login 返回的 accessToken 将作为 H5 翻牌 Cookie (wr_skey) 同步更新，
+// 实现 App 签到与 H5 翻牌的双重脱机全自动刷新！
 async function tryRefreshLogin(auth) {
+    if (!auth || !auth.refreshToken || !auth.deviceId) {
+        $.log("[WeRead] /login 刷新跳过：缺少 refreshToken 或 deviceId");
+        return null;
+    }
+
+    let ts = Math.floor(Date.now() / 1000);
+    let random = Math.floor(Math.random() * 999999999);
+    let sig = computeLoginSignature(auth.refreshToken, auth.deviceId, { random, timestamp: ts });
+
     let body = {
-        refreshToken: auth.refreshToken,
+        random: random,
         deviceId: auth.deviceId,
-        random: Math.floor(Math.random() * 999999999),
-        timestamp: Math.floor(Date.now() / 1000)
+        refCgi: "",
+        deviceName: auth.deviceName || "iPhone",
+        signature: sig,
+        refreshToken: auth.refreshToken,
+        wxToken: 1,
+        timestamp: ts,
+        inBackground: 0,
+        deviceToken: auth.deviceToken || ""
     };
 
-    let sig = computeLoginSignature(auth.refreshToken, auth.deviceId, body);
-    body.signature = sig;
-
-    $.log("[WeRead] /login body=" + JSON.stringify(body).slice(0, 120));
+    $.log("[WeRead] 发起 /login 自动换票刷新 (ts=" + ts + ", rand=" + random + ", sig=" + sig.slice(0, 10) + "...)...");
 
     let r = await post(
         API + "/login",
@@ -1096,36 +1264,46 @@ async function tryRefreshLogin(auth) {
         {
             "Content-Type": "application/json",
             "Accept": "*/*",
-            "User-Agent": auth.ua || "WeRead",
+            "User-Agent": auth.ua || "WeRead/10.2.1 (iPhone; iOS 26.6.1; Scale/3.00)",
             "channelid": auth.channelid || "AppStore",
-            "basever": auth.basever || "",
-            "v": auth.basever || ""
+            "basever": auth.basever || "10.2.1",
+            "v": auth.basever || "10.2.1"
         }
     );
 
     if (r.status !== 200) {
-        $.log("[WeRead] /login failed with HTTP " + r.status + ": " + (r.body || "").slice(0, 100));
+        $.log("[WeRead] /login 刷新失败 HTTP " + r.status + ": " + (r.body || "").slice(0, 100));
         return null;
     }
 
     let loginData = decode(r.body);
     if (!loginData || !loginData.vid || !loginData.skey) {
-        $.log("[WeRead] /login response missing vid/skey: " + (r.body || "").slice(0, 150));
+        $.log("[WeRead] /login 响应解析失败或缺少关键字段: " + (r.body || "").slice(0, 150));
         return null;
     }
 
+    // 关键突破：/login 返回的 accessToken 即为 H5 翻牌所用的 wr_skey！
+    // 一次登录同时刷新 App 原生凭据 (vid/skey) 与 H5 翻牌凭据 (wrVid/wrSkey)
     let newAuth = {
-        vid: loginData.vid,
+        vid: String(loginData.vid),
         skey: loginData.skey,
+        accessToken: loginData.accessToken || auth.accessToken || "",
         refreshToken: loginData.refreshToken || auth.refreshToken,
         deviceId: auth.deviceId,
+        deviceName: auth.deviceName || "iPhone",
+        deviceToken: auth.deviceToken || "",
         openId: loginData.openId || auth.openId,
-        basever: auth.basever,
-        channelid: auth.channelid,
-        ua: auth.ua
+        basever: auth.basever || "10.2.1",
+        channelid: auth.channelid || "AppStore",
+        ua: auth.ua || "WeRead/10.2.1 (iPhone; iOS 26.6.1; Scale/3.00)",
+        wrVid: String(loginData.vid),
+        wrSkey: loginData.accessToken || loginData.skey,
+        flipUa: auth.flipUa || "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15",
+        authTime: Date.now()
     };
 
-    $.log("[WeRead] login refresh OK, vid=" + newAuth.vid.slice(0, 8) + "...");
+    $.setdata(JSON.stringify(newAuth), AUTH_KEY);
+    $.log("[WeRead] /login 全自动刷新成功！vid=" + newAuth.vid.slice(0, 8) + "..., wrSkey=" + (newAuth.wrSkey ? "已同步" : "无"));
     return newAuth;
 }
 

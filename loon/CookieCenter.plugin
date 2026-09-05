@@ -32,10 +32,11 @@ hostname = i.weread.qq.com, weread.qq.com, wx.sx.189.cn, render.bestpay.cn
 
 [Script]
 # --- 1. 微信读书 (凭据捕获：vid/skey/Token/翻牌Cookie) ---
-http-request ^https?://i\.weread\.qq\.com/.* script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/app/weread_claim/weread_claim.js, tag=微信读书·凭据捕获, requires-body=false, enable={weread_capture}
+# 精确匹配核心高频接口，排除 /subscription/ 等业务接口，避免与「微信读书增强/好书收录」插件拦截冲突
+http-request ^https?://i\.weread\.qq\.com/(user/|feature|mobileSync|readdata/|pay/) script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/app/weread_claim/weread_claim.js, tag=微信读书·凭据捕获, requires-body=false, enable={weread_capture}
 http-request POST ^https?://i\.weread\.qq\.com/login script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/app/weread_claim/weread_claim.js, tag=微信读书·登录捕获, requires-body=true, enable={weread_capture}
 http-response POST ^https?://i\.weread\.qq\.com/login script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/app/weread_claim/weread_claim.js, tag=微信读书·Token捕获, requires-body=true, enable={weread_capture}
-http-request ^https?://weread\.qq\.com/.* script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/app/weread_claim/weread_claim.js, tag=微信读书·翻牌Cookie, requires-body=false, enable={weread_capture}
+http-request ^https?://weread\.qq\.com/flip-card-game script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/app/weread_claim/weread_claim.js, tag=微信读书·翻牌Cookie, requires-body=false, enable={weread_capture}
 cron "0 23 * * *" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/app/weread_claim/weread_claim.js, tag=微信读书·每日阅读奖励, enable={weread_claim_cron}
 cron "0 20 * * 2" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/app/weread_claim/weread_flip.js, tag=微信读书·周二翻牌抽奖, enable={weread_flip_cron}
 
