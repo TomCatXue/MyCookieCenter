@@ -2,7 +2,7 @@
 
 多平台 App 签到 & Cookie 管理 / 特殊功能插件合集，适配 Loon / Surge / Quantumult X / Stash。
 
-> **一键抓取，多处使用**：单文件脚本同时承担 Cookie 捕获与 cron 签到，内联 Env 类跨平台运行。
+> **抓取与执行分离**：专用 Cookie 抓取插件 + 独立签到单体，内联 Env 类跨平台运行，由 BoxJS 订阅统一管理调度。
 
 ---
 
@@ -30,7 +30,7 @@ MyCookieCenter/
 
 | 体系 | 目录 | 特点 |
 |---|---|---|
-| **签到 / 权益体系** | `loon/CookieCenter.plugin`(抓 Cookie + cron) + `boxjs/`(BoxJS 面板) | 脚本位于 `app/weread_claim/`、`plugins/sx_ai_benefit/`、`plugins/bestpay_coin/`，需持久化 |
+| **签到 / 权益体系** | `loon/CookieCenter.plugin`(专用 Cookie 抓取) + `boxjs/`(BoxJS 任务调度与面板) | 脚本位于 `app/weread_claim/`、`plugins/sx_ai_benefit/`、`plugins/bestpay_coin/`，需持久化 |
 | **功能插件** | `plugins/` + `loon/*.plugin`（独立） | 无状态请求/响应改写，实时生效，独立开关 |
 
 ---
