@@ -36,6 +36,9 @@ async function main() {
         if (arg.task === "flip") {
             $.name = "WeRead · 周二翻牌";
             await runFlipCard();
+        } else if (arg.task === "free" || arg.task === "limitFree") {
+            $.name = "WeRead · 限免入架";
+            await runFreeBooks();
         } else {
             $.name = "WeRead · 每日签到";
             await runClaim();
@@ -1308,6 +1311,136 @@ async function tryRefreshLogin(auth) {
 }
 
 
+
+// ============================================================
+// 每周限免好书入架业务逻辑
+// ============================================================
+
+async function fetchLimitFreeBooks(auth) {
+    let books = [];
+    try {
+        let res = await get(API + "/newUser/limitFree?cmd=0", getHeaders(auth));
+        if (res.status === 401) {
+            let refreshed = await tryRefreshLogin(auth);
+            if (refreshed) {
+                auth = refreshed;
+                res = await get(API + "/newUser/limitFree?cmd=0", getHeaders(auth));
+            }
+        }
+        if (res.status === 200) {
+            let data = decode(res.body) || JSON.parse(res.body || "{}");
+            let list = data.books || data.data || (Array.isArray(data) ? data : []);
+            list.forEach(b => {
+                let bid = b.bookId || b.id;
+                let title = b.title || b.bookInfo?.title || "";
+                if (bid) books.push({ bookId: String(bid), title });
+            });
+            $.log("[WeRead] /newUser/limitFree 获取到 " + list.length + " 本限免书籍");
+        }
+    } catch (e) {
+        $.log("[WeRead] /newUser/limitFree 请求异常: " + String(e));
+    }
+
+    try {
+        let res2 = await get(API + "/free/library/list", getHeaders(auth));
+        if (res2.status === 200) {
+            let data = decode(res2.body) || JSON.parse(res2.body || "{}");
+            let list = data.books || data.data || data.items || [];
+            list.forEach(b => {
+                let bid = b.bookId || b.id || b.book?.bookId;
+                let title = b.title || b.book?.title || "";
+                if (bid) books.push({ bookId: String(bid), title });
+            });
+            $.log("[WeRead] /free/library/list 获取完毕，候选库累计 " + books.length + " 本");
+        }
+    } catch (e) {
+        $.log("[WeRead] /free/library/list 请求异常: " + String(e));
+    }
+
+    if (books.length === 0) {
+        try {
+            let res3 = await get(API + "/exchange/bookrecommend", getHeaders(auth));
+            if (res3.status === 200) {
+                let data = decode(res3.body) || JSON.parse(res3.body || "{}");
+                let list = data.books || data.data || [];
+                list.forEach(b => {
+                    if (b.bookId) books.push({ bookId: String(b.bookId), title: b.title || "" });
+                });
+                $.log("[WeRead] /exchange/bookrecommend 备用源获取到 " + books.length + " 本");
+            }
+        } catch (e) { }
+    }
+
+    let uniqueMap = new Map();
+    books.forEach(b => {
+        if (b.bookId && !uniqueMap.has(b.bookId)) {
+            uniqueMap.set(b.bookId, b);
+        }
+    });
+    return { books: Array.from(uniqueMap.values()), auth };
+}
+
+async function batchAddShelf(auth, bookList) {
+    if (!bookList || bookList.length === 0) {
+        return { success: false, count: 0, titles: [], errMsg: "书单为空" };
+    }
+    let bookIds = bookList.map(b => b.bookId);
+    $.log("[WeRead] 准备批量加入书架，共 " + bookIds.length + " 本...");
+
+    let addPayload = { bookIds: bookIds };
+    let res = await post(
+        API + "/shelf/add",
+        encode(addPayload),
+        getHeaders(auth)
+    );
+
+    if (res.status === 401) {
+        let refreshed = await tryRefreshLogin(auth);
+        if (refreshed) {
+            auth = refreshed;
+            res = await post(
+                API + "/shelf/add",
+                encode(addPayload),
+                getHeaders(auth)
+            );
+        }
+    }
+
+    let resData = decode(res.body) || JSON.parse(res.body || "{}");
+    $.log("[WeRead] /shelf/add 响应: " + JSON.stringify(resData).slice(0, 150));
+
+    if (resData && (resData.succ || resData.errcode === -2449 || res.status === 200)) {
+        let titles = bookList.map(b => b.title ? `《${b.title}》` : `ID:${b.bookId}`).filter(Boolean);
+        return { success: true, count: bookIds.length, titles };
+    }
+    return { success: false, count: 0, titles: [], errMsg: resData?.errmsg || resData?.message || ("HTTP " + res.status) };
+}
+
+async function runFreeBooks() {
+    let auth = getAuth();
+    if (!auth || !auth.vid) {
+        $.msg("WeRead · 限免入架", "未找到登录凭据", "请打开微信读书 App 刷新一次认证");
+        return;
+    }
+
+    $.log("[WeRead] 限免好书入架任务启动... version=" + SCRIPT_VERSION);
+    let { books, auth: updatedAuth } = await fetchLimitFreeBooks(auth);
+    auth = updatedAuth;
+
+    if (!books || books.length === 0) {
+        $.msg("WeRead · 限免入架", "暂无可用限免书单", "本周官方限免书库暂未更新或当前列表为空");
+        return;
+    }
+
+    let result = await batchAddShelf(auth, books);
+    if (result.success) {
+        let preview = result.titles.slice(0, 3).join("、");
+        if (result.titles.length > 3) preview += ` 等共 ${result.count} 本`;
+        $.msg("WeRead · 限免入架", `成功添加 ${result.count} 本好书`, preview);
+    } else {
+        $.msg("WeRead · 限免入架", "批量添加失败", result.errMsg || "请检查网络");
+    }
+}
 
 function Env(name) {
 

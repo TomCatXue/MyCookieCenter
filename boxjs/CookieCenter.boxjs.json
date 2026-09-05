@@ -45,6 +45,10 @@
         {
           "name": "周二翻牌抽奖游戏",
           "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/app/weread_claim/weread_flip.js"
+        },
+        {
+          "name": "每周限免好书一键入架",
+          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/app/weread_claim/weread_free.js"
         }
       ],
       "tasks": [
@@ -57,12 +61,18 @@
           "name": "每周二翻牌抽奖自动运行",
           "cron": "0 20 * * 2",
           "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/app/weread_claim/weread_flip.js"
+        },
+        {
+          "name": "每周限免好书自动入架",
+          "cron": "0 10 * * 5",
+          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/app/weread_claim/weread_free.js"
         }
       ],
       "descs_html": [
         "<span><b>凭证捕获：</b>开启 CookieCenter 插件后，在微信读书 App 内阅读或刷新任一页面，即可自动捕获 vid、skey 与 refreshToken。</span>",
         "<span><b>阅读奖励：</b>每日 23:00 自动检查阅读时长，达标后自动领取书币或体验卡。</span>",
-        "<span><b>周二翻牌：</b>每周二晚 20:00 自动执行翻牌抽奖游戏。</span>"
+        "<span><b>周二翻牌：</b>每周二晚 20:00 自动执行翻牌抽奖游戏。</span>",
+        "<span><b>限免入架：</b>每周五 10:00 自动拉取官方最新限免书库与推荐好书，批量加入书架防错过。</span>"
       ]
     },
     {

@@ -21,6 +21,7 @@ prefer_coin = select,"2","1",tag=微信读书·奖励偏好,desc=2:优先书币(
 # 后台定时任务开关（由 Loon 在后台定时自动执行）
 weread_claim_cron = switch,true,tag=微信读书·每日阅读奖励,desc=每晚 23:00 自动检查并领取阅读时长奖励
 weread_flip_cron = switch,true,tag=微信读书·周二翻牌抽奖,desc=每周二 20:00 自动参与翻牌抽奖游戏
+weread_free_cron = switch,true,tag=微信读书·每周限免入架,desc=每周五 10:00 自动将本周限免好书批量加入书架
 sx_benefit_cron = switch,true,tag=山西电信·月初放水监控,desc=每月 1~8 号后台自动低频随机监控放水
 
 # =================== MITM 解密域名 ===================
@@ -39,6 +40,7 @@ http-response POST ^https?://i\.weread\.qq\.com/login script-path=https://raw.gi
 http-request ^https?://weread\.qq\.com/flip-card-game script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/app/weread_claim/weread_claim.js, tag=微信读书·翻牌Cookie, requires-body=false, enable={weread_capture}
 cron "0 23 * * *" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/app/weread_claim/weread_claim.js, tag=微信读书·每日阅读奖励, enable={weread_claim_cron}
 cron "0 20 * * 2" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/app/weread_claim/weread_flip.js, tag=微信读书·周二翻牌抽奖, enable={weread_flip_cron}
+cron "0 10 * * 5" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/app/weread_claim/weread_free.js, tag=微信读书·每周限免入架, enable={weread_free_cron}
 
 # --- 2. 山西电信 · 体验AI领福利 (活动凭据捕获) ---
 http-request ^https:\/\/wx\.sx\.189\.cn\/sx_ai_benefit\/h5\/HD script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/sx_ai_benefit/sx_ai_benefit.js, tag=山西电信·活动凭证捕获, requires-body=false, enable={sx_benefit_capture}
