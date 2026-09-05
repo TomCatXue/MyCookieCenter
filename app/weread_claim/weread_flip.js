@@ -1,56 +1,23 @@
 /*
 #!name=微信读书·周二翻牌抽奖
-#!desc=每周二 20:00 自动翻牌抽奖。本文件为翻牌专用入口，默认执行翻牌（参数 task=claim 仅作兼容）；通知标题为「WeRead · 周二翻牌」。
-#!author=Codex
+#!desc=微信读书周二翻牌抽奖（每周二 20:00）。仅负责翻牌游戏自动抽奖并自动更新 H5 Cookie。
+#!author=TomCatXue
 #!homepage=https://github.com/TomCatXue/MyCookieCenter
 #!icon=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/weread.png
 #!tag=微信读书,翻牌,抽奖
 
-MITM 与 cron 规则统一由 loon/CookieCenter.plugin 配置：
+配置由 loon/CookieCenter.plugin 或 loon/WeReadEnhance.plugin 提供：
 - 周二翻牌 cron -> 本文件（每周二 20:00）
-- 每日领取 cron -> weread_claim.js（每日 23:00）
 参数面板由 boxjs/CookieCenter.boxjs.json 订阅提供。
 */
 
 const AUTH_KEY = "weread_auth_v2";
 const FLIP_STATE_KEY = "weread_flip_state_v1";
-const SCRIPT_VERSION = "2026-09-05-auto-refresh";
+const SCRIPT_VERSION = "2026-09-05-independent";
 const API = "https://i.weread.qq.com";
 const FLIP_API = "https://weread.qq.com/flip-card-game/api";
 const PF = "weread_wx-2001-iap-2001-iphone";
-const HMAC_SALT = "EBRYFkVMReKBGsU2";
 const FLIP_CARD_ORDER = [2, 5, 4, 7, 8, 6, 0, 1, 3];
-
-let $ = new Env("WeRead");
-
-async function main() {
-    try {
-        if (typeof $request !== "undefined") {
-            saveAuth();
-            $done({});
-            return;
-        }
-
-        // cron 任务：本文件为翻牌专用入口，默认翻牌（task=claim 仅作兼容保留）
-        let arg = parseArgument(typeof $argument !== "undefined" ? $argument : {});
-        if (arg.task === "claim") {
-            $.name = "WeRead · 每日签到";
-            await runClaim();
-        } else {
-            $.name = "WeRead · 周二翻牌";
-            await runFlipCard();
-        }
-    } catch (e) {
-        $.msg("WeRead", "执行异常", String(e));
-    }
-
-    $done({});
-}
-
-if (typeof module === "undefined" || !module.exports) {
-    main();
-}
-
 
 // ============================================================
 // Pure-JS SHA-256 / HMAC-SHA256（Loon 无原生 crypto，手写）
@@ -388,51 +355,6 @@ function decode(str) {
 }
 
 
-// Build a human-readable description for a claimed reward
-function describeChoice(choice, resp) {
-    // Try to extract detail from exchange response first
-    if (resp && resp.body) {
-        let ex = decode(resp.body);
-        if (ex) {
-            if (ex.awardName) return ex.awardName;
-            if (ex.exchangeName) return ex.exchangeName;
-            if (ex.desc) return ex.desc;
-            if (ex.choiceName) return ex.choiceName;
-        }
-    }
-    // Then try fields on the choice object itself
-    if (choice.choiceName) return choice.choiceName;
-    if (choice.name) return choice.name;
-    if (choice.desc) return choice.desc;
-    // Fallback to choiceType-based description
-    if (choice.choiceType === 2) return "书币";
-    if (choice.choiceType === 1) return "体验卡";
-    return "奖励";
-}
-
-
-// 解析奖励偏好 prefer_coin。
-// Loon [Argument] 段的值通过 $persistentStore.read("prefer_coin") 读取（见 Env.getdata），
-// 返回用户选择的 "1"(优先体验卡) / "2"(优先书币) 字符串；兼容个别版本带 "input," 前缀。
-// 1=优先体验卡, 2=优先书币（默认）。
-function resolvePreferCoin(rawPrefer) {
-    let preferVal = rawPrefer;
-    if (typeof preferVal === "string") {
-        preferVal = preferVal.replace(/^(input|switch),/, "");
-    }
-    let preferCoin = true; // 默认书币优先
-    if (preferVal === 1 || preferVal === "1" || preferVal === false || preferVal === "false") {
-        preferCoin = false; // 体验卡优先
-    }
-    return {
-        raw: rawPrefer,
-        preferCoin: preferCoin,
-        firstType: preferCoin ? 2 : 1,
-        secondType: preferCoin ? 1 : 2
-    };
-}
-
-
 // ============================================================
 // /login 签名计算（逆向还原自 WeRead 10.2.0 ARM64 sub_1004d7878）
 // ============================================================
@@ -624,286 +546,6 @@ async function tryWebRenewal(auth) {
             }
         });
     });
-}
-
-
-async function runClaim() {
-
-    let auth = getAuth();
-
-    if (!auth) {
-        $.msg("WeRead", "没有认证", "请打开微信读书刷新一次");
-        return;
-    }
-
-    // 快速检测 skey 是否有效：先发一个查询请求
-    let probe = await post(
-        API + "/weekly/exchange",
-        encode({
-            awardLevelId: 0,
-            unread: 1,
-            isExchangeAward: 0,
-            pf: PF,
-            awardChoiceType: 0
-        }),
-        getHeaders(auth)
-    );
-
-    if (probe.status === 401) {
-        // 先尝试通过 /login 自动换票刷新
-        $.log("[WeRead] 401 — skey 已过期，尝试通过 /login 自动换票刷新...");
-        if (auth.refreshToken && auth.deviceId) {
-            let refreshedAuth = await tryRefreshLogin(auth);
-            if (refreshedAuth && refreshedAuth.skey) {
-                auth = refreshedAuth;
-                let probeRefresh = await post(
-                    API + "/weekly/exchange",
-                    encode({
-                        awardLevelId: 0,
-                        unread: 1,
-                        isExchangeAward: 0,
-                        pf: PF,
-                        awardChoiceType: 0
-                    }),
-                    getHeaders(auth)
-                );
-                if (probeRefresh.status === 200) {
-                    $.log("[WeRead] /login 刷新后请求成功！");
-                    return await runClaimWithAuth(auth, probeRefresh.body);
-                }
-            }
-        }
-    }
-
-    if (probe.status === 401) {
-        // 方案 C：skey 已过期，但 vid 长期有效——尝试不带 skey 重新请求
-        $.log("[WeRead] 401 — skey 已过期，尝试不带 skey 请求（vid 长期有效）...");
-        let noSkeyAuth = JSON.parse(JSON.stringify(auth));
-        delete noSkeyAuth.skey;
-        let probe2 = await post(
-            API + "/weekly/exchange",
-            encode({
-                awardLevelId: 0,
-                unread: 1,
-                isExchangeAward: 0,
-                pf: PF,
-                awardChoiceType: 0
-            }),
-            getHeaders(noSkeyAuth)
-        );
-
-        if (probe2.status === 200) {
-            $.log("[WeRead] 不带 skey 请求成功，vid 仍然有效");
-            // 传 noSkeyAuth（无 skey），后续领取请求直接不带 skey，避免每次 401
-            return await runClaimWithAuth(noSkeyAuth, probe2.body);
-        }
-
-        // 方案 D：vid/skey 均失效，通知用户手动刷新
-        $.msg("WeRead", "认证已过期", "vid/skey 已失效，请重新打开微信读书 App 刷新认证后再试");
-        $.setdata("", AUTH_KEY);
-        return;
-    }
-
-    if (probe.status !== 200) {
-        $.msg("WeRead", "请求失败", "HTTP " + probe.status);
-        return;
-    }
-
-    // Probe succeeded, proceed with claim
-    return await runClaimWithAuth(auth, probe.body);
-}
-
-
-// Core claim logic, given valid auth and optional cached query result
-async function runClaimWithAuth(auth, cachedBody) {
-
-    let data;
-    let queryBody = cachedBody;
-
-    if (!cachedBody) {
-        let result = await post(
-            API + "/weekly/exchange",
-            encode({
-                awardLevelId: 0,
-                unread: 1,
-                isExchangeAward: 0,
-                pf: PF,
-                awardChoiceType: 0
-            }),
-            getHeaders(auth)
-        );
-
-        if (result.status === 401) {
-            $.log("[WeRead] query 401 — 尝试通过 /login 自动换票刷新...");
-            if (auth.refreshToken && auth.deviceId) {
-                let refreshedAuth = await tryRefreshLogin(auth);
-                if (refreshedAuth && refreshedAuth.skey) {
-                    auth = refreshedAuth;
-                    result = await post(
-                        API + "/weekly/exchange",
-                        encode({
-                            awardLevelId: 0,
-                            unread: 1,
-                            isExchangeAward: 0,
-                            pf: PF,
-                            awardChoiceType: 0
-                        }),
-                        getHeaders(auth)
-                    );
-                }
-            }
-        }
-
-        if (result.status === 401) {
-            // 方案 C：尝试不带 skey 查询
-            $.log("[WeRead] query 401 — 尝试不带 skey 请求...");
-            delete auth.skey;
-            let r1 = await post(
-                API + "/weekly/exchange",
-                encode({
-                    awardLevelId: 0,
-                    unread: 1,
-                    isExchangeAward: 0,
-                    pf: PF,
-                    awardChoiceType: 0
-                }),
-                getHeaders(auth)
-            );
-            if (r1.status === 200) {
-                queryBody = r1.body;
-            } else {
-                $.msg("WeRead", "认证已过期", "vid/skey 已失效，请重新打开微信读书 App 刷新认证后再试");
-                $.setdata("", AUTH_KEY);
-                return;
-            }
-        }
-        if (result.status !== 200) {
-            $.msg("WeRead", "请求失败", "HTTP " + result.status);
-            return;
-        }
-        queryBody = result.body;
-    }
-
-    data = decode(queryBody);
-
-    if (!data) {
-        $.msg("WeRead", "解析失败", queryBody.slice(0, 100));
-        return;
-    }
-
-
-    let awards = [];
-
-    if (data.readtimeAwards)
-        data.readtimeAwards.forEach(a => { a._src = "阅读时长"; awards.push(a); });
-
-    if (data.readdayAwards)
-        data.readdayAwards.forEach(a => { a._src = "阅读天数"; awards.push(a); });
-
-
-    let count = 0;
-    let details = [];
-
-    // 读取奖励偏好：Loon 把 [Argument] 段参数值存在 persistentStore（key = 参数名），
-    // 直接用 $.getdata("prefer_coin") 读取用户在插件界面选择的值。
-    // 注意：$argument 只对应 argument="..." 里的静态字符串，无法读取 [Argument] 段参数。
-    let prefer = resolvePreferCoin($.getdata("prefer_coin"));
-    let firstType = prefer.firstType;
-    let secondType = prefer.secondType;
-    $.log("[WeRead] prefer_coin 原始值=" + String(prefer.raw) + ", preferCoin=" + prefer.preferCoin + ", firstType=" + firstType);
-
-    for (let item of awards) {
-
-        if (item.awardStatus !== 1)
-            continue;
-
-
-        let choices = item.awardChoices || [];
-
-        let choice =
-            choices.find(x => x.choiceType === firstType && x.canChoice === 1)
-            ||
-            choices.find(x => x.choiceType === secondType && x.canChoice === 1);
-
-
-        if (!choice)
-            continue;
-
-
-        let r = await post(
-            API + "/weekly/exchange",
-            encode({
-                unread: 1,
-                awardChoiceType: choice.choiceType,
-                awardLevelId: item.awardLevelId,
-                isExchangeAward: 1,
-                pf: PF
-            }),
-            getHeaders(auth)
-        );
-
-        if (r.status === 401) {
-            $.log("[WeRead] exchange 401 — 尝试通过 /login 自动换票刷新并重试...");
-            if (auth.refreshToken && auth.deviceId) {
-                let refreshedAuth = await tryRefreshLogin(auth);
-                if (refreshedAuth && refreshedAuth.skey) {
-                    auth = refreshedAuth;
-                    r = await post(
-                        API + "/weekly/exchange",
-                        encode({
-                            unread: 1,
-                            awardChoiceType: choice.choiceType,
-                            awardLevelId: item.awardLevelId,
-                            isExchangeAward: 1,
-                            pf: PF
-                        }),
-                        getHeaders(auth)
-                    );
-                }
-            }
-        }
-
-        if (r.status === 401) {
-            // 方案 C：skey 已过期，尝试不带 skey 重新领取
-            $.log("[WeRead] claim 401 — 尝试不带 skey 重新领取...");
-            delete auth.skey; // 后续请求都不带 skey
-            let r2 = await post(
-                API + "/weekly/exchange",
-                encode({
-                    unread: 1,
-                    awardChoiceType: choice.choiceType,
-                    awardLevelId: item.awardLevelId,
-                    isExchangeAward: 1,
-                    pf: PF
-                }),
-                getHeaders(auth)
-            );
-
-            if (r2.status === 200) {
-                count++;
-                details.push((item._src || "奖励") + "·" + describeChoice(choice, r2));
-                continue;
-            }
-
-            // 方案 D：vid/skey 均失效
-            $.msg("WeRead", "认证已过期", "vid/skey 已失效，请重新打开微信读书 App 刷新认证后再试");
-            $.setdata("", AUTH_KEY);
-            return;
-        }
-
-        if (r.status === 200) {
-            count++;
-            details.push((item._src || "奖励") + "·" + describeChoice(choice, r));
-        }
-
-    }
-
-
-    if (count > 0)
-        $.msg("WeRead", "领取完成", "成功领取 " + count + " 个奖励\n" + details.join("、"));
-    else
-        $.msg("WeRead", "领取完成", "暂无可领取的奖励");
-
 }
 
 
@@ -1349,4 +991,26 @@ function Env(name) {
         console.log.apply(console, arguments);
     };
 
+}
+
+
+let $ = new Env("WeRead · 周二翻牌");
+
+async function main() {
+    try {
+        if (typeof $request !== "undefined") {
+            $done({});
+            return;
+        }
+
+        await runFlipCard();
+    } catch (e) {
+        $.msg("WeRead · 周二翻牌", "执行异常", String(e));
+    }
+
+    $done({});
+}
+
+if (typeof module === "undefined" || !module.exports) {
+    main();
 }

@@ -1,63 +1,21 @@
 /*
 #!name=微信读书·自动领取（每日签到）
-#!desc=微信读书阅读奖励自动领取（每日 23:00）。本文件默认执行每日领取，参数 task=flip 时执行翻牌；通知标题为「WeRead · 每日签到」。
-#!author=Codex
+#!desc=微信读书阅读奖励自动领取（每日 23:00）。仅负责每日阅读时长与天数达标奖励领取。
+#!author=TomCatXue
 #!homepage=https://github.com/TomCatXue/MyCookieCenter
 #!icon=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/weread.png
 #!tag=微信读书,自动领取,阅读奖励
 
-MITM 与 cron 规则统一由 loon/CookieCenter.plugin 配置：
+配置由 loon/CookieCenter.plugin 或 loon/WeReadEnhance.plugin 提供：
 - 每日领取 cron -> 本文件（每日 23:00）
-- 周二翻牌 cron -> weread_flip.js（每周二 20:00）
+- 凭据自动捕获 -> 本文件（打开微信读书 App 时自动保存）
 参数面板由 boxjs/CookieCenter.boxjs.json 订阅提供。
 */
 
 const AUTH_KEY = "weread_auth_v2";
-const FLIP_STATE_KEY = "weread_flip_state_v1";
-const SCRIPT_VERSION = "2026-09-05-auto-refresh";
+const SCRIPT_VERSION = "2026-09-05-independent";
 const API = "https://i.weread.qq.com";
-const FLIP_API = "https://weread.qq.com/flip-card-game/api";
 const PF = "weread_wx-2001-iap-2001-iphone";
-const HMAC_SALT = "EBRYFkVMReKBGsU2";
-const FLIP_CARD_ORDER = [2, 5, 4, 7, 8, 6, 0, 1, 3];
-
-let $ = new Env("WeRead");
-
-async function main() {
-    try {
-        if (typeof $request !== "undefined") {
-            saveAuth();
-            $done({});
-            return;
-        }
-
-        // cron 任务：通过 $argument 区分任务类型（翻牌也可调用本文件）
-        let arg = parseArgument(typeof $argument !== "undefined" ? $argument : {});
-        if (arg.task === "flip") {
-            $.name = "WeRead · 周二翻牌";
-            await runFlipCard();
-        } else if (arg.task === "free" || arg.task === "limitFree") {
-            $.name = "WeRead · 限免入架";
-            await runFreeBooks();
-        } else {
-            $.name = "WeRead · 每日签到";
-            await runClaim();
-        }
-    } catch (e) {
-        $.msg("WeRead", "执行异常", String(e));
-    }
-
-    $done({});
-}
-
-if (typeof module === "undefined" || !module.exports) {
-    main();
-}
-
-
-// ============================================================
-// Pure-JS SHA-256 / HMAC-SHA256（Loon 无原生 crypto，手写）
-// ============================================================
 
 const SHA256_K = [
     0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
@@ -169,6 +127,83 @@ function hmacSha256(keyStr, dataStr) {
 
 function hmacSha256Hex(keyStr, dataStr) {
     return bytesToHex(hmacSha256(keyStr, dataStr));
+}
+
+const WE_READ_TABLE_HEX = "34ca55401db693c63130293532a7b811c2b516fa8bb124a4109004e908f83b8a9c8c44f9bc5c69e2a1dad2d37589f71e2d5056d77253bf22fb200f012e45876e6648f2e0cdfe67a943f49451cea54aee13268eccaa33145d0e39bbcf912b814dea99ec1a2c85c5d936744b18e1f13d9d419fb4170dd64cbedcaf972877f062ff71c1c8278f6c68a89be6591c1b1209984e3f063700ba1f0a192fc9d5d057496ffd25e4610c42cb96645fdbad60238d9a6dc3c45e3eb9926abd5b077f7695ed4fab847a80e778c7e5eb73836bfc38467d4765b352633a05d1efa3a6de9e3c02aeb27ba0f6f32ac0ac86035a540bf582d47ee3dfb0d8dd21e87c88a2795870b715";
+const WE_READ_TABLE = new Uint8Array(256);
+for (let i = 0; i < 256; i++) {
+    WE_READ_TABLE[i] = parseInt(WE_READ_TABLE_HEX.substr(i * 2, 2), 16);
+}
+
+function subBytes(str) {
+    const b = strToBytes(str);
+    const out = new Uint8Array(b.length);
+    for (let i = 0; i < b.length; i++) {
+        out[i] = WE_READ_TABLE[b[i]];
+    }
+    return out;
+}
+
+function simRotateBytes(arr, shift) {
+    const L = arr.length;
+    if (L === 0) return new Uint8Array(0);
+    const dest = new Uint8Array(L);
+    let curr = shift;
+    for (let i = 0; i < L; i++) {
+        dest[curr % L] = arr[i];
+        curr++;
+    }
+    return dest;
+}
+
+function xorSumBytes(arr) {
+    let res = 0;
+    for (let i = 0; i < arr.length; i++) res ^= arr[i];
+    return res;
+}
+
+function compareByteArrays(a, b) {
+    const len = Math.min(a.length, b.length);
+    for (let i = 0; i < len; i++) {
+        if (a[i] !== b[i]) return a[i] - b[i];
+    }
+    return a.length - b.length;
+}
+
+function computeLoginSignature(refreshToken, deviceId, body) {
+    let random = body.random;
+    let ts = body.timestamp;
+    let logoToken = "5ecdcfd7f";
+
+    const s0 = subBytes(String(ts));
+    const s1 = subBytes(String(random));
+    const s2 = subBytes(logoToken);
+    const s3 = subBytes(deviceId);
+    const s4 = strToBytes("5a6f1");
+    const s5 = subBytes(refreshToken);
+
+    const list = [s0, s1, s2, s3, s4, s5];
+    list.sort(compareByteArrays);
+
+    let totalLen = 0;
+    for (let i = 0; i < list.length; i++) totalLen += list[i].length;
+    const concat = new Uint8Array(totalLen);
+    let off = 0;
+    for (let i = 0; i < list.length; i++) {
+        concat.set(list[i], off);
+        off += list[i].length;
+    }
+
+    const shift1 = xorSumBytes(concat) % 11;
+    const rot1 = simRotateBytes(concat, shift1);
+
+    const hash1Hex = bytesToHex(sha256Uint8(rot1));
+    const hex1Ascii = strToBytes(hash1Hex);
+
+    const shift2 = xorSumBytes(hex1Ascii) % 11;
+    const rot2 = simRotateBytes(hex1Ascii, shift2);
+
+    return bytesToHex(sha256Uint8(rot2));
 }
 
 
@@ -501,13 +536,47 @@ async function tryWebRenewal(auth) {
     });
 }
 
+function describeChoice(choice, resp) {
+    if (resp && resp.body) {
+        let ex = decode(resp.body);
+        if (ex) {
+            if (ex.awardName) return ex.awardName;
+            if (ex.exchangeName) return ex.exchangeName;
+            if (ex.desc) return ex.desc;
+            if (ex.choiceName) return ex.choiceName;
+        }
+    }
+    if (choice.choiceName) return choice.choiceName;
+    if (choice.name) return choice.name;
+    if (choice.desc) return choice.desc;
+    if (choice.choiceType === 2) return "书币";
+    if (choice.choiceType === 1) return "体验卡";
+    return "奖励";
+}
+
+function resolvePreferCoin(rawPrefer) {
+    let preferVal = rawPrefer;
+    if (typeof preferVal === "string") {
+        preferVal = preferVal.replace(/^(input|switch),/, "");
+    }
+    let preferCoin = true;
+    if (preferVal === 1 || preferVal === "1" || preferVal === false || preferVal === "false") {
+        preferCoin = false;
+    }
+    return {
+        raw: rawPrefer,
+        preferCoin: preferCoin,
+        firstType: preferCoin ? 2 : 1,
+        secondType: preferCoin ? 1 : 2
+    };
+}
 
 async function runClaim() {
 
     let auth = getAuth();
 
     if (!auth) {
-        $.msg("WeRead", "没有认证", "请打开微信读书刷新一次");
+        $.msg("WeRead · 每日签到", "没有认证", "请打开微信读书刷新一次");
         return;
     }
 
@@ -775,331 +844,10 @@ async function runClaimWithAuth(auth, cachedBody) {
 
 
     if (count > 0)
-        $.msg("WeRead", "领取完成", "成功领取 " + count + " 个奖励\n" + details.join("、"));
+        $.msg("WeRead · 每日签到", "领取完成", "成功领取 " + count + " 个奖励\n" + details.join("、"));
     else
-        $.msg("WeRead", "领取完成", "暂无可领取的奖励");
+        $.msg("WeRead · 每日签到", "领取完成", "暂无可领取的奖励");
 
-}
-
-
-// ── GET helper ──────────────────────────────────────────
-
-function get(url, headers) {
-    return new Promise((resolve, reject) => {
-        $httpClient.get({
-            url,
-            headers,
-            timeout: 10000
-        }, (err, res, data) => {
-            if (err) reject(err);
-            else resolve({ status: res.status, body: data });
-        });
-    });
-}
-
-// ── Flip card helpers ───────────────────────────────────
-
-function pickNextFlip(data) {
-    // 2026-08-27 抓包确认：
-    // 1) cardIndex = cardList/initialList 中 status=0（未翻开）的数组下标（真实翻 cardIndex=6 对应 initialList[6] status=0）
-    // 2) giftIndex = 本次会话已翻的牌数 = flipList.length（抓包第 1 次翻 flipList 空 → giftIndex=0；已翻 1 张 → giftIndex=1）
-    //    ⚠️ 必须用服务器最新 flipList.length，固定 0 在已翻过牌时是非法参数 → WAF 断开 499
-    let cards = data.cardList || [];
-    let used = {};
-    cards.forEach(c => {
-        if (typeof c.cardIndex === "number" && c.cardIndex >= 0) {
-            used[c.cardIndex] = true;
-        }
-    });
-
-    // 收集 status=0（可翻）的卡片位置，优先 initialList 再 cardList
-    let candidates = [];
-    let seen = {};
-    (data.initialList || []).forEach((c, i) => {
-        if (c.status === 0 && !used[i] && !seen[i]) { candidates.push(i); seen[i] = true; }
-    });
-    cards.forEach((c, i) => {
-        if (c.status === 0 && !used[i] && !seen[i]) { candidates.push(i); seen[i] = true; }
-    });
-    // 回退：按 FLIP_CARD_ORDER 顺序找未翻的位置
-    if (candidates.length === 0) {
-        for (let i = 0; i < FLIP_CARD_ORDER.length; i++) {
-            let candidate = FLIP_CARD_ORDER[i];
-            if (!used[candidate] && !seen[candidate]) {
-                candidates.push(candidate);
-            }
-        }
-    }
-
-    if (candidates.length === 0) return null;
-    let cardIndex = candidates[0];
-    let giftIndex = Array.isArray(data.flipList) ? data.flipList.length : 0;
-    return { cardIndex, giftIndex };
-}
-
-function getSavedFlipState() {
-    let raw = $.getdata(FLIP_STATE_KEY);
-    if (!raw) return null;
-
-    try {
-        let saved = JSON.parse(raw);
-        let maxAge = 8 * 24 * 60 * 60 * 1000;
-        if (saved.savedAt && Date.now() - saved.savedAt > maxAge) return null;
-        return saved.data || null;
-    } catch (e) {
-        return null;
-    }
-}
-
-function saveFlipState(data) {
-    if (!data) return;
-    $.setdata(JSON.stringify({ savedAt: Date.now(), data }), FLIP_STATE_KEY);
-}
-
-function clearFlipState() {
-    $.setdata("", FLIP_STATE_KEY);
-}
-
-function describeCardPrize(card) {
-    if (!card) return "未知奖励";
-    if (card.bookInfo && card.bookInfo.title) return card.bookInfo.title;
-    if (card.cardType === "money" || card.type === "money") return "书币";
-    if (card.cardType === "infinite" || card.type === "infinite") return "体验卡";
-    if (card.cardType === "book") {
-        return card.bookInfo && card.bookInfo.title ? card.bookInfo.title : "书籍";
-    }
-    return "未知奖励";
-}
-
-function describeFlipResult(data, justFlippedIndex) {
-    if (!data) return "未知奖励";
-    if (data.prizeName) return data.prizeName;
-    if (data.reward) return data.reward;
-    if (data.giftName) return data.giftName;
-
-    let cards = Array.isArray(data.cardList) ? data.cardList : [];
-    // 一次运行里多张牌都已 status===3，必须按本次刚翻的 cardIndex 定位，否则会误报早先那张的奖励
-    if (typeof justFlippedIndex === "number") {
-        for (let i = 0; i < cards.length; i++) {
-            if (cards[i].cardIndex === justFlippedIndex) {
-                return describeCardPrize(cards[i]);
-            }
-        }
-    }
-    for (let i = 0; i < cards.length; i++) {
-        let s = cards[i].status;
-        if (s === 1 || s === 2 || s === 3 || s === 4) {
-            return describeCardPrize(cards[i]);
-        }
-    }
-
-    return "未知奖励";
-}
-
-// Parse Cookie string into key-value object
-function parseCookie(str) {
-    let obj = {};
-    if (!str) return obj;
-    str.split(";").forEach(pair => {
-        let eq = pair.indexOf("=");
-        if (eq > 0) {
-            obj[decodeURIComponent(pair.slice(0, eq).trim())] = decodeURIComponent(pair.slice(eq + 1).trim());
-        }
-    });
-    return obj;
-}
-
-// Build Cookie header for weread.qq.com
-function getFlipHeaders(auth) {
-    // 翻牌游戏用 wrVid/wrSkey（Cookie 认证），与 i.weread.qq.com 的 vid/skey 分开存储
-    let wrVid = auth.wrVid || auth.vid || "";
-    let wrSkey = auth.wrSkey || auth.skey || "";
-    // ⚠️ 必须用 WebView UA（Mozilla/...AppleWebKit...），绝不能用 App 原生 UA（auth.ua，无 Mozilla 前缀）。
-    // 2026-08-27 抓包确认：真实翻牌请求 UA 是 iOS 26.6.1 的 WebView UA；
-    // 用 App UA 请求 H5 翻牌接口会被 WAF 直接断开（HTTP 499）。
-    let flipUa = auth.flipUa || "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;WeRead/10.2.1 (iPhone; iOS 26.6.1; Scale/3.00)";
-    return {
-        "User-Agent": flipUa,
-        "Accept": "application/json, text/plain, */*",
-        "Accept-Language": "zh-CN,zh-Hans;q=0.9",
-        "Accept-Encoding": "gzip, deflate, br, zstd",
-        "Referer": "https://weread.qq.com/flip-card-game?isAnimateNavBarBackground=1&isShowNavBarShadow=0&isStatusbarLight=1&backgroundColor=%25234CB6FA&navBarTintColor=%2523ffffff&navBarTitleColor=%2523ffffff&navBarBackgroundColor=%25234CB6FA",
-        "sec-fetch-site": "same-origin",
-        "sec-fetch-mode": "cors",
-        "sec-fetch-dest": "empty",
-        "priority": "u=3, i",
-        "Cookie": "wr_skey=" + wrSkey + "; wr_vid=" + wrVid
-    };
-}
-
-// Try to flip all available cards (max 6 flips per week)
-async function runFlipCardDirect(auth) {
-    $.log("[WeRead] 翻牌游戏 — 开始... version=" + SCRIPT_VERSION);
-
-    if (!auth) auth = getAuth();
-
-    // ⚠️ 翻牌必须用 weread.qq.com 捕获的真实 Cookie（wr_skey/wr_vid）。
-    // 不能 fallback 到 App 的 vid/skey：诊断（2026-08-23）已确认 App skey ≠ 网页 wr_skey，
-    // 用 App skey 冒充会触发 WAF 直接断开连接（HTTP 499）。
-    if (!auth || !auth.wrVid || !auth.wrSkey) {
-        if (auth && auth.refreshToken && auth.deviceId) {
-            $.log("[WeRead] 翻牌 — 缺少 wr_skey，尝试通过 /login 自动刷新获取...");
-            let refreshedAuth = await tryRefreshLogin(auth);
-            if (refreshedAuth && refreshedAuth.wrSkey) {
-                auth = refreshedAuth;
-            }
-        }
-    }
-
-    if (!auth || !auth.wrVid || !auth.wrSkey) {
-        $.log("[WeRead] 翻牌 — 未捕获 weread.qq.com Cookie. wrVid="
-            + (auth && auth.wrVid ? "有" : "无") + ", wrSkey=" + (auth && auth.wrSkey ? "有" : "无"));
-        $.msg("WeRead", "翻牌", "未捕获到 weread.qq.com 登录 Cookie（wr_skey/wr_vid）且自动刷新失败\n请在微信读书 App 打开「翻牌游戏」页面一次，再重新运行");
-        return;
-    }
-
-    // ⚠️ 关键：先 GET flipCardList 获取服务器最新状态（抓包确认真实 App 会先查列表）。
-    // 不能依赖本地保存的旧 state —— 旧 state 的 flipList.length 会算出错误的 giftIndex，
-    // 导致服务器/WAF 校验参数非法直接断开（HTTP 499）。
-    let listRes = await get(FLIP_API + "/flipCardList?pf=ios&platform=ios_html", getFlipHeaders(auth));
-    if (listRes.status !== 200) {
-        if (auth && auth.refreshToken && auth.deviceId && (listRes.status === 401 || listRes.status === 403 || listRes.status === 499)) {
-            $.log("[WeRead] 翻牌 — flipCardList 返回 HTTP " + listRes.status + "，尝试通过 /login 自动刷新 wr_skey 并重试...");
-            let refreshedAuth = await tryRefreshLogin(auth);
-            if (refreshedAuth && refreshedAuth.wrSkey) {
-                auth = refreshedAuth;
-                listRes = await get(FLIP_API + "/flipCardList?pf=ios&platform=ios_html", getFlipHeaders(auth));
-            }
-        }
-        if (listRes.status !== 200) {
-        $.log("[WeRead] 翻牌 — flipCardList 查询失败 HTTP " + listRes.status
-            + "，body=" + String(listRes.body || "").slice(0, 100));
-        $.msg("WeRead", "翻牌失败", "查询卡片列表失败 (HTTP " + listRes.status + ")\n若为 401/403/499，请打开微信读书 App 的「翻牌游戏」页面一次重新捕获 Cookie");
-        return;
-        }
-    }
-
-    let freshState;
-    try {
-        freshState = JSON.parse(listRes.body || "{}");
-    } catch (e) {
-        freshState = decode(listRes.body) || {};
-    }
-
-    let remainingCount = freshState.remainingCount || 0;
-    $.log("[WeRead] 翻牌 — flipCardList 成功, remainingCount=" + remainingCount
-        + ", flipList.length=" + (freshState.flipList ? freshState.flipList.length : 0));
-
-    if (remainingCount <= 0) {
-        $.msg("WeRead", "翻牌", "本周翻牌次数已用完");
-        return;
-    }
-
-    // 用服务器最新状态作为起点（替换本地旧 state），giftIndex 由最新 flipList.length 决定
-    state = freshState;
-    saveFlipState(state);
-
-    let results = [];
-    let attempts = 0;
-    const MAX_ATTEMPTS = 6;
-
-    while (attempts < MAX_ATTEMPTS) {
-        let target = pickNextFlip(state);
-
-        if (!target && state && state.cardList) {
-            clearFlipState();
-            state = {};
-            target = pickNextFlip(state);
-        }
-
-        if (!target) {
-            $.log("[WeRead] 翻牌 — 没有未翻开的卡片");
-            break;
-        }
-
-        $.log("[WeRead] 翻牌 — 第 " + (attempts + 1) + "/" + MAX_ATTEMPTS
-            + " 次, cardIndex=" + target.cardIndex + ", giftIndex=" + target.giftIndex);
-
-        let flipUrl = FLIP_API + "/flipCardFlip?cardIndex=" + target.cardIndex
-            + "&giftIndex=" + target.giftIndex + "&pf=ios&platform=ios_html";
-        let flipRes = await get(flipUrl, getFlipHeaders(auth));
-
-        attempts++;
-
-        if (flipRes.status === 401 || flipRes.status === 403 || flipRes.status === 499) {
-            $.log("[WeRead] 翻牌 — HTTP " + flipRes.status + "，尝试通过 /login 自动刷新 wr_skey 并重试当前卡片...");
-            if (auth && auth.refreshToken && auth.deviceId) {
-                let refreshedAuth = await tryRefreshLogin(auth);
-                if (refreshedAuth && refreshedAuth.wrSkey) {
-                    auth = refreshedAuth;
-                    flipRes = await get(flipUrl, getFlipHeaders(auth));
-                }
-            }
-        }
-
-        // 401/403 = Cookie 明确失效（需重新捕获）；499 = WAF/服务器断开连接。
-        // 2026-08-27 抓包确认：wr_skey 有效时真实请求仍 200，499 通常因请求参数/头不合法被 WAF 拦。
-        if (flipRes.status === 401 || flipRes.status === 403) {
-            $.log("[WeRead] 翻牌 — HTTP " + flipRes.status + "，Cookie 失效，需重新捕获");
-            results.push("第 " + attempts + " 次: 失败 (HTTP " + flipRes.status + ")，Cookie 失效");
-            break;
-        }
-        if (flipRes.status === 499) {
-            $.log("[WeRead] 翻牌 — HTTP 499（WAF 断开），该 cardIndex 不可翻，跳过");
-            results.push("第 " + attempts + " 次: 失败 (HTTP 499)");
-            // 把当前 cardIndex 记入 used，避免死循环重试同一张
-            state = state || {};
-            state.cardList = state.cardList || [];
-            state.cardList.push({ cardIndex: target.cardIndex, status: 9 });
-            state.initialList = state.initialList || [];
-            continue;
-        }
-
-        if (flipRes.status === 200) {
-            let flipData;
-            try {
-                flipData = JSON.parse(flipRes.body || "{}");
-            } catch (e) {
-                flipData = decode(flipRes.body) || {};
-            }
-            state = flipData;
-            saveFlipState(state);
-
-            let prize = describeFlipResult(flipData, target.cardIndex);
-            let type = flipData.prizeType || flipData.type || "";
-            results.push("第 " + attempts + " 次: " + prize + (type ? " (" + type + ")" : ""));
-            $.log("[WeRead] 翻牌 — 第 " + attempts + " 次成功: " + prize);
-
-            if (!flipData.remainingCount || flipData.remainingCount <= 0) {
-                $.log("[WeRead] 翻牌 — 无剩余翻牌次数");
-                break;
-            }
-        } else {
-            $.log("[WeRead] 翻牌 — 第 " + attempts + " 次失败 HTTP " + flipRes.status);
-            results.push("第 " + attempts + " 次: 失败 (HTTP " + flipRes.status + ")");
-            break;
-        }
-
-        if (attempts < MAX_ATTEMPTS) {
-            await new Promise(r => setTimeout(r, 1500));
-        }
-    }
-
-    if (results.length > 0) {
-        let failed = results.some(r => r.indexOf("失败") !== -1);
-        if (failed) {
-            // 401/403/499 = Cookie 失效。renewal 不可行，需用户重新打开翻牌页面捕获
-            $.msg("WeRead", "翻牌失败", "wr_skey 已失效（约 7 天有效）\n请打开微信读书 App 的「翻牌游戏」页面一次，让 Loon 重新捕获 Cookie 后再试\n\n" + results.join("\n"));
-        } else {
-            $.msg("WeRead", "翻牌完成", results.join("\n"));
-        }
-    } else {
-        $.msg("WeRead", "翻牌", "暂无可翻的卡片");
-    }
-}
-
-async function runFlipCard(auth) {
-    return await runFlipCardDirect(auth);
 }
 
 
@@ -1183,222 +931,6 @@ async function tryRefreshLogin(auth) {
 }
 
 
-
-// ============================================================
-// 每周限免好书入架业务逻辑
-// ============================================================
-
-function extractBooks(data) {
-    let list = [];
-    if (!data) return list;
-    let rawList = data.books || data.data || data.items || data.freeBooks || (Array.isArray(data) ? data : []);
-    rawList.forEach(b => {
-        let bid = b.bookId || b.id || b.bookInfo?.bookId || b.book?.bookId;
-        let title = b.title || b.bookInfo?.title || b.book?.title || "";
-        if (bid) {
-            list.push({ bookId: String(bid), title: String(title) });
-        }
-    });
-    return list;
-}
-
-async function checkFreeQualify(auth) {
-    try {
-        let res = await get(API + "/checkfreequalify?type=book&vid=" + auth.vid, getHeaders(auth));
-        let data = decode(res.body);
-        if (data && typeof data.reachedMax !== "undefined") {
-            return data;
-        }
-    } catch (e) {
-        $.log("[WeRead] checkfreequalify 请求异常: " + String(e));
-    }
-    return { reachedMax: 0 };
-}
-
-function extractBooks(data) {
-    let list = [];
-    if (!data) return list;
-    let rawList = data.books || data.data || data.items || data.freeBooks || (Array.isArray(data) ? data : []);
-    rawList.forEach(b => {
-        let bid = b.bookId || b.id || b.bookInfo?.bookId || b.book?.bookId;
-        let title = b.title || b.bookInfo?.title || b.book?.title || "";
-        let received = typeof b.received !== "undefined" ? b.received : 0;
-        if (bid) {
-            list.push({ bookId: String(bid), title: String(title), received: received });
-        }
-    });
-    return list;
-}
-
-async function checkFreeQualify(auth) {
-    try {
-        let res = await get(API + "/checkfreequalify?type=book&vid=" + auth.vid, getHeaders(auth));
-        let data = decode(res.body);
-        if (data && typeof data.reachedMax !== "undefined") {
-            return data;
-        }
-    } catch (e) {
-        $.log("[WeRead] checkfreequalify 请求异常: " + String(e));
-    }
-    return { reachedMax: 0 };
-}
-
-function extractBooks(data) {
-    let list = [];
-    if (!data) return list;
-    let rawList = data.books || data.data || data.items || data.freeBooks || (Array.isArray(data) ? data : []);
-    rawList.forEach(b => {
-        let bid = b.bookId || b.id || b.bookInfo?.bookId || b.book?.bookId;
-        let title = b.title || b.bookInfo?.title || b.book?.title || "";
-        let received = typeof b.received !== "undefined" ? b.received : 0;
-        if (bid) {
-            list.push({ bookId: String(bid), title: String(title), received: received });
-        }
-    });
-    return list;
-}
-
-async function fetchLimitFreeBooks(auth) {
-    let books = [];
-
-    // 1. 优先获取福利界面「免费图书馆」书单（每期免费领 2 本电子书）
-    // 关键对齐：必须携带完整查询参数 ?count=120&receiveStatus=1&type=book&v=2，否则触发服务端 HTTP 499 拦截
-    try {
-        let res1 = await get(API + "/free/library/list?count=120&receiveStatus=1&type=book&v=2", getHeaders(auth));
-        if (res1.status === 401) {
-            let refreshed = await tryRefreshLogin(auth);
-            if (refreshed) {
-                auth = refreshed;
-                res1 = await get(API + "/free/library/list?count=120&receiveStatus=1&type=book&v=2", getHeaders(auth));
-            }
-        }
-        if (res1.status === 200) {
-            let data = decode(res1.body);
-            let list = extractBooks(data);
-            books = books.concat(list);
-            $.log("[WeRead] /free/library/list 成功提取到 " + list.length + " 本免费好书" + (data && data.intro ? " (" + data.intro + ")" : ""));
-        } else {
-            $.log("[WeRead] /free/library/list HTTP " + res1.status);
-        }
-    } catch (e) {
-        $.log("[WeRead] /free/library/list 请求异常: " + String(e));
-    }
-
-    // 2. 备选源：限免/新人免费书单 /newUser/limitFree
-    try {
-        let res2 = await get(API + "/newUser/limitFree?cmd=0", getHeaders(auth));
-        if (res2.status === 200) {
-            let data = decode(res2.body);
-            let list = extractBooks(data);
-            books = books.concat(list);
-            if (list.length > 0) $.log("[WeRead] /newUser/limitFree 提取到 " + list.length + " 本书籍");
-        }
-    } catch (e) { }
-
-    // 3. 备用推荐源 /exchange/bookrecommend
-    if (books.length === 0) {
-        try {
-            let res3 = await get(API + "/exchange/bookrecommend", getHeaders(auth));
-            if (res3.status === 200) {
-                let data = decode(res3.body);
-                let list = extractBooks(data);
-                books = books.concat(list);
-                if (list.length > 0) $.log("[WeRead] /exchange/bookrecommend 提取到 " + list.length + " 本书籍");
-            }
-        } catch (e) { }
-    }
-
-    // 按 bookId 去重
-    let uniqueMap = new Map();
-    books.forEach(b => {
-        if (b.bookId && !uniqueMap.has(b.bookId)) {
-            uniqueMap.set(b.bookId, b);
-        }
-    });
-
-    return { books: Array.from(uniqueMap.values()), auth };
-}
-
-async function batchAddShelf(auth, bookList) {
-    if (!bookList || bookList.length === 0) {
-        return { success: false, count: 0, titles: [], errMsg: "书单为空" };
-    }
-
-    let bookIds = bookList.map(b => b.bookId);
-    $.log("[WeRead] 准备领取加入书架，共 " + bookIds.length + " 本: " + bookIds.join(", "));
-
-    let addPayload = { bookIds: bookIds };
-    let res = await post(
-        API + "/shelf/add",
-        encode(addPayload),
-        getHeaders(auth)
-    );
-
-    if (res.status === 401) {
-        let refreshed = await tryRefreshLogin(auth);
-        if (refreshed) {
-            auth = refreshed;
-            res = await post(
-                API + "/shelf/add",
-                encode(addPayload),
-                getHeaders(auth)
-            );
-        }
-    }
-
-    let resData = decode(res.body);
-    $.log("[WeRead] /shelf/add 响应 HTTP " + res.status + ": " + JSON.stringify(resData || {}).slice(0, 150));
-
-    if (resData && (resData.succ || resData.errcode === -2449 || res.status === 200)) {
-        let titles = bookList.map(b => b.title ? `《${b.title}》` : `ID:${b.bookId}`).filter(Boolean);
-        return { success: true, count: bookIds.length, titles };
-    }
-
-    return { success: false, count: 0, titles: [], errMsg: resData?.errmsg || resData?.message || ("HTTP " + res.status) };
-}
-
-async function runFreeBooks() {
-    let auth = getAuth();
-    if (!auth || !auth.vid) {
-        $.msg("WeRead · 限免入架", "未找到登录凭据", "请打开微信读书 App 刷新一次认证");
-        return;
-    }
-
-    $.log("[WeRead] 限免好书入架任务启动... version=" + SCRIPT_VERSION);
-
-    // 1. 检查领书资格与本期配额（每期最多 2 本）
-    let qualify = await checkFreeQualify(auth);
-    if (qualify && qualify.reachedMax === 1) {
-        $.log("[WeRead] 本期免费图书馆领书配额已达上限 (reachedMax=1)");
-        $.msg("WeRead · 限免入架", "本期配额已满", qualify.hint || "每期最多领取2本书，下期再来吧");
-        return;
-    }
-
-    // 2. 抓取书单
-    let { books, auth: updatedAuth } = await fetchLimitFreeBooks(auth);
-    auth = updatedAuth;
-
-    if (!books || books.length === 0) {
-        $.msg("WeRead · 限免入架", "暂无可用限免书单", "未获取到本周免费图书馆书籍，请稍后重试");
-        return;
-    }
-
-    // 3. 优先挑选未领取过的书籍 (received === 0)
-    let unreceived = books.filter(b => b.received !== 1);
-    let candidates = unreceived.length > 0 ? unreceived : books;
-
-    // 每期领 2 本，挑出前 2 本入架
-    let targetBooks = candidates.slice(0, 2);
-    let result = await batchAddShelf(auth, targetBooks);
-
-    if (result.success) {
-        let preview = result.titles.join("、");
-        $.msg("WeRead · 限免入架", `成功领取 ${result.count} 本免费好书`, preview);
-    } else {
-        $.msg("WeRead · 限免入架", "领取失败", result.errMsg || "请检查网络");
-    }
-}
-
 function Env(name) {
 
     this.name = name;
@@ -1439,4 +971,27 @@ function Env(name) {
         console.log.apply(console, arguments);
     };
 
+}
+
+
+let $ = new Env("WeRead · 每日签到");
+
+async function main() {
+    try {
+        if (typeof $request !== "undefined") {
+            saveAuth();
+            $done({});
+            return;
+        }
+
+        await runClaim();
+    } catch (e) {
+        $.msg("WeRead · 每日签到", "执行异常", String(e));
+    }
+
+    $done({});
+}
+
+if (typeof module === "undefined" || !module.exports) {
+    main();
 }

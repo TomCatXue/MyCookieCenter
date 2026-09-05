@@ -1,18 +1,22 @@
 /*
 ------------------------------------------
-@Description: 轻触订阅人数，好书即刻入架 · 微信读书优雅收录
+@Description: 轻触订阅人数或在读人数，好书即刻入架 · 微信读书优雅收录
 @Author: TomCatXue (重构整合)
 @OriginalAuthor: 水君
-@Fixed:  修复 Env 类 HTTP 封装 bug + Cookie 覆盖问题 + 请求头污染
+@Fixed: 
+  1. 修复 i.weread.qq.com 传输层强制 Base64 编码导致入架失败的问题
+  2. 扩展触发支持现代微信读书的「在读人数/阅读统计」接口 (/book/readingStat)
+  3. 增加请求头 App 凭证自动透传与 30 秒防抖防重复机制
 ------------------------------------------
-触发：在微信读书中，点击任意书籍的「订阅人数」
-流程：查书籍信息 → 校验上架 → 加入书架 → 清理辅助书
-用法：安装插件，进入微信读书，点按即用
+触发：在微信读书中，点击任意书籍的「在读人数」或「订阅人数」
+流程：提取 bookId → 校验防抖 → 查书籍信息 → 校验上架 → Base64编码请求加入书架 → 推送通知
+用法：安装插件，进入微信读书点按即用
 */
 
-console.log("\u2705 [微信读书] 脚本已加载，等待触发...");
+console.log("\u2705 [微信读书·优雅收录] 脚本已加载，等待触发...");
 
-const $ = new Env("微信读书");
+const $ = new Env("微信读书·优雅收录");
+const CACHE_KEY = "weread_shelf_last_added";
 
 // =================== 工具函数 ===================
 
@@ -21,24 +25,50 @@ function getQueries(url) {
     return qs
         ? qs.split("&").reduce((acc, pair) => {
             const [k, v] = pair.split("=");
-            return (acc[k] = v), acc;
+            return (acc[k] = decodeURIComponent(v || "")), acc;
         }, {})
         : {};
 }
 
-// 构建请求头：以原始请求头为基础，只覆盖必要字段
+function b64encode(str) {
+    if (typeof $base64 !== "undefined") return $base64.encode(str);
+    try {
+        if (typeof Buffer !== "undefined") return Buffer.from(str).toString("base64");
+    } catch (e) { }
+    return str;
+}
+
+function b64decode(str) {
+    if (!str) return str;
+    try {
+        if (typeof $base64 !== "undefined") return $base64.decode(str);
+        if (typeof Buffer !== "undefined") return Buffer.from(str, "base64").toString("utf-8");
+    } catch (e) { }
+    return str;
+}
+
+// 构建请求头：优先复用当前 App 请求的 vid/skey，备用本地缓存
 function buildHeaders() {
-    if (typeof $request === "undefined") return {};
-    const orig = $request.headers || {};
-    const cookie = orig["Cookie"] || orig["cookie"] || orig["COOKIE"] || "";
-    const finalCookie = cookie.includes("wr_logined") ? cookie : (cookie ? cookie + "; wr_logined=1" : "wr_logined=1");
-    // 保留原始 header，只覆写必须的
-    return {
-        ...orig,
-        "Cookie": finalCookie,
-        "Referer": "https://weread.qq.com/",
-        "User-Agent": orig["User-Agent"] || orig["user-agent"] || orig["USER-AGENT"] || "WeRead/1.0",
+    let orig = (typeof $request !== "undefined" && $request.headers) ? $request.headers : {};
+    let auth = {};
+    try {
+        let raw = $.getdata("weread_auth_v2");
+        if (raw) auth = JSON.parse(raw);
+    } catch (e) { }
+
+    let headers = {
+        "Content-Type": "application/json",
+        "Accept": "*/*",
+        "User-Agent": orig["User-Agent"] || orig["user-agent"] || auth.ua || "WeRead/10.2.1",
+        "channelid": orig["channelid"] || auth.channelid || "AppStore",
+        "basever": orig["basever"] || auth.basever || "10.2.1",
+        "v": orig["v"] || auth.basever || "10.2.1",
+        "vid": orig["vid"] || auth.vid || ""
     };
+    if (orig["skey"] || auth.skey) {
+        headers["skey"] = orig["skey"] || auth.skey;
+    }
+    return headers;
 }
 
 // =================== 业务逻辑 ===================
@@ -50,21 +80,21 @@ async function getBookInfo(bookId) {
             type: "get",
             headers: buildHeaders(),
         };
-        $.log(`\n[INFO] 正在查询书籍[${bookId}]的基础信息...`);
+        $.log(`[INFO] 正在查询书籍[${bookId}]的基础信息...`);
         const res = await Request(opts);
         const data = res?.bookInfo || res;
         const title = data?.title || "";
         const author = data?.author || "";
 
         if (data && data.totalWords === 0) {
-            $.log(`[INFO] 书籍[${bookId}](${title})的 totalWords 为 0，说明该书籍从未上架。`);
+            $.log(`[INFO] 书籍[${bookId}](${title})的 totalWords 为 0，说明该书籍暂无排版内容。`);
             return { available: false, title, author };
         }
 
-        $.log(`[INFO] 书籍[${bookId}](${title})正常，允许加入书架。`);
+        $.log(`[INFO] 书籍[${bookId}](${title})信息正常，准备加入书架。`);
         return { available: true, title, author };
     } catch (e) {
-        $.log(`[ERROR] 查询书籍信息失败，将默认尝试添加书架: ${e}`);
+        $.log(`[WARN] 查询书籍信息异常，默认尝试添加书架: ${e}`);
         return { available: true, title: "", author: "" };
     }
 }
@@ -77,7 +107,7 @@ async function isBookOnShelf(bookId) {
             headers: buildHeaders(),
         };
         const res = await Request(opts);
-        if (res && res.data && res.data.length > 0) {
+        if (res && res.data && Array.isArray(res.data) && res.data.length > 0) {
             return res.data[0].onShelf === 1;
         }
         return false;
@@ -86,29 +116,8 @@ async function isBookOnShelf(bookId) {
     }
 }
 
-async function cleanBuiltinBook() {
-    const builtinBookId = "490081";
-    try {
-        const opts = {
-            url: "https://i.weread.qq.com/shelf/delete",
-            type: "post",
-            dataType: "json",
-            headers: buildHeaders(),
-            body: { bookIds: [builtinBookId] },
-        };
-        await Request(opts);
-    } catch {
-        // 静默失败
-    }
-}
-
-async function addBook(bookId, shouldCleanBuiltin) {
-    const builtinBookId = "490081";
-    const bookList = [builtinBookId];
-
-    if (bookId && bookId.toString() !== builtinBookId) {
-        bookList.push(bookId.toString());
-    }
+async function addBook(bookId) {
+    const bookList = [String(bookId)];
 
     try {
         const opts = {
@@ -119,26 +128,18 @@ async function addBook(bookId, shouldCleanBuiltin) {
             body: { bookIds: bookList },
         };
 
-        $.log(`[INFO] 正在将书籍加入书架: ${bookId}`);
+        $.log(`[INFO] 发起加书架请求，bookId: ${bookId}`);
         const res = await Request(opts);
-        $.log(`[INFO] 服务器返回结果: ${JSON.stringify(res)}\n`);
+        $.log(`[INFO] 服务器响应: ${JSON.stringify(res)}\n`);
 
-        // errcode === -2449 表示书籍被限制/下架，强制当作成功处理
-        if (res && res.errcode === -2449) {
-            $.log(`[INFO] 书籍[${bookId}]受限制(errcode=-2449)，强制返回成功`);
-            if (shouldCleanBuiltin) {
-                await cleanBuiltinBook();
-            }
+        if (res && (res.succ === 1 || res.succ === true || res.errcode === -2449)) {
             return { succ: true };
         }
 
-        if (res && res.succ && shouldCleanBuiltin) {
-            await cleanBuiltinBook();
-        }
-
-        return res;
+        return res || { succ: false };
     } catch (e) {
         $.logErr(e);
+        return { succ: false, error: e };
     }
 }
 
@@ -148,43 +149,56 @@ async function addBook(bookId, shouldCleanBuiltin) {
     try {
         if (typeof $request === "undefined") return;
 
-        const bookId = getQueries($request.url)?.bookId;
+        const queries = getQueries($request.url);
+        const bookId = queries?.bookId;
         if (!bookId) {
-            $.msg($.name, "\u274c 解析失败", "未从请求 URL 中找到 bookId");
             return;
         }
+
+        // 30 秒防抖去重：避免同一个页面多次触发连续加书架与通知
+        let lastCache = $.getdata(CACHE_KEY);
+        if (lastCache) {
+            try {
+                let parsed = JSON.parse(lastCache);
+                if (parsed.bookId === String(bookId) && (Date.now() - parsed.time < 30000)) {
+                    $.log(`[INFO] 书籍[${bookId}]在 30 秒内已处理，跳过重复触发`);
+                    return;
+                }
+            } catch (e) { }
+        }
+        $.setdata(JSON.stringify({ bookId: String(bookId), time: Date.now() }), CACHE_KEY);
 
         const info = await getBookInfo(bookId);
+        const label = info.title ? `《${info.title}》` : `ID: ${bookId}`;
+
         if (!info.available) {
-            const label = info.title ? `\u300a${info.title}\u300b` : `ID: ${bookId}`;
-            $.msg($.name, "\ud83d\udcd5 暂未上架", `${label}（字数 0，从未上架）`);
+            $.msg($.name, "📕 暂未上架", `${label}（暂无正版排版数据）`);
             return;
         }
 
-        const builtinBookId = "490081";
-        const builtinOnShelf = await isBookOnShelf(builtinBookId);
-        const shouldCleanBuiltin = !builtinOnShelf;
+        const onShelf = await isBookOnShelf(bookId);
+        if (onShelf) {
+            $.log(`[INFO] 书籍[${bookId}]已在书架中，无需重复添加`);
+            return;
+        }
 
-        const res = await addBook(bookId, shouldCleanBuiltin);
+        const res = await addBook(bookId);
 
         if (res && res.succ) {
-            const label = info.title ? `\u300a${info.title}\u300b` : `ID: ${bookId}`;
             const authorPart = info.author ? ` / ${info.author}` : "";
-            $.msg($.name, "\ud83d\udcd6 已加入书架", `${label}${authorPart}`);
+            $.msg($.name, "📖 已加入书架", `${label}${authorPart}`);
         } else {
-            $.msg($.name, "\u274c 添加失败", `请尝试其它书籍\n${JSON.stringify(res)}`);
+            $.log(`[WARN] 书籍[${bookId}]添加未返回成功标志: ${JSON.stringify(res)}`);
         }
     } catch (e) {
         $.logErr(e);
-        $.msg($.name, "\u26a0\ufe0f 脚本错误", e.message || e);
     }
 })()
     .catch((e) => {
         $.logErr(e);
-        $.msg($.name, "\u26a0\ufe0f 脚本错误", e.message || e);
     })
     .finally(() => {
-        $done();
+        $done({});
     });
 
 // =================== 通用框架：Request + Env ===================
@@ -207,8 +221,12 @@ async function Request(t) {
         const i = t.timeout ? (t.timeout > 1000 ? t.timeout : t.timeout * 1000) : 10000;
 
         "json" === n && (r["Content-Type"] = "application/json;charset=UTF-8");
-        const y =
-            "string" == typeof s ? s : s && "form" == n ? $.queryStr(s) : $.toStr(s);
+
+        let y = "string" == typeof s ? s : s && "form" == n ? $.queryStr(s) : $.toStr(s);
+
+        if (p === "post" && o.indexOf("i.weread.qq.com") !== -1 && y) {
+            y = b64encode(y);
+        }
 
         const l = {
             url: c,
@@ -218,7 +236,16 @@ async function Request(t) {
         };
 
         const m = $.http[p.toLowerCase()](l).then((t) => {
-            const rawBody = t && typeof t.body !== "undefined" ? t.body : t;
+            let rawBody = t && typeof t.body !== "undefined" ? t.body : t;
+            if (typeof rawBody === "string") {
+                let trimmed = rawBody.trim();
+                if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) {
+                    let decoded = b64decode(trimmed);
+                    if (decoded && (decoded.trim().startsWith("{") || decoded.trim().startsWith("["))) {
+                        rawBody = decoded;
+                    }
+                }
+            }
             return "data" == u ? ($.toObj(rawBody) || rawBody) : $.toObj(t) || t;
         });
 
@@ -290,6 +317,16 @@ function Env(t, e) {
                 }
             }
             return s.substring(0, s.length - 1);
+        }
+        getdata(k) {
+            if (typeof $persistentStore !== "undefined") return $persistentStore.read(k);
+            if (typeof $prefs !== "undefined") return $prefs.valueForKey(k);
+            return null;
+        }
+        setdata(v, k) {
+            if (typeof $persistentStore !== "undefined") return $persistentStore.write(v, k);
+            if (typeof $prefs !== "undefined") return $prefs.setValueForKey(v, k);
+            return false;
         }
         msg(title = this.name, subtitle = "", body = "", options = {}) {
             const payload = () => { return options; };
