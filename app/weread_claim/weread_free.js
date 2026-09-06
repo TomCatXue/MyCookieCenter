@@ -346,6 +346,13 @@ async function tryRefreshLogin(auth) {
 async function checkFreeQualify(auth) {
     try {
         let res = await get(API + "/checkfreequalify?type=book&vid=" + auth.vid, getHeaders(auth));
+        if (res.status === 401 || res.status === 499) {
+            let refreshed = await tryRefreshLogin(auth);
+            if (refreshed) {
+                auth = refreshed;
+                res = await get(API + "/checkfreequalify?type=book&vid=" + auth.vid, getHeaders(auth));
+            }
+        }
         let data = decode(res.body);
         if (data && typeof data.reachedMax !== "undefined") {
             return data;
@@ -378,7 +385,7 @@ async function fetchLimitFreeBooks(auth) {
     // 关键对齐：必须携带完整查询参数 ?count=120&receiveStatus=1&type=book&v=2，否则触发服务端 HTTP 499 拦截
     try {
         let res1 = await get(API + "/free/library/list?count=120&receiveStatus=1&type=book&v=2", getHeaders(auth));
-        if (res1.status === 401) {
+        if (res1.status === 401 || res1.status === 499) {
             let refreshed = await tryRefreshLogin(auth);
             if (refreshed) {
                 auth = refreshed;
@@ -447,7 +454,7 @@ async function batchAddShelf(auth, bookList) {
         getHeaders(auth)
     );
 
-    if (res.status === 401) {
+    if (res.status === 401 || res.status === 499) {
         let refreshed = await tryRefreshLogin(auth);
         if (refreshed) {
             auth = refreshed;

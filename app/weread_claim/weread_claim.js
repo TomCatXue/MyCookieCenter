@@ -450,7 +450,7 @@ async function runClaim() {
         getHeaders(auth)
     );
 
-    if (probe.status === 401) {
+    if (probe.status === 401 || probe.status === 499) {
         // 先尝试通过 /login 自动换票刷新
         $.log("[WeRead] 401 — skey 已过期，尝试通过 /login 自动换票刷新...");
         if (auth.refreshToken && auth.deviceId) {
@@ -476,7 +476,7 @@ async function runClaim() {
         }
     }
 
-    if (probe.status === 401) {
+    if (probe.status === 401 || probe.status === 499) {
         // 方案 C：skey 已过期，但 vid 长期有效——尝试不带 skey 重新请求
         $.log("[WeRead] 401 — skey 已过期，尝试不带 skey 请求（vid 长期有效）...");
         let noSkeyAuth = JSON.parse(JSON.stringify(auth));
@@ -534,7 +534,7 @@ async function runClaimWithAuth(auth, cachedBody) {
             getHeaders(auth)
         );
 
-        if (result.status === 401) {
+        if (result.status === 401 || result.status === 499) {
             $.log("[WeRead] query 401 — 尝试通过 /login 自动换票刷新...");
             if (auth.refreshToken && auth.deviceId) {
                 let refreshedAuth = await tryRefreshLogin(auth);
@@ -555,7 +555,7 @@ async function runClaimWithAuth(auth, cachedBody) {
             }
         }
 
-        if (result.status === 401) {
+        if (result.status === 401 || result.status === 499) {
             // 方案 C：尝试不带 skey 查询
             $.log("[WeRead] query 401 — 尝试不带 skey 请求...");
             delete auth.skey;
@@ -660,7 +660,7 @@ async function runClaimWithAuth(auth, cachedBody) {
             getHeaders(auth)
         );
 
-        if (r.status === 401) {
+        if (r.status === 401 || r.status === 499) {
             $.log("[WeRead] claim 401 — 尝试通过 /login 自动换票刷新并重试...");
             if (auth.refreshToken && auth.deviceId) {
                 let refreshedAuth = await tryRefreshLogin(auth);
@@ -681,7 +681,7 @@ async function runClaimWithAuth(auth, cachedBody) {
             }
         }
 
-        if (r.status === 401) {
+        if (r.status === 401 || r.status === 499) {
             $.log("[WeRead] claim 401 — 尝试不带 skey 重新领取...");
             delete auth.skey;
             let r2 = await post(

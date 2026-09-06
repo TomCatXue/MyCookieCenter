@@ -61,13 +61,20 @@ function parseCookieStr(cookieStr) {
 }
 
 (function main() {
-    if (typeof $request === "undefined") {
+    let url = "";
+    if (typeof $request !== "undefined" && $request.url) {
+        url = $request.url;
+    } else if (typeof $response !== "undefined" && $response.url) {
+        url = $response.url;
+    }
+
+    // 防御性拦截：若非微信读书域名请求，直接短路退出，杜绝误伤与性能损耗
+    if (!url || url.indexOf("weread.qq.com") === -1) {
         $done({});
         return;
     }
 
-    let url = $request.url || "";
-    let headers = $request.headers || {};
+    let headers = (typeof $request !== "undefined" && $request.headers) ? $request.headers : ((typeof $response !== "undefined" && $response.headers) ? $response.headers : {});
     let existing = getStoredAuth();
     let updated = false;
 

@@ -38,11 +38,27 @@ function b64decode(str) {
     }
 
     let url = (typeof $request !== "undefined" && $request.url) ? $request.url : "";
-    if (url.indexOf("/feature") !== -1) {
+    if (url && url.indexOf("weread.qq.com") === -1) {
+        $done({});
+        return;
+    }
+
+    if (!url || url.indexOf("/feature") !== -1) {
         try {
             let rawBody = $response.body;
-            let decoded = b64decode(rawBody);
-            let data = JSON.parse(decoded);
+            let data = null;
+            let isBase64 = false;
+
+            // 优先作为明文 JSON 解析；若失败才尝试 Base64 解码后再解析
+            try {
+                data = JSON.parse(rawBody);
+            } catch (e) {
+                try {
+                    let decoded = b64decode(rawBody);
+                    data = JSON.parse(decoded);
+                    isBase64 = true;
+                } catch (e2) { }
+            }
 
             if (data && data.feature) {
                 // 彻底关闭新版本检测与更新公告
@@ -54,8 +70,8 @@ function b64decode(str) {
                 // 消除潜在特性计时
                 data.feature.VIPRightTimerSeconds = 8640000;
 
-                let newBody = b64encode(JSON.stringify(data));
-                $.log("[WeRead] 成功改写 feature 配置：已彻底屏蔽版本更新弹窗与公告！");
+                let newBody = isBase64 ? b64encode(JSON.stringify(data)) : JSON.stringify(data);
+                $.log("[WeRead] 成功改写 feature 配置：已彻底屏蔽版本更新弹窗与公告！(isBase64=" + isBase64 + ")");
                 $done({ body: newBody });
                 return;
             }
