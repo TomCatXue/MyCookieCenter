@@ -218,34 +218,12 @@ function getHeader(headers, name) {
 
 function getAuth() {
     let data = $.getdata(AUTH_KEY);
-    let auth = null;
-    if (data) {
-        try { auth = JSON.parse(data); } catch (e) { }
+    if (!data) return null;
+    try {
+        return JSON.parse(data);
+    } catch (e) {
+        return null;
     }
-    // 回退机制：若缺少 App 端凭据，自动从网页端 Cookie (weread_web_cookie) 提取 wr_vid 与 wr_skey
-    if (!auth || (!auth.vid && !auth.skey)) {
-        let webCookie = $.getdata("weread_web_cookie");
-        if (webCookie) {
-            let wrVid = "", wrSkey = "";
-            webCookie.split(";").forEach(pair => {
-                let eq = pair.indexOf("=");
-                if (eq > 0) {
-                    let k = decodeURIComponent(pair.slice(0, eq).trim());
-                    let v = decodeURIComponent(pair.slice(eq + 1).trim());
-                    if (k === "wr_vid") wrVid = v;
-                    if (k === "wr_skey") wrSkey = v;
-                }
-            });
-            if (wrVid && wrSkey) {
-                auth = auth || {};
-                auth.vid = wrVid;
-                auth.skey = wrSkey;
-                auth.wrVid = wrVid;
-                auth.wrSkey = wrSkey;
-            }
-        }
-    }
-    return auth;
 }
 
 
@@ -435,13 +413,12 @@ function describeChoice(choice, resp) {
 }
 
 function resolvePreferCoin(rawPrefer) {
-    let preferVal = rawPrefer;
-    if (typeof preferVal === "string") {
-        preferVal = preferVal.replace(/^(input|switch),/, "");
-    }
-    let preferCoin = true;
-    if (preferVal === 1 || preferVal === "1" || preferVal === false || preferVal === "false") {
-        preferCoin = false;
+    let s = String(rawPrefer || "").trim();
+    s = s.replace(/^(select|input|switch),/i, "").trim();
+
+    let preferCoin = true; // 默认 2 优先书币
+    if (s === "1" || s === "false" || s === "card") {
+        preferCoin = false; // 1 优先体验卡
     }
     return {
         raw: rawPrefer,
@@ -632,27 +609,44 @@ async function runClaimWithAuth(auth, cachedBody) {
     // 直接用 $.getdata("prefer_coin") 读取用户在插件界面选择的值。
     // 注意：$argument 只对应 argument="..." 里的静态字符串，无法读取 [Argument] 段参数。
     let prefer = resolvePreferCoin($.getdata("prefer_coin"));
-    let firstType = prefer.firstType;
-    let secondType = prefer.secondType;
-    $.log("[WeRead] prefer_coin 原始值=" + String(prefer.raw) + ", preferCoin=" + prefer.preferCoin + ", firstType=" + firstType);
+    let firstType = Number(prefer.firstType);
+    let secondType = Number(prefer.secondType);
+    let preferDesc = prefer.preferCoin ? "优先书币" : "优先体验卡";
+    $.log("[WeRead] 奖励偏好: " + preferDesc + " (firstType=" + firstType + ", 原始配置=" + String(prefer.raw) + ")");
+
+    let readingTimeSec = data.readingTime || 0;
+    let readingMin = Math.floor(readingTimeSec / 60);
+    let readingDay = data.readingDay || 0;
+    $.log(`[WeRead] 本周阅读统计: 时长 ${readingMin} 分钟 (${readingTimeSec} 秒), 天数 ${readingDay} 天`);
 
     for (let item of awards) {
-
-        if (item.awardStatus !== 1)
+        let levelDesc = item.awardLevelDesc || ("档位 " + item.awardLevelId);
+        if (item.awardStatus === 0) {
+            $.log(`[WeRead] ${item._src} [${levelDesc}]: 尚未达标 (${item.awardStatusDesc || "未达标"})`);
             continue;
-
+        }
+        if (item.awardStatus === 2) {
+            $.log(`[WeRead] ${item._src} [${levelDesc}]: 今日/本周已领取`);
+            continue;
+        }
+        if (item.awardStatus !== 1) {
+            $.log(`[WeRead] ${item._src} [${levelDesc}]: 状态未知 (status=${item.awardStatus})`);
+            continue;
+        }
 
         let choices = item.awardChoices || [];
-
         let choice =
-            choices.find(x => x.choiceType === firstType && x.canChoice === 1)
+            choices.find(x => Number(x.choiceType) === firstType && Number(x.canChoice) === 1)
             ||
-            choices.find(x => x.choiceType === secondType && x.canChoice === 1);
+            choices.find(x => Number(x.choiceType) === secondType && Number(x.canChoice) === 1);
 
-
-        if (!choice)
+        if (!choice) {
+            $.log(`[WeRead] ${item._src} [${levelDesc}]: 未找到可用奖励选项`);
             continue;
+        }
 
+        let targetName = choice.choiceType === 1 ? "体验卡" : "书币";
+        $.log(`[WeRead] ${item._src} [${levelDesc}]: 已达标！正在领取 ${targetName} (awardChoiceType=${choice.choiceType})...`);
 
         let r = await post(
             API + "/weekly/exchange",
@@ -688,9 +682,8 @@ async function runClaimWithAuth(auth, cachedBody) {
         }
 
         if (r.status === 401) {
-            // 方案 C：skey 已过期，尝试不带 skey 重新领取
             $.log("[WeRead] claim 401 — 尝试不带 skey 重新领取...");
-            delete auth.skey; // 后续请求都不带 skey
+            delete auth.skey;
             let r2 = await post(
                 API + "/weekly/exchange",
                 encode({
@@ -709,8 +702,7 @@ async function runClaimWithAuth(auth, cachedBody) {
                 continue;
             }
 
-            // 方案 D：vid/skey 均失效
-            $.msg("WeRead", "认证已过期", "vid/skey 已失效，请重新打开微信读书 App 刷新认证后再试");
+            $.msg("WeRead · 每日签到", "认证已过期", "vid/skey 已失效，请重新打开微信读书 App 刷新认证后再试");
             $.setdata("", AUTH_KEY);
             return;
         }
@@ -719,14 +711,13 @@ async function runClaimWithAuth(auth, cachedBody) {
             count++;
             details.push((item._src || "奖励") + "·" + describeChoice(choice, r));
         }
-
     }
 
-
-    if (count > 0)
+    if (count > 0) {
         $.msg("WeRead · 每日签到", "领取完成", "成功领取 " + count + " 个奖励\n" + details.join("、"));
-    else
-        $.msg("WeRead · 每日签到", "领取完成", "暂无可领取的奖励");
+    } else {
+        $.msg("WeRead · 每日签到", "暂无达标奖励", `本周累计阅读 ${readingMin} 分钟，${readingDay} 天\n尚未达到新的领取门槛，请阅读达标后再来领取~`);
+    }
 
 }
 

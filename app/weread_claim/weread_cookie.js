@@ -16,7 +16,6 @@
 */
 
 const AUTH_KEY = "weread_auth_v2";
-const WEB_COOKIE_KEY = "weread_web_cookie";
 const $ = new Env("WeRead · Cookie捕获");
 
 function getHeader(headers, name) {
@@ -71,33 +70,6 @@ function parseCookieStr(cookieStr) {
     let headers = $request.headers || {};
     let existing = getStoredAuth();
     let updated = false;
-
-    // ============================================================
-    // 1. 微信读书网页端 (weread.qq.com/web/)
-    // ============================================================
-    if (url.indexOf("://weread.qq.com/web/") !== -1 || (url.indexOf("://weread.qq.com/") !== -1 && url.indexOf("flip-card-game") === -1 && url.indexOf("sentry") === -1 && url.indexOf("cls") === -1)) {
-        let cookie = getHeader(headers, "cookie") || "";
-        if (cookie) {
-            let c = parseCookieStr(cookie);
-            if (c.wr_vid && c.wr_skey) {
-                // 去重：仅当鉴权变化才写存储/通知/打日志
-                let changed = (existing.webVid !== c.wr_vid || existing.webSkey !== c.wr_skey);
-                if (changed) {
-                    existing.webVid = c.wr_vid;
-                    existing.webSkey = c.wr_skey;
-                    if (!existing.vid) existing.vid = c.wr_vid;
-                    existing.webUa = headers["user-agent"] || headers["User-Agent"] || existing.webUa || "";
-                    existing.webTime = Date.now();
-                    $.setdata(cookie, WEB_COOKIE_KEY);
-                    saveAuth(existing);
-                    $.msg("微信读书 · 网页端", "✅ Cookie 获取成功", "wr_vid: " + c.wr_vid + "\nwr_skey: " + c.wr_skey.slice(0, 8) + "...");
-                    $.log("[WeRead] 网页端 Cookie 已捕获: wr_vid=" + c.wr_vid);
-                }
-            }
-        }
-        $done({});
-        return;
-    }
 
     // ============================================================
     // 2. 微信读书翻牌游戏 (weread.qq.com/flip-card-game)
