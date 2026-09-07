@@ -171,7 +171,8 @@
       "keys": [
         "telecom_gold_auth",
         "telecom_gold_threshold",
-        "telecom_phone"
+        "telecom_phone",
+        "telecom_password"
       ],
       "author": "@Codex",
       "icon": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/189.png?v=20260903",
@@ -212,6 +213,13 @@
           "val": "",
           "type": "text",
           "desc": "留空则自动使用抓取到的本机号码，亦可手动指定 11 位电信手机号。"
+        },
+        {
+          "id": "telecom_password",
+          "name": "电信服务密码 (备用脱机通道)",
+          "val": "",
+          "type": "password",
+          "desc": "可选。配置后支持直接调用官方接口脱机登录换票，无需频繁手动进 App 抓取。"
         },
         {
           "id": "telecom_gold_auth",
