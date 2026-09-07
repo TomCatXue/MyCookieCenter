@@ -2,7 +2,7 @@
 
 本目录收录两类内容：
 
-1. **CookieCenter 受管权益脚本**（`sx_ai_benefit/`、`bestpay_coin/`）：由 [`loon/CookieCenter.plugin`](../loon/CookieCenter.plugin) 与 [`boxjs/CookieCenter.boxjs.json`](../boxjs/CookieCenter.boxjs.json) 统一管理；
+1. **CookieCenter 受管权益脚本**（`sx_ai_benefit/`）：由 [`loon/CookieCenter.plugin`](../loon/CookieCenter.plugin) 与 [`boxjs/CookieCenter.boxjs.json`](../boxjs/CookieCenter.boxjs.json) 统一管理；
 2. **独立功能插件**：解锁会员、首页净化、请求改写等非签到类脚本，与 CookieCenter 体系相互独立。
 
 ---
@@ -37,7 +37,6 @@
 | 目录 | 名称 | 功能 | Loon 入口 | BoxJS |
 |---|---|---|---|---|
 | [`sx_ai_benefit/`](./sx_ai_benefit/) | 山西电信·体验AI领福利 | 凭证捕获 + 每月 1~8 号放水探针监控 | [`loon/CookieCenter.plugin`](../loon/CookieCenter.plugin) | [`boxjs/CookieCenter.boxjs.json`](../boxjs/CookieCenter.boxjs.json) |
-| [`bestpay_coin/`](./bestpay_coin/) | 翼支付·权益币与绿色能量 | 进页面自动收币、签到与开宝箱 | [`loon/CookieCenter.plugin`](../loon/CookieCenter.plugin) | [`boxjs/CookieCenter.boxjs.json`](../boxjs/CookieCenter.boxjs.json) |
 
 > 这两个目录原本作为独立 `.plugin` 发布；现其 MITM 规则与 cron 定时任务已并入 `CookieCenter.plugin`，不再单独提供 Loon 插件入口。
 

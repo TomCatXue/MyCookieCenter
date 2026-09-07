@@ -164,61 +164,6 @@
         "<span><b>智能监控：</b>每月 1~8 号后台自动探测活动服务器放水状态，绝不报任何证书错误。</span>",
         "<span><b>单次提醒：</b>一旦检测到新批次放水立即发送直达通知，点击直通电信 APP 极速抢兑；当月已领或通知后即深度休眠。</span>"
       ]
-    },
-    {
-      "id": "bestpay_coin",
-      "name": "翼支付 · 权益币与绿色能量",
-      "keys": [
-        "bestpay_auto_star",
-        "bestpay_auto_sign",
-        "bestpay_auto_box"
-      ],
-      "author": "@Codex",
-      "icon": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/bestpay_coin.png?v=20260903",
-      "icons": [
-        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/bestpay_coin.png?v=20260903",
-        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/bestpay_coin.png?v=20260903"
-      ],
-      "repo": "https://github.com/TomCatXue/MyCookieCenter",
-      "settings": [
-        {
-          "id": "bestpay_auto_star",
-          "name": "自动一键全收权益币/能量球",
-          "val": true,
-          "type": "boolean",
-          "desc": "进入赚钱专区页面时，自动调用 starReceive 接口收光所有漂浮币。"
-        },
-        {
-          "id": "bestpay_auto_sign",
-          "name": "自动每日签到打卡",
-          "val": true,
-          "type": "boolean",
-          "desc": "进入页面时自动完成每日签到发奖。"
-        },
-        {
-          "id": "bestpay_auto_box",
-          "name": "自动开启每日福利宝箱",
-          "val": true,
-          "type": "boolean",
-          "desc": "进入页面时自动开启每日定时宝箱。"
-        }
-      ],
-      "scripts": [
-        {
-          "name": "🚀 直达 App 权益币界面",
-          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/bestpay_coin/bestpay_open.js"
-        },
-        {
-          "name": "一键收币与签到自检",
-          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/bestpay_coin/bestpay_coin.js"
-        }
-      ],
-      "descs_html": [
-        "<span><b>免抓包注入：</b>由 CookieCenter 插件拦截 H5 页面并注入轻量秒刷引擎。</span>",
-        "<span><b>直达按钮：</b>在 BoxJS 中点击「🚀 直达 App 权益币界面」运行，即可弹出横幅直达 App 页面！</span>",
-        "<span><b>秒级搞定：</b>打开翼支付 App “赚钱专区”或“绿色能量”页面瞬间，全自动一键收光所有权益币、自动签到、自动开宝箱。</span>",
-        "<span><b>官方通道：</b>通过 App 内置已鉴权的官方 JSBridge 调度，零风控、零证书报错。</span>"
-      ]
     }
   ]
 }

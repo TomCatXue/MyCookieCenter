@@ -3,7 +3,7 @@
 本目录存放 BoxJS 面板订阅文件，负责**签到、羊毛等任务**的配置与管理——Cookie 持久化、偏好参数设置、任务查看与手动运行入口等。
 
 > 架构遵循 Cookie 抓取与签到执行彻底分离模式：[`loon/CookieCenter.plugin`](../loon/CookieCenter.plugin) 专职负责 MITM 凭据捕获（零 Cron）；本目录的 BoxJS 订阅统一提供 Cookie 持久化、偏好参数配置、各任务查看、手动一键执行与定时任务调度。
-> `plugins/` 下的独立功能插件是无状态的请求/响应改写，通过各自的 Loon 插件 `#!switch` 管理，不纳入 BoxJS；`plugins/sx_ai_benefit/`、`plugins/bestpay_coin/` 属于 CookieCenter 体系，脚本与任务已纳入本订阅。
+> `plugins/` 下的独立功能插件是无状态的请求/响应改写，通过各自的 Loon 插件 `#!switch` 管理，不纳入 BoxJS；`plugins/sx_ai_benefit/` 属于 CookieCenter 体系，脚本与任务已纳入本订阅。
 
 ---
 
@@ -21,7 +21,7 @@
 
 | 文件 | 说明 |
 |---|---|
-| [`CookieCenter.boxjs.json`](./CookieCenter.boxjs.json) | 微信读书 / 山西电信 / 翼支付的统一配置面板 |
+| [`CookieCenter.boxjs.json`](./CookieCenter.boxjs.json) | 微信读书 / 山西电信的统一配置面板 |
 
 ---
 

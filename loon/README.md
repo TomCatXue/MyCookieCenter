@@ -2,7 +2,7 @@
 
 本目录存放所有 Loon 专用的 `.plugin` 文件，按功能分两类：
 
-- **统一签到 / 权益插件** — `CookieCenter.plugin`，整合微信读书、山西电信、翼支付的凭据捕获与后台定时任务
+- **统一签到 / 权益插件** — `CookieCenter.plugin`，整合微信读书与山西电信的凭据捕获与后台定时任务
 - **独立功能插件** — 对应 `plugins/` 下的解锁/净化脚本，各自独立开关
 
 > `CookieCenter.plugin` 内置了 Loon 后台 cron 任务开关；[BoxJS 订阅](../boxjs/README.md)负责 Cookie 持久化与参数面板配置。
@@ -15,7 +15,7 @@
 
 | 文件 | 说明 | 脚本来源 |
 |---|---|---|
-| [`CookieCenter.plugin`](./CookieCenter.plugin) | 微信读书 / 山西电信 / 翼支付的凭据捕获 + 后台定时任务 | [`app/weread_claim/`](../app/weread_claim/)、[`plugins/sx_ai_benefit/`](../plugins/sx_ai_benefit/)、[`plugins/bestpay_coin/`](../plugins/bestpay_coin/) |
+| [`CookieCenter.plugin`](./CookieCenter.plugin) | 微信读书 / 山西电信的凭据捕获 + 后台定时任务 | [`app/weread_claim/`](../app/weread_claim/)、[`plugins/sx_ai_benefit/`](../plugins/sx_ai_benefit/) |
 
 ### 独立功能
 

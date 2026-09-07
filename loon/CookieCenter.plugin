@@ -1,47 +1,40 @@
-﻿#!name = CookieCenter · 统一凭据捕获与签到中心
-#!desc = 一站式中心：整合微信读书、山西电信、翼支付。代码层抓取与执行彻底分离，Loon 后台负责自动定时唤醒与脱机自动换票，数据存入 Loon 原生持久化（BoxJS 亦可可视化查看与修改）。
+#!name = CookieCenter · 统一凭据捕获与签到中心
+#!desc = 一站式中心：整合微信读书与山西电信。代码层抓取与执行彻底分离，Loon 后台负责自动定时唤醒与脱机自动换票，数据存入 Loon 原生持久化（BoxJS 亦可可视化查看与修改）。
 #!author = TomCatXue
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://avatars.githubusercontent.com/u/138953496?v=4
 #!tag = 签到, Cookie, 凭据捕获, 定时任务
-#!version = 3.3.0
-#!date = 2026-09-06
+#!version = 3.5.0
+#!date = 2026-09-07
 
-# =================== 1. 凭据抓取独立开关 (默认关闭，按需开启) ===================
+# =================== 1. 业务功能开关 (极简双主控面板) ===================
 
 [Argument]
-weread_capture = switch,true,tag=微信读书·全量凭据抓取,desc=进入微信读书App或翻牌页，自动捕获各业务凭据与脱机换票Token
-sx_benefit_capture = switch,false,tag=山西电信·活动凭证抓取,desc=进入电信AI领福利H5页面触发，抓取活动Cookie与链接
-bestpay_capture = switch,false,tag=翼支付·一键收币签到,desc=进入翼支付赚钱专区页面触发，自动秒收与签到
+# 微信读书一键总控：单按钮开启/关闭所有功能（凭据抓取、每日签到、周二翻牌、周五限免）；偏好在 BoxJS 中灵活切换
+weread_enable = switch,true,tag=微信读书·全功能总开关,desc=一键开启/关闭微信读书所有功能（包含全量凭据捕获、每日签到、周二翻牌抽奖、周五限免好书入架）
 
-# =================== 2. 业务偏好参数设置 ===================
-prefer_coin = select,"2","1",tag=微信读书·奖励偏好,desc=2:优先书币(推荐); 1:优先体验卡
-
-# =================== 3. 后台定时任务开关 (默认开启，由 Loon 后台自动调度) ===================
-weread_claim_cron = switch,true,tag=微信读书·每日阅读奖励,desc=每晚 23:00 自动检查并领取阅读时长与天数奖励
-weread_flip_cron = switch,true,tag=微信读书·周二翻牌抽奖,desc=每周二 20:00 自动参与翻牌抽奖游戏并同步H5凭证
-weread_free_cron = switch,true,tag=微信读书·每周限免入架,desc=每周五 10:00 自动将本周免费图书馆好书批量加入书架
-sx_benefit_cron = switch,true,tag=山西电信·月初放水监控,desc=每月 1~8 号后台自动低频随机监控放水
+# 山西电信一键总控：单按钮开启/关闭所有功能（活动凭证捕获、月初放水探针监控）
+sx_benefit_enable = switch,true,tag=山西电信·全功能总开关,desc=一键开启/关闭山西电信领福利（包含活动凭据捕获与月初放水监控）
 
 # =================== 规则配置 (抓取与执行彻底解耦) ===================
 
 [Script]
-# --- 【抓取层】专职凭据捕获 (无执行代码，捕获存入 Loon 持久化) ---
-# 匹配已收窄到核心接口：去掉 mobileSync/readdata/pay 等进页面高频调用，配合脚本去重，进入页面仅触发一次有效处理
-http-request ^https?:\/\/(i\.)?weread\.qq\.com\/(flip-card-game|user\/|feature|free\/library|checkfreequalify) script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/app/weread_claim/weread_cookie.js?v=20260906, tag=微信读书·凭据捕获, requires-body=false, enable={weread_capture}
-http-request ^https?:\/\/i\.weread\.qq\.com\/login script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/app/weread_claim/weread_cookie.js?v=20260906, tag=微信读书·登录请求, requires-body=true, enable={weread_capture}
-http-response ^https?:\/\/i\.weread\.qq\.com\/login script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/app/weread_claim/weread_cookie.js?v=20260906, tag=微信读书·登录响应, requires-body=true, enable={weread_capture}
-http-request ^https:\/\/wx\.sx\.189\.cn\/sx_ai_benefit\/h5\/HD script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/sx_ai_benefit/sx_ai_benefit.js, tag=山西电信·活动凭证捕获, requires-body=false, enable={sx_benefit_capture}
-http-response ^https:\/\/render\.bestpay\.cn\/marketing-h5\/index\.html script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/bestpay_coin/bestpay_coin.js, tag=翼支付·一键收币签到, requires-body=true, enable={bestpay_capture}
-http-request ^https:\/\/render\.bestpay\.cn\/__bestpay_notify__ script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/bestpay_coin/bestpay_coin.js, tag=翼支付·完成通知, requires-body=false, enable={bestpay_capture}
+# --- 【微信读书】抓取与后台调度 (联动 weread_enable 统一总控) ---
+# 1. 抓取层：专职凭据捕获 (无执行代码，捕获存入 Loon 持久化)
+http-request ^https?:\/\/(i\.)?weread\.qq\.com\/(flip-card-game|user\/|feature|free\/library|checkfreequalify) script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/app/weread_claim/weread_cookie.js?v=20260907, tag=微信读书·凭据捕获, requires-body=false, enable={weread_enable}
+http-request ^https?:\/\/i\.weread\.qq\.com\/login script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/app/weread_claim/weread_cookie.js?v=20260907, tag=微信读书·登录请求, requires-body=true, enable={weread_enable}
+http-response ^https?:\/\/i\.weread\.qq\.com\/login script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/app/weread_claim/weread_cookie.js?v=20260907, tag=微信读书·登录响应, requires-body=true, enable={weread_enable}
 
-# --- 【执行层】专职后台定时任务调度 (纯执行单体，只读持久化，401 自动脱机换票更新) ---
-cron "0 23 * * *" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/app/weread_claim/weread_claim.js?v=20260906, tag=微信读书·每日阅读奖励, enable={weread_claim_cron}
-cron "0 20 * * 2" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/app/weread_claim/weread_flip.js?v=20260906, tag=微信读书·周二翻牌抽奖, enable={weread_flip_cron}
-cron "0 10 * * 5" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/app/weread_claim/weread_free.js?v=20260906, tag=微信读书·每周限免入架, enable={weread_free_cron}
-cron "*/20 8-19 1-8 * *" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/sx_ai_benefit/sx_ai_benefit.js, tag=山西电信·新活动探针监控, enable={sx_benefit_cron}
+# 2. 执行层：后台定时任务调度 (纯执行单体，只读持久化，401 自动脱机换票更新)
+cron "0 23 * * *" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/app/weread_claim/weread_claim.js?v=20260907, tag=微信读书·每日阅读奖励, enable={weread_enable}
+cron "0 20 * * 2" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/app/weread_claim/weread_flip.js?v=20260907, tag=微信读书·周二翻牌抽奖, enable={weread_enable}
+cron "0 10 * * 5" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/app/weread_claim/weread_free.js?v=20260907, tag=微信读书·每周限免入架, enable={weread_enable}
+
+# --- 【山西电信】抓取与探针监控 (联动 sx_benefit_enable 统一总控) ---
+http-request ^https:\/\/wx\.sx\.189\.cn\/sx_ai_benefit\/h5\/HD script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/sx_ai_benefit/sx_ai_benefit.js?v=20260907, tag=山西电信·活动凭证捕获, requires-body=false, enable={sx_benefit_enable}
+cron "*/20 8-19 1-8 * *" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/sx_ai_benefit/sx_ai_benefit.js?v=20260907, tag=山西电信·新活动探针监控, enable={sx_benefit_enable}
 
 # =================== MITM 解密域名 ===================
 
 [MITM]
-hostname = weread.qq.com, i.weread.qq.com, wx.sx.189.cn, render.bestpay.cn
+hostname = weread.qq.com, i.weread.qq.com, wx.sx.189.cn

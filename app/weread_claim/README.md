@@ -13,7 +13,7 @@
 ## 安装
 
 1. 在 Loon 中导入 Cookie 抓取插件 [`loon/CookieCenter.plugin`](../../loon/CookieCenter.plugin)
-2. 在 Loon 插件配置中开启「微信读书·全量凭据」开关，进入微信读书 App 浏览或退出重新登录一次以激活脱机换票
+2. 在 Loon 插件配置中开启「微信读书·全功能总开关」，进入微信读书 App 浏览或退出重新登录一次以激活脱机换票
 3. 在 BoxJS 中添加 [`boxjs/CookieCenter.boxjs.json`](../../boxjs/CookieCenter.boxjs.json) 订阅，配置奖励偏好并统一管理定时任务
 4. 「优雅收录（好书即刻入架）」保留在独立插件 [`loon/WeReadEnhance.plugin`](../../loon/WeReadEnhance.plugin) 中单独管理
 
@@ -28,8 +28,10 @@
 
 | 参数 | 类型 | 作用 | 默认 |
 |------|------|------|------|
-| `prefer_coin` | BoxJS select | 奖励偏好：`1`=优先体验卡，`2`=优先书币 | `2` |
-| `weread_capture` | CookieCenter 开关 | 开启微信读书全量凭据捕获（网页端/App端/翻牌/免费图书馆） | 关 |
+| 参数 | 配置位置 | 作用 | 默认 |
+|------|------|------|------|
+| `weread_enable` | Loon [Argument] | 微信读书全功能总开关（一键开启/关闭抓取与所有定时任务） | 开 (`true`) |
+| `prefer_coin` | BoxJS 设置 | 奖励偏好：`1`=优先体验卡，`2`=优先书币 (推荐) | `2` |
 
 ## 定时任务
 
