@@ -2,8 +2,8 @@
 ------------------------------------------
 @Name: 中国电信 · 金豆自动签到与整点抢兑话费
 @Author: TomCatXue
-@Description: 捕获 waphub.189.cn / wapside.189.cn 金豆凭据，并支持后台整点查询与自动兑换话费
-@Rule: 单一总控原则，遵循事实基础，捕获与执行自闭环
+@Description: 全域捕获 waphub.189.cn / jf.189.cn / wapside.189.cn 金豆凭据与 Cookie，支持整点查询与自动兑换话费
+@Rule: 单一总控原则，宽域全量抓取，支持 Cookie 与 Token 双轨鉴权
 ------------------------------------------
 */
 
@@ -38,27 +38,51 @@ function captureTraffic() {
     const headers = $request.headers || {};
     const body = $request.body || "";
 
+    $.log("[电信金豆] 捕获到 189 请求: " + url.slice(0, 100));
+
     let existing = getStoredAuth();
     let updated = false;
 
-    // 提取 Token
-    let token = headers["Authorization"] || headers["authorization"] || headers["token"] || headers["Token"] || "";
+    // 1. 提取 Token (Header / Query / Body / Cookie)
+    let token = headers["Authorization"] || headers["authorization"] || headers["token"] || headers["Token"] || headers["X-Token"] || headers["ticket"] || "";
     if (token && token.indexOf("Bearer ") === 0) {
         token = token.slice(7).trim();
     }
 
-    // 提取手机号（从 query、header 或 body 中寻找 11 位大陆手机号）
-    let phone = headers["phone"] || headers["phoneNum"] || headers["phonenum"] || "";
+    if (!token && url) {
+        let tm = url.match(/[?&](?:token|ticket|accessToken|userToken|loginToken)=([a-zA-Z0-9_\-\.\~]+)/i);
+        if (tm) token = tm[1];
+    }
+
+    // 2. 提取并记录完整 Cookie
+    let cookie = headers["Cookie"] || headers["cookie"] || "";
+    if (cookie) {
+        if (!existing.cookie || existing.cookie !== cookie) {
+            existing.cookie = cookie;
+            updated = true;
+        }
+        if (!token) {
+            let cm = cookie.match(/(?:token|tokenId|login_token|ticket|SESSION|sso_token)=([a-zA-Z0-9_\-\.\~]+)/i);
+            if (cm) token = cm[1];
+        }
+    }
+
+    // 3. 提取手机号 (Header / Query / Body / Cookie)
+    let phone = headers["phone"] || headers["phoneNum"] || headers["phonenum"] || headers["mobile"] || "";
     if (!phone && url) {
-        let m = url.match(/[?&](?:phone|phoneNum|mobile|tel|accNbr)=([0-9]{11})/i);
+        let m = url.match(/[?&](?:phone|phoneNum|mobile|tel|accNbr|userPhone)=([0-9]{11})/i);
         if (m) phone = m[1];
     }
     if (!phone && body) {
-        let m = body.match(/"(?:phone|phoneNum|mobile|tel|accNbr)"\s*:\s*"([0-9]{11})"/i);
+        let m = body.match(/"(?:phone|phoneNum|mobile|tel|accNbr|userPhone)"\s*:\s*"([0-9]{11})"/i);
+        if (m) phone = m[1];
+    }
+    if (!phone && cookie) {
+        let m = cookie.match(/(?:phone|phoneNum|mobile|accNbr)=([0-9]{11})/i);
         if (m) phone = m[1];
     }
 
-    // 提取 User-Agent
+    // 4. 提取 User-Agent
     let ua = headers["User-Agent"] || headers["user-agent"] || "";
 
     if (token && existing.token !== token) {
@@ -73,7 +97,7 @@ function captureTraffic() {
         existing.ua = ua;
         updated = true;
     }
-    if (url && (!existing.baseUrl || url.indexOf("/points/") !== -1)) {
+    if (url) {
         try {
             let u = new URL(url);
             existing.origin = u.origin;
@@ -83,9 +107,12 @@ function captureTraffic() {
     if (updated) {
         existing.updateTime = Date.now();
         saveAuth(existing);
-        let phoneMask = existing.phone ? (existing.phone.slice(0, 3) + "****" + existing.phone.slice(7)) : "已捕获";
-        $.msg($.name, "✅ 电信金豆凭据捕获成功", "手机号: " + phoneMask + "\nToken 已持久化保存");
-        $.log("[电信金豆] 凭据已更新: phone=" + phoneMask + ", token=" + (existing.token ? existing.token.slice(0, 10) + "..." : "无"));
+        let phoneMask = existing.phone ? (existing.phone.slice(0, 3) + "****" + existing.phone.slice(7)) : "自动解析中";
+        let tokenDesc = existing.token ? (existing.token.slice(0, 8) + "...") : (existing.cookie ? "Cookie已捕获" : "待补全");
+        $.msg($.name, "✅ 电信金豆凭据捕获成功", "手机号: " + phoneMask + "\n凭据: " + tokenDesc);
+        $.log("[电信金豆] 凭据已更新保存: phone=" + phoneMask + ", token=" + tokenDesc);
+    } else {
+        $.log("[电信金豆] 本次请求未检测到全新凭证变动");
     }
 
     $done({});
@@ -94,17 +121,18 @@ function captureTraffic() {
 async function executeTask() {
     let auth = getStoredAuth();
     let token = auth.token || "";
+    let cookie = auth.cookie || "";
     let phone = auth.phone || $.getdata("telecom_phone") || "";
     let threshold = parseInt($.getdata(PREFER_KEY)) || 1000; // 默认 1000 金豆档位
 
-    if (!token) {
-        $.msg($.name, "❌ 未找到有效凭证", "请在电信营业厅 App 打开「金豆兑换话费」页面完成一次抓取");
-        $.log("[电信金豆] 错误: 本地未存储 telecom_gold_auth 凭证数据");
+    if (!token && !cookie) {
+        $.msg($.name, "❌ 未找到有效凭据", "请在电信营业厅 App 打开「金豆兑换话费」页面完成一次抓取");
+        $.log("[电信金豆] 错误: 本地未存储有效的 Token 或 Cookie 凭证数据");
         $.done();
         return;
     }
 
-    let phoneMask = phone ? (phone.slice(0, 3) + "****" + phone.slice(7)) : "未配置";
+    let phoneMask = phone ? (phone.slice(0, 3) + "****" + phone.slice(7)) : "未配置(使用默认)";
     $.log("[电信金豆] 任务启动: 目标号码=" + phoneMask + ", 兑换阈值=" + threshold);
 
     // 1. 查询当前金豆总额
@@ -112,7 +140,7 @@ async function executeTask() {
     $.log("[电信金豆] 当前金豆余额: " + currentPoints);
 
     if (currentPoints < 0) {
-        $.log("[电信金豆] 查询余额接口无响应或失败，尝试直接发起兑换测试...");
+        $.log("[电信金豆] 查询余额接口无响应或格式未知，继续发起兑换尝试...");
     } else if (currentPoints < threshold) {
         let msg = "当前金豆 (" + currentPoints + ") 未达兑换阈值 (" + threshold + ")，本轮跳过";
         $.log("[电信金豆] " + msg);
@@ -151,18 +179,30 @@ async function executeTask() {
     $.done();
 }
 
+function buildHeaders(auth) {
+    let host = auth.origin || "https://waphub.189.cn";
+    let h = {
+        "User-Agent": auth.ua || "CtClient;13.2.0;iOS;26.6.1;iPhone 16e;OTk0NzQ4!#!MTc2MzU=",
+        "Content-Type": "application/json;charset=utf-8",
+        "Referer": host + "/",
+        "Origin": host
+    };
+    if (auth.token) {
+        h["Authorization"] = "Bearer " + auth.token;
+        h["token"] = auth.token;
+    }
+    if (auth.cookie) {
+        h["Cookie"] = auth.cookie;
+    }
+    return h;
+}
+
 function queryPoints(auth) {
     return new Promise(resolve => {
         let host = auth.origin || "https://waphub.189.cn";
         let options = {
             url: host + "/points/query",
-            headers: {
-                "Authorization": "Bearer " + auth.token,
-                "token": auth.token,
-                "User-Agent": auth.ua || "CtClient;13.2.0;iOS;26.6.1;iPhone 16e;OTk0NzQ4!#!MTc2MzU=",
-                "Content-Type": "application/json;charset=utf-8",
-                "Referer": host + "/"
-            },
+            headers: buildHeaders(auth),
             timeout: 5000
         };
 
@@ -187,14 +227,7 @@ function requestExchange(auth, points, phone) {
         let host = auth.origin || "https://waphub.189.cn";
         let options = {
             url: host + "/points/exchange/charge",
-            headers: {
-                "Authorization": "Bearer " + auth.token,
-                "token": auth.token,
-                "User-Agent": auth.ua || "CtClient;13.2.0;iOS;26.6.1;iPhone 16e;OTk0NzQ4!#!MTc2MzU=",
-                "Content-Type": "application/json;charset=utf-8",
-                "Referer": host + "/",
-                "Origin": host
-            },
+            headers: buildHeaders(auth),
             body: JSON.stringify({
                 points: points,
                 phone: phone,
