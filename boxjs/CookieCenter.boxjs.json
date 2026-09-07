@@ -164,6 +164,81 @@
         "<span><b>智能监控：</b>每月 1~8 号后台自动探测活动服务器放水状态，绝不报任何证书错误。</span>",
         "<span><b>单次提醒：</b>一旦检测到新批次放水立即发送直达通知，点击直通电信 APP 极速抢兑；当月已领或通知后即深度休眠。</span>"
       ]
+    },
+    {
+      "id": "telecom_gold",
+      "name": "中国电信 · 金豆兑换话费",
+      "keys": [
+        "telecom_gold_auth",
+        "telecom_gold_threshold",
+        "telecom_phone"
+      ],
+      "author": "@Codex",
+      "icon": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/189.png?v=20260903",
+      "icons": [
+        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/189.png?v=20260903",
+        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/189.png?v=20260903"
+      ],
+      "repo": "https://github.com/TomCatXue/MyCookieCenter",
+      "settings": [
+        {
+          "id": "telecom_gold_threshold",
+          "name": "金豆兑换话费档位",
+          "val": "1000",
+          "type": "select",
+          "items": [
+            {
+              "key": "200",
+              "label": "200 金豆 (兑换 1 元话费券)"
+            },
+            {
+              "key": "1000",
+              "label": "1000 金豆 (兑换 5 元话费券·推荐)"
+            },
+            {
+              "key": "2000",
+              "label": "2000 金豆 (兑换 10 元话费券)"
+            },
+            {
+              "key": "3000",
+              "label": "3000 金豆 (兑换 15 元话费券)"
+            }
+          ],
+          "desc": "设置整点抢兑的目标金豆档位，金豆不足时自动跳过避免风控。"
+        },
+        {
+          "id": "telecom_phone",
+          "name": "指定充值手机号",
+          "val": "",
+          "type": "text",
+          "desc": "留空则自动使用抓取到的本机号码，亦可手动指定 11 位电信手机号。"
+        },
+        {
+          "id": "telecom_gold_auth",
+          "name": "金豆商城会话凭据",
+          "val": "",
+          "type": "textarea",
+          "desc": "进入电信 App 金豆兑换话费页面后自动抓取并保存的 Token 与域名数据。"
+        }
+      ],
+      "scripts": [
+        {
+          "name": "查询金豆并执行一次兑换测试",
+          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/telecom_gold/telecom_gold.js"
+        }
+      ],
+      "tasks": [
+        {
+          "name": "每日上午 10:00 整点抢兑话费",
+          "cron": "0 10 * * *",
+          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/telecom_gold/telecom_gold.js"
+        }
+      ],
+      "descs_html": [
+        "<span><b>凭据捕获：</b>在 Loon 中开启 CookieCenter 插件后，进入电信营业厅 App「我的」→「金豆」→「兑换话费」页面即可自动捕获凭据。</span>",
+        "<span><b>整点抢兑：</b>默认每天 10:00 准点自动查询金豆并向服务器提交兑换。</span>",
+        "<span><b>风控反馈：</b>若遇库存告罄或运营商下发滑块验证码，脚本会如实发送系统通知反馈，杜绝虚假结果。</span>"
+      ]
     }
   ]
 }

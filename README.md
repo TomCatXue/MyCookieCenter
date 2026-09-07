@@ -30,7 +30,7 @@ MyCookieCenter/
 
 | 体系 | 目录 | 特点 |
 |---|---|---|
-| **签到 / 权益体系** | `loon/CookieCenter.plugin`(专用 Cookie 抓取) + `boxjs/`(BoxJS 任务调度与面板) | 脚本位于 `app/weread_claim/`、`plugins/sx_ai_benefit/`，需持久化 |
+| **签到 / 权益体系** | `loon/CookieCenter.plugin`(专用 Cookie 抓取) + `boxjs/`(BoxJS 任务调度与面板) | 脚本位于 `app/weread_claim/`、`plugins/sx_ai_benefit/`、`plugins/telecom_gold/`，需持久化 |
 | **功能插件** | `plugins/` + `loon/*.plugin`（独立） | 无状态请求/响应改写，实时生效，独立开关 |
 
 ---
