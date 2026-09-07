@@ -2,8 +2,8 @@
 ------------------------------------------
 @Name: 中国电信 · 等级权益兑换话费
 @Author: TomCatXue
-@Description: 基于电信真实 wappark.189.cn/jt-sign 网关，自动拦截 sign/accId，0点准时自动抢兑话费
-@Rule: 完全摒弃失效的脱机密码与金豆体系，直接继承 App 登录态与瑞数 Cookie，内置 RSA-1024 加密
+@Description: 基于电信 wappark.189.cn/jt-sign 网关，自动拦截 sign/accId，0点准时自动抢兑话费
+@Rule: 静默防扰机制（有效时不重复抓取、不弹窗），会话变动时单次通知
 ------------------------------------------
 */
 
@@ -24,7 +24,7 @@ function saveAuth(newAuth) {
 }
 
 // ============================================================
-// 1. 抓取与回填层 (http-request / http-response)
+// 1. 抓取与回填层 (静默化 + 防抖去重)
 // ============================================================
 if (typeof $request !== "undefined" && typeof $response === "undefined") {
     handleRequest();
@@ -43,30 +43,37 @@ function handleRequest() {
     const body = $request.body || "";
 
     let existing = getStoredAuth();
+
+    // 【核心静默锁】如果本地已有有效 sign，且在 12 小时内已成功更新，直接短路跳过，不重复捕获、不弹窗
+    const isFresh = existing.sign && (Date.now() - (existing.updateTime || 0) < 12 * 3600 * 1000);
+
+    let sign = headers["sign"] || headers["Sign"] || "";
+    let cookie = headers["Cookie"] || headers["cookie"] || "";
+
+    // 如果 sign 未发生变化且在保鲜期内，直接放行退出
+    if (isFresh && (!sign || sign === existing.sign)) {
+        $done({});
+        return;
+    }
+
     let updated = false;
 
-    // 1. 拦截请求头中的核心字段：sign
-    let sign = headers["sign"] || headers["Sign"] || "";
     if (sign && existing.sign !== sign) {
         existing.sign = sign;
         updated = true;
     }
 
-    // 2. 提取有效 Cookie (包含通过瑞数校验的关键 Cookie)
-    let cookie = headers["Cookie"] || headers["cookie"] || "";
     if (cookie && cookie.length > 30 && existing.cookie !== cookie) {
         existing.cookie = cookie;
         updated = true;
     }
 
-    // 3. 提取 User-Agent
     let ua = headers["User-Agent"] || headers["user-agent"] || "";
     if (ua && existing.ua !== ua) {
         existing.ua = ua;
         updated = true;
     }
 
-    // 4. 尝试从 URL 或 Body 提取 accId
     if (url) {
         let m = url.match(/[?&]accId=([0-9a-zA-Z_-]+)/i);
         if (m && existing.accId !== m[1]) {
@@ -74,22 +81,18 @@ function handleRequest() {
             updated = true;
         }
     }
-    if (body) {
-        let m = body.match(/"accId"\s*:\s*"([0-9a-zA-Z_-]+)"/i);
-        if (m && existing.accId !== m[1]) {
-            existing.accId = m[1];
-            updated = true;
-        }
-    }
 
-    if (updated) {
+    if (updated && existing.sign) {
         existing.updateTime = Date.now();
-        saveAuth(existing);
-        let statusDesc = existing.sign ? "sign: " + existing.sign.slice(0, 8) + "..." : (existing.cookie ? "Cookie已记录" : "未就绪");
-        $.log("[电信权益] 抓取到参数更新: " + statusDesc + " (URL: " + url.slice(0, 60) + "...)");
-        if (existing.sign) {
-            $.msg($.name, "✅ 等级权益凭据捕获成功", "已捕获核心 sign 与鉴权 Cookie\n0 点抢兑话费已就绪");
+
+        // 弹窗防扰策略：6 小时内最多弹 1 次通知，其余时间全部静默保存
+        let lastNotify = existing.lastNotifyTime || 0;
+        if (Date.now() - lastNotify > 6 * 3600 * 1000) {
+            existing.lastNotifyTime = Date.now();
+            $.msg($.name, "✅ 等级权益凭据已锁定", "已捕获核心 sign，0点自动抢兑话费");
         }
+        saveAuth(existing);
+        $.log("[电信权益] sign 凭据已静默更新: " + existing.sign.slice(0, 8) + "...");
     }
 
     $done({});
@@ -105,24 +108,29 @@ function handleResponse() {
     try {
         let data = JSON.parse(resBody);
 
-        // 拦截 ssoHomLogin 响应：直接提取 sign 与 accId
+        // 拦截 ssoHomLogin 响应
         if (url.indexOf("ssoHomLogin") !== -1 && (data.resoultCode === "0" || data.code === 0)) {
-            if (data.sign) {
+            if (data.sign && existing.sign !== data.sign) {
                 existing.sign = data.sign;
                 updated = true;
             }
-            if (data.accId) {
+            if (data.accId && existing.accId !== data.accId) {
                 existing.accId = data.accId;
                 updated = true;
             }
-            $.log("[电信权益] 从 ssoHomLogin 响应回填成功: accId=" + existing.accId + ", sign=" + (existing.sign ? existing.sign.slice(0, 8) + "..." : "无"));
         }
     } catch (e) { }
 
     if (updated && existing.sign) {
         existing.updateTime = Date.now();
+
+        let lastNotify = existing.lastNotifyTime || 0;
+        if (Date.now() - lastNotify > 6 * 3600 * 1000) {
+            existing.lastNotifyTime = Date.now();
+            $.msg($.name, "✅ 等级权益凭据已锁定", "accId 与 sign 已就绪，0点准时抢兑");
+        }
         saveAuth(existing);
-        $.msg($.name, "✅ 等级权益会话已锁定", "accId: " + (existing.accId || "已记录") + "\nsign: " + existing.sign.slice(0, 8) + "...\n零点准时抢兑");
+        $.log("[电信权益] ssoHomLogin 凭据已静默回填: accId=" + existing.accId);
     }
 
     $done({});
@@ -132,11 +140,10 @@ async function executeTask() {
     let auth = getStoredAuth();
     let sign = auth.sign || "";
     let accId = auth.accId || "";
-    let cookie = auth.cookie || "";
 
     if (!sign) {
         $.msg($.name, "❌ 缺少核心 sign 凭证", "请打开电信营业厅 App -> 点击「我」->「签到」或「等级权益」页面，等待凭据自动捕获！");
-        $.log("[电信权益] 错误: 未找到有效 sign。请进入电信 App 的等级权益中心进行一次流量拦截。");
+        $.log("[电信权益] 错误: 未找到有效 sign。请进入电信 App 的等级权益中心完成一次静默拦截。");
         $.done();
         return;
     }
@@ -176,7 +183,6 @@ async function executeTask() {
     $.done();
 }
 
-// 查询等级权益列表
 function queryRightsInfo(auth) {
     return new Promise(resolve => {
         let value = {
@@ -227,7 +233,6 @@ function queryRightsInfo(auth) {
     });
 }
 
-// 提交领取权益
 function receiveRights(auth, rightsId) {
     return new Promise(resolve => {
         let value = {
