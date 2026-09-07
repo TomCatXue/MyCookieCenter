@@ -1,7 +1,7 @@
 /**
  * 山西电信体验AI领福利 - 极简静默监控与凭证捕获脚本
- * @version 1.2.0
- * @date 2026-09-03
+ * @version 1.3.0
+ * @date 2026-09-07
  * GitHub: https://github.com/TomCatXue/MyCookieCenter
  * 
  * 严格静默规则：
@@ -18,45 +18,107 @@ if (isRequest) {
   handleProbe();
 }
 
-// ==================== 1. 凭据自动捕获（只通知一次） ====================
-function handleCapture() {
+// ==================== 1. 凭据自动捕获与凭证更换自动抢兑 ====================
+async function handleCapture() {
   const url = $request.url || '';
   const headers = $request.headers || {};
 
-  if (url.includes('/sx_ai_benefit/h5/HD')) {
-    const cookie = headers['Cookie'] || headers['cookie'];
-    if (cookie) {
-      $persistentStore.write(cookie, 'sx_benefit_cookie');
-      $persistentStore.write(url, 'sx_benefit_url');
-      const utmScha = getQueryParam(url, 'utm_scha') || '';
-      $persistentStore.write(utmScha, 'sx_benefit_utm_scha');
-      const ua = headers['User-Agent'] || headers['user-agent'] || 'CtClient;13.2.0;iOS;26.6.1;iPhone 16e';
-      $persistentStore.write(ua, 'sx_benefit_ua');
+  try {
+    if (url.includes('/sx_ai_benefit/h5/HD')) {
+      const cookie = headers['Cookie'] || headers['cookie'];
+      if (cookie) {
+        $persistentStore.write(cookie, 'sx_benefit_cookie');
+        $persistentStore.write(url, 'sx_benefit_url');
+        const utmScha = getQueryParam(url, 'utm_scha') || '';
+        $persistentStore.write(utmScha, 'sx_benefit_utm_scha');
+        const ua = headers['User-Agent'] || headers['user-agent'] || 'CtClient;13.2.0;iOS;26.6.1;iPhone 16e';
+        $persistentStore.write(ua, 'sx_benefit_ua');
 
-      const match = url.match(/(HD\d{8}[A-Za-z0-9]+)/i);
-      const code = match ? match[1] : '';
+        const match = url.match(/(HD\d{8}[A-Za-z0-9]+)/i);
+        const code = match ? match[1] : '';
 
-      if (code) {
-        $persistentStore.write(code, 'sx_monitor_current_code');
-        const lastNotifiedCode = $persistentStore.read('sx_capture_notified_code');
+        if (code) {
+          $persistentStore.write(code, 'sx_monitor_current_code');
+          const lastNotifiedCode = $persistentStore.read('sx_capture_notified_code');
 
-        // 核心控制：只有检测到新批次代码时，才通知 1 次；已通知过则绝不弹窗
-        if (code !== lastNotifiedCode) {
-          $persistentStore.write(code, 'sx_capture_notified_code');
-          sendNotify(
-            '中国电信 · 权益中心',
-            '📡 云开通信畅，会话已同步。',
-            '当前状态：新凭据已归囊，探针就绪待命。',
-            'ctclient://'
-          );
-          console.log(`[电信福利] 首次检测到新批次凭据 [${code}]，已发送单次通知。`);
-        } else {
-          console.log(`[电信福利] 凭证静默刷新成功（批次 [${code}] 已通知过，保持静默）。`);
+          // 核心特性：检测到新凭据更换（新批次上线），不再只是发通知，立即自动发起领奖！
+          if (code !== lastNotifiedCode) {
+            $persistentStore.write(code, 'sx_capture_notified_code');
+            console.log(`[电信福利] 🚀 检测到新凭据/批次更换 [${code}]，立即自动触发抢兑流程...`);
+            await autoClaimBenefit(url, cookie, ua, code);
+          } else {
+            console.log(`[电信福利] 凭证静默刷新成功（批次 [${code}] 处于当期，保持静默）。`);
+          }
         }
       }
     }
+  } catch (err) {
+    console.log('[电信福利] 凭证捕获与自动领奖异常: ' + err.message);
+  } finally {
+    $done({});
   }
-  $done({});
+}
+
+// 自动抢兑权益核心函数 (优先腾讯视频会员)
+async function autoClaimBenefit(activityUrl, cookie, ua, code) {
+  const now = new Date();
+  const currentYearMonth = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`;
+  
+  // 读取用户偏好的奖品类型，默认优先 tc_member (腾讯视频会员)
+  const prefer = $persistentStore.read('sx_prefer_benefit') || 'tc_member';
+
+  const keyInfo = await getPublicKey(activityUrl, cookie, ua);
+  if (!keyInfo || !keyInfo.para) {
+    throw new Error('RSA 公钥签发失败');
+  }
+
+  const plainParams = JSON.stringify({ goodsType: prefer });
+  const payload = buildEncryptedPayload(plainParams, keyInfo);
+
+  console.log(`[电信福利] 正在提交领取请求: 目标权益=${prefer}...`);
+  const checkRes = await postJson('https://wx.sx.189.cn/sx_ai_benefit/order/subCheck', activityUrl, cookie, ua, payload);
+  console.log('[电信福利] 服务端自动抢兑响应: ' + JSON.stringify(checkRes));
+
+  const msg = checkRes.msg ? checkRes.msg.replace(/<br\s*[\/]?>/gi, ' ') : '';
+
+  if (msg.includes('已参与本期活动')) {
+    $persistentStore.write(currentYearMonth, 'sx_monitor_notified_month');
+    sendNotify(
+      '中国电信 · 权益中心',
+      '🎉 本月权益确认已到账',
+      '系统检测到本期腾讯视频会员已完成领取。',
+      'ctclient://'
+    );
+  } else if (msg.includes('成功') || checkRes.code === 0 || checkRes.code === '0') {
+    $persistentStore.write(currentYearMonth, 'sx_monitor_notified_month');
+    sendNotify(
+      '中国电信 · 权益中心',
+      '🎁 腾讯视频会员已自动领取成功！',
+      '检测到凭证更换，已为你自动抢下本月腾讯视频会员！',
+      'ctclient://'
+    );
+  } else if (msg.includes('短信') || msg.includes('验证码')) {
+    sendNotify(
+      '中国电信 · 权益中心',
+      '⚠️ 腾讯视频会员需短信验证',
+      '点击立即跳转电信 App，在弹窗中确认短信验证码！',
+      'ctclient://'
+    );
+  } else if (msg.includes('抢完') || msg.includes('满') || msg.includes('结束')) {
+    sendNotify(
+      '中国电信 · 权益中心',
+      '⚠️ 腾讯视频会员名额已抢光',
+      '建议在 BoxJS 中将目标切换为免验证的 3GB 流量包。',
+      'ctclient://'
+    );
+  } else {
+    sendNotify(
+      '中国电信 · 权益中心',
+      '📡 凭证已更换，自动领取反馈',
+      msg || '已发起自动兑换，请在 App 中查看领取结果。',
+      'ctclient://'
+    );
+  }
 }
 
 // ==================== 2. 服务端探针静默监控 ====================
