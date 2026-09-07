@@ -166,13 +166,10 @@
       ]
     },
     {
-      "id": "telecom_gold",
-      "name": "中国电信 · 金豆兑换话费",
+      "id": "telecom_rights",
+      "name": "中国电信 · 等级权益兑换话费",
       "keys": [
-        "telecom_gold_auth",
-        "telecom_gold_threshold",
-        "telecom_phone",
-        "telecom_password"
+        "telecom_rights_auth"
       ],
       "author": "@Codex",
       "icon": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/189.png?v=20260903",
@@ -183,69 +180,30 @@
       "repo": "https://github.com/TomCatXue/MyCookieCenter",
       "settings": [
         {
-          "id": "telecom_phone",
-          "name": "电信手机号 (方式B核心配置)",
-          "val": "",
-          "type": "text",
-          "desc": "输入 11 位电信手机号，用于脱机登录与话费充值入账。"
-        },
-        {
-          "id": "telecom_password",
-          "name": "电信服务密码 (方式B脱机凭据)",
-          "val": "",
-          "type": "password",
-          "desc": "输入 6 位电信服务密码。配置后直接调用官方登录接口脱机换票，无需进 App 抓包。"
-        },
-        {
-          "id": "telecom_gold_threshold",
-          "name": "金豆兑换话费档位",
-          "val": "1000",
-          "type": "select",
-          "items": [
-            {
-              "key": "200",
-              "label": "200 金豆 (兑换 1 元话费券)"
-            },
-            {
-              "key": "1000",
-              "label": "1000 金豆 (兑换 5 元话费券·推荐)"
-            },
-            {
-              "key": "2000",
-              "label": "2000 金豆 (兑换 10 元话费券)"
-            },
-            {
-              "key": "3000",
-              "label": "3000 金豆 (兑换 15 元话费券)"
-            }
-          ],
-          "desc": "设置整点抢兑的目标金豆档位，金豆不足时自动跳过避免风控。"
-        },
-        {
-          "id": "telecom_gold_auth",
-          "name": "金豆商城会话凭据 (自动回填)",
+          "id": "telecom_rights_auth",
+          "name": "等级权益会话凭据 (sign/Cookie/accId)",
           "val": "",
           "type": "textarea",
-          "desc": "由脱机换票或 App 访问后自动持久化生成的 Token、Cookie 与用户信息。"
+          "desc": "进入电信 App「我」->「签到」或「等级权益」页面后自动捕获并保存的 sign、Cookie 与 accId 数据。"
         }
       ],
       "scripts": [
         {
-          "name": "查询金豆并执行一次兑换测试",
-          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/telecom_gold/telecom_gold.js"
+          "name": "查询当月等级权益并执行一次兑换测试",
+          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/telecom_rights/telecom_rights.js"
         }
       ],
       "tasks": [
         {
-          "name": "每日上午 10:00 整点抢兑话费",
-          "cron": "0 10 * * *",
-          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/telecom_gold/telecom_gold.js"
+          "name": "每日 00:00:00 准点抢兑等级话费",
+          "cron": "0 0 * * *",
+          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/telecom_rights/telecom_rights.js"
         }
       ],
       "descs_html": [
-        "<span><b>凭据捕获：</b>在 Loon 中开启 CookieCenter 插件后，进入电信营业厅 App「我的」→「金豆」→「兑换话费」页面即可自动捕获凭据。</span>",
-        "<span><b>整点抢兑：</b>默认每天 10:00 准点自动查询金豆并向服务器提交兑换。</span>",
-        "<span><b>风控反馈：</b>若遇库存告罄或运营商下发滑块验证码，脚本会如实发送系统通知反馈，杜绝虚假结果。</span>"
+        "<span><b>真实网关：</b>精准对齐 wappark.189.cn/jt-sign 生产网关，彻底抛弃失效的金豆与密码模式。</span>",
+        "<span><b>自动捕获：</b>进入电信 App「我」->「签到」或「等级权益」页面，自动锁定核心 sign 与已通过瑞数校验的会话 Cookie。</span>",
+        "<span><b>智能匹配：</b>内置官方标准 RSA 加密，自动查询当前用户星级等级（V1~V7）并匹配当月话费权益，每日 00:00:00 准时自动提交抢兑。</span>"
       ]
     }
   ]
