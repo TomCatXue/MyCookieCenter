@@ -3,7 +3,7 @@
 @Name: 中国电信 · 金豆自动签到与整点抢兑话费
 @Author: TomCatXue
 @Description: 针对电信营业厅金豆商城与兑换中心进行全域精准嗅探与自动换票
-@Rule: 拒绝假捕获，拦截 wappark / waphub / wapside 真实凭据，支持服务密码双轨
+@Rule: 支持方式B（手机号+服务密码脱机登录模式）与方式A（App 抓取模式）双轨驱动
 ------------------------------------------
 */
 
@@ -89,9 +89,10 @@ function handleRequest() {
         existing.origin = u.origin;
     } catch (e) { }
 
-    // 核心判定：只有真正捕获到 Token，或者有效手机号有更新时，才视为有效凭证捕获！
+    // 核心判定：只有真正捕获到有效 Token 或手机号时才触发保存与弹窗
     if (token && existing.token !== token) {
         existing.token = token;
+        existing.source = "app";
         updated = true;
     }
     if (phone && existing.phone !== phone) {
@@ -125,6 +126,7 @@ function handleResponse() {
         // 分支 A: 拦截统一登录接口返回
         if (url.indexOf("/unified/user/login") !== -1 && data.code == 0 && data.biz && data.biz.token) {
             existing.token = data.biz.token;
+            existing.source = "app";
             updated = true;
             $.log("[电信金豆] ✅ 成功从 login 接口拦截到 Token: " + existing.token.slice(0, 10) + "...");
         }
@@ -168,42 +170,52 @@ function handleResponse() {
 
 async function executeTask() {
     let auth = getStoredAuth();
-    let token = auth.token || "";
-    let phone = auth.phone || $.getdata("telecom_phone") || "";
+    let phone = $.getdata("telecom_phone") || auth.phone || "";
     let password = $.getdata("telecom_password") || "";
     let threshold = parseInt($.getdata(PREFER_KEY)) || 1000; // 默认 1000 金豆档位
+    let token = auth.token || "";
 
-    // 模式一：支持通过手机号和服务密码直接脱机登录 (吸收自电信金豆.user.js)
-    if (!token && phone && password) {
-        $.log("[电信金豆] 本地未捕获 Token，尝试使用服务密码脱机登录 wapside:9001...");
-        let loginToken = await loginWithPassword(phone, password);
-        if (loginToken) {
-            token = loginToken;
-            auth.token = loginToken;
+    $.log("[电信金豆] 启动任务: 手机号=" + (phone ? (phone.slice(0, 3) + "****" + phone.slice(7)) : "未配置") + ", 阈值=" + threshold + ", 密码配置=" + (password ? "已设置" : "未设置"));
+
+    // 方式 B 优先：如果配置了服务密码，优先执行脱机登录更新 Token
+    if (phone && password) {
+        $.log("[电信金豆] 正在执行【方式 B】：使用手机号 + 服务密码脱机登录换票 (wapside:9001)...");
+        let pwdToken = await loginWithPassword(phone, password);
+        if (pwdToken) {
+            token = pwdToken;
+            auth.token = pwdToken;
+            auth.phone = phone;
+            auth.source = "wapside";
             saveAuth(auth);
+            $.log("[电信金豆] 【方式 B】脱机登录成功！已获取最新有效 Token");
+        } else {
+            $.log("[电信金豆] 【方式 B】脱机换票未成功，若已有历史 App Token 则尝试回退执行...");
         }
     }
 
-    // 严格鉴权卡点提示
     if (!token) {
-        $.msg($.name, "❌ 未捕获有效 Token", "请在电信 App 内进入「我的」→「金豆」→ 点击「兑换话费」或「签到」页面以触发鉴权！");
-        $.log("[电信金豆] 错误: 本地仅有基础 Cookie 或空白，尚未捕获真实业务 Token。请勿只停留在抽奖转盘页，需点击一次兑换话费或签到。");
+        $.msg($.name, "❌ 缺少有效凭据", "【方式 B 未登录成功】：请检查 BoxJS 中的手机号与服务密码是否正确。若触发瑞数412防护，可在手机 Safari 中打开 https://wapside.189.cn:9001/ 访问一次即可解除。");
+        $.log("[电信金豆] 错误: 无可用 Token。请检查手机号与服务密码，或通过电信 App 进入兑换页抓取。");
         $.done();
         return;
     }
 
     let phoneMask = phone ? (phone.slice(0, 3) + "****" + phone.slice(7)) : "默认账号";
-    $.log("[电信金豆] 任务启动: 目标号码=" + phoneMask + ", 兑换阈值=" + threshold);
 
-    // 1. 实时查询金豆余额 (调用真实网关 queryInfo)
-    let currentPoints = await queryInfoReal(auth);
-    $.log("[电信金豆] 实时查询金豆余额: " + currentPoints);
-
-    if (currentPoints < 0) {
-        $.log("[电信金豆] queryInfo 未返回数值，尝试备用接口 myGold...");
-        currentPoints = await queryMyGold(auth);
-        $.log("[电信金豆] myGold 返回余额: " + currentPoints);
+    // 1. 查询金豆总额 (根据鉴权来源智能路由)
+    let currentPoints = -1;
+    if (auth.source === "wapside") {
+        $.log("[电信金豆] 使用 wapside 专有接口查询积分...");
+        currentPoints = await queryPointsWapside(auth);
+    } else {
+        $.log("[电信金豆] 使用 waphub 网关 queryInfo 查询积分...");
+        currentPoints = await queryInfoReal(auth);
+        if (currentPoints < 0) {
+            currentPoints = await queryMyGold(auth);
+        }
     }
+
+    $.log("[电信金豆] 当前金豆余额: " + currentPoints);
 
     if (currentPoints >= 0 && currentPoints < threshold) {
         let msg = "当前金豆 (" + currentPoints + ") 未达兑换阈值 (" + threshold + ")，本轮跳过";
@@ -214,8 +226,14 @@ async function executeTask() {
     }
 
     // 2. 发起整点兑换请求
-    $.log("[电信金豆] 准备提交话费兑换请求...");
-    let res = await executeExchange(auth, threshold, phone);
+    $.log("[电信金豆] 开始提交话费兑换请求...");
+    let res = null;
+    if (auth.source === "wapside") {
+        res = await executeExchangeWapside(auth, threshold, phone);
+    } else {
+        res = await executeExchange(auth, threshold, phone);
+    }
+
     $.log("[电信金豆] 兑换响应: " + JSON.stringify(res));
 
     if (res && (res.code === 0 || res.code === 200 || res.success === true)) {
@@ -224,7 +242,7 @@ async function executeTask() {
     } else if (res && (res.code === 413 || String(res.msg).indexOf("库存") !== -1 || String(res.msg).indexOf("抢光") !== -1)) {
         $.msg($.name, "⚠️ 库存告罄", "商品太紧俏，本轮库存已被抢光~");
     } else if (res && (res.code === -1 && String(res.msg).indexOf("<!DOCTYPE") !== -1)) {
-        $.msg($.name, "⚠️ 触发网关安全校验", "返回瑞数安全拦截，请打开电信 App 重新进入兑换页刷新会话");
+        $.msg($.name, "⚠️ 触发网关安全校验", "返回瑞数安全拦截。可在手机 Safari 中打开一次 https://wapside.189.cn:9001/ 解除拦截");
     } else {
         $.msg($.name, "❌ 兑换反馈", (res ? (res.msg || JSON.stringify(res)) : "网络请求异常"));
     }
@@ -253,6 +271,7 @@ function buildHeaders(auth) {
     return h;
 }
 
+// 真实网关 queryInfo 接口
 function queryInfoReal(auth) {
     return new Promise(resolve => {
         let host = auth.origin || "https://waphub.189.cn";
@@ -309,18 +328,83 @@ function queryMyGold(auth) {
     });
 }
 
+// wapside:9001 积分查询接口
+function queryPointsWapside(auth) {
+    return new Promise(resolve => {
+        let options = {
+            url: "https://wapside.189.cn:9001/points/query",
+            headers: {
+                "Authorization": "Bearer " + auth.token,
+                "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Mobile/15E148 Safari/604.1",
+                "Accept": "application/json",
+                "Referer": "https://wapside.189.cn:9001/"
+            },
+            timeout: 8000
+        };
+        if (auth.cookie) options.headers["Cookie"] = auth.cookie;
+
+        $httpClient.get(options, (err, resp, data) => {
+            if (err || !data) {
+                resolve(-1);
+                return;
+            }
+            try {
+                let res = JSON.parse(data);
+                if (res.code === 0 && res.data && res.data.points !== undefined) {
+                    resolve(parseInt(res.data.points));
+                } else {
+                    resolve(-1);
+                }
+            } catch (e) {
+                resolve(-1);
+            }
+        });
+    });
+}
+
+// wapside:9001 话费兑换接口
+function executeExchangeWapside(auth, points, phone) {
+    return new Promise(resolve => {
+        let options = {
+            url: "https://wapside.189.cn:9001/points/exchange/charge",
+            headers: {
+                "Authorization": "Bearer " + auth.token,
+                "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Mobile/15E148 Safari/604.1",
+                "Content-Type": "application/json;charset=utf-8",
+                "Accept": "application/json",
+                "Referer": "https://wapside.189.cn:9001/"
+            },
+            body: JSON.stringify({
+                points: points,
+                phone: phone
+            }),
+            timeout: 8000
+        };
+        if (auth.cookie) options.headers["Cookie"] = auth.cookie;
+
+        $httpClient.post(options, (err, resp, data) => {
+            if (err) {
+                resolve({ code: -1, msg: String(err) });
+                return;
+            }
+            try {
+                resolve(JSON.parse(data));
+            } catch (e) {
+                resolve({ code: -1, msg: data ? data.slice(0, 100) : "响应解析失败" });
+            }
+        });
+    });
+}
+
 function executeExchange(auth, points, phone) {
     return new Promise(resolve => {
-        // 如果有 wapside 凭据走 wapside:9001，否则走网关
-        let url = "https://wapside.189.cn:9001/points/exchange/charge";
+        let host = auth.origin || "https://waphub.189.cn";
         let options = {
-            url: url,
+            url: host + "/gateway/golden/goldGoods/taskList",
             headers: buildHeaders(auth),
             body: JSON.stringify({
                 points: points,
-                phone: phone,
-                phoneNum: phone,
-                timestamp: Date.now()
+                phone: phone
             }),
             timeout: 8000
         };
@@ -333,21 +417,30 @@ function executeExchange(auth, points, phone) {
             try {
                 resolve(JSON.parse(data));
             } catch (e) {
-                resolve({ code: -1, msg: data || "响应解析失败" });
+                resolve({ code: -1, msg: data ? data.slice(0, 100) : "响应解析失败" });
             }
         });
     });
 }
 
+// 服务密码脱机登录 (wapside:9001)
 function loginWithPassword(phone, password) {
     return new Promise(resolve => {
+        let auth = getStoredAuth();
+        let headers = {
+            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Mobile/15E148 Safari/604.1",
+            "Content-Type": "application/json;charset=utf-8",
+            "Accept": "application/json",
+            "Referer": "https://wapside.189.cn:9001/",
+            "Origin": "https://wapside.189.cn:9001"
+        };
+        if (auth.cookie) {
+            headers["Cookie"] = auth.cookie;
+        }
+
         let options = {
             url: "https://wapside.189.cn:9001/login/auth",
-            headers: {
-                "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Mobile/15E148 Safari/604.1",
-                "Content-Type": "application/json;charset=utf-8",
-                "Accept": "application/json"
-            },
+            headers: headers,
             body: JSON.stringify({
                 phoneNum: phone,
                 servicePassword: password
@@ -357,19 +450,26 @@ function loginWithPassword(phone, password) {
 
         $httpClient.post(options, (err, resp, data) => {
             if (err || !data) {
+                $.log("[电信金豆] 登录接口网络异常: " + (err ? String(err) : "空返回"));
+                resolve(null);
+                return;
+            }
+            if (data.indexOf("<!DOCTYPE") !== -1 || (resp && resp.status === 412)) {
+                $.log("[电信金豆] 服务密码接口返回 412 瑞数安全挑战页");
                 resolve(null);
                 return;
             }
             try {
                 let res = JSON.parse(data);
                 if (res.code === 0 && res.data && res.data.token) {
-                    $.log("[电信金豆] 服务密码登录成功，已获取新 Token");
+                    $.log("[电信金豆] 服务密码登录成功！获取到 Token: " + res.data.token.slice(0, 10) + "...");
                     resolve(res.data.token);
                 } else {
-                    $.log("[电信金豆] 服务密码登录失败: " + (res.msg || "未知错误"));
+                    $.log("[电信金豆] 登录返回失败: " + (res.msg || data.slice(0, 80)));
                     resolve(null);
                 }
             } catch (e) {
+                $.log("[电信金豆] 登录响应非 JSON: " + data.slice(0, 80));
                 resolve(null);
             }
         });
