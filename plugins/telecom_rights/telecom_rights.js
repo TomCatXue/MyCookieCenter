@@ -3,7 +3,7 @@
 @Name: 中国电信 · 等级权益兑换话费
 @Author: TomCatXue
 @Description: 基于电信 wappark.189.cn/jt-sign 网关，自动拦截 sign/accId，0点准时自动抢兑话费
-@Rule: 静默防扰机制（有效时不重复抓取、不弹窗），会话变动时单次通知
+@Rule: 精准时效管理，透明诊断日志，彻底告别 401 静默吞错
 ------------------------------------------
 */
 
@@ -24,7 +24,7 @@ function saveAuth(newAuth) {
 }
 
 // ============================================================
-// 1. 抓取与回填层 (静默化 + 防抖去重)
+// 1. 抓取与回填层
 // ============================================================
 if (typeof $request !== "undefined" && typeof $response === "undefined") {
     handleRequest();
@@ -44,14 +44,12 @@ function handleRequest() {
 
     let existing = getStoredAuth();
 
-    // 【核心静默锁】如果本地已有有效 sign，且在 12 小时内已成功更新，直接短路跳过，不重复捕获、不弹窗
-    const isFresh = existing.sign && (Date.now() - (existing.updateTime || 0) < 12 * 3600 * 1000);
-
     let sign = headers["sign"] || headers["Sign"] || "";
     let cookie = headers["Cookie"] || headers["cookie"] || "";
 
-    // 如果 sign 未发生变化且在保鲜期内，直接放行退出
-    if (isFresh && (!sign || sign === existing.sign)) {
+    // 3 分钟同 sign 防抖，避免同一次进页面触发多重写入
+    const isDebounced = existing.sign && sign === existing.sign && (Date.now() - (existing.updateTime || 0) < 3 * 60 * 1000);
+    if (isDebounced) {
         $done({});
         return;
     }
@@ -84,15 +82,16 @@ function handleRequest() {
 
     if (updated && existing.sign) {
         existing.updateTime = Date.now();
-
-        // 弹窗防扰策略：6 小时内最多弹 1 次通知，其余时间全部静默保存
-        let lastNotify = existing.lastNotifyTime || 0;
-        if (Date.now() - lastNotify > 6 * 3600 * 1000) {
-            existing.lastNotifyTime = Date.now();
-            $.msg($.name, "✅ 等级权益凭据已锁定", "已捕获核心 sign，0点自动抢兑话费");
-        }
         saveAuth(existing);
-        $.log("[电信权益] sign 凭据已静默更新: " + existing.sign.slice(0, 8) + "...");
+
+        // 防抖通知：5 分钟内最多弹 1 次
+        let lastNotify = existing.lastNotifyTime || 0;
+        if (Date.now() - lastNotify > 5 * 60 * 1000) {
+            existing.lastNotifyTime = Date.now();
+            saveAuth(existing);
+            $.msg($.name, "✅ 等级权益凭据已锁定", "sign: " + existing.sign.slice(0, 8) + "...\n0点准时抢兑");
+        }
+        $.log("[电信权益] sign 凭据已更新: " + existing.sign.slice(0, 8) + "...");
     }
 
     $done({});
@@ -123,14 +122,15 @@ function handleResponse() {
 
     if (updated && existing.sign) {
         existing.updateTime = Date.now();
+        saveAuth(existing);
 
         let lastNotify = existing.lastNotifyTime || 0;
-        if (Date.now() - lastNotify > 6 * 3600 * 1000) {
+        if (Date.now() - lastNotify > 5 * 60 * 1000) {
             existing.lastNotifyTime = Date.now();
+            saveAuth(existing);
             $.msg($.name, "✅ 等级权益凭据已锁定", "accId 与 sign 已就绪，0点准时抢兑");
         }
-        saveAuth(existing);
-        $.log("[电信权益] ssoHomLogin 凭据已静默回填: accId=" + existing.accId);
+        $.log("[电信权益] ssoHomLogin 凭据已回填: accId=" + existing.accId);
     }
 
     $done({});
@@ -143,20 +143,30 @@ async function executeTask() {
 
     if (!sign) {
         $.msg($.name, "❌ 缺少核心 sign 凭证", "请打开电信营业厅 App -> 点击「我」->「签到」或「等级权益」页面，等待凭据自动捕获！");
-        $.log("[电信权益] 错误: 未找到有效 sign。请进入电信 App 的等级权益中心完成一次静默拦截。");
+        $.log("[电信权益] 错误: 本地未找到 sign。请进入电信 App 的等级权益中心完成一次静默拦截。");
         $.done();
         return;
     }
 
-    $.log("[电信权益] 任务启动: accId=" + (accId || "待查询") + ", sign=" + sign.slice(0, 8) + "...");
+    // 检查凭证是否为过期陈旧数据 (电信 sign 生命周期通常为 15~30 分钟)
+    let ageMinutes = Math.round((Date.now() - (auth.updateTime || 0)) / 60000);
+    $.log("[电信权益] 任务启动: accId=" + (accId || "待查询") + ", sign=" + sign.slice(0, 8) + "..., 距捕获已过 " + ageMinutes + " 分钟");
 
     // 1. 查询当前等级与话费权益 ID (queryLevelRightInfo)
-    $.log("[电信权益] 正在查询当期等级权益列表...");
+    $.log("[电信权益] 正在向服务端查询当期等级权益列表...");
     let rightInfo = await queryRightsInfo(auth);
 
+    if (rightInfo && rightInfo.error === "UNAUTHORIZED") {
+        $.msg($.name, "❌ sign 凭证已过期 (401)", "电信 session 已失效，请在电信 App 中重新进入「签到/权益」页面刷新凭据！");
+        $.log("[电信权益] 严重提示: 服务端返回 401 未授权访问，当前 sign 已过期失效。电信 sign 时效较短，必须在临近 0 点前进入 App 刷新一次！");
+        $.done();
+        return;
+    }
+
     if (!rightInfo || !rightInfo.rightsId) {
-        $.msg($.name, "⚠️ 未匹配到话费权益", "可能当月已领完，或未查询到包含话费的等级项目");
-        $.log("[电信权益] 查询权益失败或未识别到话费选项: " + JSON.stringify(rightInfo));
+        let errDesc = rightInfo ? (rightInfo.msg || "无匹配数据") : "网络异常";
+        $.msg($.name, "⚠️ 未匹配到话费权益", errDesc);
+        $.log("[电信权益] 查询权益失败: " + JSON.stringify(rightInfo));
         $.done();
         return;
     }
@@ -176,6 +186,8 @@ async function executeTask() {
         $.msg($.name, "⚠️ 库存告罄", "当期话费权益已领完，下期请早~");
     } else if (resText.includes("人数过多")) {
         $.msg($.name, "👥 抢购人数过多", "并发触发系统繁忙，建议下次微调时间重试");
+    } else if (res && (res.code === "401" || resText.includes("未授权"))) {
+        $.msg($.name, "❌ 提交时 sign 失效 (401)", "请重新在 App 内进入页面刷新凭据");
     } else {
         $.msg($.name, "❌ 领取反馈", (res ? (res.resoultMsg || res.msg || resText.slice(0, 60)) : "请求异常"));
     }
@@ -207,11 +219,17 @@ function queryRightsInfo(auth) {
 
         $httpClient.post(options, (err, resp, data) => {
             if (err || !data) {
-                resolve(null);
+                $.log("[电信权益] 查询网络异常: " + (err ? String(err) : "空响应"));
+                resolve({ error: "NETWORK_ERROR", msg: String(err || "无网络响应") });
                 return;
             }
+            $.log("[电信权益] 服务端权益原始返回: " + data.slice(0, 200));
             try {
                 let d = JSON.parse(data);
+                if (d.code === "401" || d.code === 401 || (d.msg && d.msg.includes("未授权"))) {
+                    resolve({ error: "UNAUTHORIZED", msg: d.msg || "未授权访问" });
+                    return;
+                }
                 if (d.currentLevel) {
                     let key = "V" + d.currentLevel;
                     let items = d[key] || [];
@@ -225,9 +243,9 @@ function queryRightsInfo(auth) {
                         return;
                     }
                 }
-                resolve(null);
+                resolve({ error: "NO_MATCH", msg: "未找到符合的话费权益", raw: d });
             } catch (e) {
-                resolve(null);
+                resolve({ error: "PARSE_ERROR", msg: data.slice(0, 100) });
             }
         });
     });
