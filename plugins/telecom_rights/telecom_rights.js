@@ -11,6 +11,8 @@
 
 const $ = new Env("中国电信 · 等级权益兑换");
 const AUTH_KEY = "telecom_rights_auth";
+const DEFAULT_LV5_RIGHTS_ID = "eae02aa850f607daa851910621d86200b10256cab2504e274ba6224e91254ea7";
+
 const CLAIMED_MONTH_KEY = "telecom_rights_claimed_month";
 
 // RSA 公钥 (来自 0点权益.py)
@@ -185,8 +187,8 @@ async function executeTask() {
     $.log(`[电信权益] 任务就绪: accId=${accId || "待查询"}, sign=${sign.slice(0, 8)}..., 距捕获已过 ${ageMinutes} 分钟`);
 
     // 【机制 2：预热获取 rightsId】
-    let rightsId = auth.cachedRightsId || "";
-    let rightsTitle = auth.cachedTitle || "等级话费券";
+    let rightsId = $.getdata("telecom_rights_id") || auth.cachedRightsId || DEFAULT_LV5_RIGHTS_ID;
+    let rightsTitle = auth.cachedTitle || "LV5等级权益3元话费";
 
     if (!rightsId) {
         $.log("[电信权益] 本地未缓存 rightsId，正在向服务端查询当期项目...");

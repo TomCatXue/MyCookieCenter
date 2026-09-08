@@ -169,6 +169,7 @@
       "id": "telecom_rights",
       "name": "中国电信 · 等级权益兑换话费",
       "keys": [
+        "telecom_rights_id",
         "telecom_rights_auth"
       ],
       "author": "@Codex",
@@ -179,6 +180,13 @@
       ],
       "repo": "https://github.com/TomCatXue/MyCookieCenter",
       "settings": [
+        {
+          "id": "telecom_rights_id",
+          "name": "目标话费权益 ID (已锁定 LV5 3元话费)",
+          "val": "eae02aa850f607daa851910621d86200b10256cab2504e274ba6224e91254ea7",
+          "type": "text",
+          "desc": "基于你账号真实级别成功定位的 LV5 话费项目 ID，0 点免查直接开火秒杀。"
+        },
         {
           "id": "telecom_rights_auth",
           "name": "等级权益会话凭据 (sign/Cookie/accId)",
