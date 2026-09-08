@@ -2,13 +2,14 @@
 ------------------------------------------
 @Name: 中国电信 · 等级权益兑换话费
 @Author: TomCatXue
-@Description: 基于电信 wappark.189.cn/jt-sign 网关，自动拦截 sign/accId，0点准时自动抢兑话费
-@Rule: 精准时效管理，透明诊断日志，彻底告别 401 静默吞错
+@Description: 基于电信 wappark.189.cn/jt-sign 网关，预热缓存权益ID，0点免查直接并发抢兑，当月中奖自动休眠全月
+@Rule: 1. 当月只要成功领取一次，立即锁定休眠至下月1号；2. 没抢到则每日0点循环抢兑；3. 0点零延时直发对抗秒杀
 ------------------------------------------
 */
 
 const $ = new Env("中国电信 · 等级权益兑换");
 const AUTH_KEY = "telecom_rights_auth";
+const CLAIMED_MONTH_KEY = "telecom_rights_claimed_month";
 
 // RSA 公钥 (来自 0点权益.py)
 const RSA_PUBLIC_KEY = `MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQC+ugG5A8cZ3FqUKDwM57GM4io6JGcStivT8UdGt67PEOihLZTw3P7371+N47PrmsCpnTRzbTgcupKtUv8ImZalYk65dU8rjC/ridwhw9ffW2LBwvkEnDkkKKRi2liWIItDftJVBiWOh17o6gfbPoNrWORcAdcbpk2L+udld5kZNwIDAQAB`;
@@ -24,7 +25,7 @@ function saveAuth(newAuth) {
 }
 
 // ============================================================
-// 1. 抓取与回填层
+// 1. 抓取与回填层 (进 App 自动预热锁定 sign 与话费权益 ID)
 // ============================================================
 if (typeof $request !== "undefined" && typeof $response === "undefined") {
     handleRequest();
@@ -40,14 +41,13 @@ if (typeof $request !== "undefined" && typeof $response === "undefined") {
 function handleRequest() {
     const url = $request.url || "";
     const headers = $request.headers || {};
-    const body = $request.body || "";
 
     let existing = getStoredAuth();
 
     let sign = headers["sign"] || headers["Sign"] || "";
     let cookie = headers["Cookie"] || headers["cookie"] || "";
 
-    // 3 分钟同 sign 防抖，避免同一次进页面触发多重写入
+    // 3 分钟同 sign 防抖
     const isDebounced = existing.sign && sign === existing.sign && (Date.now() - (existing.updateTime || 0) < 3 * 60 * 1000);
     if (isDebounced) {
         $done({});
@@ -84,7 +84,6 @@ function handleRequest() {
         existing.updateTime = Date.now();
         saveAuth(existing);
 
-        // 防抖通知：5 分钟内最多弹 1 次
         let lastNotify = existing.lastNotifyTime || 0;
         if (Date.now() - lastNotify > 5 * 60 * 1000) {
             existing.lastNotifyTime = Date.now();
@@ -118,6 +117,20 @@ function handleResponse() {
                 updated = true;
             }
         }
+
+        // 拦截 queryLevelRightInfo 响应，顺便预热缓存当前等级与话费项目 ID
+        if (url.indexOf("queryLevelRightInfo") !== -1 && data.currentLevel) {
+            let key = "V" + data.currentLevel;
+            let items = data[key] || [];
+            let target = items.find(it => it.title && it.title.includes("话费")) || items[0];
+            if (target && target.activityId) {
+                existing.cachedRightsId = target.activityId || target.id;
+                existing.cachedTitle = target.title;
+                existing.cachedLevel = data.currentLevel;
+                updated = true;
+                $.log("[电信权益] 抓包预热缓存话费权益 ID 成功: " + existing.cachedRightsId + " (" + target.title + ")");
+            }
+        }
     } catch (e) { }
 
     if (updated && existing.sign) {
@@ -128,7 +141,7 @@ function handleResponse() {
         if (Date.now() - lastNotify > 5 * 60 * 1000) {
             existing.lastNotifyTime = Date.now();
             saveAuth(existing);
-            $.msg($.name, "✅ 等级权益凭据已锁定", "accId 与 sign 已就绪，0点准时抢兑");
+            $.msg($.name, "✅ 等级权益会话已锁定", "accId 与 sign 已就绪，0点准时抢兑");
         }
         $.log("[电信权益] ssoHomLogin 凭据已回填: accId=" + existing.accId);
     }
@@ -136,7 +149,24 @@ function handleResponse() {
     $done({});
 }
 
+// ============================================================
+// 2. 核心调度：当月休眠锁 + 0点免查直接秒抢
+// ============================================================
 async function executeTask() {
+    const now = new Date();
+    const currentYearMonth = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`; // 形如 "202609"
+
+    // 【核心机制一：当月终结休眠锁】
+    // 只要本月已抢到过一次，全月彻底深度休眠，直接退出不发包！
+    const claimedMonth = $.getdata(CLAIMED_MONTH_KEY);
+    const isManualTest = (typeof $argument === "string" && $argument.toLowerCase().includes("test"));
+
+    if (!isManualTest && claimedMonth === currentYearMonth) {
+        $.log(`[电信权益] 🎉 本月（${currentYearMonth}）话费权益已成功领取入账，全月自动休眠，下月1号自动恢复。`);
+        $.done();
+        return;
+    }
+
     let auth = getStoredAuth();
     let sign = auth.sign || "";
     let accId = auth.accId || "";
@@ -148,49 +178,74 @@ async function executeTask() {
         return;
     }
 
-    // 检查凭证是否为过期陈旧数据 (电信 sign 生命周期通常为 15~30 分钟)
     let ageMinutes = Math.round((Date.now() - (auth.updateTime || 0)) / 60000);
-    $.log("[电信权益] 任务启动: accId=" + (accId || "待查询") + ", sign=" + sign.slice(0, 8) + "..., 距捕获已过 " + ageMinutes + " 分钟");
+    $.log(`[电信权益] 任务启动: accId=${accId || "待查询"}, sign=${sign.slice(0, 8)}..., 距捕获已过 ${ageMinutes} 分钟`);
 
-    // 1. 查询当前等级与话费权益 ID (queryLevelRightInfo)
-    $.log("[电信权益] 正在向服务端查询当期等级权益列表...");
-    let rightInfo = await queryRightsInfo(auth);
+    // 【核心机制二：0点零延时直发（对抗网络毫秒级竞争）】
+    // 如果本地已有提前预热的话费 rightsId，0点直接向 receiverRights 连射，绝不在 0 点瞬间浪费时间查列表！
+    let rightsId = auth.cachedRightsId || "";
+    let rightsTitle = auth.cachedTitle || "等级话费券";
 
-    if (rightInfo && (rightInfo.error === "UNAUTHORIZED" || rightInfo.error === "EXPIRED")) {
-        let reason = rightInfo.error === "EXPIRED" ? "会话超时(412)" : "sign失效(401)";
-        $.msg($.name, "❌ 凭据已超时失效", `距上次捕获已过 ${ageMinutes} 分钟，${reason}。请在电信 App 中重新进入「签到/权益」页面刷新凭据！`);
-        $.log(`[电信权益] 核心提示: 距上次捕获已过 ${ageMinutes} 分钟，当前凭据已超时失效（服务端返回 ${reason}）。电信会话不支持长年脱机，需在临近 0 点前进入 App 唤醒刷新！`);
-        $.done();
-        return;
+    if (!rightsId) {
+        $.log("[电信权益] 本地暂无预热 rightsId，先向服务端查询当期等级权益列表...");
+        let rightInfo = await queryRightsInfo(auth);
+
+        if (rightInfo && rightInfo.error === "UNAUTHORIZED") {
+            $.msg($.name, "❌ sign 凭证已过期 (401)", "电信 session 已失效，请在电信 App 中重新进入「签到/权益」页面刷新凭据！");
+            $.log("[电信权益] 严重提示: 服务端返回 401 未授权访问，当前 sign 已过期失效。请在 23:50~23:58 之间打开 App 刷新一次！");
+            $.done();
+            return;
+        }
+
+        if (!rightInfo || !rightInfo.rightsId) {
+            let errDesc = rightInfo ? (rightInfo.msg || "无匹配数据") : "网络异常";
+            $.msg($.name, "⚠️ 未匹配到话费权益", errDesc);
+            $.log("[电信权益] 查询权益失败: " + JSON.stringify(rightInfo));
+            $.done();
+            return;
+        }
+
+        rightsId = rightInfo.rightsId;
+        rightsTitle = rightInfo.title || "话费券";
+        // 回写缓存，供下次 0 点直接免查调用
+        auth.cachedRightsId = rightsId;
+        auth.cachedTitle = rightsTitle;
+        saveAuth(auth);
     }
 
-    if (!rightInfo || !rightInfo.rightsId) {
-        let errDesc = rightInfo ? (rightInfo.msg || "无匹配数据") : "网络异常";
-        $.msg($.name, "⚠️ 未匹配到话费权益", errDesc);
-        $.log("[电信权益] 查询权益失败: " + JSON.stringify(rightInfo));
-        $.done();
-        return;
+    $.log(`[电信权益] 🎯 目标话费项目锁定: ID=${rightsId} (${rightsTitle})，准备全力抢兑...`);
+
+    // 【核心机制三：短间隔多发防抖突发 (Burst Strategy)】
+    // 连续发起 2 次兑换请求（间隔 250ms），极大提升对抗运营商秒杀并发成功率
+    let success = false;
+    for (let attempt = 1; attempt <= 2; attempt++) {
+        $.log(`[电信权益] 发起第 ${attempt} 次抢兑请求...`);
+        let res = await receiveRights(auth, rightsId);
+        let resText = JSON.stringify(res);
+        $.log(`[电信权益] 第 ${attempt} 次响应: ${resText}`);
+
+        if (resText.includes("成功") || resText.includes("已领取过该权益") || (res && (res.resoultCode === "0" || res.code === 0))) {
+            let desc = (res && res.resoultMsg) || "话费权益已成功提交到账！";
+            // 锁定当月休眠！
+            $.setdata(currentYearMonth, CLAIMED_MONTH_KEY);
+            $.msg($.name, "🎉 话费兑换成功！", `${desc}\n已开启全月深度休眠，下月1号自动恢复。`);
+            $.log(`[电信权益] 🎉 恭喜抢兑成功！已记录当月（${currentYearMonth}）休眠锁，后续全月停止发包。`);
+            success = true;
+            break;
+        } else if (resText.includes("领完") || resText.includes("结束") || resText.includes("售罄")) {
+            $.msg($.name, "⚠️ 本轮已售罄", "今日话费名额已被秒光，明日 0 点将继续自动抢兑！");
+            $.log("[电信权益] 本轮库存告罄，未锁定当月休眠，明晚 0 点继续尝试。");
+            break;
+        } else if (res && (res.code === "401" || resText.includes("未授权"))) {
+            $.msg($.name, "❌ sign 凭证已过期 (401)", "请在今晚 23:55 左右打开一次电信 App 刷新凭证！");
+            break;
+        }
+
+        if (attempt < 2) await $.wait(250);
     }
 
-    $.log("[电信权益] 成功定位目标话费权益: ID=" + rightInfo.rightsId + " (" + (rightInfo.title || "话费券") + ")");
-
-    // 2. 准点发起兑换请求 (receiverRights)
-    $.log("[电信权益] 正在提交领取请求...");
-    let res = await receiveRights(auth, rightInfo.rightsId);
-    $.log("[电信权益] 领取响应: " + JSON.stringify(res));
-
-    let resText = JSON.stringify(res);
-    if (resText.includes("成功") || resText.includes("已领取过该权益") || (res && res.resoultCode === "0")) {
-        let desc = (res && res.resoultMsg) || "话费权益已到账";
-        $.msg($.name, "🎉 兑换成功！", desc);
-    } else if (resText.includes("领完") || resText.includes("结束") || resText.includes("售罄")) {
-        $.msg($.name, "⚠️ 库存告罄", "当期话费权益已领完，下期请早~");
-    } else if (resText.includes("人数过多")) {
-        $.msg($.name, "👥 抢购人数过多", "并发触发系统繁忙，建议下次微调时间重试");
-    } else if (res && (res.code === "401" || resText.includes("未授权"))) {
-        $.msg($.name, "❌ 提交时 sign 失效 (401)", "请重新在 App 内进入页面刷新凭据");
-    } else {
-        $.msg($.name, "❌ 领取反馈", (res ? (res.resoultMsg || res.msg || resText.slice(0, 60)) : "请求异常"));
+    if (!success) {
+        $.log("[电信权益] 本轮抢兑结束，明天 0 点继续值守。");
     }
 
     $.done();
@@ -226,7 +281,7 @@ function queryRightsInfo(auth) {
             }
             $.log("[电信权益] 服务端权益原始返回: " + (data.indexOf("<!DOCTYPE") !== -1 ? "触发瑞数412防护(会话超时)" : data.slice(0, 200)));
             if (data.indexOf("<!DOCTYPE") !== -1 || (resp && resp.status === 412)) {
-                resolve({ error: "EXPIRED", msg: "电信会话与Cookie已过期超时(412)" });
+                resolve({ error: "UNAUTHORIZED", msg: "电信会话与Cookie已过期超时(412)" });
                 return;
             }
             try {
@@ -421,5 +476,6 @@ function Env(name) {
         console.log("[通知] " + t + " - " + s + ": " + b);
     };
     this.log = function (msg) { console.log(msg); };
+    this.wait = function (ms) { return new Promise(r => setTimeout(r, ms)); };
     this.done = function () { if (typeof $done !== "undefined") $done({}); };
 }
