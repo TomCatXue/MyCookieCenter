@@ -269,6 +269,16 @@ async function executeTask() {
     $.done();
 }
 
+
+function cleanCookie(rawCookie) {
+    if (!rawCookie) return "";
+    return rawCookie
+        .split(";")
+        .map(s => s.trim())
+        .filter(s => s && !s.startsWith("FSSBBIl1Ugzb") && !s.startsWith("wSmxQu") && !s.startsWith("1cieWOle"))
+        .join("; ");
+}
+
 function queryRightsInfo(auth) {
     return new Promise(resolve => {
         let value = {
@@ -283,13 +293,17 @@ function queryRightsInfo(auth) {
             headers: {
                 "sign": auth.sign,
                 "Content-Type": "application/json;charset=utf-8",
+                "Accept": "application/json, text/plain, */*",
+                "Origin": "https://wappark.189.cn",
                 "Referer": "https://wappark.189.cn/resources/dist/signInActivity.html",
-                "User-Agent": auth.ua || "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15"
+                "User-Agent": auth.ua || "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15",
+                "X-Requested-With": "XMLHttpRequest"
             },
             body: JSON.stringify({ para: paraV }),
             timeout: 8000
         };
-        if (auth.cookie) options.headers["Cookie"] = auth.cookie;
+        let c = cleanCookie(auth.cookie);
+        if (c) options.headers["Cookie"] = c;
 
         $httpClient.post(options, (err, resp, data) => {
             if (err || !data) {
@@ -329,7 +343,7 @@ function queryRightsInfo(auth) {
     });
 }
 
-function receiveRights(auth, rightsId) {
+function receiveRights(auth, rightsId, useCleanCookie = true) {
     return new Promise(resolve => {
         let value = {
             id: rightsId,
@@ -340,22 +354,37 @@ function receiveRights(auth, rightsId) {
         };
         let paraV = encryptParaRsa(value);
 
+        let c = useCleanCookie ? cleanCookie(auth.cookie) : (auth.cookie || "");
+
         let options = {
             url: "https://wappark.189.cn/jt-sign/paradise/receiverRights",
             headers: {
                 "sign": auth.sign,
                 "Content-Type": "application/json;charset=utf-8",
+                "Accept": "application/json, text/plain, */*",
+                "Origin": "https://wappark.189.cn",
                 "Referer": "https://wappark.189.cn/resources/dist/signInActivity.html",
-                "User-Agent": auth.ua || "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15"
+                "User-Agent": auth.ua || "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15",
+                "X-Requested-With": "XMLHttpRequest"
             },
             body: JSON.stringify({ para: paraV }),
             timeout: 8000
         };
-        if (auth.cookie) options.headers["Cookie"] = auth.cookie;
+        if (c) options.headers["Cookie"] = c;
 
         $httpClient.post(options, (err, resp, data) => {
             if (err) {
                 resolve({ code: -1, msg: String(err) });
+                return;
+            }
+            if (data && (data.indexOf("<!DOCTYPE") !== -1 || (resp && resp.status === 412))) {
+                // 如果是第一次使用纯净 Cookie 被拦，则回退尝试使用原始 Cookie
+                if (useCleanCookie) {
+                    $.log("[电信权益] 纯净 Cookie 触发 412，自动切换原始 Cookie 重试提交...");
+                    receiveRights(auth, rightsId, false).then(resolve);
+                    return;
+                }
+                resolve({ code: -1, msg: "触发瑞数412防护(请在App内点一次兑换)" });
                 return;
             }
             try {

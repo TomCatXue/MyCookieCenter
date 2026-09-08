@@ -4,7 +4,7 @@
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://avatars.githubusercontent.com/u/138953496?v=4
 #!tag = 签到, Cookie, 凭据捕获, 定时任务
-#!version = 3.8.0
+#!version = 3.8.1
 #!date = 2026-09-08
 
 # =================== 1. 业务功能开关 (极简三主控面板) ===================
@@ -24,7 +24,7 @@ telecom_rights_enable = switch,true,tag=电信权益·全功能总开关,desc=�
 [Script]
 # --- 【微信读书】抓取与后台调度 (联动 weread_enable 统一总控) ---
 # 1. 抓取层：专职凭据捕获 (无执行代码，捕获存入 Loon 持久化)
-http-request ^https?:\/\/(i\.)?weread\.qq\.com\/(flip-card-game|user\/|feature|free\/library|checkfreequalify) script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/app/weread_claim/weread_cookie.js?v=20260908, tag=微信读书·凭据捕获, requires-body=false, enable={weread_enable}
+http-request ^https?:\/\/(i\.)?weread\.qq\.com\/(flip-card-game|user\/|feature|free\/library|checkfreequalify) script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/app/weread_claim/weread_cookie.js?v=20260909, tag=微信读书·凭据捕获, requires-body=false, enable={weread_enable}
 http-request ^https?:\/\/i\.weread\.qq\.com\/login script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/app/weread_claim/weread_cookie.js?v=20260907, tag=微信读书·登录请求, requires-body=true, enable={weread_enable}
 http-response ^https?:\/\/i\.weread\.qq\.com\/login script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/app/weread_claim/weread_cookie.js?v=20260907, tag=微信读书·登录响应, requires-body=true, enable={weread_enable}
 
@@ -40,7 +40,7 @@ cron "*/20 8-19 1-8 * *" script-path=https://raw.githubusercontent.com/TomCatXue
 # --- 【电信权益】真实网关凭据捕获、会话回填与零点抢兑 (联动 telecom_rights_enable 统一总控) ---
 http-request ^https?:\/\/(waphub|wappark)\.189\.cn\/(jt-sign|gateway|JinDouMall)\/ script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/telecom_rights/telecom_rights.js?v=20260907, tag=电信权益·凭证捕获, requires-body=false, enable={telecom_rights_enable}
 http-response ^https?:\/\/(waphub|wappark)\.189\.cn\/(jt-sign|gateway)\/ script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/telecom_rights/telecom_rights.js?v=20260907, tag=电信权益·会话回填, requires-body=true, enable={telecom_rights_enable}
-cron "59 23 * * *" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/telecom_rights/telecom_rights.js?v=20260908, timeout=75, tag=电信权益·零点抢兑话费, enable={telecom_rights_enable}
+cron "59 23 * * *" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/telecom_rights/telecom_rights.js?v=20260909, timeout=75, tag=电信权益·零点抢兑话费, enable={telecom_rights_enable}
 
 # =================== MITM 解密域名 ===================
 
