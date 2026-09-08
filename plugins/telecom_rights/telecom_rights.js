@@ -156,9 +156,10 @@ async function executeTask() {
     $.log("[电信权益] 正在向服务端查询当期等级权益列表...");
     let rightInfo = await queryRightsInfo(auth);
 
-    if (rightInfo && rightInfo.error === "UNAUTHORIZED") {
-        $.msg($.name, "❌ sign 凭证已过期 (401)", "电信 session 已失效，请在电信 App 中重新进入「签到/权益」页面刷新凭据！");
-        $.log("[电信权益] 严重提示: 服务端返回 401 未授权访问，当前 sign 已过期失效。电信 sign 时效较短，必须在临近 0 点前进入 App 刷新一次！");
+    if (rightInfo && (rightInfo.error === "UNAUTHORIZED" || rightInfo.error === "EXPIRED")) {
+        let reason = rightInfo.error === "EXPIRED" ? "会话超时(412)" : "sign失效(401)";
+        $.msg($.name, "❌ 凭据已超时失效", `距上次捕获已过 ${ageMinutes} 分钟，${reason}。请在电信 App 中重新进入「签到/权益」页面刷新凭据！`);
+        $.log(`[电信权益] 核心提示: 距上次捕获已过 ${ageMinutes} 分钟，当前凭据已超时失效（服务端返回 ${reason}）。电信会话不支持长年脱机，需在临近 0 点前进入 App 唤醒刷新！`);
         $.done();
         return;
     }
@@ -223,7 +224,11 @@ function queryRightsInfo(auth) {
                 resolve({ error: "NETWORK_ERROR", msg: String(err || "无网络响应") });
                 return;
             }
-            $.log("[电信权益] 服务端权益原始返回: " + data.slice(0, 200));
+            $.log("[电信权益] 服务端权益原始返回: " + (data.indexOf("<!DOCTYPE") !== -1 ? "触发瑞数412防护(会话超时)" : data.slice(0, 200)));
+            if (data.indexOf("<!DOCTYPE") !== -1 || (resp && resp.status === 412)) {
+                resolve({ error: "EXPIRED", msg: "电信会话与Cookie已过期超时(412)" });
+                return;
+            }
             try {
                 let d = JSON.parse(data);
                 if (d.code === "401" || d.code === 401 || (d.msg && d.msg.includes("未授权"))) {
