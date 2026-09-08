@@ -190,20 +190,20 @@
       "scripts": [
         {
           "name": "查询当月等级权益并执行一次兑换测试",
-          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/telecom_rights/telecom_rights.js"
+          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/telecom_rights/telecom_rights.js?v=20260908"
         }
       ],
       "tasks": [
         {
-          "name": "每日 00:00:00 准点抢兑等级话费",
-          "cron": "0 0 * * *",
-          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/telecom_rights/telecom_rights.js"
+          "name": "每日 23:59:00 提前唤醒 + 提前 250ms 偷跑秒杀",
+          "cron": "59 23 * * *",
+          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/telecom_rights/telecom_rights.js?v=20260908"
         }
       ],
       "descs_html": [
-        "<span><b>真实网关：</b>精准对齐 wappark.189.cn/jt-sign 生产网关，彻底抛弃失效的金豆与密码模式。</span>",
-        "<span><b>自动捕获：</b>进入电信 App「我」->「签到」或「等级权益」页面，自动锁定核心 sign 与已通过瑞数校验的会话 Cookie。</span>",
-        "<span><b>智能匹配：</b>内置官方标准 RSA 加密，自动查询当前用户星级等级（V1~V7）并匹配当月话费权益，每日 00:00:00 准时自动提交抢兑。</span>"
+        "<span><b>偷跑秒杀：</b>采用每日 23:59:00 提前一分钟唤醒，并在内存中高精度倒计时至 23:59:59.750（提前 250 毫秒）开火偷跑，对冲空口网络延迟与调度抖动。</span>",
+        "<span><b>三连并发：</b>0 点瞬间实施短间隔 3 枪连射突发，极大拉高对抗全国并发抢兑的胜率。</span>",
+        "<span><b>月度休眠：</b>当月只要成功抢到一次话费（或已参与），立即自动锁定当月深度休眠，不再发包打扰；未抢到则每天循环继续蹲守，下月初自动复苏。</span>"
       ]
     }
   ]
