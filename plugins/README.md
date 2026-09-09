@@ -1,9 +1,9 @@
 # 特殊功能插件
 
-本目录收录**解锁会员、首页净化、请求改写**等非签到类脚本，与 [`app/`](../app/) 签到体系完全独立。
+本目录收录两类内容：
 
-> **签到体系**（`app/`）：抓 Cookie + cron 执行，需持久化、跨平台运行框架。
-> **功能插件**（`plugins/`）：通常无状态、被动拦截请求头/响应体，每个插件独立开关，实时生效。
+1. **CookieCenter 受管权益脚本**（`sx_ai_benefit/`）：由 [`loon/CookieCenter.plugin`](../loon/CookieCenter.plugin) 与 [`boxjs/CookieCenter.boxjs.json`](../boxjs/CookieCenter.boxjs.json) 统一管理；
+2. **独立功能插件**：解锁会员、首页净化、请求改写等非签到类脚本，与 CookieCenter 体系相互独立。
 
 ---
 
@@ -16,7 +16,7 @@
 | 状态 | 需 BoxJS / `$persistentStore` 持久化 | 一般无状态 |
 | Loon 插件 | `loon/CookieCenter.plugin` 聚合 | 每插件独立 `loon/<Name>.plugin` |
 | BoxJS | ✅ 纳入 `boxjs/` 订阅 | ❌ 不纳入，通过插件自身 `#!switch` 管理 |
-| 开关粒度 | 每脚本 capture + sign 双开关 | 每插件单开关 |
+| 开关粒度 | 每脚本 capture + cron 双开关 | 每插件单开关 |
 
 ---
 
@@ -26,10 +26,19 @@
 |---|---|---|---|---|
 | — | QQ空间·清净 | 广告退散，空间清净（纯规则型，无需脚本） | [`loon/QzoneAdBlock.plugin`](../loon/QzoneAdBlock.plugin) | ✅ 已验证 |
 | [`wxread/`](./wxread/) | 微信读书·优雅收录 | 轻触订阅人数，好书即刻入架 | [`loon/WeReadEnhance.plugin`](../loon/WeReadEnhance.plugin) | ✅ 已验证 |
+| [`bilibili/`](./bilibili/) | 哔哩哔哩·增强版 𝕏 | 空降助手、分区修复、扫码登录、画质解锁 | [`loon/BilibiliFix.plugin`](../loon/BilibiliFix.plugin) | ✅ 已验证 |
 | [`github_push_time/`](./github_push_time/) | GitHub·星标推送时间 | 在 GitHub App 星标列表语言后显示最近推送时间 | [`loon/GitHubPushTime.plugin`](../loon/GitHubPushTime.plugin) | ✅ 已验证 |
 | [`pixiv_novel_translate/`](./pixiv_novel_translate/) | Pixiv·小说翻译 | 在 Pixiv 小说阅读页注入翻译按钮，支持 Google / 微软 / 百度 | [`loon/PixivNovelTranslate.plugin`](../loon/PixivNovelTranslate.plugin) | ✅ 已验证 |
 
 ---
+
+## CookieCenter 受管目录
+
+| 目录 | 名称 | 功能 | Loon 入口 | BoxJS |
+|---|---|---|---|---|
+| [`sx_ai_benefit/`](./sx_ai_benefit/) | 山西电信·体验AI领福利 | 凭证捕获 + 每月 1~8 号放水探针监控 | [`loon/CookieCenter.plugin`](../loon/CookieCenter.plugin) | [`boxjs/CookieCenter.boxjs.json`](../boxjs/CookieCenter.boxjs.json) |
+
+> 这两个目录原本作为独立 `.plugin` 发布；现其 MITM 规则与 cron 定时任务已并入 `CookieCenter.plugin`，不再单独提供 Loon 插件入口。
 
 ## 新增插件规范
 

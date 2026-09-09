@@ -1,21 +1,48 @@
-﻿#!name = CookieCenter · Cookie 抓取与签到
-#!desc = 多平台 Cookie 抓取 + 每日签到，一站式管理。
+#!name = CookieCenter · 统一凭据捕获与签到中心
+#!desc = 一站式中心：整合微信读书、山西电信与中国电信等级权益。代码层抓取与执行彻底分离，Loon 后台负责自动定时唤醒与脱机自动换票，数据存入 Loon 原生持久化（BoxJS 亦可可视化查看与修改）。
 #!author = TomCatXue
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
-#!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/icon.png
-#!tag = Cookie,签到
+#!icon = https://avatars.githubusercontent.com/u/138953496?v=4
+#!tag = 签到, Cookie, 凭据捕获, 定时任务
+#!version = 3.8.1
+#!date = 2026-09-08
 
-# =================== 独立开关 ===================
+# =================== 1. 业务功能开关 (极简三主控面板) ===================
 
 [Argument]
-# 暂无应用，添加新应用后在下方填入对应开关
+# 微信读书一键总控：单按钮开启/关闭所有功能（凭据抓取、每日签到、周二翻牌、周五限免）；偏好在 BoxJS 中灵活切换
+weread_enable = switch,true,tag=微信读书·全功能总开关,desc=一键开启/关闭微信读书所有功能（包含全量凭据捕获、每日签到、周二翻牌抽奖、周五限免好书入架）
 
-# =================== MITM ===================
+# 山西电信一键总控：单按钮开启/关闭所有功能（活动凭证捕获、月初放水探针监控）
+sx_benefit_enable = switch,true,tag=山西电信·全功能总开关,desc=一键开启/关闭山西电信领福利（包含活动凭据捕获与月初放水监控）
 
-[MITM]
-# hostname = %APPEND% example.com
+# 电信权益一键总控：单按钮开启/关闭所有功能（sign与accId凭据捕获、每日0点自动抢兑等级话费）
+telecom_rights_enable = switch,true,tag=电信权益·全功能总开关,desc=一键开启/关闭中国电信等级权益凭据捕获与每日0点自动抢兑话费
 
-# =================== 规则 ===================
+# =================== 规则配置 (抓取与执行彻底解耦) ===================
 
 [Script]
-# 暂无脚本规则
+# --- 【微信读书】抓取与后台调度 (联动 weread_enable 统一总控) ---
+# 1. 抓取层：专职凭据捕获 (无执行代码，捕获存入 Loon 持久化)
+http-request ^https?:\/\/(i\.)?weread\.qq\.com\/(flip-card-game|user\/|feature|free\/library|checkfreequalify) script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/app/weread_claim/weread_cookie.js?v=20260909, tag=微信读书·凭据捕获, requires-body=false, enable={weread_enable}
+http-request ^https?:\/\/i\.weread\.qq\.com\/login script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/app/weread_claim/weread_cookie.js?v=20260907, tag=微信读书·登录请求, requires-body=true, enable={weread_enable}
+http-response ^https?:\/\/i\.weread\.qq\.com\/login script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/app/weread_claim/weread_cookie.js?v=20260907, tag=微信读书·登录响应, requires-body=true, enable={weread_enable}
+
+# 2. 执行层：后台定时任务调度 (纯执行单体，只读持久化，401 自动脱机换票更新)
+cron "0 23 * * *" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/app/weread_claim/weread_claim.js?v=20260907, tag=微信读书·每日阅读奖励, enable={weread_enable}
+cron "0 20 * * 2" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/app/weread_claim/weread_flip.js?v=20260907, tag=微信读书·周二翻牌抽奖, enable={weread_enable}
+cron "0 10 * * 5" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/app/weread_claim/weread_free.js?v=20260907, tag=微信读书·每周限免入架, enable={weread_enable}
+
+# --- 【山西电信】抓取与探针监控 (联动 sx_benefit_enable 统一总控) ---
+http-request ^https:\/\/wx\.sx\.189\.cn\/sx_ai_benefit\/h5\/HD script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/sx_ai_benefit/sx_ai_benefit.js?v=20260907, tag=山西电信·活动凭证捕获, requires-body=false, enable={sx_benefit_enable}
+cron "*/20 8-19 1-8 * *" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/sx_ai_benefit/sx_ai_benefit.js?v=20260907, tag=山西电信·新活动探针监控, enable={sx_benefit_enable}
+
+# --- 【电信权益】真实网关凭据捕获、会话回填与零点抢兑 (联动 telecom_rights_enable 统一总控) ---
+http-request ^https?:\/\/(waphub|wappark)\.189\.cn\/(jt-sign|gateway|JinDouMall)\/ script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/telecom_rights/telecom_rights.js?v=20260907, tag=电信权益·凭证捕获, requires-body=false, enable={telecom_rights_enable}
+http-response ^https?:\/\/(waphub|wappark)\.189\.cn\/(jt-sign|gateway)\/ script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/telecom_rights/telecom_rights.js?v=20260907, tag=电信权益·会话回填, requires-body=true, enable={telecom_rights_enable}
+cron "59 23 * * *" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/telecom_rights/telecom_rights.js?v=20260909, timeout=75, tag=电信权益·零点抢兑话费, enable={telecom_rights_enable}
+
+# =================== MITM 解密域名 ===================
+
+[MITM]
+hostname = weread.qq.com, i.weread.qq.com, waphub.189.cn, wappark.189.cn, wx.sx.189.cn

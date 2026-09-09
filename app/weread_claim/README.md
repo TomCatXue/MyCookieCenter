@@ -1,65 +1,58 @@
 # 微信读书 · 自动领取
 
-> 定时领取已达标阅读时长奖励，每周二自动翻牌。
+> 定时领取已达标阅读时长奖励、每周二自动翻牌与免费图书馆好书批量入架。
 
 ## 功能
 
 - 每晚 23:00 自动检查并领取已达标的阅读奖励（书币 / 体验卡），按偏好优先选取
 - 每周二 20:00 自动完成翻牌游戏（每周 6 次，按抓包确认的时序翻牌）
-- 自动抓取鉴权信息：`i.weread.qq.com` 的 vid/skey 与 `weread.qq.com` 的 wr_vid/wr_skey
+- 每周五 10:00 自动从官方免费图书馆精选好书加入书架（每期上限 2 本）
+- 凭据与执行彻底解耦：专用抓取插件静默获取，执行脚本脱机自动换票更新鉴权
 - 支持通知推送领取结果
 
 ## 安装
 
-1. 在 Loon 中导入 `loon/WeReadClaim.plugin`
-2. 打开 `capture_cookie` 开关，进入微信读书 App 随便刷一下触发抓取
-3. 收到抓取成功通知后可关闭开关（减少 MITM 开销）
-4. 领取与翻牌由 cron 自动执行，无需手动干预
+1. 在 Loon 中导入 Cookie 抓取插件 [`loon/CookieCenter.plugin`](../../loon/CookieCenter.plugin)
+2. 在 Loon 插件配置中开启「微信读书·全功能总开关」，进入微信读书 App 浏览或退出重新登录一次以激活脱机换票
+3. 在 BoxJS 中添加 [`boxjs/CookieCenter.boxjs.json`](../../boxjs/CookieCenter.boxjs.json) 订阅，配置奖励偏好并统一管理定时任务
+4. 「优雅收录（好书即刻入架）」保留在独立插件 [`loon/WeReadEnhance.plugin`](../../loon/WeReadEnhance.plugin) 中单独管理
 
 ## BoxJS 配置
 
-本脚本已纳入 `boxjs/CookieCenter.boxjs.json` 订阅，在 BoxJS 中添加订阅后可在面板中配置 `prefer_coin`（奖励偏好）。
+本套脚本全面纳入 [`boxjs/CookieCenter.boxjs.json`](../../boxjs/CookieCenter.boxjs.json) 订阅，提供：
+- 奖励偏好设置 `prefer_coin`
+- 网页端与 App 端 Cookie 持久化数据查看与修改
+- 定时任务配置与手动一键运行调试
 
 ## 参数配置
 
 | 参数 | 类型 | 作用 | 默认 |
 |------|------|------|------|
-| `prefer_coin` | input | 奖励偏好：`1`=优先体验卡，`2`=优先书币 | `2` |
-| `capture_cookie` | switch | 开启自动抓取登录信息（vid/skey/refreshToken） | 开 |
+| 参数 | 配置位置 | 作用 | 默认 |
+|------|------|------|------|
+| `weread_enable` | Loon [Argument] | 微信读书全功能总开关（一键开启/关闭抓取与所有定时任务） | 开 (`true`) |
+| `prefer_coin` | BoxJS 设置 | 奖励偏好：`1`=优先体验卡，`2`=优先书币 (推荐) | `2` |
 
 ## 定时任务
 
 | 任务 | cron | 说明 |
 |------|------|------|
-| 领取奖励 | `0 23 * * *` | 每晚 23:00 检查并领取 |
-| 翻牌游戏 | `0 20 * * 2` | 每周二 20:00 自动翻牌 |
+| 领取奖励 | `0 23 * * *` | 每晚 23:00 检查并领取阅读时长奖励 |
+| 翻牌游戏 | `0 20 * * 2` | 每周二 20:00 自动翻牌抽奖并同步 H5 凭证 |
+| 免费图书馆 | `0 10 * * 5` | 每周五 10:00 自动拉取免费图书馆好书入架 |
 
-## 鉴权模型
-
-微信读书分两套域名，鉴权信息同值异传：
-
-| 域名 | 用途 | 鉴权方式 |
-|------|------|----------|
-| `i.weread.qq.com` | App 核心 API（领取奖励） | `vid` / `skey` 请求头 |
-| `weread.qq.com` | 翻牌游戏 H5 | `wr_vid` / `wr_skey` Cookie |
-
-抓包确认 `wr_vid == vid`、`wr_skey == skey`，脚本自动从 `/login` 响应与各域请求中提取并分别存储。
+> 任务采用单一职责独立脚本单体，由 BoxJS 订阅统一调度与手动测试。
 
 ## 已知限制
 
-- **App 签到凭据不能主动刷新**：`/login` 请求体含 HMAC-SHA256 签名（盐 `EBRYFkVMReKBGsU2`，key 格式 `%@_%@_EBRYFkVMReKBGsU2_%@`），穷举 160+ 组合均无法复现。脚本会在 `skey` 失效时尝试仅用长期 `vid` 重试；若 `vid` 也失效，仍需重新打开 App 触发抓取。
-- **翻牌 Cookie 支持自动续期**：`weread.qq.com` 的 `wr_skey` 失效时，脚本会调用网页版 `/web/login/renewal` 获取新的 `wr_skey`，并重试本次翻牌；该续期只更新 `wr_skey`，不会覆盖 App API 的 `skey`。
-- 翻牌每周 6 次，脚本按抓包确认的 `FLIP_CARD_ORDER` 时序翻牌，用尽即止。
+- **全自动脱机刷新（已实装）**：`/login` 签名算法通过 ARM64 二进制（`sub_1004d7878`）完全逆向还原。当凭据失效遇到 401/403/499 时，执行端脚本自动脱机调用 `/login` 换票并回写更新。
+- **前置激活条件**：需至少在开启抓取开关后，在微信读书 App 中操作一次「退出并重新登录」，捕获一次 `refreshToken` 与 `deviceId`，之后便可永久全自动脱机换票。
 
 ## 文件说明
 
 | 文件 | 用途 |
 |------|------|
-| `weread_claim.js` | 核心脚本（抓取 + 领取 + 翻牌，单文件自包含） |
-| `loon/WeReadClaim.plugin` | Loon 插件清单（MITM / Script / Argument / cron） |
-
-## 版本
-
-- `2026-08-10-fix` — 修复 cookie 自动抓取、翻牌时序、奖励切换三处问题（基于逆向笔记）
-- `2026-08-11-flipfix` — 修复翻牌通知奖励误报：一次运行翻多张牌时，`describeFlipResult` 误取 `cardList` 中首张已翻牌的奖励，改为按本次 `cardIndex` 精确匹配
-- `2026-08-12-autorenew` — 翻牌遇到 401/403 时自动调用网页版 `renewal` 续期 `wr_skey` 并重试，减少手动打开 App 重新抓 Cookie 的次数- `2026-08-14-preferfix` — 修复奖励偏好切换失效：Loon `[Argument]` 段参数值应通过 `$persistentStore.read("prefer_coin")` 读取（即 `$.getdata("prefer_coin")`），而非 `$argument`（后者只对应 `argument="..."` 静态字符串）。原代码读取源错误导致偏好恒为默认书币，体验卡/书币切换不生效；同时移除失效的 `savePreferenceFromArgument` 中转存储死代码。
+| `weread_cookie.js` | 专用凭据捕获脚本（由 `CookieCenter.plugin` 调用，抓取网页端/App端/翻牌/免费图书馆凭据） |
+| `weread_claim.js` | 每日签到纯执行单体（每晚 23:00 自动检查领取时长奖励） |
+| `weread_flip.js` | 周二翻牌纯执行单体（每周二 20:00 自动翻牌抽奖并同步 H5 Cookie） |
+| `weread_free.js` | 免费图书馆纯执行单体（每周五 10:00 自动拉取限免好书入架） |

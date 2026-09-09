@@ -1,25 +1,217 @@
 {
   "id": "mycookiecenter.app.sub",
-  "name": "MyCookieCenter 签到订阅",
+  "name": "MyCookieCenter 签到与权益中心",
   "author": "@MyCookieCenter",
-  "icon": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/icon.png",
+  "icon": "https://avatars.githubusercontent.com/u/138953496?v=4",
+  "icons": [
+    "https://avatars.githubusercontent.com/u/138953496?v=4",
+    "https://avatars.githubusercontent.com/u/138953496?v=4"
+  ],
   "repo": "https://github.com/TomCatXue/MyCookieCenter",
   "apps": [
     {
       "id": "weread_claim",
       "name": "微信读书",
-      "keys": ["weread_auth_v2", "weread_flip_state_v1", "prefer_coin"],
+      "keys": [
+        "weread_auth_v2",
+        "weread_flip_state_v1",
+        "prefer_coin"
+      ],
       "author": "@Codex",
+      "icon": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/weread.png?v=20260903",
+      "icons": [
+        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/weread.png?v=20260903",
+        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/weread.png?v=20260903"
+      ],
       "repo": "https://github.com/TomCatXue/MyCookieCenter",
-      "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/app/weread_claim/weread_claim.js",
       "settings": [
         {
           "id": "prefer_coin",
-          "name": "奖励偏好",
+          "name": "奖励领取偏好",
           "val": "2",
-          "type": "number",
-          "desc": "1=优先体验卡 2=优先书币"
+          "type": "select",
+          "items": [
+            {
+              "key": "1",
+              "label": "优先体验卡"
+            },
+            {
+              "key": "2",
+              "label": "优先书币 (推荐)"
+            }
+          ],
+          "desc": "设置阅读时长达标奖励偏好。设为优先书币时自动转换书币。"
+        },
+        {
+          "id": "weread_auth_v2",
+          "name": "微信读书 App 全量凭据",
+          "val": "",
+          "type": "textarea",
+          "desc": "包含 vid、skey、refreshToken、deviceId 的 JSON 数据，由抓取插件自动捕获保存。"
         }
+      ],
+      "scripts": [
+        {
+          "name": "领取阅读达标奖励",
+          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/app/weread_claim/weread_claim.js"
+        },
+        {
+          "name": "周二翻牌抽奖游戏",
+          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/app/weread_claim/weread_flip.js"
+        },
+        {
+          "name": "每周限免好书一键入架",
+          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/app/weread_claim/weread_free.js"
+        }
+      ],
+      "tasks": [
+        {
+          "name": "每日阅读达标奖励自动领取",
+          "cron": "0 23 * * *",
+          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/app/weread_claim/weread_claim.js"
+        },
+        {
+          "name": "每周二翻牌抽奖自动运行",
+          "cron": "0 20 * * 2",
+          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/app/weread_claim/weread_flip.js"
+        },
+        {
+          "name": "每周限免好书自动入架",
+          "cron": "0 10 * * 5",
+          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/app/weread_claim/weread_free.js"
+        }
+      ],
+      "descs_html": [
+        "<span><b>架构分离：</b>遵循 Cookie 抓取与签到执行彻底分离模式。Loon 插件仅负责抓取凭据，本 BoxJS 订阅统一管理所有签到任务与手动执行。</span>",
+        "<span><b>自动更新鉴权：</b>任务执行脚本仅读取已存储的 Cookie/凭证。当凭证过期时，内置纯 JS 逆向签名算法自动脱机调用 /login 换票更新鉴权，无需手动干预。</span>",
+        "<span><b>每日签到：</b>每晚 23:00 自动检查阅读时长与天数，达标后自动领取书币或体验卡。</span>",
+        "<span><b>周二翻牌：</b>每周二晚 20:00 自动参与翻牌抽奖，若 Cookie 超时自动同步换票重试。</span>",
+        "<span><b>免费图书馆：</b>每周五 10:00 自动对接免费图书馆书单，精选好书批量入架。</span>"
+      ]
+    },
+    {
+      "id": "sx_ai_benefit",
+      "name": "山西电信 · 体验AI领福利",
+      "keys": [
+        "sx_benefit_cookie",
+        "sx_benefit_url",
+        "sx_benefit_utm_scha",
+        "sx_benefit_ua",
+        "sx_monitor_current_code",
+        "sx_monitor_notified_month",
+        "sx_capture_notified_code",
+        "sx_prefer_benefit"
+      ],
+      "author": "@Codex",
+      "icon": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/sx_telecom.png?v=20260907",
+      "icons": [
+        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/sx_telecom.png?v=20260907",
+        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/sx_telecom.png?v=20260907"
+      ],
+      "repo": "https://github.com/TomCatXue/MyCookieCenter",
+      "settings": [
+        {
+          "id": "sx_prefer_benefit",
+          "name": "月度权益目标选择",
+          "val": "tc_member",
+          "type": "select",
+          "items": [
+            {
+              "key": "tc_member",
+              "label": "腾讯视频 VIP 会员 31 天 (限量1000份·需短信)"
+            },
+            {
+              "key": "tc_flow",
+              "label": "3GB 国内流量包 (当月有效·免验证码秒到)"
+            },
+            {
+              "key": "tc_tele",
+              "label": "1~20 元随机话费满减券 (需翼支付实名)"
+            }
+          ],
+          "desc": "每人每月限领一项。推荐视频会员，亦可选择免验证的 3GB 流量。"
+        },
+        {
+          "id": "sx_benefit_cookie",
+          "name": "当前会话 Cookie",
+          "val": "",
+          "type": "text",
+          "desc": "进入活动页面后自动抓取，亦支持在此手动配置与更新。"
+        },
+        {
+          "id": "sx_benefit_url",
+          "name": "活动完整 URL",
+          "val": "",
+          "type": "text",
+          "desc": "包含 ticket 与活动批次标识的完整活动地址。"
+        }
+      ],
+      "scripts": [
+        {
+          "name": "执行探针自检 / 通信测试",
+          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/sx_ai_benefit/sx_ai_benefit.js"
+        }
+      ],
+      "tasks": [
+        {
+          "name": "每月1-8号放水智能监控",
+          "cron": "*/20 8-19 1-8 * *",
+          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/sx_ai_benefit/sx_ai_benefit.js"
+        }
+      ],
+      "descs_html": [
+        "<span><b>凭据捕获：</b>开启 CookieCenter 插件后，在电信 APP 首页 AI 搜索“领福利”进入活动，自动记录凭据（新批次单次提醒）。</span>",
+        "<span><b>智能监控：</b>每月 1~8 号后台自动探测活动服务器放水状态，绝不报任何证书错误。</span>",
+        "<span><b>单次提醒：</b>一旦检测到新批次放水立即发送直达通知，点击直通电信 APP 极速抢兑；当月已领或通知后即深度休眠。</span>"
+      ]
+    },
+    {
+      "id": "telecom_rights",
+      "name": "中国电信 · 等级权益兑换话费",
+      "keys": [
+        "telecom_rights_id",
+        "telecom_rights_auth"
+      ],
+      "author": "@Codex",
+      "icon": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/189.png?v=20260903",
+      "icons": [
+        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/189.png?v=20260903",
+        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/189.png?v=20260903"
+      ],
+      "repo": "https://github.com/TomCatXue/MyCookieCenter",
+      "settings": [
+        {
+          "id": "telecom_rights_id",
+          "name": "目标话费权益 ID (已锁定 LV5 3元话费)",
+          "val": "eae02aa850f607daa851910621d86200b10256cab2504e274ba6224e91254ea7",
+          "type": "text",
+          "desc": "基于你账号真实级别成功定位的 LV5 话费项目 ID，0 点免查直接开火秒杀。"
+        },
+        {
+          "id": "telecom_rights_auth",
+          "name": "等级权益会话凭据 (sign/Cookie/accId)",
+          "val": "",
+          "type": "textarea",
+          "desc": "进入电信 App「我」->「签到」或「等级权益」页面后自动捕获并保存的 sign、Cookie 与 accId 数据。"
+        }
+      ],
+      "scripts": [
+        {
+          "name": "查询当月等级权益并执行一次兑换测试",
+          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/telecom_rights/telecom_rights.js?v=20260909"
+        }
+      ],
+      "tasks": [
+        {
+          "name": "每日 23:59:00 提前唤醒 + 提前 250ms 偷跑秒杀",
+          "cron": "59 23 * * *",
+          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/telecom_rights/telecom_rights.js?v=20260909"
+        }
+      ],
+      "descs_html": [
+        "<span><b>偷跑秒杀：</b>采用每日 23:59:00 提前一分钟唤醒，并在内存中高精度倒计时至 23:59:59.750（提前 250 毫秒）开火偷跑，对冲空口网络延迟与调度抖动。</span>",
+        "<span><b>三连并发：</b>0 点瞬间实施短间隔 3 枪连射突发，极大拉高对抗全国并发抢兑的胜率。</span>",
+        "<span><b>月度休眠：</b>当月只要成功抢到一次话费（或已参与），立即自动锁定当月深度休眠，不再发包打扰；未抢到则每天循环继续蹲守，下月初自动复苏。</span>"
       ]
     }
   ]
