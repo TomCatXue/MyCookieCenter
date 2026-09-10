@@ -15,6 +15,9 @@ const DEFAULT_LV5_RIGHTS_ID = "eae02aa850f607daa851910621d86200b10256cab2504e274
 
 const CLAIMED_MONTH_KEY = "telecom_rights_claimed_month";
 
+// 采用与 0点权益.py 完全一致的固定标准移动浏览器 UA，彻底规避电信 App 原生 CtClient 头触发的瑞数 412 防护
+const STANDARD_UA = "Mozilla/5.0 (Linux; Android 13; 22081212C Build/TKQ1.220829.002) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/104.0.5112.97 Mobile Safari/537.36";
+
 // RSA 公钥 (来自 0点权益.py)
 const RSA_PUBLIC_KEY = `MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQC+ugG5A8cZ3FqUKDwM57GM4io6JGcStivT8UdGt67PEOihLZTw3P7371+N47PrmsCpnTRzbTgcupKtUv8ImZalYk65dU8rjC/ridwhw9ffW2LBwvkEnDkkKKRi2liWIItDftJVBiWOh17o6gfbPoNrWORcAdcbpk2L+udld5kZNwIDAQAB`;
 
@@ -71,11 +74,6 @@ function handleRequest() {
         updated = true;
     }
 
-    let ua = headers["User-Agent"] || headers["user-agent"] || "";
-    if (ua && existing.ua !== ua) {
-        existing.ua = ua;
-        updated = true;
-    }
 
     if (url) {
         let m = url.match(/[?&]accId=([0-9a-zA-Z_-]+)/i);
@@ -272,15 +270,6 @@ async function executeTask() {
 }
 
 
-function cleanCookie(rawCookie) {
-    if (!rawCookie) return "";
-    return rawCookie
-        .split(";")
-        .map(s => s.trim())
-        .filter(s => s && !s.startsWith("FSSBBIl1Ugzb") && !s.startsWith("wSmxQu") && !s.startsWith("1cieWOle"))
-        .join("; ");
-}
-
 function queryRightsInfo(auth) {
     return new Promise(resolve => {
         let value = {
@@ -295,17 +284,12 @@ function queryRightsInfo(auth) {
             headers: {
                 "sign": auth.sign,
                 "Content-Type": "application/json;charset=utf-8",
-                "Accept": "application/json, text/plain, */*",
-                "Origin": "https://wappark.189.cn",
                 "Referer": "https://wappark.189.cn/resources/dist/signInActivity.html",
-                "User-Agent": auth.ua || "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15",
-                "X-Requested-With": "XMLHttpRequest"
+                "User-Agent": STANDARD_UA
             },
             body: JSON.stringify({ para: paraV }),
             timeout: 8000
         };
-        let c = cleanCookie(auth.cookie);
-        if (c) options.headers["Cookie"] = c;
 
         $httpClient.post(options, (err, resp, data) => {
             if (err || !data) {
@@ -315,7 +299,7 @@ function queryRightsInfo(auth) {
             }
             $.log("[电信权益] 服务端权益原始返回: " + (data.indexOf("<!DOCTYPE") !== -1 ? "触发瑞数412防护(会话超时)" : data.slice(0, 200)));
             if (data.indexOf("<!DOCTYPE") !== -1 || (resp && resp.status === 412)) {
-                resolve({ error: "EXPIRED", msg: "电信会话与Cookie已过期超时(412)" });
+                resolve({ error: "EXPIRED", msg: "电信会话已超时(412)" });
                 return;
             }
             try {
@@ -345,7 +329,7 @@ function queryRightsInfo(auth) {
     });
 }
 
-function receiveRights(auth, rightsId, useCleanCookie = true) {
+function receiveRights(auth, rightsId) {
     return new Promise(resolve => {
         let value = {
             id: rightsId,
@@ -356,23 +340,17 @@ function receiveRights(auth, rightsId, useCleanCookie = true) {
         };
         let paraV = encryptParaRsa(value);
 
-        let c = useCleanCookie ? cleanCookie(auth.cookie) : (auth.cookie || "");
-
         let options = {
             url: "https://wappark.189.cn/jt-sign/paradise/receiverRights",
             headers: {
                 "sign": auth.sign,
                 "Content-Type": "application/json;charset=utf-8",
-                "Accept": "application/json, text/plain, */*",
-                "Origin": "https://wappark.189.cn",
                 "Referer": "https://wappark.189.cn/resources/dist/signInActivity.html",
-                "User-Agent": auth.ua || "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15",
-                "X-Requested-With": "XMLHttpRequest"
+                "User-Agent": STANDARD_UA
             },
             body: JSON.stringify({ para: paraV }),
             timeout: 8000
         };
-        if (c) options.headers["Cookie"] = c;
 
         $httpClient.post(options, (err, resp, data) => {
             if (err) {
@@ -380,13 +358,7 @@ function receiveRights(auth, rightsId, useCleanCookie = true) {
                 return;
             }
             if (data && (data.indexOf("<!DOCTYPE") !== -1 || (resp && resp.status === 412))) {
-                // 如果是第一次使用纯净 Cookie 被拦，则回退尝试使用原始 Cookie
-                if (useCleanCookie) {
-                    $.log("[电信权益] 纯净 Cookie 触发 412，自动切换原始 Cookie 重试提交...");
-                    receiveRights(auth, rightsId, false).then(resolve);
-                    return;
-                }
-                resolve({ code: -1, msg: "触发瑞数412防护(请在App内点一次兑换)" });
+                resolve({ code: -1, msg: "触发瑞数412防护(会话超时，请重新进App)" });
                 return;
             }
             try {
