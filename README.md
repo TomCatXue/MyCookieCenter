@@ -109,7 +109,7 @@ MyCookieCenter 是一套运行在代理工具上的自动化脚本合集，覆�
 |---|---|---|---|---|
 | 🚀 QQ空间 · 清净 | 广告退散，空间清净（纯规则型） | — | [`QzoneAdBlock.plugin`](./loon/QzoneAdBlock.plugin) | ✅ 已验证 |
 | 📺 哔哩哔哩 · 增强版 𝕏 | 空降助手 + 分区修复 + 扫码登录 + 1080P 高码率解锁 | [`plugins/bilibili/`](./plugins/bilibili/) | [`BilibiliFix.plugin`](./loon/BilibiliFix.plugin) | ✅ 已验证 |
-| 📖 微信读书 · 优雅收录 | 轻触订阅人数，好书即刻入架 | [`plugins/wxread/`](./plugins/wxread/) | [`WeReadEnhance.plugin`](./loon/WeReadEnhance.plugin) | ✅ 已验证 |
+| 📖 微信读书 · 防强更净化 | 屏蔽升级弹窗与强更通知，锁定老版本免费 AI 听书 | [`plugins/wxread/`](./plugins/wxread/) | [`WeReadEnhance.plugin`](./loon/WeReadEnhance.plugin) | ✅ 已验证 |
 | ⭐ GitHub · 星标推送时间 | 星标列表语言后显示最近推送时间 | [`plugins/github_push_time/`](./plugins/github_push_time/) | [`GitHubPushTime.plugin`](./loon/GitHubPushTime.plugin) | ✅ 已验证 |
 | 🎨 Pixiv · 小说翻译 | 小说阅读页一键翻译，支持 Google 免费 / 微软 / 百度 | [`plugins/pixiv_novel_translate/`](./plugins/pixiv_novel_translate/) | [`PixivNovelTranslate.plugin`](./loon/PixivNovelTranslate.plugin) | ✅ 已验证 |
 
@@ -158,7 +158,7 @@ MyCookieCenter/
 ## 致谢
 
 - `QQ空间 · 清净` 广告屏蔽规则源自 [zqzess/rule_for_quantumultX](https://github.com/zqzess/rule_for_quantumultX)（MIT License）
-- `微信读书 · 优雅收录` 脚本基于社区脚本重构整合
+- `微信读书 · 防强更净化` 原「优雅收录」方案源自水君社区脚本，被官方修复下线后转型防强更净化
 - `扫描全能王 · 签到` 签到脚本与图标引用 [MaYIHEI/paperclip](https://github.com/MaYIHEI/paperclip)、[MaYIHEI/pin](https://github.com/MaYIHEI/pin)
 - 感谢每一位 Star / Issue / PR 的朋友 🙌
 

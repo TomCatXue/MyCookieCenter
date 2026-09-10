@@ -15,7 +15,7 @@
 1. 在 Loon 中导入 Cookie 抓取插件 [`loon/CookieCenter.plugin`](../../loon/CookieCenter.plugin)
 2. 在 Loon 插件配置中开启「微信读书·全功能总开关」，进入微信读书 App 浏览或退出重新登录一次以激活脱机换票
 3. 在 BoxJS 中添加 [`boxjs/CookieCenter.boxjs.json`](../../boxjs/CookieCenter.boxjs.json) 订阅，配置奖励偏好并统一管理定时任务
-4. 「优雅收录（好书即刻入架）」保留在独立插件 [`loon/WeReadEnhance.plugin`](../../loon/WeReadEnhance.plugin) 中单独管理
+4. （可选）防强更净化（屏蔽升级弹窗、锁定老版本免费 AI 听书）在独立插件 [`loon/WeReadEnhance.plugin`](../../loon/WeReadEnhance.plugin) 中单独管理——原「优雅收录」入架方案已被官方修复下线
 
 ## BoxJS 配置
 

@@ -25,7 +25,7 @@
 | 目录 | 名称 | 功能 | Loon 插件 | 状态 |
 |---|---|---|---|---|
 | — | QQ空间·清净 | 广告退散，空间清净（纯规则型，无需脚本） | [`loon/QzoneAdBlock.plugin`](../loon/QzoneAdBlock.plugin) | ✅ 已验证 |
-| [`wxread/`](./wxread/) | 微信读书·优雅收录 | 轻触订阅人数，好书即刻入架 | [`loon/WeReadEnhance.plugin`](../loon/WeReadEnhance.plugin) | ✅ 已验证 |
+| [`wxread/`](./wxread/) | 微信读书·防强更净化 | 屏蔽升级弹窗与强更通知，锁定老版本免费 AI 听书 | [`loon/WeReadEnhance.plugin`](../loon/WeReadEnhance.plugin) | ✅ 已验证 |
 | [`bilibili/`](./bilibili/) | 哔哩哔哩·增强版 𝕏 | 空降助手、分区修复、扫码登录、画质解锁 | [`loon/BilibiliFix.plugin`](../loon/BilibiliFix.plugin) | ✅ 已验证 |
 | [`github_push_time/`](./github_push_time/) | GitHub·星标推送时间 | 在 GitHub App 星标列表语言后显示最近推送时间 | [`loon/GitHubPushTime.plugin`](../loon/GitHubPushTime.plugin) | ✅ 已验证 |
 | [`pixiv_novel_translate/`](./pixiv_novel_translate/) | Pixiv·小说翻译 | 在 Pixiv 小说阅读页注入翻译按钮，支持 Google / 微软 / 百度 | [`loon/PixivNovelTranslate.plugin`](../loon/PixivNovelTranslate.plugin) | ✅ 已验证 |
@@ -60,4 +60,4 @@ feat(plugins): 新增 <插件名> 插件(<一句话功能>)
 ## 致谢
 
 - `QzoneAdBlock` 广告屏蔽规则源自 [zqzess/rule_for_quantumultX](https://github.com/zqzess/rule_for_quantumultX)（MIT License）
-- `wxread/` 微信读书优雅收录脚本，基于社区脚本重构整合
+- `wxread/` 微信读书防强更净化 —— 原水君「优雅收录」方案因官方云端强校验下线，转型专职防强更净化
