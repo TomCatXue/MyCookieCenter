@@ -236,6 +236,9 @@ async function executeTask() {
 
     // 【机制 4：短间隔 3 连发并发突发 (Burst Strategy)】
     let success = false;
+    let notified = false;
+    let lastErrorMsg = "";
+
     for (let attempt = 1; attempt <= 3; attempt++) {
         let fireNow = new Date().toLocaleTimeString() + "." + String(Date.now() % 1000).padStart(3, "0");
         $.log(`[电信权益] 🚀 @${fireNow} [第${attempt}枪] 发起抢兑...`);
@@ -244,25 +247,33 @@ async function executeTask() {
         $.log(`[电信权益] 响应 [第${attempt}枪]: ${resText}`);
 
         if (resText.includes("成功") || resText.includes("已领取过该权益") || (res && (res.resoultCode === "0" || res.code === 0))) {
-            let desc = (res && res.resoultMsg) || "话费权益已成功提交到账！";
+            let desc = (res && (res.resoultMsg || res.msg)) || "话费权益已成功提交到账！";
             $.setdata(currentYearMonth, CLAIMED_MONTH_KEY);
             $.msg($.name, "🎉 话费秒杀成功！", `${desc}\n已开启全月深度休眠，下月1号自动恢复。`);
             $.log(`[电信权益] 🎉 恭喜秒杀成功！已打上本月（${currentYearMonth}）休眠锁。`);
             success = true;
+            notified = true;
             break;
         } else if (resText.includes("领完") || resText.includes("结束") || resText.includes("售罄")) {
             $.msg($.name, "⚠️ 本轮已售罄", "今日 105 个名额已被抢光，明晚 23:59 继续自动蹲守！");
             $.log("[电信权益] 本轮库存告罄，未锁定休眠，明晚继续尝试。");
+            notified = true;
             break;
         } else if (res && (res.code === "401" || resText.includes("未授权") || resText.includes("DOCTYPE"))) {
             $.msg($.name, "❌ sign 凭证已过期", "请在今晚 23:55 左右打开一次电信 App 刷新凭证！");
+            notified = true;
             break;
+        } else {
+            lastErrorMsg = (res && (res.resoultMsg || res.msg)) || (resText.length > 50 ? resText.slice(0, 50) + "..." : resText);
         }
 
         if (attempt < 3) await $.wait(250);
     }
 
     if (!success) {
+        if (!notified) {
+            $.msg($.name, "⚠️ 抢兑反馈", `${lastErrorMsg || "未命中有效响应"}\n明晚 23:59 将继续自动蹲守！`);
+        }
         $.log("[电信权益] 本轮抢兑结束，明晚 23:59 继续值守。");
     }
 

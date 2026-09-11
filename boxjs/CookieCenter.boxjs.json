@@ -198,14 +198,14 @@
       "scripts": [
         {
           "name": "查询当月等级权益并执行一次兑换测试",
-          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/telecom_rights/telecom_rights.js?v=20260910"
+          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/telecom_rights/telecom_rights.js?v=20260911"
         }
       ],
       "tasks": [
         {
           "name": "每日 23:59:00 提前唤醒 + 提前 250ms 偷跑秒杀",
           "cron": "59 23 * * *",
-          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/telecom_rights/telecom_rights.js?v=20260910"
+          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/telecom_rights/telecom_rights.js?v=20260911"
         }
       ],
       "descs_html": [
