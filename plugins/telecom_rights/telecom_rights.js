@@ -234,45 +234,75 @@ async function executeTask() {
         }
     }
 
-    // 【机制 4：短间隔 3 连发并发突发 (Burst Strategy)】
+    // 【机制 4：异步阶梯并发突发秒杀 (Staggered Parallel Burst)】
+    // 彻底废除串行 await 阻塞：前枪若遭遇网关挂起超时，后序各枪绝不死等，严格按毫秒级阶梯并发直冲 0 点
+    const BURST_SHOTS = [
+        { shot: 1, delay: 0 },    // 23:59:59.750 提前 250ms 偷跑冲击 0 点
+        { shot: 2, delay: 200 },  // 23:59:59.950 毫秒级准点压哨冲线
+        { shot: 3, delay: 450 },  // 00:00:00.200 极速补刀（防前枪 502/超时）
+        { shot: 4, delay: 750 }   // 00:00:00.500 二次补刀收尾
+    ];
+
     let success = false;
-    let notified = false;
-    let lastErrorMsg = "";
+    let isFinished = false;
+    let successDesc = "";
+    let isSoldOut = false;
+    let isAuthExpired = false;
+    let shotResponses = [];
 
-    for (let attempt = 1; attempt <= 3; attempt++) {
-        let fireNow = new Date().toLocaleTimeString() + "." + String(Date.now() % 1000).padStart(3, "0");
-        $.log(`[电信权益] 🚀 @${fireNow} [第${attempt}枪] 发起抢兑...`);
-        let res = await receiveRights(auth, rightsId);
-        let resText = JSON.stringify(res);
-        $.log(`[电信权益] 响应 [第${attempt}枪]: ${resText}`);
-
-        if (resText.includes("成功") || resText.includes("已领取过该权益") || (res && (res.resoultCode === "0" || res.code === 0))) {
-            let desc = (res && (res.resoultMsg || res.msg)) || "话费权益已成功提交到账！";
-            $.setdata(currentYearMonth, CLAIMED_MONTH_KEY);
-            $.msg($.name, "🎉 话费秒杀成功！", `${desc}\n已开启全月深度休眠，下月1号自动恢复。`);
-            $.log(`[电信权益] 🎉 恭喜秒杀成功！已打上本月（${currentYearMonth}）休眠锁。`);
-            success = true;
-            notified = true;
-            break;
-        } else if (resText.includes("领完") || resText.includes("结束") || resText.includes("售罄")) {
-            $.msg($.name, "⚠️ 本轮已售罄", "今日 105 个名额已被抢光，明晚 23:59 继续自动蹲守！");
-            $.log("[电信权益] 本轮库存告罄，未锁定休眠，明晚继续尝试。");
-            notified = true;
-            break;
-        } else if (res && (res.code === "401" || resText.includes("未授权") || resText.includes("DOCTYPE"))) {
-            $.msg($.name, "❌ sign 凭证已过期", "请在今晚 23:55 左右打开一次电信 App 刷新凭证！");
-            notified = true;
-            break;
-        } else {
-            lastErrorMsg = (res && (res.resoultMsg || res.msg)) || (resText.length > 50 ? resText.slice(0, 50) + "..." : resText);
+    async function executeShot(shotIndex, delayMs) {
+        if (delayMs > 0) {
+            await $.wait(delayMs);
+        }
+        if (isFinished && success) {
+            $.log(`[电信权益] ⏭️ [第${shotIndex}枪] 前序请求已秒杀成功，取消发射`);
+            return null;
         }
 
-        if (attempt < 3) await $.wait(250);
+        let fireTimeStr = new Date().toLocaleTimeString() + "." + String(Date.now() % 1000).padStart(3, "0");
+        $.log(`[电信权益] 🚀 @${fireTimeStr} [第${shotIndex}枪] 异步开火 (延迟+${delayMs}ms)...`);
+
+        let startTime = Date.now();
+        let res = await receiveRights(auth, rightsId, 4000);
+        let elapsed = Date.now() - startTime;
+        let resText = JSON.stringify(res);
+        let recvTimeStr = new Date().toLocaleTimeString() + "." + String(Date.now() % 1000).padStart(3, "0");
+        $.log(`[电信权益] 📩 @${recvTimeStr} [第${shotIndex}枪] 响应 (${elapsed}ms): ${resText}`);
+
+        shotResponses.push({ shotIndex, elapsed, res, resText });
+
+        if (resText.includes("成功") || resText.includes("已领取过该权益") || (res && (res.resoultCode === "0" || res.code === 0))) {
+            if (!success) {
+                success = true;
+                isFinished = true;
+                successDesc = (res && (res.resoultMsg || res.msg)) || "话费权益已成功提交到账！";
+                $.setdata(currentYearMonth, CLAIMED_MONTH_KEY);
+                $.msg($.name, "🎉 话费秒杀成功！", `${successDesc}\n已开启全月深度休眠，下月1号自动恢复。`);
+                $.log(`[电信权益] 🎉 恭喜第${shotIndex}枪秒杀成功！已打上本月（${currentYearMonth}）休眠锁。`);
+            }
+        } else if (resText.includes("领完") || resText.includes("结束") || resText.includes("售罄")) {
+            isSoldOut = true;
+        } else if (res && (res.code === "401" || resText.includes("未授权"))) {
+            isAuthExpired = true;
+        }
+
+        return res;
     }
 
+    // 4 枪全部并发执行，彼此绝不串行等待
+    await Promise.all(BURST_SHOTS.map(s => executeShot(s.shot, s.delay)));
+
     if (!success) {
-        if (!notified) {
-            $.msg($.name, "⚠️ 抢兑反馈", `${lastErrorMsg || "未命中有效响应"}\n明晚 23:59 将继续自动蹲守！`);
+        if (isSoldOut) {
+            $.msg($.name, "⚠️ 本轮已售罄", "今日 105 个名额已被抢光，明晚 23:59 继续自动蹲守！");
+            $.log("[电信权益] 本轮库存告罄，未锁定休眠，明晚继续尝试。");
+        } else if (isAuthExpired) {
+            $.msg($.name, "❌ sign 凭据已过期", "请在今晚 23:55 左右打开一次电信 App 刷新凭证！");
+            $.log("[电信权益] sign 凭证已过期失效。");
+        } else {
+            let summary = shotResponses.map(r => `枪${r.shotIndex}:${r.res && r.res.msg ? (r.res.msg.includes("502") ? "502过载" : (r.res.msg.includes("超时") ? "超时" : r.res.msg.slice(0, 10))) : "异常"}`).join(" | ");
+            $.msg($.name, "⚠️ 抢兑反馈", `0点瞬间网关拥堵 [${summary}]\n明晚 23:59 将继续自动蹲守！`);
+            $.log(`[电信权益] 本轮未命中，响应概况: ${summary}。明晚 23:59 继续值守。`);
         }
         $.log("[电信权益] 本轮抢兑结束，明晚 23:59 继续值守。");
     }
@@ -340,7 +370,7 @@ function queryRightsInfo(auth) {
     });
 }
 
-function receiveRights(auth, rightsId) {
+function receiveRights(auth, rightsId, timeoutMs = 4000) {
     return new Promise(resolve => {
         let value = {
             id: rightsId,
@@ -360,12 +390,21 @@ function receiveRights(auth, rightsId) {
                 "User-Agent": STANDARD_UA
             },
             body: JSON.stringify({ para: paraV }),
-            timeout: 8000
+            timeout: timeoutMs
         };
 
         $httpClient.post(options, (err, resp, data) => {
             if (err) {
-                resolve({ code: -1, msg: String(err) });
+                let errStr = String(err);
+                if (errStr.includes("timeout") || errStr.includes("Timeout")) {
+                    resolve({ code: -1, msg: "请求超时(4s内未响应)" });
+                } else {
+                    resolve({ code: -1, msg: errStr });
+                }
+                return;
+            }
+            if (resp && resp.status === 502) {
+                resolve({ code: 502, msg: "502 Bad Gateway(网关瞬时过载)" });
                 return;
             }
             if (data && (data.indexOf("<!DOCTYPE") !== -1 || (resp && resp.status === 412))) {
@@ -375,7 +414,8 @@ function receiveRights(auth, rightsId) {
             try {
                 resolve(JSON.parse(data));
             } catch (e) {
-                resolve({ code: -1, msg: data ? data.slice(0, 100) : "响应非JSON" });
+                let clean = data ? data.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim() : "";
+                resolve({ code: -1, msg: clean ? (clean.length > 50 ? clean.slice(0, 50) + "..." : clean) : "响应非JSON" });
             }
         });
     });
