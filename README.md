@@ -93,7 +93,7 @@ MyCookieCenter 是一套运行在代理工具上的自动化脚本合集，覆�
 |---|---|---|---|---|
 | 📚 微信读书 · 自动领取 | 每晚 23:00 领取阅读奖励 · 周二翻牌 · 周五好书入架 | 打开微信读书浏览 / 重新登录 | [`app/weread_claim/`](./app/weread_claim/) | ✅ 已验证 |
 | 📱 山西电信 · 体验AI领福利 | 凭证静默捕获 + 月度福利领取 | 电信 App 首页 AI 搜索「领福利」进入活动页 | [`plugins/sx_ai_benefit/`](./plugins/sx_ai_benefit/) | ✅ 已验证 |
-| ☎️ 中国电信 · 等级权益 | 每日 0 点自动抢兑等级话费券 | 电信营业厅 App →「我」→ 签到 / 等级权益页 | [`plugins/telecom_rights/`](./plugins/telecom_rights/) | ✅ 已验证 |
+| ☎️ 中国电信 · 等级权益 | 23:59 提前唤醒 · 毫秒级偷跑抢兑等级话费券 | 电信营业厅 App →「我」→ 签到 / 等级权益页 | [`plugins/telecom_rights/`](./plugins/telecom_rights/) | ✅ 已验证 |
 | 📷 扫描全能王 · 签到 | 抓取 Cookie + 每日签到 | 打开扫描全能王 App（静默抓取） | [`plugins/camscanner/`](./plugins/camscanner/) | ✅ 已验证（外部依赖） |
 
 > 微信读书、山西电信、电信权益原先的独立插件已合并进 `CookieCenter.plugin`，安装一个插件即可同时获得凭据捕获与后台定时任务。
