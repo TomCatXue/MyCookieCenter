@@ -21,7 +21,7 @@
 
 | 文件 | 说明 |
 |---|---|
-| [`CookieCenter.boxjs.json`](./CookieCenter.boxjs.json) | 微信读书 / 山西电信的统一配置面板 |
+| [`CookieCenter.boxjs.json`](./CookieCenter.boxjs.json) | 微信读书 / 山西电信 / 中国电信等级权益 / 电信会员抽奖的统一配置面板 |
 
 ---
 

@@ -1,11 +1,11 @@
 #!name = CookieCenter · 统一凭据捕获与签到中心
-#!desc = 一站式中心：整合微信读书、山西电信与中国电信等级权益。代码层抓取与执行彻底分离，Loon 后台负责自动定时唤醒与脱机自动换票，数据存入 Loon 原生持久化（BoxJS 亦可可视化查看与修改）。
+#!desc = 一站式中心：整合微信读书、山西电信、中国电信等级权益与电信周三会员抽奖。代码层抓取与执行彻底分离，Loon 后台负责自动定时唤醒与脱机自动换票，数据存入 Loon 原生持久化（BoxJS 亦可可视化查看与修改）。
 #!author = TomCatXue
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://avatars.githubusercontent.com/u/138953496?v=4
 #!tag = 签到, Cookie, 凭据捕获, 定时任务
-#!version = 3.8.1
-#!date = 2026-09-08
+#!version = 3.9.0
+#!date = 2026-09-16
 
 # =================== 1. 业务功能开关 (极简三主控面板) ===================
 
@@ -18,6 +18,10 @@ sx_benefit_enable = switch,true,tag=山西电信·全功能总开关,desc=一键
 
 # 电信权益一键总控：单按钮开启/关闭所有功能（sign与accId凭据捕获、每日0点自动抢兑等级话费）
 telecom_rights_enable = switch,true,tag=电信权益·全功能总开关,desc=一键开启/关闭中国电信等级权益凭据捕获与每日0点自动抢兑话费
+
+# 电信会员抽奖一键总控：单按钮开启/关闭所有功能（凭据捕获、周三会员日双抽奖与幸运抽奖）
+telecom_draw_enable = switch,true,tag=电信会员抽奖·全功能总开关,desc=一键开启/关闭中国电信5G会员周三会员日两大抽奖与幸运抽奖（包含凭据捕获、做任务与自动抽奖）
+
 
 # =================== 规则配置 (抓取与执行彻底解耦) ===================
 
@@ -42,7 +46,17 @@ http-request ^https?:\/\/(waphub|wappark)\.189\.cn\/(jt-sign|gateway|JinDouMall)
 http-response ^https?:\/\/(waphub|wappark)\.189\.cn\/(jt-sign|gateway)\/ script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/telecom_rights/telecom_rights.js?v=20260912, tag=电信权益·会话回填, requires-body=true, enable={telecom_rights_enable}
 cron "59 23 * * *" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/telecom_rights/telecom_rights.js?v=20260912, timeout=90, tag=电信权益·零点抢兑话费, enable={telecom_rights_enable}
 
+# --- 【电信会员抽奖】周三会员日双抽奖与幸运抽奖 (联动 telecom_draw_enable 统一总控) ---
+# 1. 抓取层：专职凭据捕获 (微信小程序打开电信5G会员/权益商城自动提取 SessionKey 与手机号)
+http-request ^https?:\/\/cdn\.bestpay\.cn\/marketing\/telecom\.member\.config\.json tag=电信抽奖·凭据捕获(配置), script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/telecom_member_draw/telecom_member_draw.js, requires-body=false, enable={telecom_draw_enable}
+http-request ^https?:\/\/mapi-h5\.bestpay\.com\.cn\/gapi\/(equitymall|op-product-system|handyservice|mapi-gateway) tag=电信抽奖·凭据捕获(网关), script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/telecom_member_draw/telecom_member_draw.js, requires-body=true, enable={telecom_draw_enable}
+http-request ^https?:\/\/spanner\.bestpay\.com\.cn:10081 tag=电信抽奖·凭据捕获(MGS), script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/telecom_member_draw/telecom_member_draw.js, requires-body=false, enable={telecom_draw_enable}
+
+# 2. 执行层：每周三上午 09:00:00 自动执行三大抽奖任务
+cron "0 9 * * 3" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/telecom_member_draw/telecom_member_draw.js, tag=电信抽奖·周三自动抽奖, enable={telecom_draw_enable}
+
+
 # =================== MITM 解密域名 ===================
 
 [MITM]
-hostname = weread.qq.com, i.weread.qq.com, waphub.189.cn, wappark.189.cn, wx.sx.189.cn
+hostname = weread.qq.com, i.weread.qq.com, waphub.189.cn, wappark.189.cn, wx.sx.189.cn, mapi-h5.bestpay.com.cn, cdn.bestpay.cn, spanner.bestpay.com.cn, activity.bestpay.cn, h5.bestpay.cn

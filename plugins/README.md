@@ -37,6 +37,8 @@
 | 目录 | 名称 | 功能 | Loon 入口 | BoxJS |
 |---|---|---|---|---|
 | [`sx_ai_benefit/`](./sx_ai_benefit/) | 山西电信·体验AI领福利 | 凭证捕获 + 每月 1~8 号放水探针监控 | [`loon/CookieCenter.plugin`](../loon/CookieCenter.plugin) | [`boxjs/CookieCenter.boxjs.json`](../boxjs/CookieCenter.boxjs.json) |
+| [`telecom_rights/`](./telecom_rights/) | 中国电信·等级权益话费秒杀 | 凭据捕获 + 每日 23:59:59.750 毫秒偷跑抢兑话费券 | [`loon/CookieCenter.plugin`](../loon/CookieCenter.plugin) | [`boxjs/CookieCenter.boxjs.json`](../boxjs/CookieCenter.boxjs.json) |
+| [`telecom_member_draw/`](./telecom_member_draw/) | 中国电信·周三会员日与幸运抽奖 | 凭据捕获 + 周三会员日双抽奖与幸运抽奖自动领 | [`loon/CookieCenter.plugin`](../loon/CookieCenter.plugin) / [`loon/TelecomMemberDraw.plugin`](../loon/TelecomMemberDraw.plugin) | [`boxjs/CookieCenter.boxjs.json`](../boxjs/CookieCenter.boxjs.json) |
 
 > 这两个目录原本作为独立 `.plugin` 发布；现其 MITM 规则与 cron 定时任务已并入 `CookieCenter.plugin`，不再单独提供 Loon 插件入口。
 

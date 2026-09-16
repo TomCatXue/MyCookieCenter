@@ -1,0 +1,29 @@
+#!name = 中国电信 · 周三会员日与幸运抽奖
+#!desc = 自动捕获中国电信5G会员/翼支付凭据，每周三自动参与周三会员日两大抽奖（山西甄选周三会员日、山西抽奖新-每周三次）及权益商城幸运抽奖，自动完成抽奖任务并自动领取奖品入账。
+#!author = TomCatXue
+#!homepage = https://github.com/TomCatXue/MyCookieCenter
+#!icon = https://raw.githubusercontent.com/fmz200/wool_scripts/main/icons/chinatelecom.png
+#!tag = 抽奖, 中国电信, 翼支付, 会员日, 签到
+#!version = 1.0.0
+#!date = 2026-09-16
+
+# =================== 独立功能开关 ===================
+
+[Argument]
+telecom_draw_enable = switch,true,tag=电信抽奖·全功能总开关,desc=一键开启/关闭电信会员抽奖所有功能（凭据捕获与自动抽奖）
+
+# =================== MITM 解密域名 ===================
+
+[MITM]
+hostname = mapi-h5.bestpay.com.cn, cdn.bestpay.cn, spanner.bestpay.com.cn, activity.bestpay.cn, h5.bestpay.cn
+
+# =================== 脚本规则 (捕获与定时执行) ===================
+
+[Script]
+# 1. 凭据捕获：微信小程序打开电信5G会员权益或抽奖页面时静默捕获 SessionKey 与手机号
+http-request ^https?:\/\/cdn\.bestpay\.cn\/marketing\/telecom\.member\.config\.json tag=电信会员·凭据捕获(配置), script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/telecom_member_draw/telecom_member_draw.js, requires-body=false, enable={telecom_draw_enable}
+http-request ^https?:\/\/mapi-h5\.bestpay\.com\.cn\/gapi\/(equitymall|op-product-system|handyservice|mapi-gateway) tag=电信会员·凭据捕获(网关), script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/telecom_member_draw/telecom_member_draw.js, requires-body=true, enable={telecom_draw_enable}
+http-request ^https?:\/\/spanner\.bestpay\.com\.cn:10081 tag=电信会员·凭据捕获(MGS), script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/telecom_member_draw/telecom_member_draw.js, requires-body=false, enable={telecom_draw_enable}
+
+# 2. 定时抽奖：每周三上午 09:00:00 自动执行三大抽奖任务
+cron "0 9 * * 3" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/telecom_member_draw/telecom_member_draw.js, tag=电信会员·周三自动抽奖, enable={telecom_draw_enable}

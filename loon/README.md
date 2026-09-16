@@ -15,7 +15,8 @@
 
 | 文件 | 说明 | 脚本来源 |
 |---|---|---|
-| [`CookieCenter.plugin`](./CookieCenter.plugin) | 微信读书 / 山西电信 / 电信等级权益的凭据捕获 + 后台定时任务 | [`app/weread_claim/`](../app/weread_claim/)、[`plugins/sx_ai_benefit/`](../plugins/sx_ai_benefit/)、[`plugins/telecom_rights/`](../plugins/telecom_rights/) |
+| [`CookieCenter.plugin`](./CookieCenter.plugin) | 微信读书 / 山西电信 / 电信等级权益 / 电信周三会员抽奖的一站式凭据捕获 + 后台定时任务 | [`app/weread_claim/`](../app/weread_claim/)、[`plugins/sx_ai_benefit/`](../plugins/sx_ai_benefit/)、[`plugins/telecom_rights/`](../plugins/telecom_rights/)、[`plugins/telecom_member_draw/`](../plugins/telecom_member_draw/) |
+| [`TelecomMemberDraw.plugin`](./TelecomMemberDraw.plugin) | 中国电信 · 周三会员日与幸运抽奖（独立版） | [`plugins/telecom_member_draw/`](../plugins/telecom_member_draw/) |
 
 ### 独立功能
 
