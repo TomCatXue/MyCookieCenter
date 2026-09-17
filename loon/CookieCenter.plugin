@@ -48,9 +48,10 @@ cron "59 23 * * *" script-path=https://raw.githubusercontent.com/TomCatXue/MyCoo
 
 # --- 【电信会员抽奖】周三会员日双抽奖与幸运抽奖 (联动 telecom_draw_enable 统一总控) ---
 # 1. 抓取层：专职凭据捕获 (微信小程序打开电信5G会员/权益商城自动提取 SessionKey 与手机号)
+# 1. 抓取层：精准专职凭据捕获 (100% 静默捕获，进小程序自动秒领)
 http-request ^https?:\/\/cdn\.bestpay\.cn\/marketing\/telecom\.member\.config\.json tag=电信抽奖·凭据捕获(配置), script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/telecom_member_draw/telecom_member_draw.js, requires-body=false, enable={telecom_draw_enable}
-http-request ^https?:\/\/mapi-h5\.bestpay\.com\.cn\/gapi\/(equitymall|op-product-system|handyservice|mapi-gateway) tag=电信抽奖·凭据捕获(网关), script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/telecom_member_draw/telecom_member_draw.js, requires-body=true, enable={telecom_draw_enable}
-http-request ^https?:\/\/spanner\.bestpay\.com\.cn:10081 tag=电信抽奖·凭据捕获(MGS), script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/telecom_member_draw/telecom_member_draw.js, requires-body=false, enable={telecom_draw_enable}
+http-response ^https?:\/\/mapi\.bestpay\.com\.cn\/mapi\/miniProgrameLoginEnc tag=电信抽奖·小程序登录捕获, script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/telecom_member_draw/telecom_member_draw.js, requires-body=true, enable={telecom_draw_enable}
+http-request ^https?:\/\/spanner\.bestpay\.com\.cn:10081 tag=电信抽奖·MGS网关捕获, script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/telecom_member_draw/telecom_member_draw.js, requires-body=false, enable={telecom_draw_enable}
 
 # 2. 执行层：每周三上午 09:00:00 自动执行三大抽奖任务
 cron "0 9 * * 3" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/telecom_member_draw/telecom_member_draw.js, tag=电信抽奖·周三自动抽奖, enable={telecom_draw_enable}
@@ -59,4 +60,4 @@ cron "0 9 * * 3" script-path=https://raw.githubusercontent.com/TomCatXue/MyCooki
 # =================== MITM 解密域名 ===================
 
 [MITM]
-hostname = weread.qq.com, i.weread.qq.com, waphub.189.cn, wappark.189.cn, wx.sx.189.cn, mapi-h5.bestpay.com.cn, cdn.bestpay.cn, spanner.bestpay.com.cn, activity.bestpay.cn, h5.bestpay.cn
+hostname = mapi.bestpay.com.cn, weread.qq.com, i.weread.qq.com, waphub.189.cn, wappark.189.cn, wx.sx.189.cn, mapi-h5.bestpay.com.cn, cdn.bestpay.cn, spanner.bestpay.com.cn, activity.bestpay.cn, h5.bestpay.cn

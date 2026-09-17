@@ -5,23 +5,22 @@
  * 2. 周三会员日抽奖二：山西抽奖新-每周三次 (默认 hd92859166)
  * 3. 权益商城幸运抽奖：每周/每日免费抽奖与任务 (默认 A2025011413413484352835699495179)
  * 
- * 特性：
- * - 自动拦截捕获电信5G会员/翼支付 SessionKey 与手机号
- * - 内置纯 JS 版 C005 混合加解密引擎 (RSA + AES-128-CBC + MD5)，零外部依赖
- * - 支持动态获取活动编号，兼容活动轮换
- * - 周三定时自动唤醒并发起批量抽奖与奖品自动入账
+ * 核心升级：
+ * - 【100% 静默捕获】：进小程序彻底告别频繁弹窗打扰，凭据后台静默更新
+ * - 【进小程序全自动秒领】：捕获到新鲜活跃凭据瞬间，后台自动触发做任务与抽奖，中奖自动领奖入账
+ * - 【双重调度保底】：支持周三上午 09:00:00 Cron 定时兜底，配合进小程序即时抽奖双保险
+ * - 【内置 C005 混合加密】：纯 JS 封装 RSA + AES-128-CBC + MD5 一机一密通信引擎，零外部依赖
  * 
  * GitHub: https://github.com/TomCatXue/MyCookieCenter
  */
 
 // ==================== 环境兼容层 ====================
-const $ = new Env('中国电信·会员日与幸运抽奖');
+const $ = new Env('中国电信·会员抽奖');
 const isRequest = typeof $request !== 'undefined';
-
-// ==================== 算法套件 (GibberishAES + JSEncrypt + MD5) ====================
-
+const isResponse = typeof $response !== 'undefined';
 const CryptoKit = (function() {
-  const window = {};
+  const window = typeof globalThis !== 'undefined' ? globalThis : {};
+  const navigator = typeof globalThis !== 'undefined' && globalThis.navigator ? globalThis.navigator : { appName: 'Netscape', userAgent: '' };
   var GibberishAES=function(){var t=14,e=8,r=!1,i=function(t){try{return unescape(encodeURIComponent(t))}catch(e){throw"Error on UTF-8 encode"}},n=function(t){try{return decodeURIComponent(escape(t))}catch(e){throw"Bad Key"}},s=function(t){var e,r,i=[];for(t.length<16&&(e=16-t.length,i=[e,e,e,e,e,e,e,e,e,e,e,e,e,e,e,e]),r=0;r<t.length;r++)i[r]=t[r];return i},o=function(t,e){var r,i,n="";if(e){if(r=t[15],r>16)throw"Decryption error: Maybe bad key";if(16==r)return"";for(i=0;i<16-r;i++)n+=String.fromCharCode(t[i])}else for(i=0;i<16;i++)n+=String.fromCharCode(t[i]);return n},a=function(t){var e,r="";for(e=0;e<t.length;e++)r+=(t[e]<16?"0":"")+t[e].toString(16);return r},h=function(t){var e=[];return t.replace(/(..)/g,function(t){e.push(parseInt(t,16))}),e},c=function(t,e){var r,n=[];for(e||(t=i(t)),r=0;r<t.length;r++)n[r]=t.charCodeAt(r);return n},u=function(r){switch(r){case 128:t=10,e=4;break;case 192:t=12,e=6;break;case 256:t=14,e=8;break;default:throw"Invalid Key Size Specified:"+r}},f=function(t){var e,r=[];for(e=0;e<t;e++)r=r.concat(Math.floor(256*Math.random()));return r},l=function(r,i){var n,s=t>=12?3:2,o=[],a=[],h=[],c=[],u=r.concat(i);for(h[0]=GibberishAES.Hash.MD5(u),c=h[0],n=1;n<s;n++)h[n]=GibberishAES.Hash.MD5(h[n-1].concat(u)),c=c.concat(h[n]);return o=c.slice(0,4*e),a=c.slice(4*e,4*e+16),{key:o,iv:a}},p=function(t,e){t=GibberishAES.s2a(t);var r=[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];e=x(GibberishAES.s2a(e));var i,n=Math.ceil(t.length/16),o=[],a=[];for(i=0;i<n;i++)o[i]=s(t.slice(16*i,16*i+16));for(t.length%16===0&&(o.push([16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16]),n++),i=0;i<o.length;i++)o[i]=0===i?B(o[i],r):B(o[i],a[i-1]),a[i]=y(o[i],e);return GibberishAES.Base64.encode(a)},d=function(t,e){var r=[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];e=x(GibberishAES.s2a(e));var i,s=t.length/16,a=[],h=[],c="";for(i=0;i<s;i++)a.push(t.slice(16*i,16*(i+1)));for(i=a.length-1;i>=0;i--)h[i]=m(a[i],e),h[i]=0===i?B(h[i],r):B(h[i],a[i-1]);for(i=0;i<s-1;i++)c+=o(h[i]);return c+=o(h[i],!0),n(c)},g=function(t,e){t=GibberishAES.s2a(t);var r=[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];e=x(GibberishAES.s2a(e));var i,n=Math.ceil(t.length/16),o=[],a=[];for(i=0;i<n;i++)o[i]=s(t.slice(16*i,16*i+16));for(t.length%16===0&&(o.push([16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16]),n++),i=0;i<o.length;i++)o[i]=0===i?B(o[i],r):B(o[i],a[i-1]),a[i]=y(o[i],e);return GibberishAES.Base64.encode(a)},v=function(t,e){var r=GibberishAES.Base64.decode(t),i=[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];e=x(GibberishAES.s2a(e));var s,a=r.length/16,h=[],c=[],u="";for(s=0;s<a;s++)h.push(r.slice(16*s,16*(s+1)));for(s=h.length-1;s>=0;s--)c[s]=m(h[s],e),c[s]=0===s?B(c[s],i):B(c[s],h[s-1]);for(s=0;s<a-1;s++)u+=o(c[s]);return u+=o(c[s],!0),n(u)},y=function(e,i){r=!1;var n,s=w(e,i,0);for(n=1;n<t+1;n++)s=b(s),s=S(s),n<t&&(s=_(s)),s=w(s,i,n);return s},m=function(e,i){r=!0;var n,s=w(e,i,t);for(n=t-1;n>-1;n--)s=S(s),s=b(s),s=w(s,i,n),n>0&&(s=_(s));return s},b=function(t){var e,i=r?D:E,n=[];for(e=0;e<16;e++)n[e]=i[t[e]];return n},S=function(t){var e,i=[],n=r?[0,13,10,7,4,1,14,11,8,5,2,15,12,9,6,3]:[0,5,10,15,4,9,14,3,8,13,2,7,12,1,6,11];for(e=0;e<16;e++)i[e]=t[n[e]];return i},_=function(t){var e,i=[];if(r)for(e=0;e<4;e++)i[4*e]=C[t[4*e]]^U[t[1+4*e]]^H[t[2+4*e]]^O[t[3+4*e]],i[1+4*e]=O[t[4*e]]^C[t[1+4*e]]^U[t[2+4*e]]^H[t[3+4*e]],i[2+4*e]=H[t[4*e]]^O[t[1+4*e]]^C[t[2+4*e]]^U[t[3+4*e]],i[3+4*e]=U[t[4*e]]^H[t[1+4*e]]^O[t[2+4*e]]^C[t[3+4*e]];else for(e=0;e<4;e++)i[4*e]=k[t[4*e]]^K[t[1+4*e]]^t[2+4*e]^t[3+4*e],i[1+4*e]=t[4*e]^k[t[1+4*e]]^K[t[2+4*e]]^t[3+4*e],i[2+4*e]=t[4*e]^t[1+4*e]^k[t[2+4*e]]^K[t[3+4*e]],i[3+4*e]=K[t[4*e]]^t[1+4*e]^t[2+4*e]^k[t[3+4*e]];return i},w=function(t,e,r){var i,n=[];for(i=0;i<16;i++)n[i]=t[i]^e[r][i];return n},B=function(t,e){var r,i=[];for(r=0;r<16;r++)i[r]=t[r]^e[r];return i},x=function(r){var i,n,s,o,a=[],h=[],c=[];for(i=0;i<e;i++)n=[r[4*i],r[4*i+1],r[4*i+2],r[4*i+3]],a[i]=n;for(i=e;i<4*(t+1);i++){for(a[i]=[],s=0;s<4;s++)h[s]=a[i-1][s];for(i%e===0?(h=R(T(h)),h[0]^=A[i/e-1]):e>6&&i%e==4&&(h=R(h)),s=0;s<4;s++)a[i][s]=a[i-e][s]^h[s]}for(i=0;i<t+1;i++)for(c[i]=[],o=0;o<4;o++)c[i].push(a[4*i+o][0],a[4*i+o][1],a[4*i+o][2],a[4*i+o][3]);return c},R=function(t){for(var e=0;e<4;e++)t[e]=E[t[e]];return t},T=function(t){var e,r=t[0];for(e=0;e<4;e++)t[e]=t[e+1];return t[3]=r,t},E=[99,124,119,123,242,107,111,197,48,1,103,43,254,215,171,118,202,130,201,125,250,89,71,240,173,212,162,175,156,164,114,192,183,253,147,38,54,63,247,204,52,165,229,241,113,216,49,21,4,199,35,195,24,150,5,154,7,18,128,226,235,39,178,117,9,131,44,26,27,110,90,160,82,59,214,179,41,227,47,132,83,209,0,237,32,252,177,91,106,203,190,57,74,76,88,207,208,239,170,251,67,77,51,133,69,249,2,127,80,60,159,168,81,163,64,143,146,157,56,245,188,182,218,33,16,255,243,210,205,12,19,236,95,151,68,23,196,167,126,61,100,93,25,115,96,129,79,220,34,42,144,136,70,238,184,20,222,94,11,219,224,50,58,10,73,6,36,92,194,211,172,98,145,149,228,121,231,200,55,109,141,213,78,169,108,86,244,234,101,122,174,8,186,120,37,46,28,166,180,198,232,221,116,31,75,189,139,138,112,62,181,102,72,3,246,14,97,53,87,185,134,193,29,158,225,248,152,17,105,217,142,148,155,30,135,233,206,85,40,223,140,161,137,13,191,230,66,104,65,153,45,15,176,84,187,22],D=[82,9,106,213,48,54,165,56,191,64,163,158,129,243,215,251,124,227,57,130,155,47,255,135,52,142,67,68,196,222,233,203,84,123,148,50,166,194,35,61,238,76,149,11,66,250,195,78,8,46,161,102,40,217,36,178,118,91,162,73,109,139,209,37,114,248,246,100,134,104,152,22,212,164,92,204,93,101,182,146,108,112,72,80,253,237,185,218,94,21,70,87,167,141,157,132,144,216,171,0,140,188,211,10,247,228,88,5,184,179,69,6,208,44,30,143,202,63,15,2,193,175,189,3,1,19,138,107,58,145,17,65,79,103,220,234,151,242,207,206,240,180,230,115,150,172,116,34,231,173,53,133,226,249,55,232,28,117,223,110,71,241,26,113,29,41,197,137,111,183,98,14,170,24,190,27,252,86,62,75,198,210,121,32,154,219,192,254,120,205,90,244,31,221,168,51,136,7,199,49,177,18,16,89,39,128,236,95,96,81,127,169,25,181,74,13,45,229,122,159,147,201,156,239,160,224,59,77,174,42,245,176,200,235,187,60,131,83,153,97,23,43,4,126,186,119,214,38,225,105,20,99,85,33,12,125],A=[1,2,4,8,16,32,64,128,27,54,108,216,171,77,154,47,94,188,99,198,151,53,106,212,179,125,250,239,197,145],k=[0,2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38,40,42,44,46,48,50,52,54,56,58,60,62,64,66,68,70,72,74,76,78,80,82,84,86,88,90,92,94,96,98,100,102,104,106,108,110,112,114,116,118,120,122,124,126,128,130,132,134,136,138,140,142,144,146,148,150,152,154,156,158,160,162,164,166,168,170,172,174,176,178,180,182,184,186,188,190,192,194,196,198,200,202,204,206,208,210,212,214,216,218,220,222,224,226,228,230,232,234,236,238,240,242,244,246,248,250,252,254,27,25,31,29,19,17,23,21,11,9,15,13,3,1,7,5,59,57,63,61,51,49,55,53,43,41,47,45,35,33,39,37,91,89,95,93,83,81,87,85,75,73,79,77,67,65,71,69,123,121,127,125,115,113,119,117,107,105,111,109,99,97,103,101,155,153,159,157,147,145,151,149,139,137,143,141,131,129,135,133,187,185,191,189,179,177,183,181,171,169,175,173,163,161,167,165,219,217,223,221,211,209,215,213,203,201,207,205,195,193,199,197,251,249,255,253,243,241,247,245,235,233,239,237,227,225,231,229],K=[0,3,6,5,12,15,10,9,24,27,30,29,20,23,18,17,48,51,54,53,60,63,58,57,40,43,46,45,36,39,34,33,96,99,102,101,108,111,106,105,120,123,126,125,116,119,114,113,80,83,86,85,92,95,90,89,72,75,78,77,68,71,66,65,192,195,198,197,204,207,202,201,216,219,222,221,212,215,210,209,240,243,246,245,252,255,250,249,232,235,238,237,228,231,226,225,160,163,166,165,172,175,170,169,184,187,190,189,180,183,178,177,144,147,150,149,156,159,154,153,136,139,142,141,132,135,130,129,155,152,157,158,151,148,145,146,131,128,133,134,143,140,137,138,171,168,173,174,167,164,161,162,179,176,181,182,191,188,185,186,251,248,253,254,247,244,241,242,227,224,229,230,239,236,233,234,203,200,205,206,199,196,193,194,211,208,213,214,223,220,217,218,91,88,93,94,87,84,81,82,67,64,69,70,79,76,73,74,107,104,109,110,103,100,97,98,115,112,117,118,127,124,121,122,59,56,61,62,55,52,49,50,35,32,37,38,47,44,41,42,11,8,13,14,7,4,1,2,19,16,21,22,31,28,25,26],O=[0,9,18,27,36,45,54,63,72,65,90,83,108,101,126,119,144,153,130,139,180,189,166,175,216,209,202,195,252,245,238,231,59,50,41,32,31,22,13,4,115,122,97,104,87,94,69,76,171,162,185,176,143,134,157,148,227,234,241,248,199,206,213,220,118,127,100,109,82,91,64,73,62,55,44,37,26,19,8,1,230,239,244,253,194,203,208,217,174,167,188,181,138,131,152,145,77,68,95,86,105,96,123,114,5,12,23,30,33,40,51,58,221,212,207,198,249,240,235,226,149,156,135,142,177,184,163,170,236,229,254,247,200,193,218,211,164,173,182,191,128,137,146,155,124,117,110,103,88,81,74,67,52,61,38,47,16,25,2,11,215,222,197,204,243,250,225,232,159,150,141,132,187,178,169,160,71,78,85,92,99,106,113,120,15,6,29,20,43,34,57,48,154,147,136,129,190,183,172,165,210,219,192,201,246,255,228,237,10,3,24,17,46,39,60,53,66,75,80,89,102,111,116,125,161,168,179,186,133,140,151,158,233,224,251,242,205,196,223,214,49,56,35,42,21,28,7,14,121,112,107,98,93,84,79,70],U=[0,11,22,29,44,39,58,49,88,83,78,69,116,127,98,105,176,187,166,173,156,151,138,129,232,227,254,245,196,207,210,217,123,112,109,102,87,92,65,74,35,40,53,62,15,4,25,18,203,192,221,214,231,236,241,250,147,152,133,142,191,180,169,162,246,253,224,235,218,209,204,199,174,165,184,179,130,137,148,159,70,77,80,91,106,97,124,119,30,21,8,3,50,57,36,47,141,134,155,144,161,170,183,188,213,222,195,200,249,242,239,228,61,54,43,32,17,26,7,12,101,110,115,120,73,66,95,84,247,252,225,234,219,208,205,198,175,164,185,178,131,136,149,158,71,76,81,90,107,96,125,118,31,20,9,2,51,56,37,46,140,135,154,145,160,171,182,189,212,223,194,201,248,243,238,229,60,55,42,33,16,27,6,13,100,111,114,121,72,67,94,85,1,10,23,28,45,38,59,48,89,82,79,68,117,126,99,104,177,186,167,172,157,150,139,128,233,226,255,244,197,206,211,216,122,113,108,103,86,93,64,75,34,41,52,63,14,5,24,19,202,193,220,215,230,237,240,251,146,153,132,143,190,181,168,163],H=[0,13,26,23,52,57,46,35,104,101,114,127,92,81,70,75,208,221,202,199,228,233,254,243,184,181,162,175,140,129,150,155,187,182,161,172,143,130,149,152,211,222,201,196,231,234,253,240,107,102,113,124,95,82,69,72,3,14,25,20,55,58,45,32,109,96,119,122,89,84,67,78,5,8,31,18,49,60,43,38,189,176,167,170,137,132,147,158,213,216,207,194,225,236,251,246,214,219,204,193,226,239,248,245,190,179,164,169,138,135,144,157,6,11,28,17,50,63,40,37,110,99,116,121,90,87,64,77,218,215,192,205,238,227,244,249,178,191,168,165,134,139,156,145,10,7,16,29,62,51,36,41,98,111,120,117,86,91,76,65,97,108,123,118,85,88,79,66,9,4,19,30,61,48,39,42,177,188,171,166,133,136,159,146,217,212,195,206,237,224,247,250,183,186,173,160,131,142,153,148,223,210,197,200,235,230,241,252,103,106,125,112,83,94,73,68,15,2,21,24,59,54,33,44,12,1,22,27,56,53,34,47,100,105,126,115,80,93,74,71,220,209,198,203,232,229,242,255,180,185,174,163,128,141,154,151],C=[0,14,28,18,56,54,36,42,112,126,108,98,72,70,84,90,224,238,252,242,216,214,196,202,144,158,140,130,168,166,180,186,219,213,199,201,227,237,255,241,171,165,183,185,147,157,143,129,59,53,39,41,3,13,31,17,75,69,87,89,115,125,111,97,173,163,177,191,149,155,137,135,221,211,193,207,229,235,249,247,77,67,81,95,117,123,105,103,61,51,33,47,5,11,25,23,118,120,106,100,78,64,82,92,6,8,26,20,62,48,34,44,150,152,138,132,174,160,178,188,230,232,250,244,222,208,194,204,65,79,93,83,121,119,101,107,49,63,45,35,9,7,21,27,161,175,189,179,153,151,133,139,209,223,205,195,233,231,245,251,154,148,134,136,162,172,190,176,234,228,246,248,210,220,206,192,122,116,102,104,66,76,94,80,10,4,22,24,50,60,46,32,236,226,240,254,212,218,200,198,156,146,128,142,164,170,184,182,12,2,16,30,52,58,40,38,124,114,96,110,68,74,88,86,55,57,43,37,15,1,19,29,71,73,91,85,127,113,99,109,215,217,203,197,239,225,243,253,167,169,187,181,159,145,131,141],M=function(t,e,r){var i,n=f(8),s=l(c(e,r),n),o=s.key,a=s.iv,h=[[83,97,108,116,101,100,95,95].concat(n)];return t=c(t,r),i=p(t,o,a),i=h.concat(i),V.encode(i)},I=function(t,e,r){var i=V.decode(t),n=i.slice(8,16),s=l(c(e,r),n),o=s.key,a=s.iv;return i=i.slice(16,i.length),t=d(i,o,a,r)},P=function(t){function e(t,e){return t<<e|t>>>32-e}function r(t,e){var r,i,n,s,o;return n=2147483648&t,s=2147483648&e,r=1073741824&t,i=1073741824&e,o=(1073741823&t)+(1073741823&e),r&i?2147483648^o^n^s:r|i?1073741824&o?3221225472^o^n^s:1073741824^o^n^s:o^n^s}function i(t,e,r){return t&e|~t&r}function n(t,e,r){return t&r|e&~r}function s(t,e,r){return t^e^r}function o(t,e,r){return e^(t|~r)}function a(t,n,s,o,a,h,c){return t=r(t,r(r(i(n,s,o),a),c)),r(e(t,h),n)}function h(t,i,s,o,a,h,c){return t=r(t,r(r(n(i,s,o),a),c)),r(e(t,h),i)}function c(t,i,n,o,a,h,c){return t=r(t,r(r(s(i,n,o),a),c)),r(e(t,h),i)}function u(t,i,n,s,a,h,c){return t=r(t,r(r(o(i,n,s),a),c)),r(e(t,h),i)}function f(t){for(var e,r=t.length,i=r+8,n=(i-i%64)/64,s=16*(n+1),o=[],a=0,h=0;h<r;)e=(h-h%4)/4,a=h%4*8,o[e]=o[e]|t[h]<<a,h++;return e=(h-h%4)/4,a=h%4*8,o[e]=o[e]|128<<a,o[s-2]=r<<3,o[s-1]=r>>>29,o}function l(t){var e,r,i=[];for(r=0;r<=3;r++)e=t>>>8*r&255,i=i.concat(e);return i}var p,d,g,v,y,m,b,S,_,w=[],B=7,x=12,R=17,T=22,E=5,D=9,A=14,k=20,K=4,O=11,U=16,H=23,C=6,M=10,I=15,P=21;for(w=f(t),m=1732584193,b=4023233417,S=2562383102,_=271733878,p=0;p<w.length;p+=16)d=m,g=b,v=S,y=_,m=a(m,b,S,_,w[p+0],B,3614090360),_=a(_,m,b,S,w[p+1],x,3905402710),S=a(S,_,m,b,w[p+2],R,606105819),b=a(b,S,_,m,w[p+3],T,3250441966),m=a(m,b,S,_,w[p+4],B,4118548399),_=a(_,m,b,S,w[p+5],x,1200080426),S=a(S,_,m,b,w[p+6],R,2821735955),b=a(b,S,_,m,w[p+7],T,4249261313),m=a(m,b,S,_,w[p+8],B,1770035416),_=a(_,m,b,S,w[p+9],x,2336552879),
 S=a(S,_,m,b,w[p+10],R,4294925233),b=a(b,S,_,m,w[p+11],T,2304563134),m=a(m,b,S,_,w[p+12],B,1804603682),_=a(_,m,b,S,w[p+13],x,4254626195),S=a(S,_,m,b,w[p+14],R,2792965006),b=a(b,S,_,m,w[p+15],T,1236535329),m=h(m,b,S,_,w[p+1],E,4129170786),_=h(_,m,b,S,w[p+6],D,3225465664),S=h(S,_,m,b,w[p+11],A,643717713),b=h(b,S,_,m,w[p+0],k,3921069994),m=h(m,b,S,_,w[p+5],E,3593408605),_=h(_,m,b,S,w[p+10],D,38016083),S=h(S,_,m,b,w[p+15],A,3634488961),b=h(b,S,_,m,w[p+4],k,3889429448),m=h(m,b,S,_,w[p+9],E,568446438),_=h(_,m,b,S,w[p+14],D,3275163606),S=h(S,_,m,b,w[p+3],A,4107603335),b=h(b,S,_,m,w[p+8],k,1163531501),m=h(m,b,S,_,w[p+13],E,2850285829),_=h(_,m,b,S,w[p+2],D,4243563512),S=h(S,_,m,b,w[p+7],A,1735328473),b=h(b,S,_,m,w[p+12],k,2368359562),m=c(m,b,S,_,w[p+5],K,4294588738),_=c(_,m,b,S,w[p+8],O,2272392833),S=c(S,_,m,b,w[p+11],U,1839030562),b=c(b,S,_,m,w[p+14],H,4259657740),m=c(m,b,S,_,w[p+1],K,2763975236),_=c(_,m,b,S,w[p+4],O,1272893353),S=c(S,_,m,b,w[p+7],U,4139469664),b=c(b,S,_,m,w[p+10],H,3200236656),m=c(m,b,S,_,w[p+13],K,681279174),_=c(_,m,b,S,w[p+0],O,3936430074),S=c(S,_,m,b,w[p+3],U,3572445317),b=c(b,S,_,m,w[p+6],H,76029189),m=c(m,b,S,_,w[p+9],K,3654602809),_=c(_,m,b,S,w[p+12],O,3873151461),S=c(S,_,m,b,w[p+15],U,530742520),b=c(b,S,_,m,w[p+2],H,3299628645),m=u(m,b,S,_,w[p+0],C,4096336452),_=u(_,m,b,S,w[p+7],M,1126891415),S=u(S,_,m,b,w[p+14],I,2878612391),b=u(b,S,_,m,w[p+5],P,4237533241),m=u(m,b,S,_,w[p+12],C,1700485571),_=u(_,m,b,S,w[p+3],M,2399980690),S=u(S,_,m,b,w[p+10],I,4293915773),b=u(b,S,_,m,w[p+1],P,2240044497),m=u(m,b,S,_,w[p+8],C,1873313359),_=u(_,m,b,S,w[p+15],M,4264355552),S=u(S,_,m,b,w[p+6],I,2734768916),b=u(b,S,_,m,w[p+13],P,1309151649),m=u(m,b,S,_,w[p+4],C,4149444226),_=u(_,m,b,S,w[p+11],M,3174756917),S=u(S,_,m,b,w[p+2],I,718787259),b=u(b,S,_,m,w[p+9],P,3951481745),m=r(m,d),b=r(b,g),S=r(S,v),_=r(_,y);return l(m).concat(l(b),l(S),l(_))},V=function(){var t="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/",e=t.split(""),r=function(t,r){var i,n,s=[],o="";for(totalChunks=Math.floor(16*t.length/3),i=0;i<16*t.length;i++)s.push(t[Math.floor(i/16)][i%16]);for(i=0;i<s.length;i+=3)o+=e[s[i]>>2],o+=e[(3&s[i])<<4|s[i+1]>>4],o+=void 0!==s[i+1]?e[(15&s[i+1])<<2|s[i+2]>>6]:"=",o+=void 0!==s[i+2]?e[63&s[i+2]]:"=";for(n=o.slice(0,64)+"\n",i=1;i<Math.ceil(o.length/64);i++)n+=o.slice(64*i,64*i+64)+(Math.ceil(o.length/64)==i+1?"":"\n");return n},i=function(e){e=e.replace(/\n/g,"");var r,i=[],n=[],s=[];for(r=0;r<e.length;r+=4)n[0]=t.indexOf(e.charAt(r)),n[1]=t.indexOf(e.charAt(r+1)),n[2]=t.indexOf(e.charAt(r+2)),n[3]=t.indexOf(e.charAt(r+3)),s[0]=n[0]<<2|n[1]>>4,s[1]=(15&n[1])<<4|n[2]>>2,s[2]=(3&n[2])<<6|n[3],i.push(s[0],s[1],s[2]);return i=i.slice(0,i.length-i.length%16)};return"function"==typeof Array.indexOf&&(t=e),{encode:r,decode:i}}();return{size:u,h2a:h,expandKey:x,encryptBlock:y,decryptBlock:m,Decrypt:r,s2a:c,rawEncrypt:p,aesEncrypt:g,aesDecrypt:v,dec:I,openSSLKey:l,a2h:a,enc:M,Hash:{MD5:P},Base64:V}}();"function"==typeof define&&define(function(){return GibberishAES});
   
@@ -5617,6 +5616,7 @@ return {
   };
 })();
 
+
 // ==================== 业务常量与配置 ====================
 const STORAGE_KEYS = {
   SESSION_KEY: 'telecom_draw_session_key',
@@ -5625,29 +5625,35 @@ const STORAGE_KEYS = {
   WEDNESDAY_ACT2: 'telecom_draw_wednesday_act2', // 默认 hd92859166 (山西抽奖新-每周三次)
   LUCKY_ACT: 'telecom_draw_lucky_act',           // 默认 A2025011413413484352835699495179 (权益商城幸运抽奖)
   LAST_CAPTURE_TIME: 'telecom_draw_last_capture_time',
-  LAST_RUN_DATE: 'telecom_draw_last_run_date'
+  LAST_CLAIMED_DATE: 'telecom_draw_claimed_date', // 记录当天是否已完成领取，如 2026-09-17
+  SILENT_CAPTURE: 'telecom_draw_silent_capture'   // 是否完全静默捕获，默认 true
 };
 
 const DEFAULT_CONFIG = {
   ACT1: 'hd76690472',
   ACT2: 'hd92859166',
   LUCKY_ACT: 'A2025011413413484352835699495179',
-  UA: 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 MicroMessenger/8.0.38(0x1800262c) NetType/WIFI Language/zh_CN'
+  UA: 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 MicroMessenger/8.0.38(0x1800262c) NetType/WIFI Language/zh_CN'
 };
 
+// 内存防并发锁
+let isRunningLock = false;
+
 // ==================== 主入口调度 ====================
-if (isRequest) {
+if (isRequest || isResponse) {
   handleCapture();
 } else {
   handleCron();
 }
 
-// ==================== 1. 凭据捕获处理 ====================
-function handleCapture() {
+// ==================== 1. 凭据捕获与即时自动触发 ====================
+async function handleCapture() {
   const url = $request.url || '';
   const headers = $request.headers || {};
   let body = '';
-  if ($request.body) {
+  if (typeof $response !== 'undefined' && $response.body) {
+    body = typeof $response.body === 'string' ? $response.body : '';
+  } else if (typeof $request !== 'undefined' && $request.body) {
     body = typeof $request.body === 'string' ? $request.body : '';
   }
 
@@ -5675,50 +5681,49 @@ function handleCapture() {
       if (body.startsWith('{')) {
         parsed = JSON.parse(body);
       } else {
-        // 尝试 urlencoded
         parsed = parseQueryString(body);
       }
       if (parsed) {
-        if (parsed.sessionKey) capturedSessionKey = parsed.sessionKey;
-        if (parsed.sessionkey) capturedSessionKey = parsed.sessionkey;
-        if (parsed.productNo) capturedProductNo = parsed.productNo;
-        if (parsed.phoneNo) capturedProductNo = parsed.phoneNo;
-        if (parsed.activityNo) capturedAct = parsed.activityNo;
-        if (parsed.activityId) capturedAct = parsed.activityId;
+        // 如果是登录响应结构 (result 对象下)
+        const targetObj = parsed.result && typeof parsed.result === 'object' ? parsed.result : parsed;
+        if (targetObj.sessionKey) capturedSessionKey = targetObj.sessionKey;
+        if (targetObj.sessionkey) capturedSessionKey = targetObj.sessionkey;
+        if (targetObj.productNo) capturedProductNo = targetObj.productNo;
+        if (targetObj.phoneNo) capturedProductNo = targetObj.phoneNo;
+        if (targetObj.activityNo) capturedAct = targetObj.activityNo;
+        if (targetObj.activityId) capturedAct = targetObj.activityId;
       }
     } catch (e) {}
   }
 
-  // 检查是否有凭据更新
-  let isUpdated = false;
-  if (capturedSessionKey) {
+  let isSessionUpdated = false;
+
+  // 严格校验 SessionKey：必须是 32 位 Hex 字符
+  if (capturedSessionKey && /^[0-9a-fA-F]{32}$/.test(capturedSessionKey)) {
     const oldSession = $.read(STORAGE_KEYS.SESSION_KEY);
     if (capturedSessionKey !== oldSession) {
       $.write(capturedSessionKey, STORAGE_KEYS.SESSION_KEY);
-      isUpdated = true;
+      isSessionUpdated = true;
     }
   }
 
-  if (capturedProductNo && /^[0-9]{11}$/.test(capturedProductNo)) {
+  // 严格校验手机号：必须符合大陆 11 位有效手机号格式（坚决过滤 80544/81739 等内部产品线代码）
+  if (capturedProductNo && /^1[3-9]\d{9}$/.test(capturedProductNo)) {
     const oldProduct = $.read(STORAGE_KEYS.PRODUCT_NO);
     if (capturedProductNo !== oldProduct) {
       $.write(capturedProductNo, STORAGE_KEYS.PRODUCT_NO);
-      isUpdated = true;
     }
   }
 
-  // 动态更新活动编号（若用户访问了特定周三活动）
+  // 动态捕获并更新活动编号
   if (capturedAct) {
     if (capturedAct.startsWith('hd')) {
       if (capturedAct === 'hd76690472') {
         $.write(capturedAct, STORAGE_KEYS.WEDNESDAY_ACT1);
       } else if (capturedAct === 'hd92859166') {
         $.write(capturedAct, STORAGE_KEYS.WEDNESDAY_ACT2);
-      } else if (capturedAct === 'hd70226376') {
-        // 幸运抽奖
-      } else {
-        // 新批次周三活动，自动更新至 act1 或 act2
-        $.log(`[凭据捕获] 发现新批次活动编号: ${capturedAct}`);
+      } else if (capturedAct !== 'hd70226376') {
+        $.log(`[凭据捕获] 发现新批次周三活动号: ${capturedAct}`);
         $.write(capturedAct, STORAGE_KEYS.WEDNESDAY_ACT1);
       }
     } else if (capturedAct.startsWith('A202')) {
@@ -5726,29 +5731,56 @@ function handleCapture() {
     }
   }
 
-  if (isUpdated) {
+  // 记录捕获时间
+  if (isSessionUpdated) {
     const nowTime = new Date().toLocaleString();
     $.write(nowTime, STORAGE_KEYS.LAST_CAPTURE_TIME);
-    const maskedPhone = capturedProductNo ? capturedProductNo.replace(/(\d{3})\d{4}(\d{4})/, '$1****$2') : '已记录';
-    const keySnippet = capturedSessionKey ? capturedSessionKey.slice(0, 8) + '...' : '已更新';
-    $.notify('中国电信 · 会员抽奖凭据更新', `手机号: ${maskedPhone}`, `SessionKey: ${keySnippet}，更新时间: ${nowTime}`);
-    $.log(`[凭据捕获] 成功捕获并持久化存储凭据: phone=${maskedPhone}, sessionKey=${keySnippet}`);
+    const maskedPhone = ($.read(STORAGE_KEYS.PRODUCT_NO) || '').replace(/(\d{3})\d{4}(\d{4})/, '$1****$2') || '已记录';
+    const keySnippet = capturedSessionKey.slice(0, 8) + '...';
+    // 遵照用户要求：彻底 100% 静默，绝不弹窗打扰！只在控制台输出日志
+    $.log(`[凭据捕获] 静默更新会话凭据成功: phone=${maskedPhone}, sessionKey=${keySnippet}`);
+  }
+
+  // 【核心功能：进小程序即时全自动领取】
+  // 当用户打开小程序触发捕获时，当前 sessionKey 是最新活跃状态，此时自动触发抽奖胜率最高！
+  const todayStr = getTodayDateStr();
+  const lastClaimed = $.read(STORAGE_KEYS.LAST_CLAIMED_DATE) || '';
+  const currentSession = $.read(STORAGE_KEYS.SESSION_KEY);
+  const currentPhone = $.read(STORAGE_KEYS.PRODUCT_NO);
+
+  // 检查是否具备领取条件且今日未领取过
+  if (currentSession && currentPhone && lastClaimed !== todayStr && !isRunningLock) {
+    isRunningLock = true;
+    $.log(`[即时自动领] 检测到小程序活跃且今日尚未自动领取，立即后台启动全套抽奖...`);
+    // 异步执行抽奖流程，不阻塞当前请求通过
+    setTimeout(async () => {
+      try {
+        await executeAllLotteryTasks('小程序即时唤醒');
+      } catch (e) {
+        $.log(`[即时自动领] 异常: ${e.message || e}`);
+      } finally {
+        isRunningLock = false;
+      }
+    }, 1000);
   }
 
   $.done();
 }
 
-// ==================== 2. 定时抽奖核心引擎 ====================
+// ==================== 2. 定时抽奖任务入口 (Cron) ====================
 async function handleCron() {
-  $.log('========== [中国电信·周三会员日与幸运抽奖] 任务启动 ==========');
+  $.log('========== [中国电信·周三会员日与幸运抽奖] 定时任务启动 ==========');
+  await executeAllLotteryTasks('定时调度');
+  $.done();
+}
 
+// ==================== 3. 抽奖总控执行引擎 ====================
+async function executeAllLotteryTasks(triggerSource = '定时调度') {
   const sessionKey = $.read(STORAGE_KEYS.SESSION_KEY);
   const productNo = $.read(STORAGE_KEYS.PRODUCT_NO);
 
   if (!sessionKey || !productNo) {
-    $.notify('中国电信 · 抽奖失败', '未找到登录凭据', '请在微信中打开【中国电信5G会员】小程序并进入权益或抽奖页面以自动捕获凭据！');
-    $.log('[错误] 未找到 sessionKey 或 productNo，退出');
-    $.done();
+    $.log(`[${triggerSource}] 未找到有效 sessionKey 或 productNo，本次跳过`);
     return;
   }
 
@@ -5759,65 +5791,79 @@ async function handleCron() {
   const now = new Date();
   const dayOfWeek = now.getDay(); // 0 是周日, 3 是周三
   const isWednesday = dayOfWeek === 3;
+  const todayStr = getTodayDateStr();
 
-  $.log(`[环境检测] 当前日期: ${now.toLocaleDateString()}, 星期: ${['日','一','二','三','四','五','六'][dayOfWeek]}`);
-  $.log(`[凭据信息] 手机号: ${productNo.replace(/(\d{3})\d{4}(\d{4})/, '$1****$2')}, SessionKey: ${sessionKey.slice(0, 8)}...`);
+  $.log(`[${triggerSource}] 当前时间: ${now.toLocaleString()}, 星期: ${['日','一','二','三','四','五','六'][dayOfWeek]}`);
+  $.log(`[${triggerSource}] 目标用户: ${productNo.replace(/(\d{3})\d{4}(\d{4})/, '$1****$2')}, 会话: ${sessionKey.slice(0, 8)}...`);
 
   const reportList = [];
+  let hasWinning = false;
 
-  // --- 1. 周三会员日抽奖 1 (山西甄选周三会员日) ---
+  // --- 任务 1：周三会员日抽奖 1 (山西甄选周三会员日) ---
   if (isWednesday) {
     $.log(`\n--- 正在执行周三会员日抽奖 1 [活动号: ${act1}] ---`);
     const res1 = await runWednesdayLottery(act1, '山西甄选周三会员日', sessionKey, productNo);
     reportList.push(res1);
+    if (res1.isWinning) hasWinning = true;
   } else {
     $.log(`[跳过] 周三会员日抽奖 1 仅在周三开放 (当前星期${['日','一','二','三','四','五','六'][dayOfWeek]})`);
-    reportList.push({ name: '周三抽奖1(山西甄选)', status: '仅周三开放', details: '今日非周三' });
   }
 
-  // --- 2. 周三会员日抽奖 2 (山西抽奖新-每周三次) ---
+  // --- 任务 2：周三会员日抽奖 2 (山西抽奖新-每周三次) ---
   if (isWednesday) {
     $.log(`\n--- 正在执行周三会员日抽奖 2 [活动号: ${act2}] ---`);
     const res2 = await runWednesdayLottery(act2, '山西抽奖新-每周三次', sessionKey, productNo);
     reportList.push(res2);
+    if (res2.isWinning) hasWinning = true;
   } else {
     $.log(`[跳过] 周三会员日抽奖 2 仅在周三开放 (当前星期${['日','一','二','三','四','五','六'][dayOfWeek]})`);
-    reportList.push({ name: '周三抽奖2(每周三次)', status: '仅周三开放', details: '今日非周三' });
   }
 
-  // --- 3. 权益商城幸运抽奖 (日常/周三均可) ---
+  // --- 任务 3：权益商城幸运抽奖 (日常/周三均可领) ---
   $.log(`\n--- 正在执行权益商城幸运抽奖 [活动ID: ${luckyAct}] ---`);
   const resLucky = await runLuckyLottery(luckyAct, '权益商城幸运抽奖', sessionKey, productNo);
   reportList.push(resLucky);
+  if (resLucky.isWinning) hasWinning = true;
 
-  // 汇总通知
+  // 记录今日已完成，避免当天频繁重复执行
+  $.write(todayStr, STORAGE_KEYS.LAST_CLAIMED_DATE);
+
+  // 整理战报通知
   const notifyLines = reportList.map((r, i) => `${i+1}. ${r.name}: ${r.status} (${r.details})`);
   const notifyBody = notifyLines.join('\n');
-  $.notify('中国电信 · 会员抽奖执行报告', isWednesday ? '🎉 周三会员日全套抽奖完成' : '日常抽奖完成', notifyBody);
+
   $.log('\n========== 任务汇总报告 ==========');
   $.log(notifyBody);
   $.log('==================================');
 
-  $.done();
+  // 仅在任务真正执行完成时发送 1 次汇总通知，绝不日常骚扰
+  const subTitle = isWednesday 
+    ? (hasWinning ? '🎉 周三会员日抽奖中奖啦！' : '周三会员日全套抽奖完成')
+    : (hasWinning ? '🎉 幸运抽奖中奖啦！' : '幸运抽奖完成');
+
+  $.notify('中国电信 · 会员抽奖战报', subTitle, notifyBody);
 }
 
-// ==================== 3. 周三会员日抽奖实现 ====================
+// ==================== 4. 周三会员日抽奖实现 ====================
 async function runWednesdayLottery(actNo, actTitle, sessionKey, productNo) {
+  let isWinning = false;
   try {
-    // 1. 查询活动信息
-    $.log(`[${actTitle}] 正在查询活动信息...`);
+    // 1. 查询活动详情
+    $.log(`[${actTitle}] 查询活动配置...`);
     const actRes = await requestC005('https://mapi-h5.bestpay.com.cn/gapi/op-lottery-system/DrawService/queryDrawActivity', {
       activityNo: actNo,
       sessionKey: sessionKey,
       productNo: productNo,
       phoneNo: productNo,
+      fromChannelId: 'MINIPROG',
+      fromchannelId: 'MINIPROG',
       encyType: "C005"
-    }, productNo, sessionKey);
+    }, productNo, sessionKey, 'MINIPROG');
 
     if (!actRes || !actRes.success) {
       const errMsg = actRes?.errorMsg || '活动查询失败';
       $.log(`[${actTitle}] 活动查询失败: ${errMsg}`);
-      return { name: actTitle, status: '查询失败', details: errMsg };
+      return { name: actTitle, status: '查询受阻', details: errMsg, isWinning: false };
     }
 
     const actName = actRes.result?.lotteryActivityConfigDTO?.activityName || actTitle;
@@ -5829,101 +5875,112 @@ async function runWednesdayLottery(actNo, actTitle, sessionKey, productNo) {
       sessionKey: sessionKey,
       productNo: productNo,
       phoneNo: productNo,
-      deviceNo: 'miniprogram_device_' + productNo,
+      deviceNo: 'miniprogram_' + productNo,
+      fromChannelId: 'MINIPROG',
+      fromchannelId: 'MINIPROG',
       encyType: "C005"
-    }, productNo, sessionKey);
+    }, productNo, sessionKey, 'MINIPROG');
 
     let count = countRes?.result?.lotteryCount || 0;
     $.log(`[${actTitle}] 剩余抽奖次数: ${count}`);
 
     if (count <= 0) {
-      return { name: actName, status: '次数已尽', details: '可用抽奖次数为 0' };
+      return { name: actName, status: '已无可抽次数', details: '今日次数为 0', isWinning: false };
     }
 
-    // 3. 循环抽奖
-    let drawSuccessCount = 0;
+    // 3. 循环执行抽奖
+    let drawCount = 0;
     const prizeNames = [];
 
     while (count > 0) {
-      $.log(`[${actTitle}] 正在发起第 ${drawSuccessCount + 1} 次抽奖 (剩余 ${count} 次)...`);
+      $.log(`[${actTitle}] 正在执行第 ${drawCount + 1} 次抽奖 (剩余 ${count} 次)...`);
       const drawRes = await requestC005('https://mapi-h5.bestpay.com.cn/gapi/op-lottery-system/DrawService/lotteryAward', {
         activityNo: actNo,
         sessionKey: sessionKey,
         productNo: productNo,
         phoneNo: productNo,
-        deviceNo: 'miniprogram_device_' + productNo,
+        deviceNo: 'miniprogram_' + productNo,
+        fromChannelId: 'MINIPROG',
+        fromchannelId: 'MINIPROG',
         encyType: "C005"
-      }, productNo, sessionKey);
+      }, productNo, sessionKey, 'MINIPROG');
 
       if (drawRes && drawRes.success && drawRes.result) {
-        drawSuccessCount++;
+        drawCount++;
         count--;
         const prize = drawRes.result;
-        const prizeName = prize.prizeName || '未命名奖品';
+        const prizeName = prize.prizeName || '礼品';
         const isThanks = prize.prizeType === 'THANKS_FOR_PARTICIPATE' || prizeName.includes('谢谢');
         $.log(`[${actTitle}] 抽奖成功: ${prizeName}`);
         prizeNames.push(prizeName);
 
-        // 如果不是“谢谢参与”，尝试领取奖品入账
-        if (!isThanks && prize.orderNo) {
-          $.log(`[${actTitle}] 正在自动领取奖品入账: ${prizeName}, orderNo=${prize.orderNo}`);
-          await requestC005('https://mapi-h5.bestpay.com.cn/gapi/op-lottery-system/DrawService/receivePrize', {
-            activityNo: actNo,
-            sessionKey: sessionKey,
-            productNo: productNo,
-            orderNo: prize.orderNo,
-            sourceChannel: 'APPLET',
-            encyType: "C005"
-          }, productNo, sessionKey);
+        if (!isThanks) {
+          isWinning = true;
+          // 自动领取入账
+          if (prize.orderNo) {
+            $.log(`[${actTitle}] 自动领取奖品入账: ${prizeName} (orderNo=${prize.orderNo})`);
+            await requestC005('https://mapi-h5.bestpay.com.cn/gapi/op-lottery-system/DrawService/receivePrize', {
+              activityNo: actNo,
+              sessionKey: sessionKey,
+              productNo: productNo,
+              orderNo: prize.orderNo,
+              sourceChannel: 'APPLET',
+              fromChannelId: 'MINIPROG',
+              fromchannelId: 'MINIPROG',
+              encyType: "C005"
+            }, productNo, sessionKey, 'MINIPROG');
+          }
         }
       } else {
-        const err = drawRes?.errorMsg || '抽奖失败';
-        $.log(`[${actTitle}] 抽奖中断: ${err}`);
+        const err = drawRes?.errorMsg || '抽奖未成功';
+        $.log(`[${actTitle}] 抽奖停止: ${err}`);
         break;
       }
 
-      await sleep(1500); // 间隔 1.5 秒防并发频控
+      await sleep(1500);
     }
 
-    const summaryStr = drawSuccessCount > 0 
-      ? `抽奖 ${drawSuccessCount} 次，获得: ${prizeNames.join(', ')}`
-      : '未完成抽奖';
+    const detailText = drawCount > 0 
+      ? `完成 ${drawCount} 次，获得: ${prizeNames.join(', ')}`
+      : '未产生抽奖';
 
-    return { name: actName, status: '抽奖完成', details: summaryStr };
+    return { name: actName, status: '完成', details: detailText, isWinning: isWinning };
 
   } catch (err) {
     $.log(`[${actTitle}] 执行异常: ${err.message || err}`);
-    return { name: actTitle, status: '异常中断', details: err.message || err };
+    return { name: actTitle, status: '异常', details: err.message || err, isWinning: false };
   }
 }
 
-// ==================== 4. 权益商城幸运抽奖实现 ====================
+// ==================== 5. 权益商城幸运抽奖实现 ====================
 async function runLuckyLottery(actId, actTitle, sessionKey, productNo) {
+  let isWinning = false;
   try {
     // 1. 查询活动详情
-    $.log(`[${actTitle}] 正在查询活动详情 [activityId: ${actId}]...`);
+    $.log(`[${actTitle}] 查询活动详情 [activityId: ${actId}]...`);
     const actRes = await requestC005('https://mapi-h5.bestpay.com.cn/gapi/equitymall/client/Activity/queryActivityInfo', {
       activityId: actId,
       sessionKey: sessionKey,
       productNo: productNo,
       phoneNo: productNo,
       fromChannelId: '5g_mini_program',
+      fromchannelId: '5g_mini_program',
       encyType: "C005"
-    }, productNo, sessionKey);
+    }, productNo, sessionKey, '5g_mini_program');
 
     if (!actRes || !actRes.success) {
-      const errMsg = actRes?.errorMsg || '活动查询失败';
+      const errMsg = actRes?.errorMsg || '活动详情查询失败';
       $.log(`[${actTitle}] 活动详情查询失败: ${errMsg}`);
-      return { name: actTitle, status: '查询失败', details: errMsg };
+      return { name: actTitle, status: '查询受阻', details: errMsg, isWinning: false };
     }
 
     const pageTitle = actRes.result?.t?.activityConfig?.pageTitle || actTitle;
     const lotteryModule = actRes.result?.t?.activityLotteryModules?.[0];
     const lotteryId = lotteryModule?.lotteryId || 'LM202505282205492080223238537929';
     const lotteryActivityNo = lotteryModule?.lotteryActivityNo || 'hd70226376';
-    $.log(`[${actTitle}] 成功确认活动: ${pageTitle} (lotteryId=${lotteryId})`);
+    $.log(`[${actTitle}] 成功确认活动: ${pageTitle}`);
 
-    // 2. 尝试免费领取抽奖机会 (freeReceiveLotteryOpportunity)
+    // 2. 免费领取抽奖机会 (freeReceiveLotteryOpportunity)
     try {
       $.log(`[${actTitle}] 尝试免费领取抽奖机会...`);
       const freeRes = await requestC005('https://mapi-h5.bestpay.com.cn/gapi/equitymall/client/lottery/freeReceiveLotteryOpportunity', {
@@ -5933,16 +5990,18 @@ async function runLuckyLottery(actId, actTitle, sessionKey, productNo) {
         sessionKey: sessionKey,
         productNo: productNo,
         phoneNo: productNo,
+        fromChannelId: '5g_mini_program',
+        fromchannelId: '5g_mini_program',
         encyType: "C005"
-      }, productNo, sessionKey);
+      }, productNo, sessionKey, '5g_mini_program');
       if (freeRes && freeRes.success) {
         $.log(`[${actTitle}] 免费机会领取成功！`);
       } else {
-        $.log(`[${actTitle}] 免费机会已领或不可用: ${freeRes?.errorMsg || ''}`);
+        $.log(`[${actTitle}] 免费机会状态: ${freeRes?.errorMsg || '正常'}`);
       }
     } catch(e) {}
 
-    // 3. 尝试完成内置抽奖任务 (如分享、打卡)
+    // 3. 尝试完成日常任务 (浏览与分享打卡)
     const taskCodes = ['sharedToWeChat', 'viewActivity'];
     for (const code of taskCodes) {
       try {
@@ -5953,75 +6012,83 @@ async function runLuckyLottery(actId, actTitle, sessionKey, productNo) {
           sessionKey: sessionKey,
           productNo: productNo,
           phoneNo: productNo,
+          fromChannelId: '5g_mini_program',
+          fromchannelId: '5g_mini_program',
           encyType: "C005"
-        }, productNo, sessionKey);
+        }, productNo, sessionKey, '5g_mini_program');
       } catch(e) {}
     }
 
-    // 4. 查询当前可用抽奖次数
+    // 4. 查询可用抽奖次数
     const countRes = await requestC005('https://mapi-h5.bestpay.com.cn/gapi/equitymall/client/lottery/queryCustomerLotteryTimes', {
       activityId: actId,
       lotteryId: lotteryId,
       sessionKey: sessionKey,
       productNo: productNo,
       phoneNo: productNo,
+      fromChannelId: '5g_mini_program',
+      fromchannelId: '5g_mini_program',
       encyType: "C005"
-    }, productNo, sessionKey);
+    }, productNo, sessionKey, '5g_mini_program');
 
     let count = countRes?.result?.lotteryCount || 0;
     $.log(`[${actTitle}] 可用抽奖次数: ${count}`);
 
     if (count <= 0) {
-      return { name: pageTitle, status: '次数已尽', details: '可用抽奖次数为 0' };
+      return { name: pageTitle, status: '已无可抽次数', details: '今日次数为 0', isWinning: false };
     }
 
-    // 5. 循环执行抽奖 (lotteryReceive)
-    let drawSuccessCount = 0;
+    // 5. 循环执行抽奖
+    let drawCount = 0;
     const prizeNames = [];
 
     while (count > 0) {
-      $.log(`[${actTitle}] 正在发起第 ${drawSuccessCount + 1} 次抽奖 (剩余 ${count} 次)...`);
+      $.log(`[${actTitle}] 正在执行第 ${drawCount + 1} 次抽奖 (剩余 ${count} 次)...`);
       const drawRes = await requestC005('https://mapi-h5.bestpay.com.cn/gapi/equitymall/client/lottery/lotteryReceive', {
         activityId: actId,
         lotteryId: lotteryId,
         sessionKey: sessionKey,
         productNo: productNo,
         phoneNo: productNo,
+        fromChannelId: '5g_mini_program',
+        fromchannelId: '5g_mini_program',
         encyType: "C005"
-      }, productNo, sessionKey);
+      }, productNo, sessionKey, '5g_mini_program');
 
       if (drawRes && drawRes.success) {
-        drawSuccessCount++;
+        drawCount++;
         count--;
         const prize = drawRes.result || {};
         const prizeName = prize.prizeName || prize.name || '奖品入账';
+        const isThanks = prizeName.includes('谢谢');
         $.log(`[${actTitle}] 抽奖成功: ${prizeName}`);
         prizeNames.push(prizeName);
+        if (!isThanks) isWinning = true;
       } else {
-        const err = drawRes?.errorMsg || '抽奖失败';
-        $.log(`[${actTitle}] 抽奖中断: ${err}`);
+        const err = drawRes?.errorMsg || '抽奖未成功';
+        $.log(`[${actTitle}] 抽奖停止: ${err}`);
         break;
       }
 
       await sleep(1500);
     }
 
-    const summaryStr = drawSuccessCount > 0
-      ? `抽奖 ${drawSuccessCount} 次，获得: ${prizeNames.join(', ')}`
-      : '未完成抽奖';
+    const detailText = drawCount > 0 
+      ? `完成 ${drawCount} 次，获得: ${prizeNames.join(', ')}`
+      : '未产生抽奖';
 
-    return { name: pageTitle, status: '抽奖完成', details: summaryStr };
+    return { name: pageTitle, status: '完成', details: detailText, isWinning: isWinning };
 
   } catch (err) {
     $.log(`[${actTitle}] 执行异常: ${err.message || err}`);
-    return { name: actTitle, status: '异常中断', details: err.message || err };
+    return { name: actTitle, status: '异常', details: err.message || err, isWinning: false };
   }
 }
 
-// ==================== 5. C005 通用加密请求网关 ====================
-async function requestC005(url, bizParams, productNo, sessionKey) {
+// ==================== 6. C005 混合加解密网络网关 ====================
+async function requestC005(url, bizParams, productNo, sessionKey, channelId = '5g_mini_program') {
   // 1. 获取动态公钥 nonce
-  const nonce = await getDynamicNonce(productNo);
+  const nonce = await getDynamicNonce(productNo, channelId);
   if (!nonce) {
     throw new Error('获取网关加密公钥(nonce)失败');
   }
@@ -6040,7 +6107,8 @@ async function requestC005(url, bizParams, productNo, sessionKey) {
     sign: sign,
     productNo: productNo,
     encyType: "C005",
-    fromChannelId: "5g_mini_program"
+    fromChannelId: channelId,
+    fromchannelId: channelId
   };
 
   const reqHeaders = {
@@ -6064,13 +6132,14 @@ async function requestC005(url, bizParams, productNo, sessionKey) {
   }
 }
 
-async function getDynamicNonce(productNo) {
+async function getDynamicNonce(productNo, channelId = '5g_mini_program') {
   const reqBody = {
     productNo: productNo || "80544",
     requestType: "H5",
     callback: "",
     appType: "94",
-    fromChannelId: "5g_mini_program",
+    fromChannelId: channelId,
+    fromchannelId: channelId,
     timestamp: Date.now(),
     requestNo: "req_" + Date.now(),
     requestSystem: "eq-mall-activity-h5",
@@ -6097,7 +6166,15 @@ async function getDynamicNonce(productNo) {
   }
 }
 
-// ==================== 6. 工具辅助函数 ====================
+// ==================== 7. 工具辅助函数 ====================
+function getTodayDateStr() {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 function getQueryParam(url, param) {
   const match = url.match(new RegExp('[?&]' + param + '=([^&#]*)', 'i'));
   return match ? decodeURIComponent(match[1]) : '';
@@ -6115,7 +6192,7 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// ==================== 7. 通用 Env 类 (支持 Loon / Surge / Node) ====================
+// ==================== 8. 通用 Env 类 (支持 Loon / Surge / Node) ====================
 function Env(name) {
   this.name = name;
   this.isLoon = typeof $loon !== 'undefined';
