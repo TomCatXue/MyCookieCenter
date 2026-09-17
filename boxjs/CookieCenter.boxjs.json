@@ -53,32 +53,32 @@
       "scripts": [
         {
           "name": "领取阅读达标奖励",
-          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/app/weread_claim/weread_claim.js"
+          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/weread/weread_claim.js"
         },
         {
           "name": "周二翻牌抽奖游戏",
-          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/app/weread_claim/weread_flip.js"
+          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/weread/weread_flip.js"
         },
         {
           "name": "每周限免好书一键入架",
-          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/app/weread_claim/weread_free.js"
+          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/weread/weread_free.js"
         }
       ],
       "tasks": [
         {
           "name": "每日阅读达标奖励自动领取",
           "cron": "0 23 * * *",
-          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/app/weread_claim/weread_claim.js"
+          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/weread/weread_claim.js"
         },
         {
           "name": "每周二翻牌抽奖自动运行",
           "cron": "0 20 * * 2",
-          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/app/weread_claim/weread_flip.js"
+          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/weread/weread_flip.js"
         },
         {
           "name": "每周限免好书自动入架",
           "cron": "0 10 * * 5",
-          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/app/weread_claim/weread_free.js"
+          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/weread/weread_free.js"
         }
       ],
       "descs_html": [
@@ -178,32 +178,32 @@
       "scripts": [
         {
           "name": "周三会员日双抽奖与幸运抽奖测试",
-          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/telecom_member_draw/telecom_member_draw.js"
+          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/telecom/telecom_draw.js"
         },
         {
           "name": "查询当月等级权益并执行一次话费秒杀测试",
-          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/telecom_rights/telecom_rights.js?v=20260912"
+          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/telecom/telecom_rights.js?v=20260912"
         },
         {
           "name": "山西电信体验AI领福利测试",
-          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/sx_ai_benefit/sx_ai_benefit.js?v=20260907"
+          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/telecom/telecom_benefit.js?v=20260907"
         }
       ],
       "tasks": [
         {
           "name": "周三会员日双抽奖 + 幸运抽奖 (每周三 09:00)",
           "cron": "0 9 * * 3",
-          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/telecom_member_draw/telecom_member_draw.js"
+          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/telecom/telecom_draw.js"
         },
         {
           "name": "等级权益话费秒杀 (每日 23:59:00 唤醒 · 提前 250ms 偷跑)",
           "cron": "59 23 * * *",
-          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/telecom_rights/telecom_rights.js?v=20260912"
+          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/telecom/telecom_rights.js?v=20260912"
         },
         {
           "name": "山西电信月初放水探针监控 (每月 1~8 号)",
           "cron": "*/20 8-19 1-8 * *",
-          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/sx_ai_benefit/sx_ai_benefit.js?v=20260907"
+          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/telecom/telecom_benefit.js?v=20260907"
         }
       ],
       "descs_html": [

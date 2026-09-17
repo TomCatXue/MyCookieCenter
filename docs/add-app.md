@@ -7,9 +7,9 @@
 
 接入一个 App 需要改动 **1 个目录 + 2 处索引**：
 
-1. `app/<脚本名>/<脚本名>.js` —— 新建脚本（抓 Cookie + 签到合一）
-2. `app/<脚本名>/README.md` —— 该脚本的详细文档
-3. `app/README.md` —— 在脚本清单表格追加一行
+1. `scripts/<脚本名>/<脚本名>.js` —— 新建脚本（抓 Cookie + 签到合一）
+2. `scripts/<脚本名>/README.md` —— 该脚本的详细文档
+3. `scripts/README.md` —— 在脚本清单表格追加一行
 4. （可选）`loon/CookieCenter.plugin`、`boxjs/CookieCenter.boxjs.json` 汇总配置
 
 ---
@@ -26,13 +26,13 @@
 ## 第 2 步：复制模板目录
 
 ```bash
-cp -r app/example app/myapp
-mv app/myapp/example.js app/myapp/myapp.js
+cp -r scripts/example scripts/myapp
+mv scripts/myscripts/example.js scripts/myscripts/myapp.js
 ```
 
 ## 第 3 步：改脚本
 
-打开 `app/myapp/myapp.js`，全局替换占位符：
+打开 `scripts/myscripts/myapp.js`，全局替换占位符：
 
 | 占位符 | 替换为 |
 |---|---|
@@ -51,9 +51,9 @@ mv app/myapp/example.js app/myapp/myapp.js
 
 ## 第 5 步：更新索引
 
-在 `app/README.md` 的脚本清单表格追加：
+在 `scripts/README.md` 的脚本清单表格追加：
 
-| [`myapp/`](./myapp/) | 我的App - 每日签到 | 🧪 待验证 |
+| [`myscripts/`](./myscripts/) | 我的App - 每日签到 | 🧪 待验证 |
 
 ## 第 6 步：（可选）汇总配置
 

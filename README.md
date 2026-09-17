@@ -93,8 +93,8 @@ MyCookieCenter 是一套运行在代理工具上的自动化脚本合集，覆�
 |---|---|---|---|---|
 | 📚 微信读书 · 自动领取 | 每晚 23:00 领取阅读奖励 · 周二翻牌 · 周五好书入架 | 打开微信读书浏览 / 重新登录 | [`app/weread_claim/`](./app/weread_claim/) | ✅ 已验证 |
 | 📱 山西电信 · 体验AI领福利 | 凭证静默捕获 + 月度福利领取 | 电信 App 首页 AI 搜索「领福利」进入活动页 | [`plugins/sx_ai_benefit/`](./plugins/sx_ai_benefit/) | ✅ 已验证 |
-| ☎️ 中国电信 · 全系权益中心 | 周三双抽奖 + 幸运抽奖秒领 + 0点话费秒杀 + 山西福利 | 电信5G会员小程序（进任意页秒领）/ 营业厅App（0点抢话费） | [`plugins/telecom_member_draw/`](./plugins/telecom_member_draw/) / [`plugins/telecom_rights/`](./plugins/telecom_rights/) | ✅ 已验证 |
-| 📷 扫描全能王 · 签到 | 抓取 Cookie + 每日签到 | 打开扫描全能王 App（静默抓取） | [`plugins/camscanner/`](./plugins/camscanner/) | ✅ 已验证（外部依赖） |
+| ☎️ 中国电信 · 全系权益中心 | 周三双抽奖 + 幸运抽奖秒领 + 0点话费秒杀 + 山西福利 | 电信5G会员小程序（进任意页秒领）/ 营业厅App（0点抢话费） | [`scripts/telecom/`](./scripts/telecom/) | ✅ 已验证 |
+| 📷 扫描全能王 · 签到 | 抓取 Cookie + 每日签到 | 打开扫描全能王 App（静默抓取） | [`scripts/tools/camscanner/`](./scripts/tools/camscanner/) | ✅ 已验证（外部依赖） |
 
 > 微信读书、山西电信、电信权益与电信会员抽奖已合并进 `CookieCenter.plugin`，安装一个插件即可同时获得凭据捕获与后台定时任务。
 > `扫描全能王 · 签到` 的签到脚本与图标指向外部仓库（[MaYIHEI/paperclip](https://github.com/MaYIHEI/paperclip)、[MaYIHEI/pin](https://github.com/MaYIHEI/pin)），本仓库仅维护抓取脚本与 `.plugin` 入口。
@@ -108,76 +108,39 @@ MyCookieCenter 是一套运行在代理工具上的自动化脚本合集，覆�
 | 插件 | 功能 | 脚本 | Loon 入口 | 状态 |
 |---|---|---|---|---|
 | 🚀 QQ空间 · 清净 | 广告退散，空间清净（纯规则型） | — | [`QzoneAdBlock.plugin`](./loon/QzoneAdBlock.plugin) | ✅ 已验证 |
-| 📺 哔哩哔哩 · 增强版 𝕏 | 空降助手 + 分区修复 + 扫码登录 + 1080P 高码率解锁 | [`plugins/bilibili/`](./plugins/bilibili/) | [`BilibiliFix.plugin`](./loon/BilibiliFix.plugin) | ✅ 已验证 |
-| 📖 微信读书 · 防强更净化 | 屏蔽升级弹窗与强更通知，锁定老版本免费 AI 听书 | [`plugins/wxread/`](./plugins/wxread/) | [`WeReadEnhance.plugin`](./loon/WeReadEnhance.plugin) | ✅ 已验证 |
-| ⭐ GitHub · 星标推送时间 | 星标列表语言后显示最近推送时间 | [`plugins/github_push_time/`](./plugins/github_push_time/) | [`GitHubPushTime.plugin`](./loon/GitHubPushTime.plugin) | ✅ 已验证 |
-| 🎨 Pixiv · 小说翻译 | 小说阅读页一键翻译，支持 Google 免费 / 微软 / 百度 | [`plugins/pixiv_novel_translate/`](./plugins/pixiv_novel_translate/) | [`PixivNovelTranslate.plugin`](./loon/PixivNovelTranslate.plugin) | ✅ 已验证 |
+| 📺 哔哩哔哩 · 增强版 𝕏 | 空降助手 + 分区修复 + 扫码登录 + 1080P 高码率解锁 | [`scripts/tools/bilibili/`](./scripts/tools/bilibili/) | [`BilibiliFix.plugin`](./loon/BilibiliFix.plugin) | ✅ 已验证 |
+| 📖 微信读书 · 防强更净化 | 屏蔽升级弹窗与强更通知，锁定老版本免费 AI 听书 | [`scripts/tools/wxread_enhance/`](./scripts/tools/wxread_enhance/) | [`WeReadEnhance.plugin`](./loon/WeReadEnhance.plugin) | ✅ 已验证 |
+| ⭐ GitHub · 星标推送时间 | 星标列表语言后显示最近推送时间 | [`scripts/tools/github/`](./scripts/tools/github/) | [`GitHubPushTime.plugin`](./loon/GitHubPushTime.plugin) | ✅ 已验证 |
+| 🎨 Pixiv · 小说翻译 | 小说阅读页一键翻译，支持 Google 免费 / 微软 / 百度 | [`scripts/tools/pixiv/`](./scripts/tools/pixiv/) | [`PixivNovelTranslate.plugin`](./loon/PixivNovelTranslate.plugin) | ✅ 已验证 |
 
 ## 目录结构
 
-```
+```text
 MyCookieCenter/
-├── app/         # App 签到 / 羊毛脚本（抓 Cookie + cron 签到）
-├── plugins/     # CookieCenter 受管脚本 + 独立功能脚本
-├── loon/        # Loon 专用 .plugin 插件（CookieCenter + 独立功能）
-├── boxjs/       # BoxJS 面板订阅（签到 / 权益体系）
-├── docs/        # 通用文档（抓包、接入指南）
-├── icons/       # 图标资源
-└── notes/       # 开发笔记与排错手册
+├── loon/                           # Loon 插件目录 (.plugin)
+│   ├── CookieCenter.plugin         # 核心一站式合集（微信读书 + 中国电信）
+│   ├── BilibiliFix.plugin          # 哔哩哔哩增强版
+│   ├── WeReadEnhance.plugin        # 微信读书防强更净化
+│   ├── PixivNovelTranslate.plugin  # Pixiv小说阅读翻译
+│   ├── QzoneAdBlock.plugin         # QQ空间广告屏蔽
+│   ├── GitHubPushTime.plugin       # GitHub星标时间显示
+│   └── camscanner.plugin           # 扫描全能王签到
+├── boxjs/                          # BoxJS 订阅文件
+│   └── CookieCenter.boxjs.json     # 微信读书 + 中国电信 统一配置面板
+├── scripts/                        # 核心脚本源码（按业务生态清晰聚合）
+│   ├── weread/                     # 微信读书专区（抓取 + 签到 + 翻牌 + 限免）
+│   ├── telecom/                    # 中国电信专区（周三抽奖 + 话费秒杀 + 山西福利）
+│   ├── tools/                      # 独立功能与页面净化工具（B站、Pixiv、GitHub等）
+│   └── example/                    # 脚本开发模板
+├── docs/                           # 开发规范与使用指南
+└── icons/                          # 插件图标资源
 ```
 
-| 目录 | 内容 | 索引 |
+| 目录 | 说明 | 文档 |
 |---|---|---|
-| [`app/`](./app/) | 原生 App 签到、羊毛脚本（抓 Cookie + cron） | [查看](./app/README.md) |
-| [`plugins/`](./plugins/) | CookieCenter 受管脚本 + 独立功能脚本 | [查看](./plugins/README.md) |
-| [`loon/`](./loon/) | 所有 Loon `.plugin` 插件文件 | [查看](./loon/README.md) |
-| [`boxjs/`](./boxjs/) | BoxJS 面板订阅文件（签到 / 权益体系） | [查看](./boxjs/README.md) |
-| [`docs/`](./docs/) | 通用文档（抓包、接入指南） | [查看](#文档) |
-| [`icons/`](./icons/) | 图标资源 | — |
-| [`notes/`](./notes/) | 开发笔记与排错手册 | — |
+| [`scripts/`](./scripts/) | 所有执行脚本源码（按业务聚合为 weread、telecom、tools） | [查看](./scripts/README.md) |
+| [`loon/`](./loon/) | Loon 插件规则配置 | [查看](./loon/README.md) |
+| [`boxjs/`](./boxjs/) | BoxJS 统一订阅配置 | [查看](./boxjs/README.md) |
+| [`docs/`](./docs/) | 详细使用教程与架构规范 | [查看](./docs/) |
 
-## 文档
 
-| 文档 | 内容 |
-|---|---|
-| [`docs/capture.md`](./docs/capture.md) | 📱 抓包教程：手机抓取 Cookie 与签到接口 |
-| [`docs/add-app.md`](./docs/add-app.md) | ➕ 接入新 App（抓 Cookie + 自动签到） |
-| [`docs/add-plugin.md`](./docs/add-plugin.md) | 🧩 新增功能插件（解锁会员 / 净化 / 改写） |
-| [`CONTRIBUTING.md`](./CONTRIBUTING.md) | 🤝 贡献规范（「一脚本一文件夹」） |
-| [`DISCLAIMER.md`](./DISCLAIMER.md) | ⚠️ 免责声明 |
-
-## 路线图
-
-- [x] CookieCenter 统一签到体系：抓取与执行分离 + BoxJS 面板管理
-- [x] 微信读书 · 自动领取（阅读奖励 / 翻牌 / 好书入架）
-- [x] 电信权益体系（山西电信 AI 领福利 + 等级权益 0 点抢兑）
-- [x] 独立功能插件矩阵（Bilibili / Pixiv / GitHub / 微信读书 / QQ 空间）
-- [ ] [`app/example/`](./app/example/) 示例模板完善（💎 规划中）
-- [ ] 更多 App 接入 —— 欢迎贡献，流程见 [`docs/add-app.md`](./docs/add-app.md)
-
-## 致谢
-
-- `QQ空间 · 清净` 广告屏蔽规则源自 [zqzess/rule_for_quantumultX](https://github.com/zqzess/rule_for_quantumultX)（MIT License）
-- `微信读书 · 防强更净化` 原「优雅收录」方案源自水君社区脚本，被官方修复下线后转型防强更净化
-- `扫描全能王 · 签到` 签到脚本与图标引用 [MaYIHEI/paperclip](https://github.com/MaYIHEI/paperclip)、[MaYIHEI/pin](https://github.com/MaYIHEI/pin)
-- 感谢每一位 Star / Issue / PR 的朋友 🙌
-
-## 免责声明
-
-本仓库脚本仅供**学习研究使用**，使用者需自行评估风险并承担全部责任。详细条款见 [`DISCLAIMER.md`](./DISCLAIMER.md)。
-
-## License
-
-[MIT](./LICENSE)
-
-## Star History
-
-<a href="https://www.star-history.com/?repos=TomCatXue%2FMyCookieCenter&type=date&legend=top-left">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=TomCatXue/MyCookieCenter&type=date&theme=dark&legend=top-left" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=TomCatXue/MyCookieCenter&type=date&legend=top-left" />
-    <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=TomCatXue/MyCookieCenter&type=date&legend=top-left" />
-  </picture>
-</a>
-
-如果这个项目帮到了你，欢迎点个 ⭐ Star 支持一下 · [反馈问题](https://github.com/TomCatXue/MyCookieCenter/issues)

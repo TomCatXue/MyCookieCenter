@@ -92,13 +92,13 @@ AND, ((DOMAIN-SUFFIX, chat.bilibili.com), (OR, ((DOMAIN-KEYWORD, stun), (DOMAIN-
 
 [Script]
 # 分区列表修复 (来自 BiliUniverse 完整数据，带官方高分辨率图标与 uri 跳转路由)
-http-request ^https?:\/\/app\.bili(bili\.com|api\.net)\/x\/v2\/(channel\/region\/list|region\/index)\? script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/bilibili/bilibili_region.js, requires-body=true, timeout=10, tag=[哔哩哔哩]分区列表修复
+http-request ^https?:\/\/app\.bili(bili\.com|api\.net)\/x\/v2\/(channel\/region\/list|region\/index)\? script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/bilibili/bilibili_region.js, requires-body=true, timeout=10, tag=[哔哩哔哩]分区列表修复
 
 # 自动捕获当前用户 access_key (供扫码登录签名生成使用)
-http-request ^https?:\/\/(?:app|api)\.bilibili\.com\/x\/(?:v2\/account\/mine|v2\/account\/myinfo|member\/app\/nickfree|resource\/show\/tab) script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/bilibili/bilibili_qrcode.js, tag=[哔哩哔哩]凭证捕获
+http-request ^https?:\/\/(?:app|api)\.bilibili\.com\/x\/(?:v2\/account\/mine|v2\/account\/myinfo|member\/app\/nickfree|resource\/show\/tab) script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/bilibili/bilibili_qrcode.js, tag=[哔哩哔哩]凭证捕获
 
 # 扫码登录原生签名生成与授权修复 (自动计算真实签名授权服务端入库)
-http-request ^https:\/\/passport\.bilibili\.com\/x\/passport-login\/web\/qrcode\/(check|confirm|scene) script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/bilibili/bilibili_qrcode.js, requires-body=true, timeout=10, tag=[哔哩哔哩]扫码登录修复
+http-request ^https:\/\/passport\.bilibili\.com\/x\/passport-login\/web\/qrcode\/(check|confirm|scene) script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/bilibili/bilibili_qrcode.js, requires-body=true, timeout=10, tag=[哔哩哔哩]扫码登录修复
 
 # 空降助手与评论区/动态/画质净化 (完全采用 Kelee / Sparkle 官方 master 脚本)
 http-request ^https:\/\/(?:grpc\.biliapi\.net|app\.bilibili\.com)\/bilibili\.community\.service\.dm\.v1\.DM\/DmSegMobile$ script-path = https://raw.githubusercontent.com/kokoryh/Sparkle/master/dist/bilibili.protobuf.request.js, requires-body = true, binary-body-mode = true, timeout=10, tag = [哔哩哔哩]空降助手, enable={sponsorBlock}, argument=[{logLevel}]
@@ -110,7 +110,7 @@ http-response ^https:\/\/(?:grpc\.biliapi\.net|app\.bilibili\.com)\/bilibili\.(?
 http-response ^https:\/\/api\.live\.bilibili\.com\/xlive\/(?:app-interface\/v2\/index\/feed|app-room\/v1\/index\/getInfoBy(?:Room|User))\? script-path = https://raw.githubusercontent.com/kokoryh/Sparkle/master/dist/bilibili.json.js, requires-body = true, tag = [哔哩哔哩]移除直播间广告
 
 # 大会员专属凭证注入 (仅在开启[会员]并填写凭证时触发，用于解锁付费影视)
-http-request ^https?:\/\/(?:grpc\.biliapi\.net|app\.bilibili\.com|app\.biliapi\.net)\/(?:bilibili\.app\.(?:playerunite\.v1\.Player\/PlayViewUnite|playurl\.v1\.PlayURL\/PlayView)|bilibili\.pgc\.gateway\.player\.v2\.PlayURL\/PlayView) script-path = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/bilibili/bilibili_vip.js, binary-body-mode = true, requires-body = true, timeout = 60, tag = [哔哩哔哩]大会员凭证注入, enable={VIP}, argument=[{Authorization},{UserAgent}]
+http-request ^https?:\/\/(?:grpc\.biliapi\.net|app\.bilibili\.com|app\.biliapi\.net)\/(?:bilibili\.app\.(?:playerunite\.v1\.Player\/PlayViewUnite|playurl\.v1\.PlayURL\/PlayView)|bilibili\.pgc\.gateway\.player\.v2\.PlayURL\/PlayView) script-path = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/bilibili/bilibili_vip.js, binary-body-mode = true, requires-body = true, timeout = 60, tag = [哔哩哔哩]大会员凭证注入, enable={VIP}, argument=[{Authorization},{UserAgent}]
 
 [MITM]
 hostname = grpc.biliapi.net, app.bilibili.com, api.bilibili.com, api.live.bilibili.com, passport.bilibili.com, line3-h5-mobile-api.biligame.com, www.bilibili.com

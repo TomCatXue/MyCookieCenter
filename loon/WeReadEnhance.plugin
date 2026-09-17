@@ -15,4 +15,4 @@ hostname = i.weread.qq.com
 
 [Script]
 # 拦截改写 feature 响应体，屏蔽升级弹窗并扩充特性
-http-response ^https:\/\/i\.weread\.qq\.com\/feature script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/wxread/wxread.js?v=20260906, tag=微信读书·防强更, requires-body=true, enable={weread_anti_upgrade}
+http-response ^https:\/\/i\.weread\.qq\.com\/feature script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/wxread_enhance/wxread.js?v=20260906, tag=微信读书·防强更, requires-body=true, enable={weread_anti_upgrade}
