@@ -39,5 +39,5 @@
    https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/loon/CookieCenter.plugin
    ```
 
-3. 导入后可在插件设置中按需调整开关（`weread_enable` 微信读书总控、`telecom_enable` 中国电信总控）；
+3. 导入后可在插件设置中按需调整开关（`weread`（微信读书）、`telecom`（中国电信））；
 4. **参数面板 / 手动运行**：通过 [BoxJS 订阅](../boxjs/README.md) 查看与配置 Cookie、手机号和运行测试。
