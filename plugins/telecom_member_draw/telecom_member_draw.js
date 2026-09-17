@@ -5625,8 +5625,9 @@ const STORAGE_KEYS = {
   WEDNESDAY_ACT2: 'telecom_draw_wednesday_act2', // 默认 hd92859166 (山西抽奖新-每周三次)
   LUCKY_ACT: 'telecom_draw_lucky_act',           // 默认 A2025011413413484352835699495179 (权益商城幸运抽奖)
   LAST_CAPTURE_TIME: 'telecom_draw_last_capture_time',
-  LAST_CLAIMED_DATE: 'telecom_draw_claimed_date', // 记录当天是否已完成领取，如 2026-09-17
-  SILENT_CAPTURE: 'telecom_draw_silent_capture'   // 是否完全静默捕获，默认 true
+  LAST_CLAIMED_DATE: 'telecom_draw_claimed_date',     // 记录当天是否已完成领取，如 2026-09-17
+  NOTIFIED_SESSION_KEY: 'telecom_draw_notified_session', // 记录已通知过的会话，确保同一会话仅通知一次
+  LAST_EXPIRED_NOTIFIED_DATE: 'telecom_draw_expired_notified_date' // 记录失效通知日期，避免反复轰炸
 };
 
 const DEFAULT_CONFIG = {
@@ -5731,14 +5732,21 @@ async function handleCapture() {
     }
   }
 
-  // 记录捕获时间
+  // 记录捕获时间并执行用户要求的【新会话只通知一次】策略
   if (isSessionUpdated) {
     const nowTime = new Date().toLocaleString();
     $.write(nowTime, STORAGE_KEYS.LAST_CAPTURE_TIME);
-    const maskedPhone = ($.read(STORAGE_KEYS.PRODUCT_NO) || '').replace(/(\d{3})\d{4}(\d{4})/, '$1****$2') || '已记录';
+    const maskedPhone = ($.read(STORAGE_KEYS.PRODUCT_NO) || '').replace(/(\d{3})\d{4}(\d{4})/, '$1****$2') || '已更新';
     const keySnippet = capturedSessionKey.slice(0, 8) + '...';
-    // 遵照用户要求：彻底 100% 静默，绝不弹窗打扰！只在控制台输出日志
-    $.log(`[凭据捕获] 静默更新会话凭据成功: phone=${maskedPhone}, sessionKey=${keySnippet}`);
+
+    const lastNotifiedSession = $.read(STORAGE_KEYS.NOTIFIED_SESSION_KEY) || '';
+    if (capturedSessionKey !== lastNotifiedSession) {
+      $.write(capturedSessionKey, STORAGE_KEYS.NOTIFIED_SESSION_KEY);
+      $.notify('中国电信 · 会员凭据已就绪', `账号: ${maskedPhone}`, `SessionKey 已捕获更新，进小程序将自动完成全套抽奖！`);
+      $.log(`[凭据捕获] 新凭据首次捕获，发送通知: phone=${maskedPhone}, sessionKey=${keySnippet}`);
+    } else {
+      $.log(`[凭据捕获] 会话已更新 (静默): phone=${maskedPhone}, sessionKey=${keySnippet}`);
+    }
   }
 
   // 【核心功能：进小程序即时全自动领取】
@@ -5781,6 +5789,7 @@ async function executeAllLotteryTasks(triggerSource = '定时调度') {
 
   if (!sessionKey || !productNo) {
     $.log(`[${triggerSource}] 未找到有效 sessionKey 或 productNo，本次跳过`);
+    notifyExpiredOnce('未找到登录凭据');
     return;
   }
 
@@ -5836,6 +5845,17 @@ async function executeAllLotteryTasks(triggerSource = '定时调度') {
   $.log(notifyBody);
   $.log('==================================');
 
+  // 检查是否全因凭证失效失败
+  const isAllLoginFail = reportList.length > 0 && reportList.every(r => 
+    (r.details && (r.details.includes('登录') || r.details.includes('100003') || r.details.includes('100008')))
+  );
+
+  if (isAllLoginFail) {
+    // 已经由 notifyExpiredOnce 单日提示过，此处不再弹战报造成骚扰
+    $.log('[通知控制] 本次全因会话过期未执行成功，已静默处理，避免冗余弹窗');
+    return;
+  }
+
   // 仅在任务真正执行完成时发送 1 次汇总通知，绝不日常骚扰
   const subTitle = isWednesday 
     ? (hasWinning ? '🎉 周三会员日抽奖中奖啦！' : '周三会员日全套抽奖完成')
@@ -5863,6 +5883,9 @@ async function runWednesdayLottery(actNo, actTitle, sessionKey, productNo) {
     if (!actRes || !actRes.success) {
       const errMsg = actRes?.errorMsg || '活动查询失败';
       $.log(`[${actTitle}] 活动查询失败: ${errMsg}`);
+      if (errMsg.includes('登录') || errMsg.includes('100003') || errMsg.includes('100008')) {
+        notifyExpiredOnce(errMsg);
+      }
       return { name: actTitle, status: '查询受阻', details: errMsg, isWinning: false };
     }
 
@@ -5971,6 +5994,9 @@ async function runLuckyLottery(actId, actTitle, sessionKey, productNo) {
     if (!actRes || !actRes.success) {
       const errMsg = actRes?.errorMsg || '活动详情查询失败';
       $.log(`[${actTitle}] 活动详情查询失败: ${errMsg}`);
+      if (errMsg.includes('登录') || errMsg.includes('100003') || errMsg.includes('100008')) {
+        notifyExpiredOnce(errMsg);
+      }
       return { name: actTitle, status: '查询受阻', details: errMsg, isWinning: false };
     }
 
@@ -6163,6 +6189,20 @@ async function getDynamicNonce(productNo, channelId = '5g_mini_program') {
     return json?.result?.nonce || null;
   } catch (e) {
     return null;
+  }
+}
+
+
+// 凭据失效单日仅提醒一次
+function notifyExpiredOnce(reason = '登录验证失败') {
+  const todayStr = getTodayDateStr();
+  const lastExpiredDate = $.read(STORAGE_KEYS.LAST_EXPIRED_NOTIFIED_DATE) || '';
+  if (lastExpiredDate !== todayStr) {
+    $.write(todayStr, STORAGE_KEYS.LAST_EXPIRED_NOTIFIED_DATE);
+    $.notify('中国电信 · 抽奖凭据已失效', '⚠️ 会话凭证失效', '请在微信中打开一次「中国电信5G会员」小程序任意页面，即可自动重新激活并全自动秒领！');
+    $.log(`[凭证失效] 检测到凭据失效 (${reason})，已发送今日唯一提醒通知`);
+  } else {
+    $.log(`[凭证失效] 检测到凭据失效 (${reason})，今日已提醒过，保持静默`);
   }
 }
 
