@@ -4,8 +4,8 @@
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/weread.png
 #!tag = 微信读书,防强更,去弹窗,AI听书
-#!version = 3.4.1
-#!date = 2026-09-06
+#!version = 3.4.2
+#!date = 2026-09-17 11:50
 
 [Argument]
 weread_anti_upgrade = switch,true,tag=屏蔽版本强更,desc=开启后彻底屏蔽官方强更弹窗与更新公告，安心停留在8.2.6免费AI听书

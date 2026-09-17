@@ -5,7 +5,8 @@
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://raw.githubusercontent.com/sooyaaabo/IconLibrary/main/App/BilibiliPink.png
 #!tag = 去广告,空降助手,画质解锁,Bilibili
-#!date = 2026-08-30
+#!version = 2.5.0
+#!date = 2026-09-17 11:50
 
 [Argument]
 quality = switch, true, tag = [画质] 解锁1080P高码率/4K, desc = 开启后非大会员也可直接选择并切换1080P高码率、1080P60、杜比视界等画质
