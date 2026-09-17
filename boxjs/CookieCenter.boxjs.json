@@ -90,29 +90,65 @@
       ]
     },
     {
-      "id": "sx_ai_benefit",
-      "name": "山西电信 · 体验AI领福利",
+      "id": "chinatelecom",
+      "name": "中国电信",
       "keys": [
+        "telecom_draw_session_key",
+        "telecom_draw_product_no",
+        "telecom_draw_wednesday_act1",
+        "telecom_draw_wednesday_act2",
+        "telecom_draw_lucky_act",
+        "telecom_draw_last_capture_time",
+        "telecom_draw_claimed_date",
+        "telecom_rights_id",
+        "telecom_rights_auth",
+        "sx_prefer_benefit",
         "sx_benefit_cookie",
         "sx_benefit_url",
         "sx_benefit_utm_scha",
-        "sx_benefit_ua",
         "sx_monitor_current_code",
         "sx_monitor_notified_month",
-        "sx_capture_notified_code",
-        "sx_prefer_benefit"
+        "sx_capture_notified_code"
       ],
-      "author": "@Codex",
-      "icon": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/sx_telecom.png?v=20260907",
+      "author": "@TomCatXue",
+      "icon": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/189.png?v=20260903",
       "icons": [
-        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/sx_telecom.png?v=20260907",
-        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/sx_telecom.png?v=20260907"
+        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/189.png?v=20260903",
+        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/189.png?v=20260903"
       ],
       "repo": "https://github.com/TomCatXue/MyCookieCenter",
       "settings": [
         {
+          "id": "telecom_draw_session_key",
+          "name": "【会员抽奖】会话凭证 (SessionKey)",
+          "val": "",
+          "type": "text",
+          "desc": "进入微信小程序「中国电信5G会员」任意页面后自动捕获（100%静默无弹窗），亦支持手动配置。"
+        },
+        {
+          "id": "telecom_draw_product_no",
+          "name": "【会员抽奖】电信手机号",
+          "val": "",
+          "type": "text",
+          "desc": "当前绑定的 11 位中国电信手机号码。"
+        },
+        {
+          "id": "telecom_rights_id",
+          "name": "【等级话费】目标权益 ID (默认已锁定 LV5 3元话费)",
+          "val": "eae02aa850f607daa851910621d86200b10256cab2504e274ba6224e91254ea7",
+          "type": "text",
+          "desc": "基于你账号真实级别成功定位的 LV5 话费项目 ID，0 点免查直接开火秒杀。"
+        },
+        {
+          "id": "telecom_rights_auth",
+          "name": "【等级话费】营业厅 App 凭据 (sign/Cookie/accId)",
+          "val": "",
+          "type": "textarea",
+          "desc": "进入电信营业厅 App「我」->「签到」或「等级权益」页面后自动捕获并保存的会话凭证。"
+        },
+        {
           "id": "sx_prefer_benefit",
-          "name": "月度权益目标选择",
+          "name": "【山西福利】月度权益目标选择",
           "val": "tc_member",
           "type": "select",
           "items": [
@@ -133,159 +169,48 @@
         },
         {
           "id": "sx_benefit_cookie",
-          "name": "当前会话 Cookie",
+          "name": "【山西福利】当前会话 Cookie",
           "val": "",
           "type": "text",
           "desc": "进入活动页面后自动抓取，亦支持在此手动配置与更新。"
-        },
-        {
-          "id": "sx_benefit_url",
-          "name": "活动完整 URL",
-          "val": "",
-          "type": "text",
-          "desc": "包含 ticket 与活动批次标识的完整活动地址。"
         }
       ],
       "scripts": [
         {
-          "name": "执行探针自检 / 通信测试",
-          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/sx_ai_benefit/sx_ai_benefit.js"
-        }
-      ],
-      "tasks": [
-        {
-          "name": "每月1-8号放水智能监控",
-          "cron": "*/20 8-19 1-8 * *",
-          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/sx_ai_benefit/sx_ai_benefit.js"
-        }
-      ],
-      "descs_html": [
-        "<span><b>凭据捕获：</b>开启 CookieCenter 插件后，在电信 APP 首页 AI 搜索“领福利”进入活动，自动记录凭据（新批次单次提醒）。</span>",
-        "<span><b>智能监控：</b>每月 1~8 号后台自动探测活动服务器放水状态，绝不报任何证书错误。</span>",
-        "<span><b>单次提醒：</b>一旦检测到新批次放水立即发送直达通知，点击直通电信 APP 极速抢兑；当月已领或通知后即深度休眠。</span>"
-      ]
-    },
-    {
-      "id": "telecom_rights",
-      "name": "中国电信 · 等级权益兑换话费",
-      "keys": [
-        "telecom_rights_id",
-        "telecom_rights_auth"
-      ],
-      "author": "@Codex",
-      "icon": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/189.png?v=20260903",
-      "icons": [
-        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/189.png?v=20260903",
-        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/189.png?v=20260903"
-      ],
-      "repo": "https://github.com/TomCatXue/MyCookieCenter",
-      "settings": [
-        {
-          "id": "telecom_rights_id",
-          "name": "目标话费权益 ID (已锁定 LV5 3元话费)",
-          "val": "eae02aa850f607daa851910621d86200b10256cab2504e274ba6224e91254ea7",
-          "type": "text",
-          "desc": "基于你账号真实级别成功定位的 LV5 话费项目 ID，0 点免查直接开火秒杀。"
-        },
-        {
-          "id": "telecom_rights_auth",
-          "name": "等级权益会话凭据 (sign/Cookie/accId)",
-          "val": "",
-          "type": "textarea",
-          "desc": "进入电信 App「我」->「签到」或「等级权益」页面后自动捕获并保存的 sign、Cookie 与 accId 数据。"
-        }
-      ],
-      "scripts": [
-        {
-          "name": "查询当月等级权益并执行一次兑换测试",
-          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/telecom_rights/telecom_rights.js?v=20260912"
-        }
-      ],
-      "tasks": [
-        {
-          "name": "每日 23:59:00 提前唤醒 + 提前 250ms 偷跑秒杀",
-          "cron": "59 23 * * *",
-          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/telecom_rights/telecom_rights.js?v=20260912"
-        }
-      ],
-      "descs_html": [
-        "<span><b>偷跑秒杀：</b>采用每日 23:59:00 提前一分钟唤醒，并在内存中高精度倒计时至 23:59:59.750（提前 250 毫秒）开火偷跑，对冲空口网络延迟与调度抖动。</span>",
-        "<span><b>三连并发：</b>0 点瞬间实施短间隔 3 枪连射突发，极大拉高对抗全国并发抢兑的胜率。</span>",
-        "<span><b>月度休眠：</b>当月只要成功抢到一次话费（或已参与），立即自动锁定当月深度休眠，不再发包打扰；未抢到则每天循环继续蹲守，下月初自动复苏。</span>"
-      ]
-    },
-    {
-      "id": "telecom_member_draw",
-      "name": "中国电信 · 周三会员日与幸运抽奖",
-      "keys": [
-        "telecom_draw_session_key",
-        "telecom_draw_product_no",
-        "telecom_draw_wednesday_act1",
-        "telecom_draw_wednesday_act2",
-        "telecom_draw_lucky_act",
-        "telecom_draw_last_capture_time"
-      ],
-      "author": "@Codex",
-      "icon": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/189.png?v=20260903",
-      "icons": [
-        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/189.png?v=20260903",
-        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/189.png?v=20260903"
-      ],
-      "repo": "https://github.com/TomCatXue/MyCookieCenter",
-      "settings": [
-        {
-          "id": "telecom_draw_session_key",
-          "name": "当前会话 SessionKey",
-          "val": "",
-          "type": "text",
-          "desc": "进入中国电信5G会员/权益商城抽奖页面后自动捕获，亦支持在此手动查看与维护。"
-        },
-        {
-          "id": "telecom_draw_product_no",
-          "name": "用户手机号码",
-          "val": "",
-          "type": "text",
-          "desc": "自动捕获绑定的电信手机号（11位）。"
-        },
-        {
-          "id": "telecom_draw_wednesday_act1",
-          "name": "周三抽奖1 (山西甄选周三会员日)",
-          "val": "hd76690472",
-          "type": "text",
-          "desc": "周三会员日活动1编号，默认 hd76690472，支持随批次自动更新或手动配置。"
-        },
-        {
-          "id": "telecom_draw_wednesday_act2",
-          "name": "周三抽奖2 (山西抽奖新-每周三次)",
-          "val": "hd92859166",
-          "type": "text",
-          "desc": "周三会员日活动2编号，默认 hd92859166，支持随批次自动更新或手动配置。"
-        },
-        {
-          "id": "telecom_draw_lucky_act",
-          "name": "权益商城幸运抽奖活动ID",
-          "val": "A2025011413413484352835699495179",
-          "type": "text",
-          "desc": "权益商城幸运抽奖活动编号，默认 A2025011413413484352835699495179。"
-        }
-      ],
-      "scripts": [
-        {
-          "name": "立即执行一次会员抽奖测试",
+          "name": "周三会员日双抽奖与幸运抽奖测试",
           "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/telecom_member_draw/telecom_member_draw.js"
+        },
+        {
+          "name": "查询当月等级权益并执行一次话费秒杀测试",
+          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/telecom_rights/telecom_rights.js?v=20260912"
+        },
+        {
+          "name": "山西电信体验AI领福利测试",
+          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/sx_ai_benefit/sx_ai_benefit.js?v=20260907"
         }
       ],
       "tasks": [
         {
-          "name": "每周三上午 09:00:00 自动执行三大抽奖任务",
+          "name": "周三会员日双抽奖 + 幸运抽奖 (每周三 09:00)",
           "cron": "0 9 * * 3",
           "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/telecom_member_draw/telecom_member_draw.js"
+        },
+        {
+          "name": "等级权益话费秒杀 (每日 23:59:00 唤醒 · 提前 250ms 偷跑)",
+          "cron": "59 23 * * *",
+          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/telecom_rights/telecom_rights.js?v=20260912"
+        },
+        {
+          "name": "山西电信月初放水探针监控 (每月 1~8 号)",
+          "cron": "*/20 8-19 1-8 * *",
+          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/plugins/sx_ai_benefit/sx_ai_benefit.js?v=20260907"
         }
       ],
       "descs_html": [
-        "<span><b>三大活动覆盖：</b>包含周三会员日两大抽奖（山西甄选周三会员日 hd76690472、山西抽奖新-每周三次 hd92859166）及权益商城幸运抽奖（A2025011413413484352835699495179）。</span>",
-        "<span><b>全自动任务闭环：</b>自动领取免费机会、自动完成浏览打卡任务、全自动轮询抽奖并自动领取中奖奖品入账。</span>",
-        "<span><b>内置 C005 混合加解密：</b>纯 JS 封装 RSA + AES-128-CBC + MD5 一机一密通信引擎，零外部依赖。</span>"
+        "<span><b>中国电信一站式专区：</b>整合周三会员日双抽奖、权益商城幸运抽奖、营业厅等级话费秒杀、山西电信领福利三大业务模块。</span>",
+        "<span><b>进小程序即时秒领：</b>进入微信小程序「中国电信5G会员」任意页面即可自动触发抽奖与领奖入账，静默捕获零弹窗打扰。</span>",
+        "<span><b>毫秒级偷跑抢话费：</b>每日 23:59:00 唤醒，23:59:59.750 毫秒提前偷跑对冲空口延迟，4 枪阶梯并发秒杀等级话费券。</span>",
+        "<span><b>零依赖内置加密：</b>抽奖与秒杀脚本分别内置纯 JS 版 C005 (RSA+AES-128-CBC) 与 RSA 引擎，零外部依赖，极速稳定。</span>"
       ]
     }
   ]

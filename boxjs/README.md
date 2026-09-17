@@ -2,26 +2,15 @@
 
 本目录存放 BoxJS 面板订阅文件，负责**签到、羊毛等任务**的配置与管理——Cookie 持久化、偏好参数设置、任务查看与手动运行入口等。
 
-> 架构遵循 Cookie 抓取与签到执行彻底分离模式：[`loon/CookieCenter.plugin`](../loon/CookieCenter.plugin) 专职负责 MITM 凭据捕获（零 Cron）；本目录的 BoxJS 订阅统一提供 Cookie 持久化、偏好参数配置、各任务查看、手动一键执行与定时任务调度。
-> `plugins/` 下的独立功能插件是无状态的请求/响应改写，通过各自的 Loon 插件 `#!switch` 管理，不纳入 BoxJS；`plugins/sx_ai_benefit/` 属于 CookieCenter 体系，脚本与任务已纳入本订阅。
-
----
-
-## 职责分工
-
-| 职责 | 位置 | 说明 |
-|---|---|---|
-| **凭据抓取** | `loon/CookieCenter.plugin` | 专职 Cookie 抓取插件（无 Cron），各应用独立开关控制 |
-| **任务与订阅** | `boxjs/CookieCenter.boxjs.json` | 统一管理定时任务（Cron）、Cookie 持久化、偏好设置与手动运行 |
-| **解锁/净化** | `plugins/` + `loon/*.plugin` | 无状态请求/响应改写，独立开关 |
+> 架构遵循 Cookie 抓取与签到执行彻底分离模式：[`loon/CookieCenter.plugin`](../loon/CookieCenter.plugin) 专职负责 MITM 凭据捕获；本目录的 BoxJS 订阅统一提供 Cookie 持久化、偏好参数配置、各任务查看、手动一键执行与定时任务调度。
 
 ---
 
 ## 订阅文件
 
-| 文件 | 说明 |
-|---|---|
-| [`CookieCenter.boxjs.json`](./CookieCenter.boxjs.json) | 微信读书 / 山西电信 / 中国电信等级权益 / 电信会员抽奖的统一配置面板 |
+| 文件 | 说明 | 包含核心应用 |
+|---|---|---|
+| [`CookieCenter.boxjs.json`](./CookieCenter.boxjs.json) | 统一配置面板订阅 | **微信读书**（阅读奖励、翻牌抽奖、限免好书）<br>**中国电信**（周三会员日双抽奖、幸运抽奖、等级话费秒杀、山西领福利） |
 
 ---
 
@@ -35,13 +24,7 @@ https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/boxjs
 
 ## 面板功能
 
-每个 App 对应一组 BoxJS 设置，通常包含：
-
-| key 类型 | 说明 |
-|---|---|
-| `<脚本名>_data` | Cookie / 鉴权信息（自动捕获，也可手动粘贴） |
-| `<脚本名>_clear` | 开启后下次运行会清空已存数据，强制重新抓取 |
-| `<脚本名>_debug` | 打印完整 headers / body 到 console |
-| `<脚本名>_sign_time` | 签到 cron 时间记录 |
-
-具体参数见各脚本子目录的 README。
+| 应用 | 覆盖模块 | 说明 |
+|---|---|---|
+| **微信读书** | 每日阅读奖励、周二翻牌抽奖、每周限免好书 | 自动脱机换票更新凭据，偏好设置灵活切换 |
+| **中国电信** | 周三双抽奖、幸运抽奖、等级话费抢兑、山西福利 | 整合中国电信全系业务，进小程序即时全自动秒领，内置 C005 混合加解密 |
