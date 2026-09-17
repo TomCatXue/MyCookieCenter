@@ -5826,6 +5826,8 @@ async function executeAllLotteryTasks(triggerSource = '定时调度') {
     if (res2.isWinning) hasWinning = true;
   } else {
     $.log(`[跳过] 周三会员日抽奖 2 仅在周三开放 (当前星期${['日','一','二','三','四','五','六'][dayOfWeek]})`);
+    // 非周三顺带执行心跳保活
+    await sendSessionKeepAlive(sessionKey, productNo);
   }
 
   // --- 任务 3：权益商城幸运抽奖 (日常/周三均可领) ---
@@ -5972,6 +5974,34 @@ async function runWednesdayLottery(actNo, actTitle, sessionKey, productNo) {
   } catch (err) {
     $.log(`[${actTitle}] 执行异常: ${err.message || err}`);
     return { name: actTitle, status: '异常', details: err.message || err, isWinning: false };
+  }
+}
+
+
+// ==================== 5.1 会话心跳保活 (Keep-Alive) ====================
+// 在非周三运行时，通过低频轻量请求刷新服务端 Session TTL，尽可能延长会话寿命
+async function sendSessionKeepAlive(sessionKey, productNo) {
+  try {
+    $.log('[会话保活] 正在发起轻量心跳请求以顺延服务端会话生命周期...');
+    const res = await requestC005('https://mapi-h5.bestpay.com.cn/gapi/equitymall/client/Activity/queryActivityInfo', {
+      activityId: DEFAULT_CONFIG.LUCKY_ACT,
+      sessionKey: sessionKey,
+      productNo: productNo,
+      phoneNo: productNo,
+      fromChannelId: '5g_mini_program',
+      fromchannelId: '5g_mini_program',
+      encyType: "C005"
+    }, productNo, sessionKey, '5g_mini_program');
+    if (res && res.success) {
+      $.log('[会话保活] 心跳成功，服务端 Session 已顺延刷新！');
+      return true;
+    } else {
+      $.log(`[会话保活] 心跳返回状态: ${res?.errorMsg || '未成功'}`);
+      return false;
+    }
+  } catch(e) {
+    $.log(`[会话保活] 心跳请求失败: ${e.message || e}`);
+    return false;
   }
 }
 
