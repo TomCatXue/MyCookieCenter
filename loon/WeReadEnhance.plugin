@@ -1,18 +1,18 @@
 #!name = 微信读书 · 防强更净化
-#!desc = 专为 8.2.6 等老版本微信读书设计：改写 feature 特性配置，彻底屏蔽“发现新版本”更新弹窗与强更通知，锁定纯净免费 AI 听书体验。
+#!desc = 专为 8.2.6 等老版本微信读书设计：全面拦截改写 feature、config、reconf 与 mobileSync 响应体，采用通用正则递归深度遍历算法，彻底清空 upgrade、forceUpdate、updateInfo 与 notice_msg 等弹窗字段，彻底阻断版本更新检测与强更提示，锁定纯净免费 AI 听书体验。
 #!author = TomCatXue
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/weread.png
 #!tag = 微信读书,防强更,去弹窗,AI听书
-#!version = 3.4.2
-#!date = 2026-09-17 11:50
+#!version = 3.5.0
+#!date = 2026-09-17 12:30
 
 [Argument]
-weread_anti_upgrade = switch,true,tag=屏蔽版本强更,desc=开启后彻底屏蔽官方强更弹窗与更新公告，安心停留在8.2.6免费AI听书
+weread_anti_upgrade = switch,true,tag=微信读书·防强更,desc=开启后彻底屏蔽官方强更弹窗、更新公告与新版本检测，安心停留在8.2.6免费AI听书
 
 [MITM]
-hostname = i.weread.qq.com
+hostname = i.weread.qq.com, weread.qq.com
 
 [Script]
-# 拦截改写 feature 响应体，屏蔽升级弹窗并扩充特性
-http-response ^https:\/\/i\.weread\.qq\.com\/feature script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/wxread_enhance/wxread.js?v=20260906, tag=微信读书·防强更, requires-body=true, enable={weread_anti_upgrade}
+# 全面拦截改写 feature、config、reconf、mobileSync 等配置响应体，彻底屏蔽新版本检测与弹窗
+http-response ^https?:\/\/(i\.)?weread\.qq\.com\/(feature|config|reconf|app\/upgrade|mobileSync) script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/wxread_enhance/wxread.js?v=20260917-1230, tag=微信读书·防强更, requires-body=true, enable={weread_anti_upgrade}
