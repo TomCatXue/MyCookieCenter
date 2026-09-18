@@ -1,13 +1,21 @@
+/**
+ * 微信读书 · 全功能任务
+ * 
+ * 每日阅读时长领卡 + 周二翻牌抽奖 + 周五限免图书入架 (支持全自动脱机自愈换票)
+ * cron: 0 23 * * *
+ * new Env('微信读书 · 全功能任务')
+ */
+
 /*
 ================================================================================
-@Name: 微信读书 · 全功能自动化聚合签到（青龙 / Loon 双栖全自动脱机版）
+@Name: 微信读书 · 全功能自动化任务（青龙面板专版）
 @Author: TomCatXue
-@Version: 3.1.0
+@Version: 3.2.0
 @Updated: 2026-09-18
 ================================================================================
 使用说明：
 - 青龙面板【只需配置 1 个环境变量】: WEREAD_AUTH (填入凭据 JSON 字符串即可)
-- 各功能开关直接在下方的 CONFIG 对象中修改 true 或 false，无需配置复杂环境变量！
+- 各功能开关直接在下方的 CONFIG 对象中修改 true 或 false，无需在面板配复杂环境变量！
 - 具有 100% 脱机自愈换票能力：凭借 refreshToken + deviceId，过期自动刷新，无感续用！
 ================================================================================
 */
@@ -39,7 +47,7 @@ const CONFIG = {
 // 常量与系统配置
 // ================================================================================
 const SCRIPT_NAME = "微信读书 · 全功能任务";
-const SCRIPT_VERSION = "3.1.0";
+const SCRIPT_VERSION = "3.2.0";
 const AUTH_KEY = "weread_auth_v2";
 const CACHE_FILE = "./weread_session.json";
 const API = "https://i.weread.qq.com";
@@ -336,19 +344,13 @@ function computeLoginSignature(refreshToken, deviceId, body) {
     return bytesToHex(sha256Uint8(rot2));
 }
 
-function encode(obj) {
-    let str = JSON.stringify(obj);
-    if (typeof $base64 !== "undefined") return $base64.encode(str);
-    if (typeof Buffer !== "undefined") return Buffer.from(str, "utf-8").toString("base64");
-    return str;
-}
-
 function decode(str) {
     if (!str) return null;
     try { return JSON.parse(str); } catch (e) { }
     try {
-        if (typeof $base64 !== "undefined") return JSON.parse($base64.decode(str));
-        if (typeof Buffer !== "undefined") return JSON.parse(Buffer.from(str, "base64").toString("utf-8"));
+        if (typeof Buffer !== "undefined") {
+            return JSON.parse(Buffer.from(str, "base64").toString("utf-8"));
+        }
     } catch (e) { }
     return null;
 }
@@ -384,11 +386,11 @@ async function tryRefreshLogin(auth) {
             API + "/login",
             reqBody,
             {
-                "User-Agent": auth.ua || "WeRead/10.2.1 (iPhone; iOS 26.6.1; Scale/3.00)",
+                "User-Agent": auth.ua || "WeRead/8.2.6 (iPhone; iOS 26.6.2; Scale/3.00)",
                 "Content-Type": "application/json",
-                "basever": auth.basever || "10.2.1.26",
+                "basever": auth.basever || "8.2.6.20",
                 "channelid": auth.channelid || "AppStore",
-                "v": auth.basever || "10.2.1",
+                "v": auth.basever || "8.2.6.20",
                 "vid": String(auth.vid || "")
             }
         );
@@ -433,36 +435,27 @@ async function runClaimTask(auth) {
     $.log("\n▶️ --- 开始执行任务：[每日阅读奖励领取] ---");
     let result = { task: "每日阅读领卡", success: false, details: "" };
 
-    const getHeaders = (a) => {
-        let h = {
-            "User-Agent": a.ua || "WeRead/10.2.1 (iPhone; iOS 26.6.1; Scale/3.00)",
-            "Content-Type": "application/json",
-            "basever": a.basever || "10.2.1.26",
-            "channelId": a.channelid || "100",
-            "vid": String(a.vid || "")
-        };
-        if (a.skey) h["skey"] = a.skey;
-        return h;
-    };
+    const getHeaders = (a) => ({
+        "User-Agent": a.ua || "WeRead/8.2.6 (iPhone; iOS 26.6.2; Scale/3.00)",
+        "Content-Type": "application/json",
+        "Accept": "*/*",
+        "basever": a.basever || "8.2.6.20",
+        "channelid": a.channelid || "AppStore",
+        "v": a.basever || "8.2.6.20",
+        "vid": String(a.vid || ""),
+        "skey": a.skey || ""
+    });
 
-    // 探测鉴权状态
-    let probe = await post(
-        API + "/weekly/exchange",
-        encode({ awardLevelId: 0, unread: 1, isExchangeAward: 0, pf: PF, awardChoiceType: 0 }),
-        getHeaders(auth)
-    );
+    let probeBody = JSON.stringify({ awardLevelId: 0, unread: 1, isExchangeAward: 0, pf: PF, awardChoiceType: 0 });
+    let probe = await post(API + "/weekly/exchange", probeBody, getHeaders(auth));
 
     // 401 自动触发脱机换票
     if (probe.status === 401 || probe.status === 499) {
-        $.log("[WeRead] 遇到 401，立即启动脱机自愈换票...");
+        $.log("[WeRead] 遇到 401/499，立即启动脱机自愈换票...");
         let refreshed = await tryRefreshLogin(auth);
         if (refreshed) {
             auth = refreshed;
-            probe = await post(
-                API + "/weekly/exchange",
-                encode({ awardLevelId: 0, unread: 1, isExchangeAward: 0, pf: PF, awardChoiceType: 0 }),
-                getHeaders(auth)
-            );
+            probe = await post(API + "/weekly/exchange", probeBody, getHeaders(auth));
         }
     }
 
@@ -472,58 +465,43 @@ async function runClaimTask(auth) {
         return result;
     }
 
-    // 查询用户信息与时长
-    let userRes = await get(API + "/user/profile", getHeaders(auth));
-    let userName = "微信读书用户";
-    let readTimeMinutes = 0;
-    if (userRes.status === 200) {
-        let uData = decode(userRes.body);
-        if (uData && uData.name) userName = uData.name;
-        if (uData && uData.weeklyReadingTime) readTimeMinutes = Math.floor(uData.weeklyReadingTime / 60);
-    }
+    let queryData = decode(probe.body);
+    let readingMin = Math.floor((queryData?.readingTime || 0) / 60);
+    let readingDay = queryData?.readingDay || 0;
 
-    // 领取阅读达标奖励 (1小时, 3小时, 5小时等)
+    // 领取阅读达标奖励 (时长 + 天数)
     let preferCoin = (typeof process !== "undefined" && process.env.WEREAD_PREFER_COIN !== undefined)
         ? process.env.WEREAD_PREFER_COIN === "2"
         : CONFIG.PREFER_COIN;
+    let choiceType = preferCoin ? 2 : 1; // 2=书币, 1=体验卡
+
+    let allAwards = [
+        ...(queryData?.readtimeAwards || []).map(a => Object.assign(a, { _type: "时长" })),
+        ...(queryData?.readdayAwards || []).map(a => Object.assign(a, { _type: "天数" }))
+    ];
 
     let claimList = [];
-    let queryData = decode(probe.body);
-    let awards = queryData?.awards || [];
-
-    for (let award of awards) {
-        if (award.canExchange && !award.hasExchanged) {
-            let choiceType = preferCoin ? 2 : 1;
-            let exRes = await post(
-                API + "/weekly/exchange",
-                encode({
-                    awardLevelId: award.levelId || 0,
-                    unread: 0,
-                    isExchangeAward: 0,
-                    pf: PF,
-                    awardChoiceType: choiceType
-                }),
-                getHeaders(auth)
-            );
+    for (let item of allAwards) {
+        let levelDesc = item.awardLevelDesc || ("档位" + item.awardLevelId);
+        if (item.awardStatus === 1) { // 1 = 可领取
+            $.log(`[WeRead] 检测到待领奖励: ${item._type}[${levelDesc}]，正在自动兑换...`);
+            let exBody = JSON.stringify({
+                unread: 1,
+                awardChoiceType: choiceType,
+                awardLevelId: item.awardLevelId,
+                isExchangeAward: 1,
+                pf: PF
+            });
+            let exRes = await post(API + "/weekly/exchange", exBody, getHeaders(auth));
             if (exRes.status === 200) {
-                claimList.push(`${award.name || '时长奖励'}`);
+                claimList.push(`${item._type}[${levelDesc}]`);
+                $.log(`[WeRead] 🎉 成功领取: ${item._type}[${levelDesc}]`);
             }
         }
     }
 
-    // 领取阅读天数奖励
-    let dayRes = await post(
-        API + "/weekly/exchange",
-        encode({ awardLevelId: 0, unread: 0, isExchangeAward: 1, pf: PF, awardChoiceType: preferCoin ? 2 : 1 }),
-        getHeaders(auth)
-    );
-    if (dayRes.status === 200) {
-        let d = decode(dayRes.body);
-        if (d && d.awardName) claimList.push(d.awardName);
-    }
-
     result.success = true;
-    result.details = `用户: ${userName}, 本周阅读: ${readTimeMinutes}分钟` + (claimList.length > 0 ? `, 成功领取: ${claimList.join(', ')}` : `, 今日已领或暂无待领`);
+    result.details = `本周已读: ${readingMin}分钟(${readingDay}天)` + (claimList.length > 0 ? `, 成功领取: ${claimList.join(', ')}` : `, 今日已达标项目均已在账`);
     $.log(`[WeRead] ✅ ${result.details}`);
     return result;
 }
@@ -614,21 +592,22 @@ async function runFreeTask(auth) {
     let result = { task: "周五限免入架", success: false, details: "" };
 
     const getHeaders = (a) => ({
-        "User-Agent": a.ua || "WeRead/10.2.1 (iPhone; iOS 26.6.1; Scale/3.00)",
+        "User-Agent": a.ua || "WeRead/8.2.6 (iPhone; iOS 26.6.2; Scale/3.00)",
         "Content-Type": "application/json",
-        "basever": a.basever || "10.2.1.26",
-        "channelId": a.channelid || "100",
+        "channelid": a.channelid || "AppStore",
+        "basever": a.basever || "8.2.6.20",
+        "v": a.basever || "8.2.6.20",
         "vid": String(a.vid || ""),
         "skey": a.skey || ""
     });
 
-    let listRes = await get(API + "/free/library/list", getHeaders(auth));
+    let listRes = await get(API + "/free/library/list?count=120&receiveStatus=1&type=book&v=2", getHeaders(auth));
     if (listRes.status === 401 || listRes.status === 499) {
-        $.log("[WeRead] 限免图书接口 401，启动脱机换票自愈...");
+        $.log("[WeRead] 限免图书接口 401/499，启动脱机换票自愈...");
         let refreshed = await tryRefreshLogin(auth);
         if (refreshed) {
             auth = refreshed;
-            listRes = await get(API + "/free/library/list", getHeaders(auth));
+            listRes = await get(API + "/free/library/list?count=120&receiveStatus=1&type=book&v=2", getHeaders(auth));
         }
     }
 
@@ -647,11 +626,12 @@ async function runFreeTask(auth) {
     }
 
     let addedBooks = [];
-    for (let b of books.slice(0, 3)) {
-        let bId = b.bookId || b.id;
-        let bTitle = b.title || b.name || "图书";
+    for (let b of books.slice(0, 2)) {
+        let bInfo = b.bookInfo || b;
+        let bId = bInfo.bookId || bInfo.id;
+        let bTitle = bInfo.title || bInfo.name || "图书";
         if (bId) {
-            let addRes = await post(API + "/shelf/add", encode({ bookId: String(bId) }), getHeaders(auth));
+            let addRes = await post(API + "/shelf/add", JSON.stringify({ bookId: String(bId) }), getHeaders(auth));
             if (addRes.status === 200) {
                 addedBooks.push(`《${bTitle}》`);
             }
@@ -659,7 +639,7 @@ async function runFreeTask(auth) {
     }
 
     result.success = true;
-    result.details = addedBooks.length > 0 ? `成功加入书架: ${addedBooks.join(', ')}` : "限免好书已在书架中";
+    result.details = addedBooks.length > 0 ? `成功加入书架: ${addedBooks.join(', ')}` : "本期限免好书已在书架中";
     $.log(`[WeRead] ✅ ${result.details}`);
     return result;
 }
@@ -678,6 +658,11 @@ async function main() {
         || $.getdata("WEREAD_COOKIE")
         || $.getdata(AUTH_KEY)
         || CONFIG.MANUAL_AUTH;
+
+    // 自动容错：清理 Markdown 或网页端复制时引入的反斜杠转义 (如 \_ 或 \@)
+    if (typeof rawAuth === "string") {
+        rawAuth = rawAuth.replace(/\\([_@])/g, "$1");
+    }
 
     if (!rawAuth) {
         $.log("❌ 未检测到登录凭据！");
