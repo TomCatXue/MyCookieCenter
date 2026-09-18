@@ -1,12 +1,12 @@
 #!name = 哔哩哔哩 𝕏
-#!desc = 哔哩哔哩增强版：包含SponsorBlock空降助手、全部分区修复(含港澳台及修复跳转)、扫码登录原生签名修复、新版多Tab分类收藏升级、1080P高码率画质解锁、大会员凭证解锁。
+#!desc = 哔哩哔哩增强版：包含SponsorBlock空降助手、新版gRPC卡片分区与多级子分类优化(含港澳台及快捷访问)、扫码登录原生签名修复、新版多Tab分类收藏升级、1080P高码率画质解锁、大会员凭证解锁。
 #!openUrl = https://apps.apple.com/app/id736536022
 #!author = TomCatXue
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://raw.githubusercontent.com/sooyaaabo/IconLibrary/main/App/BilibiliPink.png
 #!tag = 去广告,空降助手,画质解锁,Bilibili
-#!version = 2.5.0
-#!date = 2026-09-17 11:50
+#!version = 2.6.0
+#!date = 2026-09-18 12:00
 
 [Argument]
 quality = switch, true, tag = [画质] 解锁1080P高码率/4K, desc = 开启后非大会员也可直接选择并切换1080P高码率、1080P60、杜比视界等画质
@@ -92,8 +92,10 @@ AND, ((DOMAIN-SUFFIX, chat.bilibili.com), (OR, ((DOMAIN-KEYWORD, stun), (DOMAIN-
 ^https:\/\/app\.bilibili\.com\/x\/v2\/account\/myinfo\? response-body-json-jq '.data.vip |= if . != null and .status == 0 then . + { status: 1, type: 2, due_date: 9005270400000, role: 15 } else . end'
 
 [Script]
-# 分区列表修复 (来自 BiliUniverse 完整数据，带官方高分辨率图标与 uri 跳转路由)
-http-request ^https?:\/\/app\.bili(bili\.com|api\.net)\/x\/v2\/(channel\/region\/list|region\/index)\? script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/bilibili/bilibili_region.js, requires-body=true, timeout=10, tag=[哔哩哔哩]分区列表修复
+# 分区列表优化 (支持 gRPC 新版卡片分组、快捷访问及 HTTP 多级子分类修复)
+http-response ^https?:\/\/(grpc|app)\.bili(bili\.com|api\.net)\/bilibili\.app\.show\.v1\.Mixture\/RegionList$ script-path = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/bilibili/bilibili_region.js, requires-body = true, binary-body-mode = true, timeout = 10, tag = [哔哩哔哩]全部分区优化(gRPC)
+http-request ^https?:\/\/(grpc|app)\.bili(bili\.com|api\.net)\/bilibili\.app\.show\.v1\.Mixture\/RegionShortcut$ script-path = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/bilibili/bilibili_region.js, timeout = 10, tag = [哔哩哔哩]快捷分区保存
+http-request ^https?:\/\/app\.bili(bili\.com|api\.net)\/x\/v2\/(channel\/region\/list|region\/index)\? script-path = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/bilibili/bilibili_region.js, requires-body = true, timeout = 10, tag = [哔哩哔哩]分区列表修复(HTTP)
 
 # 自动捕获当前用户 access_key (供扫码登录签名生成使用)
 http-request ^https?:\/\/(?:app|api)\.bilibili\.com\/x\/(?:v2\/account\/mine|v2\/account\/myinfo|member\/app\/nickfree|resource\/show\/tab) script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/bilibili/bilibili_qrcode.js, tag=[哔哩哔哩]凭证捕获
@@ -114,4 +116,4 @@ http-response ^https:\/\/api\.live\.bilibili\.com\/xlive\/(?:app-interface\/v2\/
 http-request ^https?:\/\/(?:grpc\.biliapi\.net|app\.bilibili\.com|app\.biliapi\.net)\/(?:bilibili\.app\.(?:playerunite\.v1\.Player\/PlayViewUnite|playurl\.v1\.PlayURL\/PlayView)|bilibili\.pgc\.gateway\.player\.v2\.PlayURL\/PlayView) script-path = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/bilibili/bilibili_vip.js, binary-body-mode = true, requires-body = true, timeout = 60, tag = [哔哩哔哩]大会员凭证注入, enable={VIP}, argument=[{Authorization},{UserAgent}]
 
 [MITM]
-hostname = grpc.biliapi.net, app.bilibili.com, api.bilibili.com, api.live.bilibili.com, passport.bilibili.com, line3-h5-mobile-api.biligame.com, www.bilibili.com
+hostname = grpc.biliapi.net, app.bilibili.com, app.biliapi.net, api.bilibili.com, api.live.bilibili.com, passport.bilibili.com, line3-h5-mobile-api.biligame.com, www.bilibili.com
