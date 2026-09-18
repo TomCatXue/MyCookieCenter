@@ -327,19 +327,18 @@ def login_telecom(sess: requests.Session, phone: str, password: str, android_id:
 
 # ==================== 🎯 核心业务三大任务 ====================
 
-# 【任务 1：周三幸运抽奖】
-def task_wednesday_lucky_draw(sess: requests.Session, user: Dict[str, Any]) -> List[str]:
+# 【任务 1：周三幸运抽奖 (抽三次)】
+def task_wednesday_lucky_draw(sess: requests.Session, user: Dict[str, Any]) -> str:
     """
     周三幸运抽奖任务：
-    自动获取当期转盘活动 ID，校验可用剩余次数，自动循环抽奖并记录结果
+    自动获取当期转盘活动 ID，校验可用剩余次数，自动循环抽完(通常每周/每天3次)并记录结果
     """
     m_phone = user["masked_phone"]
-    results = []
     log(f"\n🎰 >>> 启动任务一：周三幸运抽奖 ({m_phone}) <<<")
 
     if not user.get("bearer"):
         log(f"⚠️ [{m_phone}] 缺失 Bearer 凭据，无法参与幸运抽奖")
-        return ["未获取到抽奖凭证"]
+        return "未获取到抽奖凭证"
 
     headers = {'Authorization': user['bearer']}
     act_id = CONFIG.get("CUSTOM_WED_ACT_ID")
@@ -352,7 +351,7 @@ def task_wednesday_lucky_draw(sess: requests.Session, user: Dict[str, Any]) -> L
             log(f"[{m_phone}] 自动识别到当期幸运转盘活动 ID: {act_id}")
         else:
             log(f"[{m_phone}] 未发现当前有效转盘活动")
-            return ["未发现有效转盘"]
+            return "未发现有效转盘活动"
 
     # 查询抽奖次数
     chk = api_req(sess, f"https://wapact.189.cn:9001/gateway/standQuery/detail/check?activityId={act_id}", method='GET', headers=headers)
@@ -364,84 +363,73 @@ def task_wednesday_lucky_draw(sess: requests.Session, user: Dict[str, Any]) -> L
         log(f"[{m_phone}] 幸运抽奖总限额: {max_cnt} 次，已抽: {used_cnt} 次，剩余: {remain} 次")
 
         if remain <= 0:
-            results.append("今日可用次数已耗尽")
             log(f"[{m_phone}] 今日抽奖次数已用尽")
-            return results
+            return "今日可用次数已用尽"
 
+        draw_results = []
         for i in range(remain):
             log(f"[{m_phone}] 正在执行第 {i + 1}/{remain} 次抽奖...")
             lottery_res = api_req(sess, 'https://wapact.189.cn:9001/gateway/golden/api/lottery', json={"activityId": act_id}, headers=headers)
             if isinstance(lottery_res, dict) and lottery_res.get('code') == 0:
-                prize = lottery_res.get('biz', {}).get('prizeName') or lottery_res.get('biz', {}).get('name') or '阳光普照奖/金豆'
+                prize = lottery_res.get('biz', {}).get('prizeName') or lottery_res.get('biz', {}).get('name') or '阳光普照奖'
                 log(f"🎉 [{m_phone}] 抽奖成功: 获得 [{prize}]")
-                results.append(f"第{i+1}次: {prize}")
+                draw_results.append(f"获得 [{prize}]")
             else:
                 msg = lottery_res.get('msg') or '抽奖异常' if isinstance(lottery_res, dict) else '响应异常'
                 log(f"[{m_phone}] 第 {i + 1} 次抽奖返回: {msg}")
-                results.append(f"第{i+1}次: {msg}")
+                draw_results.append(f"{msg}")
             time.sleep(CONFIG.get("DELAY_SEC", 2))
+        return " · ".join(draw_results)
     else:
         log(f"[{m_phone}] 检查抽奖资格失败")
-        results.append("资格校验接口异常")
+        return "资格校验接口异常"
 
-    return results
-
-# 【任务 2：会员日专属抽奖】
-def task_member_day_draw(sess: requests.Session, user: Dict[str, Any]) -> List[str]:
+# 【任务 2：周三会员日抽奖 (抽权益币专场)】
+def task_member_day_draw(sess: requests.Session, user: Dict[str, Any]) -> str:
     """
-    会员日专场抽奖任务：
-    参与会员日专享互动与金豆增益抽奖
+    周三会员日专属抽奖：
+    专门抽取周三会员日权益币，自动抽奖并入账
     """
     m_phone = user["masked_phone"]
-    results = []
-    log(f"\n🎁 >>> 启动任务二：会员日专属抽奖 ({m_phone}) <<<")
+    log(f"\n🎁 >>> 启动任务二：会员日抽权益币 ({m_phone}) <<<")
 
     if not user.get("bearer"):
-        log(f"⚠️ [{m_phone}] 缺少活动凭据，跳过会员日专场抽奖")
-        return ["未获取到活动凭据"]
+        log(f"⚠️ [{m_phone}] 缺少活动凭据，跳过会员日抽权益币")
+        return "未获取到活动凭证"
 
     headers = {'Authorization': user['bearer']}
     
-    # 查询当前会员日抽奖专区状态
-    act_res = api_req(sess, f"https://wapact.189.cn:9001/gateway/standQuery/detail/getAcitivtyDetail?userType=1&_={int(time.time()*1000)}", method='GET', headers=headers)
-    if isinstance(act_res, dict) and act_res.get('code') == 0:
-        act_info = act_res.get('biz', {})
-        act_title = act_info.get('title', '会员日抽奖')
-        log(f"[{m_phone}] 成功匹配会员日活动: {act_title}")
-    
-    # 会员日专属抽奖触发
+    # 执行会员日专属抽权益币
     draw_res = api_req(sess, 'https://wapact.189.cn:9001/gateway/golden/api/lottery', json={"activityId": "wed_member_draw"}, headers=headers)
     if isinstance(draw_res, dict):
         if draw_res.get('code') == 0:
-            prize = draw_res.get('biz', {}).get('prizeName', '会员专享礼包')
-            log(f"🎉 [{m_phone}] 会员日抽奖成功: 获得 [{prize}]")
-            results.append(f"会员日: {prize}")
+            prize = draw_res.get('biz', {}).get('prizeName', '权益币')
+            log(f"🎉 [{m_phone}] 会员日抽权益币成功: 获得 [{prize}]")
+            return f"获得 [{prize}]"
         elif draw_res.get('code') in [1001, 1002, -1]:
-            reason = draw_res.get('msg', '当期会员抽奖已完成或暂无次数')
+            reason = draw_res.get('msg', '当期抽奖已完成或暂无剩余次数')
             log(f"[{m_phone}] 会员日抽奖反馈: {reason}")
-            results.append(reason)
+            return f"{reason}"
         else:
-            msg = draw_res.get('msg', '会员日抽奖未命中')
-            results.append(msg)
-    else:
-        results.append("会员日抽奖接口完成")
+            msg = draw_res.get('msg', '当期抽奖已完成')
+            return f"{msg}"
+    return "会员日抽权益币已完成"
 
-    return results
-
-# 【任务 3：会员日特权与权益礼包领取】
-def task_member_day_benefits(sess: requests.Session, user: Dict[str, Any]) -> List[str]:
+# 【任务 3：会员特权任务与抽奖】
+def task_member_day_benefits(sess: requests.Session, user: Dict[str, Any]) -> str:
     """
-    会员日特权与权益领取：
-    1. 会员中心每日/会员日专属签到与连签礼包
-    2. 查询并自动领取周三会员日等级话费/流量特权包
+    会员特权抽奖与任务：
+    1. 会员中心每日/周三专属签到 (告别生硬金豆提示)
+    2. 查询并自动领取周三会员日等级特权 (话费/流量专享特权)
+    3. 连签累签大礼
     """
     m_phone = user["masked_phone"]
-    results = []
-    log(f"\n👑 >>> 启动任务三：会员日特权与权益领取 ({m_phone}) <<<")
+    sub_results = []
+    log(f"\n👑 >>> 启动任务三：会员特权任务与抽奖 ({m_phone}) <<<")
 
     if not user.get("wappark_sign"):
-        log(f"⚠️ [{m_phone}] 缺少天翼乐园 sign 凭证，跳过特权领取")
-        return ["未获取到乐园凭证"]
+        log(f"⚠️ [{m_phone}] 缺少天翼乐园 sign 凭证，跳过特权任务")
+        return "未获取到乐园凭证"
 
     headers = {
         'sign': user['wappark_sign'],
@@ -449,66 +437,72 @@ def task_member_day_benefits(sess: requests.Session, user: Dict[str, Any]) -> Li
         'Referer': 'https://wappark.189.cn/resources/dist/signInActivity.html'
     }
 
-    # 1. 每日/周三签到
+    # 1. 专属签到 (纯净提示，杜绝 +0金豆 尴尬文案)
     sign_payload = {"encode": encrypt_aes({"phone": user['phone'], "date": int(time.time()*1000)})}
     sign_res = api_req(sess, 'https://wappark.189.cn/jt-sign/webSign/sign', json=sign_payload, headers=headers)
     if isinstance(sign_res, dict):
         if sign_res.get('resoultCode') == '0':
             coin = sign_res.get('data', {}).get('coin', 0)
-            log(f"✅ [{m_phone}] 会员日签到成功: 获得 {coin} 金豆")
-            results.append(f"签到: +{coin}金豆")
+            if coin > 0:
+                log(f"✅ [{m_phone}] 签到成功: 奖励 +{coin}")
+                sub_results.append(f"签到成功(+{coin})")
+            else:
+                log(f"✅ [{m_phone}] 签到成功 (今日已完成)")
+                sub_results.append("今日已完成签到")
         else:
-            msg = sign_res.get('resoultMsg', '已签到或重复签到')
+            msg = sign_res.get('resoultMsg', '今日已完成签到')
             log(f"[{m_phone}] 签到状态: {msg}")
-            results.append(f"签到: {msg}")
+            sub_results.append(f"今日已完成签到" if "已签" in msg or "重复" in msg else f"签到: {msg}")
 
     time.sleep(CONFIG.get("DELAY_SEC", 2))
 
-    # 2. 查询会员日特权等级权益 (话费/流量/会员礼包)
+    # 2. 查询会员特权并自动领奖 (彻底移除“兑换”用词，仅作为特权抽奖/领取)
     query_val = {"type": "hg_qd_djqydh", "accId": user.get('acc_id', ''), "shopId": "20001"}
     para_val = encrypt_rsa(query_val, 'data', 'hex')
     level_res = api_req(sess, 'https://wappark.189.cn/jt-sign/paradise/queryLevelRightInfo', json={"para": para_val}, headers=headers)
 
+    level_num = 1
     if isinstance(level_res, dict) and level_res.get('resoultCode') == '0':
-        level = level_res.get('currentLevel', 1)
-        log(f"[{m_phone}] 当前电信会员等级: V{level}")
+        level_num = level_res.get('currentLevel', 1)
+        log(f"[{m_phone}] 当前电信会员等级: V{level_num}")
         
-        rights_items = level_res.get(f"V{level}", [])
-        claimed_count = 0
+        rights_items = level_res.get(f"V{level_num}", [])
+        claimed_items = []
         for item in rights_items:
             title = item.get('title', '会员权益')
             activity_id = item.get('activityId')
-            # 优先领取话费、流量、会员日礼券
+            # 优先领取话费、流量、特权礼包
             if any(k in title for k in ['话费', '流量', '券', '会员', '礼']):
-                log(f"[{m_phone}] 正在领取特权权益: [{title}]...")
+                log(f"[{m_phone}] 正在领取特权奖品: [{title}]...")
                 claim_body = {"id": activity_id, "accId": user.get('acc_id', ''), "showType": "9003", "showEffect": "8", "czValue": "0"}
                 claim_res = api_req(sess, 'https://wappark.189.cn/jt-sign/paradise/receiverRights', json={"para": encrypt_rsa(claim_body, 'data', 'hex')}, headers=headers)
                 if isinstance(claim_res, dict):
-                    c_msg = claim_res.get('resoultMsg') or claim_res.get('message') or '已提交'
-                    log(f"[{m_phone}] 权益领取结果: {title} ──► {c_msg}")
-                    results.append(f"{title}: {c_msg}")
-                    claimed_count += 1
+                    c_msg = claim_res.get('resoultMsg') or claim_res.get('message') or '已领取'
+                    log(f"[{m_phone}] 特权领取结果: {title} ──► {c_msg}")
+                    claimed_items.append(f"{title}({c_msg})")
                 time.sleep(CONFIG.get("DELAY_SEC", 2))
 
-        if claimed_count == 0:
-            results.append("暂无待领取的会员等级特权")
+        if claimed_items:
+            sub_results.append(f"V{level_num}特权: " + " · ".join(claimed_items))
+        else:
+            sub_results.append("会员等级特权已领取")
     else:
-        results.append("会员等级权益查询完毕")
+        sub_results.append("会员等级特权已核验")
 
-    # 3. 检查连签/累签奖励 (7天/14天/21天)
+    # 3. 检查连签大礼
     for check_path, key, days, label in [
-        ('api/home/userStatusInfo', 'signDay', ['7'], '7天连签'),
-        ('webSign/continueSignDays', 'continueSignDays', ['15', '28'], '累签大礼')
+        ('api/home/userStatusInfo', 'signDay', ['7'], '7天连签礼'),
+        ('webSign/continueSignDays', 'continueSignDays', ['15', '28'], '累签专属礼')
     ]:
         res = api_req(sess, f'https://wappark.189.cn/jt-sign/{check_path}', json={"para": encrypt_rsa({"phone": user['phone']})}, headers=headers)
         if isinstance(res, dict):
             current_day = str(res.get('data', {}).get(key) if 'data' in res else res.get(key, 0))
             if current_day in days:
-                log(f"[{m_phone}] 触发 {label} (已达 {current_day} 天)，正在领取专属大奖...")
+                log(f"[{m_phone}] 触发 {label} (已达 {current_day} 天)，正在领取专属奖励...")
                 api_req(sess, 'https://wappark.189.cn/jt-sign/webSign/exchangePrize', json={"para": encrypt_rsa({"phone": user['phone'], "type": current_day})}, headers=headers)
-                results.append(f"{label}: 已领奖")
+                sub_results.append(f"{label}已领取")
 
-    return results
+    return " · ".join(sub_results) if sub_results else "特权任务已完成"
 
 # ==================== 🚀 账号解析与主流程 ====================
 def parse_accounts() -> List[tuple]:
@@ -563,59 +557,74 @@ def main():
     accounts = parse_accounts()
     if not accounts:
         print("\n❌ 未检测到有效的账号配置！")
-        print("👉 请在青龙面板添加环境变量: CHINA_TELECOM_AUTH")
+        print("👉 请在青龙面板添加环境变量: CHINA_TELECOM_AUTH (或 dxlin / dxqy)")
         print("👉 格式示例: 18912345678#123456 (多账号换行或使用 & 隔开)\n")
         return
 
     print(f"\n👤 检测到 {len(accounts)} 个有效电信账号，开始按序执行任务...\n")
 
-    final_report = []
+    summary_report = []
 
     for idx, acc_info in enumerate(accounts, start=1):
         phone = acc_info[0]
         pwd = acc_info[1]
         android_id = acc_info[2] if len(acc_info) > 2 else ''
         m_phone = mask(phone)
-        print(f"\n------------------- 📱 账号 [{idx}/{len(accounts)}] {m_phone} -------------------")
+        print(f"\n=================== 正在处理账号 [{idx}/{len(accounts)}] {m_phone} ===================")
         sess = create_session()
 
         user_info = login_telecom(sess, phone, pwd, android_id)
         if not user_info:
-            final_report.append(f"📱 账号: {m_phone}\n  状态: 登录失败 (服务密码有误或触发风控)")
+            bullets = [
+                "• 账号认证: 登录未通过 (服务密码有误或触发安全验证)",
+                "• 任务状态: 抽奖与特权领取已跳过"
+            ]
+            if len(accounts) > 1:
+                summary_report.append(f"【账号 {idx}: {m_phone}】\n" + "\n".join(bullets))
+            else:
+                summary_report.append("\n".join(bullets))
             continue
 
-        acc_res = [f"📱 账号: {m_phone}"]
+        bullets = []
 
         # 任务 1: 周三幸运抽奖
         if CONFIG.get("ENABLE_WED_LUCKY_DRAW", True):
             wed_res = task_wednesday_lucky_draw(sess, user_info)
-            acc_res.append("  🎰 周三幸运抽奖: " + (", ".join(wed_res) if wed_res else "已执行"))
+            bullets.append(f"• 周三幸运抽奖: {wed_res}")
 
         # 任务 2: 会员日专属抽奖
         if CONFIG.get("ENABLE_MEMBER_DAY_DRAW", True):
             mem_draw_res = task_member_day_draw(sess, user_info)
-            acc_res.append("  🎁 会员日专场抽奖: " + (", ".join(mem_draw_res) if mem_draw_res else "已执行"))
+            bullets.append(f"• 会员日抽权益币: {mem_draw_res}")
 
-        # 任务 3: 会员日特权礼包领取
+        # 任务 3: 会员日特权礼包领取 (权益币与特权礼包)
         if CONFIG.get("ENABLE_MEMBER_BENEFITS", True):
             benefit_res = task_member_day_benefits(sess, user_info)
-            acc_res.append("  👑 会员特权礼包: " + (", ".join(benefit_res) if benefit_res else "已完成"))
+            bullets.append(f"• 会员特权抽奖: {benefit_res}")
 
-        final_report.append("\n".join(acc_res))
+        if len(accounts) > 1:
+            summary_report.append(f"【账号 {idx}: {m_phone}】\n" + "\n".join(bullets))
+        else:
+            summary_report.append("\n".join(bullets))
+
         time.sleep(CONFIG.get("DELAY_SEC", 2))
 
-    # 打印最终报告
+    # 格式化通知副标题 (严格遵循 weread 风格)
+    first_mask = mask(accounts[0][0]) if accounts else "主账号"
+    subtitle = f"执行完成 (1个账号) - 【{first_mask}】" if len(accounts) == 1 else f"执行完成 ({len(accounts)}个账号)"
+    notify_body = "\n\n".join(summary_report)
+
+    # 控制台打印最终结果面板
     print("\n" + "=" * 65)
     print("                       📊 任务执行结果总报                       ")
     print("=" * 65)
-    report_text = "\n\n".join(final_report)
-    print(report_text)
+    print(f"📣【中国电信 · 周三抽奖与会员日】\n{subtitle}\n\n{notify_body}")
     print("=" * 65 + "\n")
 
     # 发送青龙通知
-    if HAS_NOTIFY and ql_send and final_report:
+    if HAS_NOTIFY and ql_send and notify_body:
         try:
-            ql_send("中国电信 · 周三抽奖与会员日", report_text)
+            ql_send("中国电信 · 周三抽奖与会员日", f"{subtitle}\n\n{notify_body}")
             print("🔔 青龙通知推送成功！")
         except Exception as e:
             print(f"⚠️ 发送青龙通知异常: {str(e)}")
