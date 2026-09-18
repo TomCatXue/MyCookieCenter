@@ -25,34 +25,49 @@ ql repo https://github.com/TomCatXue/MyCookieCenter.git "ql_script" "" "README" 
 | 脚本文件 | 任务名称 | 内嵌定时 Cron | 核心环境变量 | 功能说明 |
 | :--- | :--- | :--- | :--- | :--- |
 | [`weread.js`](./weread.js) | **微信读书 · 全功能任务** | `0 23 * * *`<br>(每天 23:00) | **`WEREAD_AUTH`** | 三合一聚合：每日阅读时长领卡 + 周二翻牌抽奖 + 周五限免图书入架。内置 S-box `/login` 纯 JS 签名算法，实现 100% 脱机自愈换票。 |
-| [`telecom_wednesday.py`](./telecom_wednesday.py) | **中国电信 · 周三抽奖与会员日** | `0 10 * * 3`<br>(每周三 10:00) | **`CHINA_TELECOM_AUTH`** | 三大任务聚合：周三幸运抽奖 + 会员日专属抽奖 + 会员日特权礼包与专属签到。基于电信官方 App 协议全自动登录换发 SSO 票据与 Bearer Token。 |
+| [`telecom_wednesday.py`](./telecom_wednesday.py) | **中国电信 · 周三抽奖与会员日** | `0 10 * * 3`<br>(每周三 10:00) | **`dxlin`** | 三大任务聚合：周三幸运抽奖(抽3次) + 会员日抽权益币 + 会员特权抽奖。基于电信官方 App 协议全自动登录换发 SSO 票据与 Bearer Token。 |
 
 ---
 
 ## ⚙️ 微信读书配置指南 (1 分钟搞定)
 
-### 1. 青龙环境变量（只需这 1 个）
+### 1. 凭据获取方法（只需抓取一次）
+打开手机抓包工具（如 **Reqable**、**Stream**、**Thor** 或 **HttpCanary**）：
+1. 启动抓包，打开「微信读书 App」，在「我」页面**退出当前账号并重新登录**（或打开任意一本书阅读）；
+2. 在抓包记录中过滤域名：`i.weread.qq.com`；
+3. 从请求头（Headers / Cookies）或 `/login` 请求体中提取以下 4 个关键参数：
+   - **`vid`**：微信读书数字用户 ID（如 `12345678`）
+   - **`skey`**：会话密钥凭据
+   - **`refreshToken`**：长效脱机刷新令牌
+   - **`deviceId`**：设备指纹字符串
+
+### 2. 青龙环境变量（只需这 1 个）
 在青龙面板「环境变量」中新建变量：
 - **名称**：`WEREAD_AUTH`
-- **值**：填入从 BoxJS 或手机 Loon 导出的 JSON 凭据，形如：
-  ```json
-  {"vid":"12345678","skey":"...","refreshToken":"...","deviceId":"..."}
-  ```
-> **多账号**：如需多账号并发跑，直接在值中**换行**粘贴下一个账号的 JSON。
+- **值**：支持以下两种格式（推荐 JSON 格式）：
+  - **格式 A（JSON 格式，推荐）**：
+    ```json
+    {"vid":"12345678","skey":"...","refreshToken":"...","deviceId":"..."}
+    ```
+  - **格式 B（简写格式）**：
+    ```text
+    vid#skey#refreshToken#deviceId
+    ```
+> **💡 脱机自愈说明**：只要凭据中包含 `refreshToken` 与 `deviceId`，脚本内置的 S-box 逆向换票引擎就会在过期时自动刷新会话，**永久全自动脱机运行，无需再次人工抓包**！  
+> **多账号**：如需多账号并发跑，直接在变量值中**换行**粘贴下一个账号即可。
 
-### 2. 脚本顶部开关（按需直接改 true / false）
+### 3. 脚本顶部开关（按需直接改 true / false）
 打开 `weread.js`，最顶部 16 ~ 28 行即可自由开关各功能：
 ```javascript
 const CONFIG = {
     ENABLE_CLAIM: true,   // 1. 每日阅读时长与签到领卡 (每天 23:00)
-    ENABLE_FLIP:  true,   // 2. 每周二翻牌抽奖 (周二自动触发，非周二自动跳过)
-    ENABLE_FREE:  true,   // 3. 每周五限免好书入架 (周五自动触发，非周五自动跳过)
+    ENABLE_FLIP:  true,   // 2. 周二翻牌抽奖 (周二自动触发，非周二自动跳过)
+    ENABLE_FREE:  true,   // 3. 周五限免好书入架 (周五自动触发，非周五自动跳过)
     PREFER_COIN:  true,   // 4. 奖励偏好：true=优先书币，false=优先体验卡
     FORCE_RUN:    false,  // 5. 调试模式：平时 false。为 true 时强制跑完所有任务
     MANUAL_AUTH:  ""      // 6. [备用] 若不配环境变量，可直接将 JSON 粘在此处
 };
 ```
-
 
 ---
 
@@ -65,23 +80,27 @@ const CONFIG = {
 - `certifi`
 - `urllib3`
 
-### 2. 青龙环境变量（只需配置账号密码）
+### 2. 青龙环境变量（极简三段式配置）
 在青龙面板「环境变量」中新建变量：
-- **名称**：`CHINA_TELECOM_AUTH` (亦兼容 `chinaTelecomAccount` / `dxlin`)
-- **值**：填入手机号与电信 6 位服务密码，格式为 `手机号#服务密码`：
+- **名称**：`dxlin`
+- **值**：统一采用标准三段式格式：`手机号#服务密码#AndroidID`
   ```text
-  18912345678#123456
+  17612345678#123456#8a2c4e6f12345678
   ```
-> **多账号**：如需多个电信账号批量跑，直接在变量值中**换行**粘贴下一个账号，或用 `&` 隔开。
+- **三段参数说明**：
+  1. **手机号**：真实的电信手机号（支持携号转网号段）
+  2. **服务密码**：电信 6 位纯数字卡服务密码（拨打 10000 号或在电信 App 安全中心可快速重置）
+  3. **AndroidID**：设备硬件标识（微信小程序搜索「**云链小栈**」，进入即可一键复制本机 AndroidID）
+> **多账号**：如需配置多个电信账号，直接在变量值中**换行**粘贴下一个账号即可。
 
 ### 3. 脚本顶部开关（按需自由配置）
 打开 `telecom_wednesday.py`，顶部 50 ~ 58 行可自由配置各任务：
 ```python
 CONFIG = {
-    "ENABLE_WED_LUCKY_DRAW": True,   # 任务 1: 周三幸运抽奖 (转盘抽奖，自动探测活动并抽完全部剩余次数)
-    "ENABLE_MEMBER_DAY_DRAW": True,  # 任务 2: 会员日专属抽奖 (会员日专区/金豆抽奖)
-    "ENABLE_MEMBER_BENEFITS": True,  # 任务 3: 会员日特权礼包领取 (话费券/流量包/专属签到)
-    "FORCE_RUN": False,              # 调试模式: False=仅周三自动执行，True=平时也强制运行所有任务测试
+    "ENABLE_WED_LUCKY_DRAW": True,   # 任务 1: 周三幸运抽奖 (抽3次，自动探测并抽完转盘所有可用次数)
+    "ENABLE_MEMBER_DAY_DRAW": True,  # 任务 2: 会员日专属抽奖 (抽权益币专场)
+    "ENABLE_MEMBER_BENEFITS": True,  # 任务 3: 会员特权任务与抽奖 (专属签到与会员等级特权)
+    "FORCE_RUN": False,              # 调试模式: False=仅周三自动执行，True=非周三平时强制运行测试
     "DELAY_SEC": 2,                  # 各接口请求间隔(秒)，避免触发电信风控频控
     "CUSTOM_WED_ACT_ID": "",         # [选填] 若当期周三抽奖有特定 activityId 可填入，留空则自动探测
 }
