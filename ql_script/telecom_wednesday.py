@@ -155,21 +155,38 @@ def api_req(sess: requests.Session, url: str, method: str = 'POST', raw: bool = 
 def login_telecom(sess: requests.Session, phone: str, password: str) -> Optional[Dict[str, Any]]:
     """
     使用手机号 + 服务密码，通过电信官方 App 协议登录并换发 SSO Ticket 和 Bearer Token
+    采用 iPhone 16e 标准机型指纹与基于手机号固定哈希的持久化设备 ID
     """
     m_phone = mask(phone)
     log(f"[登录] 正在通过电信官方协议登录账号: {m_phone}")
-    
-    android_id = rd_str(16)
-    cipher_text = f"Xiaomi 20 8.0.0.{android_id[:12]}{phone}{ts()}{password}0$$$0."
+
+    # 清洗密码：去除空格，电信服务密码严格为 6 位纯数字
+    pwd_clean = password.strip()
+    if len(pwd_clean) > 6 and pwd_clean[:6].isdigit():
+        pwd_clean = pwd_clean[:6]
+
+    # 基于手机号生成确定的设备 UUID，避免每次登录设备变更触发异地风控
+    import hashlib
+    device_hash = hashlib.md5(("iPhone16e_" + phone).encode('utf-8')).hexdigest()
+    uuid = [
+        device_hash[:8],
+        device_hash[8:12],
+        "4" + device_hash[13:16],
+        device_hash[16:20],
+        device_hash[20:32]
+    ]
+    device_uid = uuid[0] + uuid[1] + uuid[2]
+    timestamp = ts()
+    cipher_text = f"iPhone 16e 26.5.2.{uuid[0]}{uuid[1]}{phone}{timestamp}{pwd_clean[:6]}0$$$0."
     login_cipher = encrypt_rsa(cipher_text, 'login', 'b64')
 
     body = {
         "headerInfos": {
             "code": "userLoginNormal",
-            "timestamp": ts(),
+            "timestamp": timestamp,
             "broadAccount": "",
             "broadToken": "",
-            "clientType": "#11.0.0#channel8#Xiaomi 20#",
+            "clientType": "#11.3.0#channel35#iPhone 16e#",
             "shopId": "20002",
             "source": "110003",
             "sourcePassword": "Sid98s",
@@ -182,13 +199,13 @@ def login_telecom(sess: requests.Session, phone: str, password: str) -> Optional
                 "loginType": "4",
                 "accountType": "",
                 "loginAuthCipherAsymmertric": login_cipher,
-                "deviceUid": "",
+                "deviceUid": device_uid,
                 "phoneNum": encode_phone(phone),
-                "isChinatelecom": "",
-                "systemVersion": "8.0.0",
-                "androidId": encode_phone(android_id),
+                "isChinatelecom": "0",
+                "systemVersion": "12",
+                "androidId": "",
                 "loginAuthCipher": "",
-                "authentication": encode_phone(password)
+                "authentication": encode_phone(pwd_clean)
             }
         }
     }
