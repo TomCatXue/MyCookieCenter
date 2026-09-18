@@ -10,7 +10,7 @@
 ================================================================================
 @Name: 微信读书 · 全功能自动化任务（青龙面板专版）
 @Author: TomCatXue
-@Version: 3.2.1
+@Version: 3.3.0
 @Updated: 2026-09-18
 ================================================================================
 使用说明：
@@ -47,7 +47,7 @@ const CONFIG = {
 // 常量与系统配置
 // ================================================================================
 const SCRIPT_NAME = "微信读书 · 全功能任务";
-const SCRIPT_VERSION = "3.2.1";
+const SCRIPT_VERSION = "3.3.0";
 const AUTH_KEY = "weread_auth_v2";
 const CACHE_FILE = "./weread_session.json";
 const API = "https://i.weread.qq.com";
@@ -344,6 +344,24 @@ function computeLoginSignature(refreshToken, deviceId, body) {
     return bytesToHex(sha256Uint8(rot2));
 }
 
+function parsePrizeQuantity(prizeStr) {
+    let cardDays = 0;
+    let coins = 0;
+    let books = [];
+    if (!prizeStr) return { cardDays, coins, books };
+
+    if (prizeStr.includes("体验卡") || prizeStr.includes("无限卡")) {
+        let m = prizeStr.match(/(\d+)\s*天/);
+        cardDays += m ? parseInt(m[1], 10) : 1;
+    } else if (prizeStr.includes("书币")) {
+        let m = prizeStr.match(/(\d+)\s*(?:个|书币)/);
+        coins += m ? parseInt(m[1], 10) : 1;
+    } else if (prizeStr.includes("《") || prizeStr.includes("书")) {
+        books.push(prizeStr);
+    }
+    return { cardDays, coins, books };
+}
+
 function decode(str) {
     if (!str) return null;
     try { return JSON.parse(str); } catch (e) { }
@@ -433,7 +451,18 @@ async function tryRefreshLogin(auth) {
 // ============================================================
 async function runClaimTask(auth) {
     $.log("\n▶️ --- 开始执行任务：[每日阅读奖励领取] ---");
-    let result = { task: "每日阅读领卡", success: false, details: "" };
+    let result = {
+        task: "每日阅读领卡",
+        success: false,
+        details: "",
+        claimedCardDays: 0,
+        claimedCoins: 0,
+        weekTotalCardDays: 0,
+        weekTotalCoins: 0,
+        readingMin: 0,
+        readingDay: 0,
+        claimList: []
+    };
 
     const getHeaders = (a) => ({
         "User-Agent": a.ua || "WeRead/8.2.6 (iPhone; iOS 26.6.2; Scale/3.00)",
@@ -466,10 +495,9 @@ async function runClaimTask(auth) {
     }
 
     let queryData = decode(probe.body);
-    let readingMin = Math.floor((queryData?.readingTime || 0) / 60);
-    let readingDay = queryData?.readingDay || 0;
+    result.readingMin = Math.floor((queryData?.readingTime || 0) / 60);
+    result.readingDay = queryData?.readingDay || 0;
 
-    // 领取阅读达标奖励 (时长 + 天数)
     let preferCoin = (typeof process !== "undefined" && process.env.WEREAD_PREFER_COIN !== undefined)
         ? process.env.WEREAD_PREFER_COIN === "2"
         : CONFIG.PREFER_COIN;
@@ -480,11 +508,15 @@ async function runClaimTask(auth) {
         ...(queryData?.readdayAwards || []).map(a => Object.assign(a, { _type: "天数" }))
     ];
 
-    let claimList = [];
     for (let item of allAwards) {
         let levelDesc = item.awardLevelDesc || ("档位" + item.awardLevelId);
         if (item.awardStatus === 1) { // 1 = 可领取
-            $.log(`[WeRead] 检测到待领奖励: ${item._type}[${levelDesc}]，正在自动兑换...`);
+            let choice = (item.awardChoices || []).find(c => c.choiceType === choiceType) || item.awardChoices?.[0];
+            let gainNum = choice ? choice.awardNum : 1;
+            let gainType = choice ? choice.choiceType : choiceType;
+            let targetName = gainType === 1 ? `${gainNum}天体验卡` : `${gainNum}书币`;
+
+            $.log(`[WeRead] 检测到待领奖励: ${item._type}[${levelDesc}]，正在自动兑换 ${targetName}...`);
             let exBody = JSON.stringify({
                 unread: 1,
                 awardChoiceType: choiceType,
@@ -494,14 +526,28 @@ async function runClaimTask(auth) {
             });
             let exRes = await post(API + "/weekly/exchange", exBody, getHeaders(auth));
             if (exRes.status === 200) {
-                claimList.push(`${item._type}[${levelDesc}]`);
-                $.log(`[WeRead] 🎉 成功领取: ${item._type}[${levelDesc}]`);
+                if (gainType === 1) result.claimedCardDays += gainNum;
+                else if (gainType === 2) result.claimedCoins += gainNum;
+                result.claimList.push(`${item._type}[${levelDesc}](+${targetName})`);
+                $.log(`[WeRead] 🎉 成功领取: ${item._type}[${levelDesc}] (+${targetName})`);
             }
         }
     }
 
+    result.weekTotalCardDays = result.claimedCardDays;
+    result.weekTotalCoins = result.claimedCoins;
+    for (let item of allAwards) {
+        if (item.awardStatus === 2) {
+            let choice = (item.awardChoices || []).find(c => c.choiceType === item.awardChooseType) || item.awardChoices?.[0];
+            let num = choice ? choice.awardNum : 1;
+            let type = item.awardChooseType || 1;
+            if (type === 1) result.weekTotalCardDays += num;
+            else if (type === 2) result.weekTotalCoins += num;
+        }
+    }
+
     result.success = true;
-    result.details = `本周已读: ${readingMin}分钟(${readingDay}天)` + (claimList.length > 0 ? `, 成功领取: ${claimList.join(', ')}` : `, 今日已达标项目均已在账`);
+    result.details = `本周已读: ${result.readingMin}分钟(${result.readingDay}天)` + (result.claimList.length > 0 ? `, 成功领取: ${result.claimList.join(', ')}` : `, 今日已达标项目均已在账`);
     $.log(`[WeRead] ✅ ${result.details}`);
     return result;
 }
@@ -511,7 +557,15 @@ async function runClaimTask(auth) {
 // ============================================================
 async function runFlipTask(auth) {
     $.log("\n▶️ --- 开始执行任务：[周二翻牌抽奖] ---");
-    let result = { task: "周二翻牌抽奖", success: false, details: "" };
+    let result = {
+        task: "周二翻牌抽奖",
+        success: false,
+        details: "",
+        flippedCardDays: 0,
+        flippedCoins: 0,
+        flippedBooks: [],
+        flippedPrizes: []
+    };
 
     const FLIP_CARD_ORDER = [2, 5, 4, 7, 8, 6, 0, 1, 3];
     const getFlipHeaders = (a) => {
@@ -554,7 +608,6 @@ async function runFlipTask(auth) {
         return result;
     }
 
-    let flippedPrizes = [];
     for (let targetIndex of FLIP_CARD_ORDER) {
         if (flipList.includes(targetIndex)) continue;
 
@@ -568,8 +621,13 @@ async function runFlipTask(auth) {
         if (drawRes.status === 200) {
             let resData = null;
             try { resData = JSON.parse(drawRes.body); } catch (e) { }
-            let prize = resData?.prizeName || resData?.reward || "奖励入账";
-            flippedPrizes.push(`位置${targetIndex}[${prize}]`);
+            let prize = resData?.prizeName || resData?.reward || resData?.giftName || "奖励入账";
+            let q = parsePrizeQuantity(prize);
+            result.flippedCardDays += q.cardDays;
+            result.flippedCoins += q.coins;
+            if (q.books.length) result.flippedBooks.push(...q.books);
+
+            result.flippedPrizes.push(`位置${targetIndex}[${prize}]`);
             flipList.push(targetIndex);
             $.log(`[WeRead] 🎯 翻牌成功: 位置 ${targetIndex} -> ${prize}`);
         } else {
@@ -579,7 +637,7 @@ async function runFlipTask(auth) {
     }
 
     result.success = true;
-    result.details = flippedPrizes.length > 0 ? `完成 ${flippedPrizes.length} 次翻牌: ${flippedPrizes.join(', ')}` : `今日无可用翻牌次数`;
+    result.details = result.flippedPrizes.length > 0 ? `完成 ${result.flippedPrizes.length} 次翻牌: ${result.flippedPrizes.join(', ')}` : `今日无可用翻牌次数`;
     $.log(`[WeRead] ✅ ${result.details}`);
     return result;
 }
@@ -589,7 +647,7 @@ async function runFlipTask(auth) {
 // ============================================================
 async function runFreeTask(auth) {
     $.log("\n▶️ --- 开始执行任务：[周五限免好书入架] ---");
-    let result = { task: "周五限免入架", success: false, details: "" };
+    let result = { task: "周五限免入架", success: false, details: "", addedBooks: [] };
 
     const getHeaders = (a) => ({
         "User-Agent": a.ua || "WeRead/8.2.6 (iPhone; iOS 26.6.2; Scale/3.00)",
@@ -625,7 +683,6 @@ async function runFreeTask(auth) {
         return result;
     }
 
-    let addedBooks = [];
     for (let b of books.slice(0, 2)) {
         let bInfo = b.bookInfo || b;
         let bId = bInfo.bookId || bInfo.id;
@@ -633,13 +690,13 @@ async function runFreeTask(auth) {
         if (bId) {
             let addRes = await post(API + "/shelf/add", JSON.stringify({ bookId: String(bId) }), getHeaders(auth));
             if (addRes.status === 200) {
-                addedBooks.push(`《${bTitle}》`);
+                result.addedBooks.push(`《${bTitle}》`);
             }
         }
     }
 
     result.success = true;
-    result.details = addedBooks.length > 0 ? `成功加入书架: ${addedBooks.join(', ')}` : "本期限免好书已在书架中";
+    result.details = result.addedBooks.length > 0 ? `成功加入书架: ${result.addedBooks.join(', ')}` : "本期限免好书已在书架中";
     $.log(`[WeRead] ✅ ${result.details}`);
     return result;
 }
@@ -722,28 +779,58 @@ async function main() {
         let vidMask = (auth.vid ? String(auth.vid).slice(0, 4) + '****' : `账号${i + 1}`);
         $.log(`\n=================== 正在处理账号 [${vidMask}] ===================`);
 
-        let accReports = [];
+        let resClaim = null;
+        let resFlip = null;
+        let resFree = null;
 
         // 任务 1: 每日阅读签到领卡
         if (canClaim) {
-            let resClaim = await runClaimTask(auth);
-            accReports.push(resClaim);
+            resClaim = await runClaimTask(auth);
         }
 
         // 任务 2: 周二翻牌游戏
         if (canFlip) {
-            let resFlip = await runFlipTask(auth);
-            accReports.push(resFlip);
+            resFlip = await runFlipTask(auth);
         }
 
         // 任务 3: 周五限免图书入架
         if (canFree) {
-            let resFree = await runFreeTask(auth);
-            accReports.push(resFree);
+            resFree = await runFreeTask(auth);
         }
 
-        let accSummary = accReports.map(r => `• ${r.task}: ${r.details}`).join("\n");
-        summaryReport.push(`【${vidMask}】\n${accSummary}`);
+        // 汇总本次新增收益
+        let totalGainCardDays = (resClaim?.claimedCardDays || 0) + (resFlip?.flippedCardDays || 0);
+        let totalGainCoins = (resClaim?.claimedCoins || 0) + (resFlip?.flippedCoins || 0);
+
+        let gainSummary = [];
+        if (totalGainCardDays > 0) gainSummary.push(`体验卡 +${totalGainCardDays}天`);
+        if (totalGainCoins > 0) gainSummary.push(`书币 +${totalGainCoins}个`);
+        let gainText = gainSummary.length > 0 ? `🎁 本次新增收获: ${gainSummary.join(' · ')}` : "🎁 今日达标奖励均已在账，暂无待领新增";
+
+        let lines = [
+            `【账号: ${vidMask}】`,
+            `----------------------------------------`,
+            `${gainText}`,
+            ``,
+            `📖 每日阅读领卡:`,
+            `  • 本周阅读进度: ${resClaim?.readingMin || 0}分钟 (已读 ${resClaim?.readingDay || 0}天)`,
+            `  • 本周累计达标: 体验卡 ${resClaim?.weekTotalCardDays || 0}天 · 书币 ${resClaim?.weekTotalCoins || 0}个`,
+            (resClaim?.claimList?.length ? `  • 本次兑换奖励: ${resClaim.claimList.join(', ')}` : `  • 本次兑换状态: 暂无可领新档位`),
+            ``,
+            `🎰 周二翻牌抽奖:`,
+            canFlip ? (resFlip?.flippedPrizes?.length
+                ? `  • 翻牌总计获得: 体验卡 +${resFlip.flippedCardDays}天 · 书币 +${resFlip.flippedCoins}个` + (resFlip.flippedBooks?.length ? ` · ${resFlip.flippedBooks.join(',')}` : '') + `\n  • 翻牌明细: ${resFlip.flippedPrizes.join(', ')}`
+                : `  • 翻牌状态: ${resFlip?.details || '本周翻牌已完成'}`)
+                : `  • 翻牌状态: 💡 非周二自动跳过`,
+            ``,
+            `📚 周五限免图书:`,
+            canFree ? (resFree?.addedBooks?.length
+                ? `  • 限免入架成功: ${resFree.addedBooks.join(', ')}`
+                : `  • 限免状态: ${resFree?.details || '本期限免好书已在书架中'}`)
+                : `  • 限免状态: 💡 非周五自动跳过`,
+            `----------------------------------------`
+        ];
+        summaryReport.push(lines.join("\n"));
     }
 
     // 4. 汇总通知
