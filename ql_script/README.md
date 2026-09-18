@@ -25,6 +25,7 @@ ql repo https://github.com/TomCatXue/MyCookieCenter.git "ql_script" "" "README" 
 | 脚本文件 | 任务名称 | 内嵌定时 Cron | 核心环境变量 | 功能说明 |
 | :--- | :--- | :--- | :--- | :--- |
 | [`weread.js`](./weread.js) | **微信读书 · 全功能任务** | `0 23 * * *`<br>(每天 23:00) | **`WEREAD_AUTH`** | 三合一聚合：每日阅读时长领卡 + 周二翻牌抽奖 + 周五限免图书入架。内置 S-box `/login` 纯 JS 签名算法，实现 100% 脱机自愈换票。 |
+| [`telecom_wednesday.py`](./telecom_wednesday.py) | **中国电信 · 周三抽奖与会员日** | `0 10 * * 3`<br>(每周三 10:00) | **`CHINA_TELECOM_AUTH`** | 三大任务聚合：周三幸运抽奖 + 会员日专属抽奖 + 会员日特权礼包与专属签到。基于电信官方 App 协议全自动登录换发 SSO 票据与 Bearer Token。 |
 
 ---
 
@@ -50,4 +51,38 @@ const CONFIG = {
     FORCE_RUN:    false,  // 5. 调试模式：平时 false。为 true 时强制跑完所有任务
     MANUAL_AUTH:  ""      // 6. [备用] 若不配环境变量，可直接将 JSON 粘在此处
 };
+```
+
+
+---
+
+## ⚙️ 中国电信配置指南 (1 分钟搞定)
+
+### 1. 青龙依赖环境
+确保青龙面板中已安装 Python3 基础依赖：
+- `requests`
+- `pycryptodome`
+- `certifi`
+- `urllib3`
+
+### 2. 青龙环境变量（只需配置账号密码）
+在青龙面板「环境变量」中新建变量：
+- **名称**：`CHINA_TELECOM_AUTH` (亦兼容 `chinaTelecomAccount` / `dxlin`)
+- **值**：填入手机号与电信 6 位服务密码，格式为 `手机号#服务密码`：
+  ```text
+  18912345678#123456
+  ```
+> **多账号**：如需多个电信账号批量跑，直接在变量值中**换行**粘贴下一个账号，或用 `&` 隔开。
+
+### 3. 脚本顶部开关（按需自由配置）
+打开 `telecom_wednesday.py`，顶部 50 ~ 58 行可自由配置各任务：
+```python
+CONFIG = {
+    "ENABLE_WED_LUCKY_DRAW": True,   # 任务 1: 周三幸运抽奖 (转盘抽奖，自动探测活动并抽完全部剩余次数)
+    "ENABLE_MEMBER_DAY_DRAW": True,  # 任务 2: 会员日专属抽奖 (会员日专区/金豆抽奖)
+    "ENABLE_MEMBER_BENEFITS": True,  # 任务 3: 会员日特权礼包领取 (话费券/流量包/专属签到)
+    "FORCE_RUN": False,              # 调试模式: False=仅周三自动执行，True=平时也强制运行所有任务测试
+    "DELAY_SEC": 2,                  # 各接口请求间隔(秒)，避免触发电信风控频控
+    "CUSTOM_WED_ACT_ID": "",         # [选填] 若当期周三抽奖有特定 activityId 可填入，留空则自动探测
+}
 ```
