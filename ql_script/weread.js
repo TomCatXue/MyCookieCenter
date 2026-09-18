@@ -10,7 +10,7 @@
 ================================================================================
 @Name: 微信读书 · 全功能自动化任务（青龙面板专版）
 @Author: TomCatXue
-@Version: 3.3.0
+@Version: 3.4.0
 @Updated: 2026-09-18
 ================================================================================
 使用说明：
@@ -47,7 +47,7 @@ const CONFIG = {
 // 常量与系统配置
 // ================================================================================
 const SCRIPT_NAME = "微信读书 · 全功能任务";
-const SCRIPT_VERSION = "3.3.0";
+const SCRIPT_VERSION = "3.4.0";
 const AUTH_KEY = "weread_auth_v2";
 const CACHE_FILE = "./weread_session.json";
 const API = "https://i.weread.qq.com";
@@ -112,7 +112,7 @@ function Env(name) {
     };
 
     this.msg = async function (title, subtitle, body) {
-        this.log(`\n📣【${title}】${subtitle ? subtitle + ' - ' : ''}${body}`);
+        this.log(`\n📣【${title}】${subtitle ? subtitle + '\n' : ''}${body}`);
         if (this.isNode) {
             try {
                 const notify = require("./sendNotify");
@@ -798,44 +798,42 @@ async function main() {
             resFree = await runFreeTask(auth);
         }
 
-        // 汇总本次新增收益
-        let totalGainCardDays = (resClaim?.claimedCardDays || 0) + (resFlip?.flippedCardDays || 0);
-        let totalGainCoins = (resClaim?.claimedCoins || 0) + (resFlip?.flippedCoins || 0);
+        // 格式化各子任务输出行
+        let claimText = resClaim?.success
+            ? `本周已读: ${resClaim.readingMin}分钟(${resClaim.readingDay}天), 体验卡 ${resClaim.weekTotalCardDays}天 · 书币 ${resClaim.weekTotalCoins}个`
+            : (resClaim?.details || "暂无数据");
 
-        let gainSummary = [];
-        if (totalGainCardDays > 0) gainSummary.push(`体验卡 +${totalGainCardDays}天`);
-        if (totalGainCoins > 0) gainSummary.push(`书币 +${totalGainCoins}个`);
-        let gainText = gainSummary.length > 0 ? `🎁 本次新增收获: ${gainSummary.join(' · ')}` : "🎁 今日达标奖励均已在账，暂无待领新增";
+        let flipText = canFlip
+            ? (resFlip?.flippedPrizes?.length
+                ? `翻牌总计获得: 体验卡 +${resFlip.flippedCardDays}天 · 书币 +${resFlip.flippedCoins}个` + (resFlip.flippedBooks?.length ? ` · ${resFlip.flippedBooks.join(',')}` : '')
+                : (resFlip?.details || "今日无可用翻牌次数"))
+            : "非周二自动跳过";
 
-        let lines = [
-            `【账号: ${vidMask}】`,
-            `----------------------------------------`,
-            `${gainText}`,
-            ``,
-            `📖 每日阅读领卡:`,
-            `  • 本周阅读进度: ${resClaim?.readingMin || 0}分钟 (已读 ${resClaim?.readingDay || 0}天)`,
-            `  • 本周累计达标: 体验卡 ${resClaim?.weekTotalCardDays || 0}天 · 书币 ${resClaim?.weekTotalCoins || 0}个`,
-            (resClaim?.claimList?.length ? `  • 本次兑换奖励: ${resClaim.claimList.join(', ')}` : `  • 本次兑换状态: 暂无可领新档位`),
-            ``,
-            `🎰 周二翻牌抽奖:`,
-            canFlip ? (resFlip?.flippedPrizes?.length
-                ? `  • 翻牌总计获得: 体验卡 +${resFlip.flippedCardDays}天 · 书币 +${resFlip.flippedCoins}个` + (resFlip.flippedBooks?.length ? ` · ${resFlip.flippedBooks.join(',')}` : '') + `\n  • 翻牌明细: ${resFlip.flippedPrizes.join(', ')}`
-                : `  • 翻牌状态: ${resFlip?.details || '本周翻牌已完成'}`)
-                : `  • 翻牌状态: 💡 非周二自动跳过`,
-            ``,
-            `📚 周五限免图书:`,
-            canFree ? (resFree?.addedBooks?.length
-                ? `  • 限免入架成功: ${resFree.addedBooks.join(', ')}`
-                : `  • 限免状态: ${resFree?.details || '本期限免好书已在书架中'}`)
-                : `  • 限免状态: 💡 非周五自动跳过`,
-            `----------------------------------------`
+        let freeText = canFree
+            ? (resFree?.addedBooks?.length
+                ? `成功加入书架: ${resFree.addedBooks.join(', ')}`
+                : (resFree?.details || "本期限免好书已在书架中"))
+            : "非周五自动跳过";
+
+        let bullets = [
+            `• 每日阅读领卡: ${claimText}`,
+            `• 周二翻牌抽奖: ${flipText}`,
+            `• 周五限免入架: ${freeText}`
         ];
-        summaryReport.push(lines.join("\n"));
+
+        if (accounts.length > 1) {
+            summaryReport.push(`【账号 ${i + 1}: ${vidMask}】\n` + bullets.join("\n"));
+        } else {
+            summaryReport.push(bullets.join("\n"));
+        }
     }
 
     // 4. 汇总通知
+    const subtitle = accounts.length === 1
+        ? `执行完成 (1个账号) - 【${accounts[0].vid ? String(accounts[0].vid).slice(0, 4) + '****' : '主账号'}】`
+        : `执行完成 (${accounts.length}个账号)`;
     const notifyBody = summaryReport.join("\n\n");
-    await $.msg(SCRIPT_NAME, `执行完成 (${accounts.length}个账号)`, notifyBody);
+    await $.msg(SCRIPT_NAME, subtitle, notifyBody);
     $.log("\n🏁 所有账号全部任务处理完毕！");
 }
 
