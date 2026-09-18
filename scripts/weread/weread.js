@@ -10,7 +10,7 @@
 ================================================================================
 @Name: 微信读书 · 全功能自动化任务（青龙面板专版）
 @Author: TomCatXue
-@Version: 3.4.0
+@Version: 3.5.0
 @Updated: 2026-09-18
 ================================================================================
 使用说明：
@@ -47,7 +47,7 @@ const CONFIG = {
 // 常量与系统配置
 // ================================================================================
 const SCRIPT_NAME = "微信读书 · 全功能任务";
-const SCRIPT_VERSION = "3.4.0";
+const SCRIPT_VERSION = "3.5.0";
 const AUTH_KEY = "weread_auth_v2";
 const CACHE_FILE = "./weread_session.json";
 const API = "https://i.weread.qq.com";
@@ -546,8 +546,29 @@ async function runClaimTask(auth) {
         }
     }
 
+    // 查询当前账户实际总余额 (体验卡天数 & 书币)
+    result.accountRemainDays = null;
+    result.accountCoins = null;
+    try {
+        let cardSummaryRes = await get(API + "/pay/memberCardSummary", getHeaders(auth));
+        if (cardSummaryRes.status === 200) {
+            let cardData = decode(cardSummaryRes.body);
+            if (cardData && cardData.remainTime !== undefined) {
+                result.accountRemainDays = Math.ceil(cardData.remainTime / 86400);
+            }
+        }
+        let balanceRes = await post(API + "/pay/balance", JSON.stringify({ pf: PF }), getHeaders(auth));
+        if (balanceRes.status === 200) {
+            let balData = decode(balanceRes.body);
+            if (balData) {
+                result.accountCoins = (balData.giftBalance !== undefined ? balData.giftBalance : balData.balance) || 0;
+            }
+        }
+    } catch(e) { }
+
     result.success = true;
-    result.details = `本周已读: ${result.readingMin}分钟(${result.readingDay}天)` + (result.claimList.length > 0 ? `, 成功领取: ${result.claimList.join(', ')}` : `, 今日已达标项目均已在账`);
+    result.details = `本周已读: ${result.readingMin}分钟(${result.readingDay}天), 本周达标已领: 体验卡 ${result.weekTotalCardDays}天 · 书币 ${result.weekTotalCoins}个`
+        + (result.accountRemainDays !== null ? ` (账户总余: ${result.accountRemainDays}天卡 · ${result.accountCoins}书币)` : "");
     $.log(`[WeRead] ✅ ${result.details}`);
     return result;
 }
@@ -815,11 +836,20 @@ async function main() {
                 : (resFree?.details || "本期限免好书已在书架中"))
             : "非周五自动跳过";
 
-        let bullets = [
-            `• 每日阅读领卡: ${claimText}`,
-            `• 周二翻牌抽奖: ${flipText}`,
-            `• 周五限免入架: ${freeText}`
-        ];
+        let bullets = [];
+        if (canClaim && resClaim) {
+            bullets.push(`• 每日阅读领卡: ${claimText}`);
+        }
+
+        // 仅在周二翻牌当天 (或 forceRun 强制执行) 时才在通知中显示翻牌任务
+        if (canFlip && resFlip) {
+            bullets.push(`• 周二翻牌抽奖: ${flipText}`);
+        }
+
+        // 仅在周五限免当天 (或 forceRun 强制执行) 时才在通知中显示限免入架任务
+        if (canFree && resFree) {
+            bullets.push(`• 周五限免入架: ${freeText}`);
+        }
 
         if (accounts.length > 1) {
             summaryReport.push(`【账号 ${i + 1}: ${vidMask}】\n` + bullets.join("\n"));
