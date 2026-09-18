@@ -10,7 +10,7 @@
 ================================================================================
 @Name: 微信读书 · 全功能自动化任务（青龙面板专版）
 @Author: TomCatXue
-@Version: 3.2.0
+@Version: 3.2.1
 @Updated: 2026-09-18
 ================================================================================
 使用说明：
@@ -47,7 +47,7 @@ const CONFIG = {
 // 常量与系统配置
 // ================================================================================
 const SCRIPT_NAME = "微信读书 · 全功能任务";
-const SCRIPT_VERSION = "3.2.0";
+const SCRIPT_VERSION = "3.2.1";
 const AUTH_KEY = "weread_auth_v2";
 const CACHE_FILE = "./weread_session.json";
 const API = "https://i.weread.qq.com";
@@ -406,7 +406,7 @@ async function tryRefreshLogin(auth) {
             return null;
         }
 
-        let newAuth = Object.assign({}, auth, {
+        let newAuth = Object.assign(auth, {
             vid: String(loginData.vid),
             skey: loginData.skey,
             accessToken: loginData.accessToken || auth.accessToken || "",
