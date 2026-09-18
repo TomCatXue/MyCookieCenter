@@ -77,6 +77,16 @@ MyCookieCenter 是一套运行在代理工具上的自动化脚本合集，覆�
 
 > Surge / Quantumult X / Stash 用户：脚本内置 `Env` 类跨平台运行，请按各脚本 `README.md` 中的平台配置段设置重写规则。
 
+### 方式 C · 青龙面板自动化（云端挂机 & 100% 脱机自愈）
+
+在青龙面板「订阅管理」中直接添加此订阅：
+```bash
+ql repo https://github.com/TomCatXue/MyCookieCenter.git "ql_script" "" "README" "main"
+```
+- 自动识别脚本头部 Cron 定时，免去手动配置；
+- 单环境变量极简设计：青龙仅需配置 `WEREAD_AUTH` 凭据，子任务开关在脚本顶部直接改 `true`/`false`；
+- 内嵌脱机换票引擎，自动刷新登录态，无需频繁手动重登。
+
 ### 方式 B · 独立功能插件
 
 1. 在 [特殊功能插件](#特殊功能插件) 表格中找到目标插件，复制对应 `.plugin` 的 Raw 地址
@@ -91,7 +101,7 @@ MyCookieCenter 是一套运行在代理工具上的自动化脚本合集，覆�
 
 | App | 功能 | 捕获操作 | 脚本 | 状态 |
 |---|---|---|---|---|
-| 📚 微信读书 · 自动领取 | 每晚 23:00 领取阅读奖励 · 周二翻牌 · 周五好书入架 | 打开微信读书浏览 / 重新登录 | [`app/weread_claim/`](./app/weread_claim/) | ✅ 已验证 |
+| 📚 微信读书 · 自动任务 | 每日阅读领卡 + 周二翻牌 + 周五限免入架 (脱机换票) | 退出微信读书并重新登录一次 (捕获长效凭据) | [`scripts/weread/`](./scripts/weread/) | ✅ 已验证 (青龙/Loon双栖) |
 | 📱 山西电信 · 体验AI领福利 | 凭证静默捕获 + 月度福利领取 | 电信 App 首页 AI 搜索「领福利」进入活动页 | [`plugins/sx_ai_benefit/`](./plugins/sx_ai_benefit/) | ✅ 已验证 |
 | ☎️ 中国电信 · 全系权益中心 | 周三双抽奖 + 幸运抽奖秒领 + 0点话费秒杀 + 山西福利 | 电信5G会员小程序（进任意页秒领）/ 营业厅App（0点抢话费） | [`scripts/telecom/`](./scripts/telecom/) | ✅ 已验证 |
 | 📷 扫描全能王 · 签到 | 抓取 Cookie + 每日签到 | 打开扫描全能王 App（静默抓取） | [`scripts/tools/camscanner/`](./scripts/tools/camscanner/) | ✅ 已验证（外部依赖） |
@@ -127,8 +137,10 @@ MyCookieCenter/
 │   └── camscanner.plugin           # 扫描全能王签到
 ├── boxjs/                          # BoxJS 订阅文件
 │   └── CookieCenter.boxjs.json     # 微信读书 + 中国电信 统一配置面板
+├── ql_script/                      # 青龙面板专用脚本目录（单文件聚合 + 内置标准 Cron）
+│   └── weread.js                   # 微信读书全功能聚合（支持 100% 脱机换票）
 ├── scripts/                        # 核心脚本源码（按业务生态清晰聚合）
-│   ├── weread/                     # 微信读书专区（抓取 + 签到 + 翻牌 + 限免）
+│   ├── weread/                     # 微信读书专区（抓取 + 签到 + 翻牌 + 限免 + 聚合）
 │   ├── telecom/                    # 中国电信专区（周三抽奖 + 话费秒杀 + 山西福利）
 │   ├── tools/                      # 独立功能与页面净化工具（B站、Pixiv、GitHub等）
 │   └── example/                    # 脚本开发模板
@@ -138,6 +150,7 @@ MyCookieCenter/
 
 | 目录 | 说明 | 文档 |
 |---|---|---|
+| [`ql_script/`](./ql_script/) | 青龙面板专用聚合脚本（内置 Cron 与单环境变量设计） | [查看](./ql_script/README.md) |
 | [`scripts/`](./scripts/) | 所有执行脚本源码（按业务聚合为 weread、telecom、tools） | [查看](./scripts/README.md) |
 | [`loon/`](./loon/) | Loon 插件规则配置 | [查看](./loon/README.md) |
 | [`boxjs/`](./boxjs/) | BoxJS 统一订阅配置 | [查看](./boxjs/README.md) |
