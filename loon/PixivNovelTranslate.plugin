@@ -4,8 +4,8 @@
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/ca/d5/93/cad5932d-6ba6-7e5a-c2a9-818682fde6f3/AppIcon-0-0-1x_U007epad-0-1-85-220.png/512x512bb.jpg
 #!tag = Pixiv,小说,翻译,Google,微软,百度,DeepSeek,AI
-#!version = 2.1.1
-#!date = 2026-09-19 12:00
+#!version = 2.2.0
+#!date = 2026-09-19 12:30
 
 [Argument]
 # 总开关：默认关闭，按需开启
@@ -34,9 +34,9 @@ hostname = app-api.pixiv.net
 
 [Script]
 # 页面注入：往小说阅读页插入“译”按钮
-http-response ^https://app-api\.pixiv\.net/webview/v2/novel script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/pixiv/pixiv_novel_translate.js?v=20260828-r15, requires-body=true, timeout=30, tag=Pixiv 小说翻译-页面注入, enable={pixiv_novel_translate}, argument=[{translator},{target},{chunk},{ms_key},{baidu_appid},{baidu_secret},{deepseek_api_url},{deepseek_api_key},{deepseek_model},{google_proxy_url},{google_proxy_token}]
+response if ${url} ~= /^https:\/\/app-api\.pixiv\.net\/webview\/v2\/novel/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/pixiv/pixiv_novel_translate.js?v=20260828-r15", {${translator}, ${target}, ${chunk}, ${ms_key}, ${baidu_appid}, ${baidu_secret}, ${deepseek_api_url}, ${deepseek_api_key}, ${deepseek_model}, ${google_proxy_url}, ${google_proxy_token}}) with enable=${pixiv_novel_translate}, tag="Pixiv 小说翻译-页面注入", timeout=30, requires_body=true
 
 # 翻译中转：拦截 pxtrans 请求，由脚本直接返回 JSON 响应（不经过 Pixiv 上游）。
 # 注意：Loon 的 http-request 中 $done({status,headers,body}) 会被当作“修改请求”发往上游，
 # 导致上游返回 404、页面显示 [object Object]；必须用 $done({response:{...}}) 直接返回。
-http-request ^https://app-api\.pixiv\.net/pxtrans script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/pixiv/pixiv_novel_translate.js?v=20260828-r15, requires-body=true, timeout=120, tag=Pixiv 小说翻译-翻译中转, enable={pixiv_novel_translate}, argument=[{translator},{target},{chunk},{ms_key},{baidu_appid},{baidu_secret},{deepseek_api_url},{deepseek_api_key},{deepseek_model},{google_proxy_url},{google_proxy_token}]
+request if ${url} ~= /^https:\/\/app-api\.pixiv\.net\/pxtrans/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/pixiv/pixiv_novel_translate.js?v=20260828-r15", {${translator}, ${target}, ${chunk}, ${ms_key}, ${baidu_appid}, ${baidu_secret}, ${deepseek_api_url}, ${deepseek_api_key}, ${deepseek_model}, ${google_proxy_url}, ${google_proxy_token}}) with enable=${pixiv_novel_translate}, tag="Pixiv 小说翻译-翻译中转", timeout=120, requires_body=true

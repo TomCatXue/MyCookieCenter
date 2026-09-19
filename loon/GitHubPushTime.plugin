@@ -4,8 +4,8 @@
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/50/1f/ef/501feff3-9be3-e1d4-749e-437b2154085f/AppIcon-0-0-1x_U007epad-0-1-P3-85-220.png/512x512bb.jpg
 #!tag = GitHub,星标,推送时间
-#!version = 1.1.1
-#!date = 2026-09-19 12:00
+#!version = 1.2.0
+#!date = 2026-09-19 12:30
 
 # ===== 独立开关 =====
 
@@ -21,7 +21,7 @@ hostname = api.github.com
 
 [Script]
 # 请求增强：给 StarredRepositoriesForUser 查询补充 pushedAt/updatedAt
-http-request ^https?://api\.github\.com/graphql script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/github/github_push_time.js?v=20260818-12, requires-body=true, timeout=10, tag=GitHub 推送时间-查询增强, enable={github_push_time}
+request if ${url} ~= /^https?:\/\/api\.github\.com\/graphql/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/github/github_push_time.js?v=20260818-12") with enable=${github_push_time}, tag="GitHub 推送时间-查询增强", timeout=10, requires_body=true
 
 # 响应注入：在星标列表语言后显示推送时间
-http-response ^https?://api\.github\.com/graphql script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/github/github_push_time.js?v=20260818-12, requires-body=true, timeout=10, tag=GitHub 推送时间-列表注入, enable={github_push_time}
+response if ${url} ~= /^https?:\/\/api\.github\.com\/graphql/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/github/github_push_time.js?v=20260818-12") with enable=${github_push_time}, tag="GitHub 推送时间-列表注入", timeout=10, requires_body=true
