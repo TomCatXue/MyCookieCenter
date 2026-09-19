@@ -591,7 +591,9 @@ def run_lucky_lottery(sess: requests.Session, act_id: str, act_title: str, sessi
     return res_str
 
 def query_equity_coin_balance(sess: requests.Session, phone: str, session_key: str) -> str:
-    """查询账户真实权益币余额"""
+    """查询账户真实权益币余额，精准回显具体数值"""
+    m_phone = mask(phone)
+    log(f"\n💰 >>> 正在查询账户权益币余额 ({m_phone}) <<<")
     res = request_c005(sess, 'https://mapi-h5.bestpay.com.cn/gapi/op-product-system/myCashPageService/myCashPage', {
         'encyType': 'C005',
         'appType': '116',
@@ -602,10 +604,26 @@ def query_equity_coin_balance(sess: requests.Session, phone: str, session_key: s
         'sessionKey': session_key
     }, phone, session_key, 'H5')
 
-    balance = safe_get(res, 'result', 'availableShowValue')
-    if balance is not None:
-        return f"{balance} 权益币"
-    return "已核验"
+    if isinstance(res, dict):
+        if res.get('success'):
+            res_dict = res.get('result') if isinstance(res.get('result'), dict) else {}
+            balance = None
+            for key_name in ['availableShowValue', 'totalAvailableValue', 'availableAmount', 'availableQuota', 'availableValue']:
+                if res_dict.get(key_name) is not None:
+                    balance = res_dict.get(key_name)
+                    break
+            
+            if balance is not None:
+                log(f"[{m_phone}] 成功查询到权益币余额: {balance}")
+                return f"{balance} 权益币"
+            else:
+                log(f"[{m_phone}] 接口返回成功但未匹配到余额字段: {res_dict}")
+                return "0 权益币"
+        else:
+            err = res.get('errorMsg') or '未开放'
+            log(f"[{m_phone}] 权益币查询接口反馈: {err}")
+            return f"查询未通过 ({err})"
+    return "接口未响应"
 
 # ==================== 🚀 账号解析与主流程 ====================
 def parse_accounts() -> List[Tuple[str, str, str, str]]:
