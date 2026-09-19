@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 ===================================================================
-📌 版本: v1.2.1 (2026-09-19 修复版)
+📌 版本: v1.3.0 (2026-09-19 战果回显版)
 中国电信 · 周三会员双抽奖与幸运抽奖聚合脚本
 ===================================================================
 new Env('中国电信 · 周三会员抽奖');
@@ -65,7 +65,7 @@ except ImportError:
 
 # ==================== 🛠️ 脚本功能开关配置 ====================
 
-SCRIPT_VERSION = "v1.2.1"
+SCRIPT_VERSION = "v1.3.0"
 
 CONFIG = {
     "ENABLE_WED_COIN_DRAW": True,   # 任务 1: 周三会员抽权益币 (专场抽权益币, 默认 hd76690472)
@@ -386,6 +386,37 @@ def login_telecom(sess: requests.Session, phone: str, password: str, android_id:
 
 # ==================== 🎯 真实周三会员抽奖业务实现 (100% 对齐 telecom_draw.js) ====================
 
+def query_recent_lottery_history(sess: requests.Session, phone: str, session_key: str, act_no: str, top_n: int = 3) -> str:
+    """查询指定活动最近中奖记录，若今日已抽完则回显近 3 次日期与奖品"""
+    try:
+        res = request_c005(sess, 'https://mapi-h5.bestpay.com.cn/gapi/op-lottery-system/DrawService/queryLotteryRecord', {
+            'activityNo': act_no,
+            'sessionKey': session_key,
+            'productNo': phone,
+            'phoneNo': phone,
+            'pageNo': 1,
+            'pageSize': 10,
+            'appType': '94',
+            'fromChannelId': 'MINIPROG',
+            'fromchannelId': 'MINIPROG',
+            'encyType': 'C005'
+        }, phone, session_key, 'MINIPROG')
+
+        records = safe_get(res, 'result', 'queryLotteryRecordDTOList') or []
+        if not records:
+            return "今日抽奖次数已用尽 (暂无历史中奖记录)"
+
+        items = []
+        for r in records[:top_n]:
+            name = (r.get('prizeName') or '奖品').strip()
+            t_str = r.get('prizeDistributeTime') or ''
+            date_short = t_str[5:10] if len(t_str) >= 10 else ''
+            items.append(f"{date_short} {name}" if date_short else name)
+
+        return f"今日已抽完 (近{len(items)}次: {', '.join(items)})"
+    except Exception as e:
+        return "今日抽奖次数已用尽"
+
 def run_wednesday_lottery(sess: requests.Session, act_no: str, act_title: str, session_key: str, phone: str) -> str:
     """周三抽奖标准化执行器 (对齐 telecom_draw.js: runWednesdayLottery)"""
     m_phone = mask(phone)
@@ -435,8 +466,7 @@ def run_wednesday_lottery(sess: requests.Session, act_no: str, act_title: str, s
     log(f"[{act_title}] 剩余可用抽奖次数: {count}")
 
     if count <= 0:
-        cached = get_today_reward(phone, act_no)
-        return f"今日已抽完 (今日战果: {cached})" if cached else "今日抽奖次数已用尽"
+        return query_recent_lottery_history(sess, phone, session_key, act_no, top_n=3)
 
     # 3. 循环抽奖并自动领取入账
     draw_count = 0
@@ -565,8 +595,7 @@ def run_lucky_lottery(sess: requests.Session, act_id: str, act_title: str, sessi
     log(f"[{act_title}] 可用抽奖次数: {count}")
 
     if count <= 0:
-        cached = get_today_reward(phone, act_id)
-        return f"今日已抽完 (今日战果: {cached})" if cached else "今日抽奖次数已用尽"
+        return query_recent_lottery_history(sess, phone, session_key, lottery_act_no, top_n=3)
 
     # 5. 循环大转盘抽奖
     draw_count = 0
