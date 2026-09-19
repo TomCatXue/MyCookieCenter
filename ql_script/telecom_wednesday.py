@@ -71,7 +71,7 @@ CONFIG = {
     "ENABLE_WED_COIN_DRAW": True,   # 任务 1: 周三会员抽权益币 (专场抽权益币, 默认 hd76690472)
     "ENABLE_WED_THRICE_DRAW": True, # 任务 2: 周三会员抽三次 (专属抽3次专场, 默认 hd92859166)
     "ENABLE_LUCKY_MALL_DRAW": True, # 任务 3: 权益商城幸运抽奖 (自动做任务+大转盘抽奖)
-    "FORCE_RUN": False,             # 调试模式: False=仅周三自动执行，True=非周三平时强制运行所有任务测试
+    "FORCE_RUN": True,             # 调试模式: False=仅周三自动执行，True=非周三平时强制运行所有任务测试
     "DELAY_SEC": 2,                 # 各接口请求间隔(秒)，避免触发电信风控频控
     "ACT_COIN": "hd76690472",       # 周三抽权益币活动代号
     "ACT_THRICE": "hd92859166",     # 周三抽3次活动代号
