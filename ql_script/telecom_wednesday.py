@@ -590,6 +590,33 @@ def run_lucky_lottery(sess: requests.Session, act_id: str, act_title: str, sessi
     set_today_reward(phone, act_id, res_str)
     return res_str
 
+
+# ==================== 💓 会话心跳保活引擎 (Keep-Alive) ====================
+def send_session_keep_alive(sess: requests.Session, phone: str, session_key: str) -> bool:
+    """
+    在非周三平时运行时，通过调用活跃接口刷新服务端 Session TTL，
+    大幅延长 sessionKey 在电信翼支付服务端的存活寿命，无需频繁重新抓包
+    """
+    m_phone = mask(phone)
+    log(f"💓 [{m_phone}] 正在发起心跳保活请求，顺延服务端 Session 生命周期...")
+    res = request_c005(sess, 'https://mapi-h5.bestpay.com.cn/gapi/equitymall/client/Activity/queryActivityInfo', {
+        'activityId': CONFIG.get("ACT_LUCKY", "A2025011413413484352835699495179"),
+        'sessionKey': session_key,
+        'productNo': phone,
+        'phoneNo': phone,
+        'fromChannelId': '5g_mini_program',
+        'fromchannelId': '5g_mini_program',
+        'encyType': 'C005'
+    }, phone, session_key, '5g_mini_program')
+
+    if isinstance(res, dict) and res.get('success'):
+        log(f"✅ [{m_phone}] 心跳成功，SessionKey 生命周期已顺延！")
+        return True
+    else:
+        err = res.get('errorMsg') if isinstance(res, dict) else '接口未响应'
+        log(f"ℹ️ [{m_phone}] 心跳反馈: {err}")
+        return False
+
 def query_equity_coin_balance(sess: requests.Session, phone: str, session_key: str) -> str:
     """查询账户真实权益币余额，精准回显具体数值"""
     m_phone = mask(phone)
@@ -726,6 +753,10 @@ def main():
             # 资产回显: 真实权益币余额
             balance = query_equity_coin_balance(sess, phone, session_key)
             bullets.append(f"• 账户当前权益币: {balance}")
+
+        # 若非周三执行，顺带触发心跳保活
+        if session_key and datetime.now().weekday() != 2:
+            send_session_keep_alive(sess, phone, session_key)
 
         if len(accounts) > 1:
             summary_report.append(f"【账号 {idx}: {m_phone}】\n" + "\n".join(bullets))
