@@ -70,8 +70,18 @@ class ProtoReader {
 
 // --- gRPC 帧操作 ---
 function unwrapGrpc(data) {
-    if (!data || data.length < 5) return new Uint8Array(0);
-    const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
+    if (!data) return new Uint8Array(0);
+    let bytes;
+    if (data instanceof Uint8Array) {
+        bytes = data;
+    } else if (data instanceof ArrayBuffer) {
+        bytes = new Uint8Array(data);
+    } else if (typeof data === 'string') {
+        bytes = (typeof Buffer !== 'undefined') ? Buffer.from(data, 'binary') : new TextEncoder().encode(data);
+    } else {
+        bytes = new Uint8Array(data);
+    }
+    if (bytes.length < 5) return new Uint8Array(0);
     return bytes.subarray(5);
 }
 
@@ -253,7 +263,7 @@ function mergeRegionContents(existingContents) {
 const url = (typeof $request !== 'undefined' && $request.url) ? $request.url : '';
 
 if (url.includes('bilibili.app.show.v1.Mixture/RegionList')) {
-    // 处理 gRPC 分区列表
+    // 1. 处理 gRPC 分区列表
     try {
         let rawPayload = null;
         if (typeof $response !== 'undefined' && $response.body) {
@@ -277,16 +287,20 @@ if (url.includes('bilibili.app.show.v1.Mixture/RegionList')) {
 
         const outPayload = encodeRegionListReply(replyObj);
         const finalGrpcBody = wrapGrpc(outPayload);
+        const grpcHeaders = {
+            'Content-Type': 'application/grpc',
+            'grpc-status': '0',
+            'grpc-message': '',
+            'bili-status-code': '0'
+        };
 
         $done({
+            status: 200,
+            headers: grpcHeaders,
+            body: finalGrpcBody,
             response: {
                 status: 200,
-                headers: {
-                    'Content-Type': 'application/grpc',
-                    'grpc-status': '0',
-                    'grpc-message': '',
-                    'bili-status-code': '0'
-                },
+                headers: grpcHeaders,
                 body: finalGrpcBody
             }
         });
@@ -296,32 +310,78 @@ if (url.includes('bilibili.app.show.v1.Mixture/RegionList')) {
             contents: buildBuiltinContents()
         };
         const finalGrpcBody = wrapGrpc(encodeRegionListReply(replyObj));
+        const grpcHeaders = {
+            'Content-Type': 'application/grpc',
+            'grpc-status': '0'
+        };
         $done({
+            status: 200,
+            headers: grpcHeaders,
+            body: finalGrpcBody,
             response: {
                 status: 200,
-                headers: {
-                    'Content-Type': 'application/grpc',
-                    'grpc-status': '0'
-                },
+                headers: grpcHeaders,
                 body: finalGrpcBody
             }
         });
     }
 } else if (url.includes('bilibili.app.show.v1.Mixture/RegionShortcut')) {
-    // 快捷方式保存请求拦截确认
+    // 2. 快捷方式保存请求拦截确认
+    const grpcHeaders = {
+        'Content-Type': 'application/grpc',
+        'grpc-status': '0',
+        'grpc-message': '',
+        'bili-status-code': '0'
+    };
     $done({
+        status: 200,
+        headers: grpcHeaders,
         response: {
             status: 200,
-            headers: {
-                'Content-Type': 'application/grpc',
-                'grpc-status': '0',
-                'grpc-message': '',
-                'bili-status-code': '0'
-            }
+            headers: grpcHeaders
         }
     });
+} else if (url.includes('/x/resource/show/tab/v2')) {
+    // 3. 首页 Tab 与顶栏入口重定向：确保右上角分类入口必定唤起新版卡片分区页面 (bilibili://main/top_category)
+    try {
+        let bodyStr = (typeof $response !== 'undefined' && $response.body) ? $response.body : '{}';
+        if (typeof bodyStr !== 'string') {
+            bodyStr = (typeof Buffer !== 'undefined') ? Buffer.from(bodyStr).toString('utf8') : new TextDecoder().decode(bodyStr);
+        }
+        const resJson = JSON.parse(bodyStr || '{}');
+        if (resJson && resJson.data) {
+            let topMore = resJson.data.top_more || [];
+            let catItem = topMore.find(item => item.id === 'categories');
+            if (catItem) {
+                catItem.uri = 'bilibili://main/top_category';
+            } else {
+                topMore.push({
+                    id: 'categories',
+                    icon: 'http://i0.hdslb.com/bfs/feed-admin/f95dfa31c793c857af6e7b65b5387a05f30d31ba.png',
+                    name: '更多分区',
+                    uri: 'bilibili://main/top_category',
+                    tab_id: '更多分区TopMore',
+                    pos: topMore.length + 1
+                });
+            }
+            resJson.data.top_more = topMore;
+            const updatedBody = JSON.stringify(resJson);
+            $done({
+                body: updatedBody,
+                response: {
+                    status: 200,
+                    headers: { 'Content-Type': 'application/json; charset=utf-8' },
+                    body: updatedBody
+                }
+            });
+        } else {
+            $done({});
+        }
+    } catch (e) {
+        $done({});
+    }
 } else if (url.includes('/x/v2/region/index') || url.includes('/x/v2/channel/region/list')) {
-    // 处理 HTTP 旧版/降级分区接口
+    // 4. 处理 HTTP 旧版/降级分区接口
     let list = JSON.parse(JSON.stringify(HTTP_REGION_DATA.index || []));
     if (HTTP_REGION_DATA.modify && HTTP_REGION_DATA.modify.length > 0) {
         list.push(...JSON.parse(JSON.stringify(HTTP_REGION_DATA.modify)));
@@ -342,19 +402,27 @@ if (url.includes('bilibili.app.show.v1.Mixture/RegionList')) {
         });
     }
 
+    const respBody = JSON.stringify({
+        code: 0,
+        message: '0',
+        ttl: 1,
+        data: list
+    });
+
     $done({
+        status: 200,
+        headers: {
+            'Content-Type': 'application/json; charset=utf-8',
+            'access-control-allow-origin': '*'
+        },
+        body: respBody,
         response: {
             status: 200,
             headers: {
                 'Content-Type': 'application/json; charset=utf-8',
                 'access-control-allow-origin': '*'
             },
-            body: JSON.stringify({
-                code: 0,
-                message: '0',
-                ttl: 1,
-                data: list
-            })
+            body: respBody
         }
     });
 } else {

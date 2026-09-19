@@ -93,8 +93,9 @@ response if ${url} ~= /^https:\/\/app\.bilibili\.com\/x\/v2\/account\/myinfo\?/i
 
 [Script]
 # 分区列表优化 (支持 gRPC 新版卡片分组、快捷访问及 HTTP 多级子分类修复)
-response if ${url} ~= /^https?:\/\/(grpc|app)\.bili(bili\.com|api\.net)\/bilibili\.app\.show\.v1\.Mixture\/RegionList$/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/bilibili/bilibili_region.js") with tag="[哔哩哔哩]全部分区优化(gRPC)", timeout=10, requires_body=true, binary_body_mode=true
-request if ${url} ~= /^https?:\/\/(grpc|app)\.bili(bili\.com|api\.net)\/bilibili\.app\.show\.v1\.Mixture\/RegionShortcut$/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/bilibili/bilibili_region.js") with tag="[哔哩哔哩]快捷分区保存", timeout=10
+response if ${url} ~= /^https?:\/\/app\.bili(bili\.com|api\.net)\/x\/resource\/show\/tab\/v2\?/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/bilibili/bilibili_region.js") with tag="[哔哩哔哩]首页分区入口重定向", timeout=10, requires_body=true
+response if ${url} ~= /^https?:\/\/(grpc|app)\.bili(bili\.com|api\.net)\/bilibili\.app\.show\.v1\.Mixture\/RegionList(?:\?.*)?$/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/bilibili/bilibili_region.js") with tag="[哔哩哔哩]全部分区优化(gRPC)", timeout=10, requires_body=true, binary_body_mode=true
+request if ${url} ~= /^https?:\/\/(grpc|app)\.bili(bili\.com|api\.net)\/bilibili\.app\.show\.v1\.Mixture\/RegionShortcut(?:\?.*)?$/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/bilibili/bilibili_region.js") with tag="[哔哩哔哩]快捷分区保存", timeout=10
 request if ${url} ~= /^https?:\/\/app\.bili(bili\.com|api\.net)\/x\/v2\/(channel\/region\/list|region\/index)\?/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/bilibili/bilibili_region.js") with tag="[哔哩哔哩]分区列表修复(HTTP)", timeout=10, requires_body=true
 
 # 自动捕获当前用户 access_key (供扫码登录签名生成使用)
