@@ -244,7 +244,10 @@ def request_c005(sess: requests.Session, url: str, biz_params: dict, product_no:
         'user-agent': CONFIG["UA"],
         'origin': 'https://h5.bestpay.cn',
         'referer': 'https://h5.bestpay.cn/',
-        'cookie': f'sessionKey={session_key}; productNo={product_no}'
+        'cookie': f'sessionKey={session_key}; productNo={product_no}',
+        'sessionKey': session_key,
+        'sessionkey': session_key,
+        'productNo': product_no
     }
 
     res = api_req(sess, url, json=payload, headers=req_headers)
