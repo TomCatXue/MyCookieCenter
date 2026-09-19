@@ -2,10 +2,10 @@
 #!desc = 抓取 Cookie + 每日签到
 #!author = MaYIHEI (原作) / TomCatXue
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
-#!icon = https://raw.githubusercontent.com/MaYIHEI/pin/refs/heads/main/app/camscanner.png
+#!icon = https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/26/ff/f2/26fff2c0-729b-5216-0c13-7d0499f10940/AppIconLite-0-0-1x_U007ephone-0-6-0-0-sRGB-85-220.png/512x512bb.jpg
 #!tag = 扫描全能王,Cookie,签到
-#!version = 1.2.0
-#!date = 2026-09-17 11:50
+#!version = 1.2.1
+#!date = 2026-09-19 12:00
 
 # =================== 独立开关 ===================
 

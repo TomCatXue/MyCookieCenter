@@ -2,10 +2,10 @@
 #!desc = 专为 8.2.6 等老版本微信读书设计：全面拦截改写 feature、config、reconf 与 mobileSync 响应体，采用通用正则递归深度遍历算法，彻底清空 upgrade、forceUpdate、updateInfo 与 notice_msg 等弹窗字段，彻底阻断版本更新检测与强更提示，锁定纯净免费 AI 听书体验。
 #!author = TomCatXue
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
-#!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/weread.png
+#!icon = https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/35/92/e6/3592e6f4-0b0b-f2e4-7968-7033b281e1f5/AppIcon-0-1x_U007epad-0-11-0-85-220-0.png/512x512bb.jpg
 #!tag = 微信读书,防强更,去弹窗,AI听书
-#!version = 3.5.0
-#!date = 2026-09-17 12:30
+#!version = 3.5.1
+#!date = 2026-09-19 12:00
 
 [Argument]
 weread_anti_upgrade = switch,true,tag=微信读书·防强更,desc=开启后彻底屏蔽官方强更弹窗、更新公告与新版本检测，安心停留在8.2.6免费AI听书

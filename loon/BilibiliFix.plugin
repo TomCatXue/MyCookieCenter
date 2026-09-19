@@ -3,10 +3,10 @@
 #!openUrl = https://apps.apple.com/app/id736536022
 #!author = TomCatXue
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
-#!icon = https://raw.githubusercontent.com/sooyaaabo/IconLibrary/main/App/BilibiliPink.png
+#!icon = https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/c5/8d/9c/c58d9cbb-7d9c-8e05-4b81-74a950b559c9/AppIcon-0-0-1x_U007epad-0-1-0-sRGB-85-220.png/512x512bb.jpg
 #!tag = 去广告,空降助手,画质解锁,Bilibili
-#!version = 2.6.0
-#!date = 2026-09-18 12:00
+#!version = 2.7.0
+#!date = 2026-09-19 12:00
 
 [Argument]
 quality = switch, true, tag = [画质] 解锁1080P高码率/4K, desc = 开启后非大会员也可直接选择并切换1080P高码率、1080P60、杜比视界等画质
@@ -34,62 +34,62 @@ AND, ((DOMAIN-SUFFIX, chat.bilibili.com), (OR, ((DOMAIN-KEYWORD, stun), (DOMAIN-
 
 [Rewrite]
 # 移除直播广告
-^https:\/\/api\.live\.bilibili\.com\/xlive\/e-commerce-interface\/v1\/ecommerce-user\/get_shopping_info\? reject-dict
-^https:\/\/api\.live\.bilibili\.com\/xlive\/open-interface\/v2\/tracker\/conf\? response-body-json-jq '.data.domains=["wss://tracker.chat.bilibili.com"]'
+request if ${url} ~= /^https:\/\/api\.live\.bilibili\.com\/xlive\/e-commerce-interface\/v1\/ecommerce-user\/get_shopping_info\?/i then reject_dict(200)
+response if ${url} ~= /^https:\/\/api\.live\.bilibili\.com\/xlive\/open-interface\/v2\/tracker\/conf\?/i then response.json.jq(".data.domains=[\"wss://tracker.chat.bilibili.com\"]")
 
 # 移除直播间的游戏推广内容
-^https:\/\/line3-h5-mobile-api\.biligame\.com\/game\/live\/large_card_material\? reject-dict
+request if ${url} ~= /^https:\/\/line3-h5-mobile-api\.biligame\.com\/game\/live\/large_card_material\?/i then reject_dict(200)
 
 # 移除开屏广告
-^https:\/\/app\.bilibili\.com\/x\/v2\/splash\/list\? mock-response-body data-type=text status-code=200 data="{\"code\":0,\"message\":\"OK\",\"ttl\":1,\"data\":{\"max_time\":0,\"min_interval\":31536000,\"pull_interval\":31536000,\"keep_ids\":[],\"show\":[],\"list\":[{}],\"splash_request_id\":\"\"}}"
-^https:\/\/app\.bilibili\.com\/x\/v2\/splash\/(show|event\/list2)\? response-body-json-jq '.data |= with_entries(if .key | IN("show", "event_list") then .value = [] else . end)'
+response if ${url} ~= /^https:\/\/app\.bilibili\.com\/x\/v2\/splash\/list\?/i then response.body.mock("text", "{\"code\":0,\"message\":\"OK\",\"ttl\":1,\"data\":{\"max_time\":0,\"min_interval\":31536000,\"pull_interval\":31536000,\"keep_ids\":[],\"show\":[],\"list\":[{}],\"splash_request_id\":\"\"}}", 200)
+response if ${url} ~= /^https:\/\/app\.bilibili\.com\/x\/v2\/splash\/(show|event\/list2)\?/i then response.json.jq(".data |= with_entries(if .key | IN(\"show\", \"event_list\") then .value = [] else . end)")
 
 # 移除大会员广告、移除右上角活动入口
-^https:\/\/ap[ip]\.bilibili\.com\/x\/(?:resource\/(?:top\/activity|patch\/tab(?:\/v2)?)|v2\/search\/square|vip\/ads\/materials)\? mock-response-body data-type=text status-code=200 data="{\"code\":-404,\"message\":\"-404\",\"ttl\":1,\"data\":null}"
+response if ${url} ~= /^https:\/\/ap[ip]\.bilibili\.com\/x\/(?:resource\/(?:top\/activity|patch\/tab(?:\/v2)?)|v2\/search\/square|vip\/ads\/materials)\?/i then response.body.mock("text", "{\"code\":-404,\"message\":\"-404\",\"ttl\":1,\"data\":null}", 200)
 
 # 修复废弃专题中心/公开课/新歌热榜接口与H5重定向
-^https:\/\/api\.bilibili\.com\/topic\/getlist\? mock-response-body data-type=text status-code=200 data="{\"code\":0,\"message\":\"0\",\"ttl\":1,\"data\":{\"list\":[],\"total\":0}}"
-^https:\/\/www\.bilibili\.com\/h5\/mooc header 302 https://m.bilibili.com/cheese/home?navhide=1
-^https:\/\/www\.bilibili\.com\/h5\/musicplus header 302 https://www.bilibili.com/v/popular/rank/music
+response if ${url} ~= /^https:\/\/api\.bilibili\.com\/topic\/getlist\?/i then response.body.mock("text", "{\"code\":0,\"message\":\"0\",\"ttl\":1,\"data\":{\"list\":[],\"total\":0}}", 200)
+request if ${url} ~= /^https:\/\/www\.bilibili\.com\/h5\/mooc/i then redirect(302, "https://m.bilibili.com/cheese/home?navhide=1")
+request if ${url} ~= /^https:\/\/www\.bilibili\.com\/h5\/musicplus/i then redirect(302, "https://www.bilibili.com/v/popular/rank/music")
 
 # 移除播放页开通会员横幅
-^https:\/\/api\.bilibili\.com\/pgc\/activity\/deliver\/material\/receive\? mock-response-body data-type=text status-code=200 data="{\"code\":0,\"data\":{\"closeType\":\"close_win\",\"container\":[],\"showTime\":\"\"},\"message\":\"success\"}"
-^https:\/\/api\.bilibili\.com\/pgc\/view\/v2\/app\/season\? response-body-json-jq 'del(.data.payment)'
-^https:\/\/api\.bilibili\.com\/pgc\/page\/channel\? response-body-json-jq '.data.modules |= map(select(.type != "TIP") | if .type == "BANNER" then .module_data.items |= map(select(.url | startswith("https://www.bilibili.com/blackboard/era/") | not)) else . end)'
+response if ${url} ~= /^https:\/\/api\.bilibili\.com\/pgc\/activity\/deliver\/material\/receive\?/i then response.body.mock("text", "{\"code\":0,\"data\":{\"closeType\":\"close_win\",\"container\":[],\"showTime\":\"\"},\"message\":\"success\"}", 200)
+response if ${url} ~= /^https:\/\/api\.bilibili\.com\/pgc\/view\/v2\/app\/season\?/i then response.json.jq("del(.data.payment)")
+response if ${url} ~= /^https:\/\/api\.bilibili\.com\/pgc\/page\/channel\?/i then response.json.jq(".data.modules |= map(select(.type != \"TIP\") | if .type == \"BANNER\" then .module_data.items |= map(select(.url | startswith(\"https://www.bilibili.com/blackboard/era/\") | not)) else . end)")
 
 # 渠道转为国际版
-^https:\/\/api\.bilibili\.com\/pgc\/page\/channel\?(.*)&mobi_app=iphone&(.*)$ header https://api.bilibili.com/pgc/page/channel?$1&mobi_app=iphone_i&$2
+request if ${url} ~= /^https:\/\/api\.bilibili\.com\/pgc\/page\/channel\?(.*)&mobi_app=iphone&(.*)$/i as urlMatch then url.replace("https://api.bilibili.com/pgc/page/channel?${urlMatch.1}&mobi_app=iphone_i&${urlMatch.2}")
 
 # 移除青少年模式弹窗
-^https:\/\/grpc\.biliapi\.net\/bilibili\.app\.interface\.v1\.Teenagers\/ModeStatus$ mock-response-body data-type=text status-code=200 data="AAAAABMKEQgCEgl0ZWVuYWdlcnMgAioA" mock-data-is-base64=true
+response if ${url} ~= /^https:\/\/grpc\.biliapi\.net\/bilibili\.app\.interface\.v1\.Teenagers\/ModeStatus$/i then response.body.mock("text", "AAAAABMKEQgCEgl0ZWVuYWdlcnMgAioA", 200, true)
 
-# 移除搜索框关键词
-^https:\/\/grpc\.biliapi\.net\/bilibili\.app\.interface\.v1\.Search\/DefaultWords$ mock-response-body data-type=text status-code=200 data="AAAAACEaHeaQnOe0ouinhumikeOAgeeVquWJp+aIlnVw5Li7KAE=" mock-data-is-base64=true
+# 移除搜索框默认词
+response if ${url} ~= /^https:\/\/grpc\.biliapi\.net\/bilibili\.app\.interface\.v1\.Search\/DefaultWords$/i then response.body.mock("text", "AAAAACEaHeaQnOe0ouinhumikeOAgeeVquWJp+aIlnVw5Li7KAE=", 200, true)
 
-# 移除播放页面广告
-^https:\/\/grpc\.biliapi\.net\/bilibili\.app\.(view\.v1\.View\/TFInfo|viewunite\.v1\.View\/(PlayPause|ViewEndPage))$ mock-response-body data-type=text status-code=200 data="AAAAAAA=" mock-data-is-base64=true
+# 移除视频播放结束推广/追番/点赞推荐卡片
+response if ${url} ~= /^https:\/\/grpc\.biliapi\.net\/bilibili\.app\.(view\.v1\.View\/TFInfo|viewunite\.v1\.View\/(PlayPause|ViewEndPage))$/i then response.body.mock("text", "AAAAAAA=", 200, true)
 
-# 请求头处理
-^https:\/\/grpc\.biliapi\.net\/bilibili\.app\.(interface\.v1\.(Teenagers\/ModeStatus|Search\/DefaultWords)|view\.v1\.View\/TFInfo|viewunite\.v1\.View\/(PlayPause|ViewEndPage))$ response-header-add grpc-status 0
-^https:\/\/(grpc\.biliapi\.net|app\.bilibili\.com)\/bilibili\.app\.show\.v1\.(Mixture\/(RegionIndex|RegionList)|Rank\/RankRegionList)$ response-header-add grpc-status 0
+# 为上述 gRPC Mock 接口与原生分区接口补充 grpc-status=0 (防止新版客户端因缺少状态头触发错误断流)
+response if ${url} ~= /^https:\/\/grpc\.biliapi\.net\/bilibili\.app\.(interface\.v1\.(Teenagers\/ModeStatus|Search\/DefaultWords)|view\.v1\.View\/TFInfo|viewunite\.v1\.View\/(PlayPause|ViewEndPage))$/i then response.header.add("grpc-status", "0")
+response if ${url} ~= /^https:\/\/(grpc\.biliapi\.net|app\.bilibili\.com)\/bilibili\.app\.show\.v1\.(Mixture\/(RegionIndex|RegionList)|Rank\/RankRegionList)$/i then response.header.add("grpc-status", "0")
 
-# 屏蔽STUN
-^https:\/\/api\.bilibili\.com\/x\/pd-proxy\/tracker\? response-body-json-jq '.data[][]?="stun.chat.bilibili.com:3478"'
+# 阻断 STUN 实时通信 P2P 穿透
+response if ${url} ~= /^https:\/\/api\.bilibili\.com\/x\/pd-proxy\/tracker\?/i then response.json.jq(".data[][]?=\"stun.chat.bilibili.com:3478\"")
 
-# 移除皮肤推送
-^https:\/\/app\.bilibili\.com\/x\/resource\/show\/skin\? response-body-json-del data.common_equip
+# 禁用自定义皮肤 (恢复原生)
+response if ${url} ~= /^https:\/\/app\.bilibili\.com\/x\/resource\/show\/skin\?/i then response.json.delete("data.common_equip")
 
-# 移除首页推荐广告
-^https:\/\/app\.bilibili\.com\/x\/v2\/feed\/index\? response-body-json-jq 'if .data.items then .data.items |= map(select((.banner_item == null) and (.ad_info == null) and (.card_goto == "av") and (.card_type | IN("small_cover_v2", "large_cover_single_v9", "large_cover_v1")))) end'
+# 移除首页推荐流中的商业/活动广告 (过滤广告卡片，仅保留普通视频 av)
+response if ${url} ~= /^https:\/\/app\.bilibili\.com\/x\/v2\/feed\/index\?/i then response.json.jq("if .data.items then .data.items |= map(select((.banner_item == null) and (.ad_info == null) and (.card_goto == \"av\") and (.card_type | IN(\"small_cover_v2\", \"large_cover_single_v9\", \"large_cover_v1\")))) end")
 
-# 移除竖屏视频广告
-^https:\/\/app\.bilibili\.com\/x\/v2\/feed\/index\/story\? response-body-json-jq 'if .data.items then .data.items |= map(select((.ad_info == null) and (.card_goto | IN("vertical_ad_av", "vertical_ad_live", "vertical_ad_picture") | not)) | del(.story_cart_icon, .free_flow_toast, .image_infos, .course_info, .game_info)) end'
+# 移除 Story 模式竖屏流商业插播广告
+response if ${url} ~= /^https:\/\/app\.bilibili\.com\/x\/v2\/feed\/index\/story\?/i then response.json.jq("if .data.items then .data.items |= map(select((.ad_info == null) and (.card_goto | IN(\"vertical_ad_av\", \"vertical_ad_live\", \"vertical_ad_picture\") | not)) | del(.story_cart_icon, .free_flow_toast, .image_infos, .course_info, .game_info)) end")
 
-# 个人页面我的收藏升级为新版多Tab聚合页面 (开启全部/追番/合集/视频分类)
-^https:\/\/app\.bilibili\.com\/x\/v2\/account\/mine(?:\/ipad)?\? response-body-json-jq 'if .data.sections_v2 then .data.sections_v2 |= map(.items |= map(if .title == "我的收藏" or .id == 496 or .id == 3072 then .uri = "bilibili://user_center/favourite?version=2" else . end)) end | if .data.ipad_sections then .data.ipad_sections |= map(if .title == "我的收藏" or .id == 749 then .uri = "bilibili://user_center/favourite?version=2" else . end) end'
+# 我的页面升级为新版多 Tab 分类收藏
+response if ${url} ~= /^https:\/\/app\.bilibili\.com\/x\/v2\/account\/mine(?:\/ipad)?\?/i then response.json.jq("if .data.sections_v2 then .data.sections_v2 |= map(.items |= map(if .title == \"我的收藏\" or .id == 496 or .id == 3072 then .uri = \"bilibili://user_center/favourite?version=2\" else . end)) end | if .data.ipad_sections then .data.ipad_sections |= map(if .title == \"我的收藏\" or .id == 749 then .uri = \"bilibili://user_center/favourite?version=2\" else . end) end")
 
 # 非会员开启会员专属清晰度 (本地UI显示)
-^https:\/\/app\.bilibili\.com\/x\/v2\/account\/myinfo\? response-body-json-jq '.data.vip |= if . != null and .status == 0 then . + { status: 1, type: 2, due_date: 9005270400000, role: 15 } else . end'
+response if ${url} ~= /^https:\/\/app\.bilibili\.com\/x\/v2\/account\/myinfo\?/i then response.json.jq(".data.vip |= if . != null and .status == 0 then . + { status: 1, type: 2, due_date: 9005270400000, role: 15 } else . end")
 
 [Script]
 # 分区列表优化 (支持 gRPC 新版卡片分组、快捷访问及 HTTP 多级子分类修复)

@@ -2,10 +2,10 @@
 #!desc = 在 GitHub App 星标列表语言后显示推送时间
 #!author = TomCatXue
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
-#!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/github.png
+#!icon = https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/50/1f/ef/501feff3-9be3-e1d4-749e-437b2154085f/AppIcon-0-0-1x_U007epad-0-1-P3-85-220.png/512x512bb.jpg
 #!tag = GitHub,星标,推送时间
-#!version = 1.1.0
-#!date = 2026-09-17 11:50
+#!version = 1.1.1
+#!date = 2026-09-19 12:00
 
 # ===== 独立开关 =====
 

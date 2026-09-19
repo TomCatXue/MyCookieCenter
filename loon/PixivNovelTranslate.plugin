@@ -2,10 +2,10 @@
 #!desc = 在 Pixiv 小说阅读页注入翻译按钮，支持 Google 免费 / 微软翻译 / 百度翻译 / DeepSeek AI 翻译
 #!author = TomCatXue
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
-#!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/pixiv.png
+#!icon = https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/ca/d5/93/cad5932d-6ba6-7e5a-c2a9-818682fde6f3/AppIcon-0-0-1x_U007epad-0-1-85-220.png/512x512bb.jpg
 #!tag = Pixiv,小说,翻译,Google,微软,百度,DeepSeek,AI
-#!version = 2.1.0
-#!date = 2026-09-17 11:50
+#!version = 2.1.1
+#!date = 2026-09-19 12:00
 
 [Argument]
 # 总开关：默认关闭，按需开启
