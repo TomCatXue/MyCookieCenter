@@ -244,10 +244,7 @@ def request_c005(sess: requests.Session, url: str, biz_params: dict, product_no:
         'user-agent': CONFIG["UA"],
         'origin': 'https://h5.bestpay.cn',
         'referer': 'https://h5.bestpay.cn/',
-        'cookie': f'sessionKey={session_key}; productNo={product_no}',
-        'sessionKey': session_key,
-        'sessionkey': session_key,
-        'productNo': product_no
+        'cookie': f'sessionKey={session_key}; productNo={product_no}'
     }
 
     res = api_req(sess, url, json=payload, headers=req_headers)
@@ -401,6 +398,10 @@ def run_wednesday_lottery(sess: requests.Session, act_no: str, act_title: str, s
     if not isinstance(act_res, dict) or not act_res.get('success'):
         err_msg = act_res.get('errorMsg', '活动查询失败') if isinstance(act_res, dict) else '响应异常'
         log(f"[{act_title}] 活动校验未通过: {err_msg}")
+        # 若非周三活动日访问周三活动，电信网关会对未开启的活动抛出 100008 拦截，绝非 SessionKey 失效
+        now_weekday = datetime.now().weekday()
+        if now_weekday != 2:
+            return "非周三活动暂未开放 (每周三 09:00 开放)"
         if '登录' in err_msg or '100003' in err_msg or '100008' in err_msg:
             return "SessionKey已失效，请进小程序刷新"
         cached = get_today_reward(phone, act_no)
