@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
+===================================================================
+📌 版本: v1.2.0 (2026-09-19 稳定版)
 中国电信 · 周三会员双抽奖与幸运抽奖聚合脚本
 ===================================================================
 new Env('中国电信 · 周三会员抽奖');
@@ -62,6 +64,9 @@ except ImportError:
     ql_send = None
 
 # ==================== 🛠️ 脚本功能开关配置 ====================
+
+SCRIPT_VERSION = "v1.2.0"
+
 CONFIG = {
     "ENABLE_WED_COIN_DRAW": True,   # 任务 1: 周三会员抽权益币 (专场抽权益币, 默认 hd76690472)
     "ENABLE_WED_THRICE_DRAW": True, # 任务 2: 周三会员抽三次 (专属抽3次专场, 默认 hd92859166)
@@ -684,7 +689,7 @@ def parse_accounts() -> List[Tuple[str, str, str, str]]:
 
 def main():
     print("=" * 65)
-    print("        🎉 中国电信 · 周三会员双抽奖与幸运抽奖聚合脚本 🎉        ")
+    print(f"  🎉 [{SCRIPT_VERSION}] 中国电信 · 周三会员双抽奖与幸运抽奖聚合脚本 🎉  ")
     print("=" * 65)
 
     now = datetime.now()
@@ -776,12 +781,12 @@ def main():
     print("\n" + "=" * 65)
     print("                       📊 任务执行结果总报                       ")
     print("=" * 65)
-    print(f"📣【中国电信 · 周三会员抽奖】\n{subtitle}\n\n{notify_body}")
+    print(f"📣 [{SCRIPT_VERSION}]【中国电信 · 周三会员抽奖】\n{subtitle}\n\n{notify_body}")
     print("=" * 65 + "\n")
 
     if HAS_NOTIFY and ql_send and notify_body:
         try:
-            ql_send("中国电信 · 周三会员抽奖", f"{subtitle}\n\n{notify_body}")
+            ql_send(f"[{SCRIPT_VERSION}] 中国电信 · 周三会员抽奖", f"{subtitle}\n\n{notify_body}")
             print("🔔 青龙通知推送成功！")
         except Exception as e:
             print(f"⚠️ 发送青龙通知异常: {str(e)}")
