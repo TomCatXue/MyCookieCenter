@@ -25,7 +25,7 @@ ql repo https://github.com/TomCatXue/MyCookieCenter.git "ql_script" "" "README" 
 | 脚本文件 | 任务名称 | 内嵌定时 Cron | 核心环境变量 | 功能说明 |
 | :--- | :--- | :--- | :--- | :--- |
 | [`weread.js`](./weread.js) | **微信读书 · 全功能任务** | `0 23 * * *`<br>(每天 23:00) | **`WEREAD_AUTH`** | 三合一聚合：每日阅读时长领卡 + 周二翻牌抽奖 + 周五限免图书入架。内置 S-box `/login` 纯 JS 签名算法，实现 100% 脱机自愈换票。 |
-| [`telecom_wednesday.py`](./telecom_wednesday.py) | **中国电信 · 周三抽奖与会员日** | `0 10 * * 3`<br>(每周三 10:00) | **`dxlin`** | 三大任务聚合：周三幸运抽奖(抽3次) + 会员日抽权益币 + 会员特权抽奖。基于电信官方 App 协议全自动登录换发 SSO 票据与 Bearer Token。 |
+| [`telecom_wednesday.py`](./telecom_wednesday.py) | **中国电信 · 周三抽奖与会员日** | `0 9 * * 3`<br>(每周三 09:00) | **`TELECOM_WED_AUTH`** | 三大任务聚合：周三幸运抽奖(抽3次) + 会员日抽权益币 + 会员特权抽奖。基于电信官方 App 协议全自动登录换发 SSO 票据与 Bearer Token。 |
 
 ---
 
@@ -82,7 +82,7 @@ const CONFIG = {
 
 ### 2. 青龙环境变量（极简三段式配置）
 在青龙面板「环境变量」中新建变量：
-- **名称**：`dxlin`
+- **名称**：`TELECOM_WED_AUTH` (亦支持简写 `dx_wed`，彻底独立于 0716 的 `dxlin` 与 0点权益的 `dxqy`)
 - **值**：统一采用标准三段式格式：`手机号#服务密码#AndroidID`
   ```text
   17612345678#123456#8a2c4e6f12345678

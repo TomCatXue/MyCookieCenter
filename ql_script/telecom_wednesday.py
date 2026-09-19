@@ -13,8 +13,9 @@ cron: 0 9 * * 3
   4. 资产回显：自动查询并回显当前账户资产明细
 
 环境变量配置：
-  dxlin : 格式为 '手机号#服务密码#AndroidID' (支持选填第四段 SessionKey: '手机号#服务密码#AndroidID#SessionKey')
-  (同时兼容 CHINA_TELECOM_AUTH / dxqy / chinaTelecomAccount 等变量名)
+  TELECOM_WED_AUTH : 专属环境变量 (支持简写 dx_wed)
+                     格式为 '手机号#服务密码#AndroidID#SessionKey' 或 '手机号#服务密码#AndroidID'
+                     多账号换行粘贴，彻底独立于 0716 脚本的 dxlin 与 0点权益的 dxqy
 
 依赖环境：
   pip install pycryptodome requests certifi urllib3
@@ -421,7 +422,7 @@ def exchange_bestpay_session_key(sess: requests.Session, phone: str, ticket: str
 
     err = res.get('errorMsg') if isinstance(res, dict) else '接口未响应'
     log(f"ℹ️ [自动置换提示] {m_phone}: 翼支付网关反馈 '{err}' (该老旧接口已被官方维护下线)")
-    log(f"👉 提示: 若要完整执行翼支付三大活动，请在微信打开「中国电信5G会员」小程序复制 sessionKey，并在 dxlin 后拼接为第4段: 手机号#密码#AndroidID#sessionKey")
+    log(f"👉 提示: 若要完整执行翼支付三大活动，请在微信打开「中国电信5G会员」小程序复制 sessionKey，并在 TELECOM_WED_AUTH 后拼接为第4段: 手机号#密码#AndroidID#sessionKey")
     return None
 
 # ==================== 🎯 核心业务三大抽奖任务 ====================
@@ -659,11 +660,11 @@ def query_equity_coin_balance(sess: requests.Session, phone: str, session_key: s
 
 # ==================== 🚀 账号解析与主流程 ====================
 def parse_accounts() -> List[Tuple[str, str, str, str]]:
-    raw = os.environ.get('dxlin') or \
-          os.environ.get('CHINA_TELECOM_AUTH') or \
-          os.environ.get('dxqy') or \
-          os.environ.get('chinaTelecomAccount') or \
-          os.environ.get('TELECOM_AUTH') or ''
+    raw = os.environ.get('TELECOM_WED_AUTH') or \
+          os.environ.get('dx_wed') or \
+          os.environ.get('TELECOM_DRAW_AUTH') or \
+          os.environ.get('dxlin') or \
+          os.environ.get('CHINA_TELECOM_AUTH') or ''
 
     accounts = []
     if not raw.strip():
@@ -703,7 +704,7 @@ def main():
     accounts = parse_accounts()
     if not accounts:
         print("\n❌ 未检测到有效的账号配置！")
-        print("👉 请在青龙面板添加环境变量: dxlin")
+        print("👉 请在青龙面板添加专属环境变量: TELECOM_WED_AUTH (或简写 dx_wed)")
         print("👉 格式示例: 18912345678#123456#8a2c4e6f12345678 (多账号换行粘贴)\n")
         return
 
