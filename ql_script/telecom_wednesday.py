@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 ===================================================================
-📌 版本: v1.2.0 (2026-09-19 稳定版)
+📌 版本: v1.2.1 (2026-09-19 修复版)
 中国电信 · 周三会员双抽奖与幸运抽奖聚合脚本
 ===================================================================
 new Env('中国电信 · 周三会员抽奖');
@@ -65,7 +65,7 @@ except ImportError:
 
 # ==================== 🛠️ 脚本功能开关配置 ====================
 
-SCRIPT_VERSION = "v1.2.0"
+SCRIPT_VERSION = "v1.2.1"
 
 CONFIG = {
     "ENABLE_WED_COIN_DRAW": True,   # 任务 1: 周三会员抽权益币 (专场抽权益币, 默认 hd76690472)
@@ -397,6 +397,7 @@ def run_wednesday_lottery(sess: requests.Session, act_no: str, act_title: str, s
         'sessionKey': session_key,
         'productNo': phone,
         'phoneNo': phone,
+        'appType': '94',
         'fromChannelId': 'MINIPROG',
         'fromchannelId': 'MINIPROG',
         'encyType': 'C005'
@@ -424,6 +425,7 @@ def run_wednesday_lottery(sess: requests.Session, act_no: str, act_title: str, s
         'productNo': phone,
         'phoneNo': phone,
         'deviceNo': f'miniprogram_{phone}',
+        'appType': '94',
         'fromChannelId': 'MINIPROG',
         'fromchannelId': 'MINIPROG',
         'encyType': 'C005'
@@ -449,6 +451,7 @@ def run_wednesday_lottery(sess: requests.Session, act_no: str, act_title: str, s
             'productNo': phone,
             'phoneNo': phone,
             'deviceNo': f'miniprogram_{phone}',
+            'appType': '94',
             'fromChannelId': 'MINIPROG',
             'fromchannelId': 'MINIPROG',
             'encyType': 'C005'
@@ -471,6 +474,7 @@ def run_wednesday_lottery(sess: requests.Session, act_no: str, act_title: str, s
                     'productNo': phone,
                     'orderNo': order_no,
                     'sourceChannel': 'APPLET',
+                    'appType': '94',
                     'fromChannelId': 'MINIPROG',
                     'fromchannelId': 'MINIPROG',
                     'encyType': 'C005'
