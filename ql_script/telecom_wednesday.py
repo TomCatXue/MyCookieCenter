@@ -7,9 +7,9 @@ new Env('中国电信 · 周三会员抽奖');
 cron: 0 9 * * 3
 ===================================================================
 功能说明：
-  1. 任务一：周三会员抽权益币 (专属抽权益币) —— 优先接入翼支付周三抽奖，中奖自动领奖入账
-  2. 任务二：周三会员抽三次 (抽三次) —— 大转盘抽奖，自动探测并抽完可用次数
-  3. 任务三：权益商城幸运抽奖 (大转盘抽奖) —— 免费领机会 + 自动做任务 + 抽大奖
+  1. 任务一：周三会员抽权益币 (专属抽权益币) —— 山西甄选周三会员日 (hd76690472)
+  2. 任务二：周三会员抽三次 (专属抽3次) —— 山西抽奖新-每周三次 (hd92859166)
+  3. 任务三：权益商城幸运抽奖 (大转盘抽奖) —— 免费领机会 + 自动做任务 + 抽大奖 (A2025011413413484352835699495179)
   4. 资产回显：自动查询并回显当前账户真实权益币余额
 
 环境变量配置：
@@ -63,14 +63,14 @@ except ImportError:
 
 # ==================== 🛠️ 脚本功能开关配置 ====================
 CONFIG = {
-    "ENABLE_WED_LUCKY_DRAW": True,  # 任务 1: 周三会员抽三次 (抽三次)
-    "ENABLE_WED_COIN_DRAW": True,   # 任务 2: 周三会员抽权益币 (专场抽权益币, 默认 hd76690472)
+    "ENABLE_WED_COIN_DRAW": True,   # 任务 1: 周三会员抽权益币 (专场抽权益币, 默认 hd76690472)
+    "ENABLE_WED_THRICE_DRAW": True, # 任务 2: 周三会员抽三次 (专属抽3次专场, 默认 hd92859166)
     "ENABLE_LUCKY_MALL_DRAW": True, # 任务 3: 权益商城幸运抽奖 (自动做任务+大转盘抽奖)
     "FORCE_RUN": False,             # 调试模式: False=仅周三自动执行，True=非周三平时强制运行所有任务测试
     "DELAY_SEC": 2,                 # 各接口请求间隔(秒)，避免触发电信风控频控
-    "ACT_COIN": "hd76690472",       # [选填] 周三抽权益币活动代号
-    "ACT_THRICE": "hd92859166",     # [选填] 周三抽3次活动代号
-    "ACT_LUCKY": "A2025011413413484352835699495179", # [选填] 权益商城大转盘活动ID
+    "ACT_COIN": "hd76690472",       # 周三抽权益币活动代号
+    "ACT_THRICE": "hd92859166",     # 周三抽3次活动代号
+    "ACT_LUCKY": "A2025011413413484352835699495179", # 权益商城大转盘活动ID
     "UA": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 MicroMessenger/8.0.38(0x1800262c) NetType/WIFI Language/zh_CN"
 }
 
@@ -109,12 +109,7 @@ KEYS = {
     'login_rsa': """-----BEGIN PUBLIC KEY-----
 MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDBkLT15ThVgz6/NOl6s8GNPofdWzWbCkWnkaAm7O2LjkM1H7dMvzkiqdxU02jamGRHLX/ZNMCXHnPcW/sDhiFCBN18qFvy8g6VYb9QtroI09e176s+ZCtiv7hbin2cCTj99iUpnEloZm19lwHyo69u5UMiPMpq0/XKBO8lYhN/gwIDAQAB
 -----END PUBLIC KEY-----""",
-    'data_rsa': """-----BEGIN PUBLIC KEY-----
-MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQC+ugG5A8cZ3FqUKDwM57GM4io6JGcStivT8UdGt67PEOihLZTw3P7371+N47PrmsCpnTRzbTgcupKtUv8ImZalYk65dU8rjC/ridwhw9ffW2LBwvkEnDkkKKRi2liWIItDftJVBiWOh17o6gfbPoNrWORcAdcbpk2L+udld5kZNwIDAQAB
------END PUBLIC KEY-----""",
-    'des3': b"1234567\x6090koiuyhgtfrdews",
-    'aes_def': b"34d7cb0bcdf07523",
-    'aes_login': "telecom_wap_2018"
+    'des3': b"1234567\x6090koiuyhgtfrdews"
 }
 
 # ==================== 🛠️ 辅助与脱敏工具 ====================
@@ -134,7 +129,6 @@ def rd_str(length: int = 16) -> str:
     return ''.join(random.choices(string.ascii_letters + string.digits, k=length))
 
 def safe_get(d: Any, *keys, default=None) -> Any:
-    """深度安全提取字典，遇 NoneType 或非 dict 自动返回 default，彻底杜绝链式崩盘"""
     curr = d
     for k in keys:
         if not isinstance(curr, dict):
@@ -174,13 +168,6 @@ def encrypt_des3(data: str, mode: str = 'enc') -> str:
         return cipher.encrypt(pad(data.encode('utf-8'), 8)).hex()
     return unpad(cipher.decrypt(bytes.fromhex(data)), 8).decode('utf-8')
 
-def encrypt_aes(data: Any, key: Union[bytes, str] = KEYS['aes_def'], b64: bool = False) -> str:
-    raw = json.dumps(data, separators=(',', ':')) if isinstance(data, (dict, list)) else str(data)
-    k_bytes = key if isinstance(key, bytes) else key.encode('utf-8')
-    cipher = AES.new(k_bytes, AES.MODE_ECB)
-    enc = cipher.encrypt(pad(raw.encode('utf-8'), 16))
-    return base64.b64encode(enc).decode('utf-8') if b64 else enc.hex()
-
 def encrypt_rsa(data: Any, key_pem: str, out: str = 'b64') -> str:
     cipher = PKCS1_v1_5.new(RSA.import_key(key_pem))
     raw = json.dumps(data, separators=(',', ':')) if isinstance(data, (dict, list)) else str(data)
@@ -198,7 +185,7 @@ def api_req(sess: requests.Session, url: str, method: str = 'POST', raw: bool = 
         log(f"[网络请求异常] {url}: {str(e)}")
         return '' if raw else {}
 
-# ==================== 🔐 翼支付 C005 混合加密套件 ====================
+# ==================== 🔐 翼支付 C005 混合加密套件 (100% 对齐 telecom_draw.js) ====================
 def aes_128_cbc_encrypt(plaintext: str, key_str: str) -> str:
     key_bytes = key_str.encode('utf-8')
     iv_bytes = 16 * b'\0'
@@ -206,26 +193,32 @@ def aes_128_cbc_encrypt(plaintext: str, key_str: str) -> str:
     padded = pad(plaintext.encode('utf-8'), 16)
     return base64.b64encode(cipher.encrypt(padded)).decode('utf-8')
 
-def get_bestpay_nonce(sess: requests.Session, k_product_no: str) -> Optional[str]:
+def get_bestpay_nonce(sess: requests.Session, product_no: str, channel_id: str = '5g_mini_program') -> Optional[str]:
     cur_time = int(datetime.now().timestamp() * 1000)
     req_body = {
-        'productNo': k_product_no,
+        'productNo': product_no or "80544",
         'requestType': 'H5',
         'callback': '',
         'appType': '94',
-        'fromChannelId': '5g_mini_program',
-        'fromchannelId': '5g_mini_program',
+        'fromChannelId': channel_id,
+        'fromchannelId': channel_id,
         'timestamp': cur_time,
         'requestNo': f'req_{cur_time}',
         'requestSystem': 'eq-mall-activity-h5',
         'requestDate': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
         'traceLogId': f'trace_{cur_time}'
     }
-    res = api_req(sess, 'https://mapi-h5.bestpay.com.cn/gapi/mapi-gateway/applyLoginFactor', json=req_body)
+    headers = {
+        'content-type': 'application/json;charset=utf-8',
+        'user-agent': CONFIG["UA"],
+        'origin': 'https://activity.bestpay.cn',
+        'referer': 'https://activity.bestpay.cn/'
+    }
+    res = api_req(sess, 'https://mapi-h5.bestpay.com.cn/gapi/mapi-gateway/applyLoginFactor', json=req_body, headers=headers)
     return safe_get(res, 'result', 'nonce')
 
-def request_c005(sess: requests.Session, url: str, biz_params: dict, k_product_no: str, session_key: str = "", channel_id: str = 'MINIPROG') -> dict:
-    nonce = get_bestpay_nonce(sess, k_product_no)
+def request_c005(sess: requests.Session, url: str, biz_params: dict, product_no: str, session_key: str, channel_id: str = '5g_mini_program') -> dict:
+    nonce = get_bestpay_nonce(sess, product_no, channel_id)
     if not nonce:
         return {'success': False, 'errorMsg': '获取 C005 加密公钥失败'}
 
@@ -240,7 +233,7 @@ def request_c005(sess: requests.Session, url: str, biz_params: dict, k_product_n
         'data': enc_data,
         'key': enc_key,
         'sign': sign,
-        'productNo': k_product_no,
+        'productNo': product_no,
         'encyType': 'C005',
         'fromChannelId': channel_id,
         'fromchannelId': channel_id
@@ -250,10 +243,9 @@ def request_c005(sess: requests.Session, url: str, biz_params: dict, k_product_n
         'content-type': 'application/json;charset=utf-8',
         'user-agent': CONFIG["UA"],
         'origin': 'https://h5.bestpay.cn',
-        'referer': 'https://h5.bestpay.cn/'
+        'referer': 'https://h5.bestpay.cn/',
+        'cookie': f'sessionKey={session_key}; productNo={product_no}'
     }
-    if session_key:
-        req_headers['cookie'] = f'sessionKey={session_key}; productNo={k_product_no}'
 
     res = api_req(sess, url, json=payload, headers=req_headers)
     if isinstance(res, dict):
@@ -345,7 +337,6 @@ def login_telecom(sess: requests.Session, phone: str, password: str, android_id:
     app_token = login_data.get('token', '')
     user_id = login_data.get('userId', '')
 
-    # 换发 SSO Ticket
     xml_data = f'''<Request>
         <HeaderInfos>
             <Code>getSingle</Code>
@@ -376,272 +367,207 @@ def login_telecom(sess: requests.Session, phone: str, password: str, android_id:
     try:
         raw_ticket = xml_res.split('<Ticket>')[1].split('</Ticket>')[0]
         ticket = encrypt_des3(raw_ticket, 'dec')
+        return {
+            "phone": phone,
+            "masked_phone": m_phone,
+            "userId": user_id,
+            "ticket": ticket
+        }
     except Exception as e:
         log(f"❌ [解析Ticket异常] {m_phone}: {str(e)}")
         return None
 
-    # 换取 wapact 统一活动网关的 Bearer Token
-    auth_body = encrypt_aes(
-        {"ticket": ticket, "backUrl": "https%3A%2F%2Fwapact.189.cn%3A9001", "platformCode": "P201010301", "loginType": 2},
-        KEYS['aes_login'],
-        True
-    )
-    auth_res = api_req(sess, 'https://wapact.189.cn:9001/unified/user/login', data=auth_body, headers={'Content-Type': 'application/json'})
-    bearer_token = auth_res.get('biz', {}).get('token', '') if isinstance(auth_res, dict) and auth_res.get('code') == 0 else ""
+# ==================== 🎯 真实周三会员抽奖业务实现 (100% 对齐 telecom_draw.js) ====================
 
-    # 换取 wappark 天翼乐园的 sign
-    sso_res = api_req(sess, f"https://wappark.189.cn/jt-sign/ssoHomLogin?ticket={ticket}", method='GET')
-    wappark_sign = sso_res.get('sign', '') if isinstance(sso_res, dict) and sso_res.get('resoultCode') == '0' else ""
-    acc_id = sso_res.get('accId', '') if isinstance(sso_res, dict) and sso_res.get('resoultCode') == '0' else ""
-
-    return {
-        "phone": phone,
-        "masked_phone": m_phone,
-        "userId": user_id,
-        "ticket": ticket,
-        "bearer": f"Bearer {bearer_token}" if bearer_token else "",
-        "wappark_sign": wappark_sign,
-        "acc_id": acc_id
-    }
-
-def exchange_bestpay_session_key(sess: requests.Session, phone: str, ticket: str) -> Optional[str]:
+def run_wednesday_lottery(sess: requests.Session, act_no: str, act_title: str, session_key: str, phone: str) -> str:
+    """周三抽奖标准化执行器 (对齐 telecom_draw.js: runWednesdayLottery)"""
     m_phone = mask(phone)
-    log(f"[置换] 正在尝试通过 SSO Ticket 置换翼支付 sessionKey ({m_phone})...")
-    k_prod = str(int(datetime.now().timestamp()))
-    biz = {
-        "appType": "116",
-        "agreeId": "20201016030100056487302393758758",
-        "encryptData": ticket,
-        "systemType": "",
-        "imei": "",
-        "mtMac": "",
-        "wifiMac": "",
-        "location": ""
-    }
-    res = request_c005(sess, 'https://mapi-welcome.bestpay.com.cn/gapi/AppFusionLogin/authorizeAndRegister', biz, k_prod, "", 'H5')
-    if isinstance(res, dict) and res.get('success'):
-        session_key = safe_get(res, 'result', 'sessionKey')
-        if session_key:
-            log(f"✅ [会话就绪] {m_phone}: 成功置换翼支付 SessionKey: {session_key[:8]}...")
-            return session_key
+    log(f"\n🎰 >>> 正在执行：{act_title} [活动号: {act_no}] ({m_phone}) <<<")
 
-    err = res.get('errorMsg') if isinstance(res, dict) else '接口未响应'
-    log(f"ℹ️ [自动置换提示] {m_phone}: 翼支付网关反馈 '{err}' (该老旧接口已被官方维护下线)")
-    log(f"👉 提示: 若要完整执行翼支付三大活动，请在微信打开「中国电信5G会员」小程序复制 sessionKey，并在 TELECOM_WED_AUTH 后拼接为第4段: 手机号#密码#AndroidID#sessionKey")
-    return None
-
-# ==================== 🎯 核心业务三大抽奖任务 ====================
-
-# 【任务 1：周三会员抽权益币 (hd76690472 山西甄选周三会员日)】
-def task_wednesday_coin_draw(sess: requests.Session, user: Dict[str, Any], session_key: str) -> str:
-    phone = user["phone"]
-    m_phone = user["masked_phone"]
-    act_no = CONFIG.get("ACT_COIN", "hd76690472")
-    act_title = "周三会员抽权益币"
-    log(f"\n🪙 >>> 启动任务一：{act_title} [活动号: {act_no}] ({m_phone}) <<<")
-
-    # 1. 检查剩余次数
-    count_res = request_c005(sess, 'https://mapi-h5.bestpay.com.cn/gapi/op-lottery-system/DrawService/getLotteryCount', {
-        'activityNo': act_no, 'sessionKey': session_key, 'productNo': phone, 'phoneNo': phone,
-        'deviceNo': f'miniprogram_{phone}', 'fromChannelId': 'MINIPROG', 'fromchannelId': 'MINIPROG', 'encyType': 'C005'
+    # 1. 必须先调用 queryDrawActivity 初始化并确认活动会话
+    act_res = request_c005(sess, 'https://mapi-h5.bestpay.com.cn/gapi/op-lottery-system/DrawService/queryDrawActivity', {
+        'activityNo': act_no,
+        'sessionKey': session_key,
+        'productNo': phone,
+        'phoneNo': phone,
+        'fromChannelId': 'MINIPROG',
+        'fromchannelId': 'MINIPROG',
+        'encyType': 'C005'
     }, phone, session_key, 'MINIPROG')
 
-    if not isinstance(count_res, dict) or not count_res.get('success'):
-        err = count_res.get('errorMsg') if isinstance(count_res, dict) else '响应异常'
-        log(f"[{act_title}] 查询未通过: {err}")
-        cached = get_today_reward(phone, "coin_draw")
-        return f"今日已抽完 (今日战果: {cached})" if cached else f"{err}"
+    if not isinstance(act_res, dict) or not act_res.get('success'):
+        err_msg = act_res.get('errorMsg', '活动查询失败') if isinstance(act_res, dict) else '响应异常'
+        log(f"[{act_title}] 活动校验未通过: {err_msg}")
+        if '登录' in err_msg or '100003' in err_msg or '100008' in err_msg:
+            return "SessionKey已失效，请进小程序刷新"
+        cached = get_today_reward(phone, act_no)
+        return f"今日已抽完 (今日战果: {cached})" if cached else f"活动反馈: {err_msg}"
+
+    act_name = safe_get(act_res, 'result', 'lotteryActivityConfigDTO', 'activityName') or act_title
+    log(f"[{act_title}] 成功确认活动: {act_name}")
+
+    # 2. 查询剩余抽奖次数
+    count_res = request_c005(sess, 'https://mapi-h5.bestpay.com.cn/gapi/op-lottery-system/DrawService/getLotteryCount', {
+        'activityNo': act_no,
+        'sessionKey': session_key,
+        'productNo': phone,
+        'phoneNo': phone,
+        'deviceNo': f'miniprogram_{phone}',
+        'fromChannelId': 'MINIPROG',
+        'fromchannelId': 'MINIPROG',
+        'encyType': 'C005'
+    }, phone, session_key, 'MINIPROG')
 
     count = safe_get(count_res, 'result', 'lotteryCount', default=0)
     log(f"[{act_title}] 剩余可用抽奖次数: {count}")
 
     if count <= 0:
-        cached = get_today_reward(phone, "coin_draw")
+        cached = get_today_reward(phone, act_no)
         return f"今日已抽完 (今日战果: {cached})" if cached else "今日抽奖次数已用尽"
 
-    draw_results = []
+    # 3. 循环抽奖并自动领取入账
+    draw_count = 0
+    prize_names = []
+
     while count > 0:
-        log(f"[{act_title}] 正在执行抽奖 (剩余 {count} 次)...")
+        draw_count += 1
+        log(f"[{act_title}] 正在执行第 {draw_count} 次抽奖 (剩余 {count} 次)...")
         draw_res = request_c005(sess, 'https://mapi-h5.bestpay.com.cn/gapi/op-lottery-system/DrawService/lotteryAward', {
-            'activityNo': act_no, 'sessionKey': session_key, 'productNo': phone, 'phoneNo': phone,
-            'deviceNo': f'miniprogram_{phone}', 'fromChannelId': 'MINIPROG', 'fromchannelId': 'MINIPROG', 'encyType': 'C005'
+            'activityNo': act_no,
+            'sessionKey': session_key,
+            'productNo': phone,
+            'phoneNo': phone,
+            'deviceNo': f'miniprogram_{phone}',
+            'fromChannelId': 'MINIPROG',
+            'fromchannelId': 'MINIPROG',
+            'encyType': 'C005'
         }, phone, session_key, 'MINIPROG')
 
         if isinstance(draw_res, dict) and draw_res.get('success') and isinstance(draw_res.get('result'), dict):
             count -= 1
             prize = draw_res['result']
-            prize_name = prize.get('prizeName') or '权益币'
+            prize_name = prize.get('prizeName') or '礼品'
             order_no = prize.get('orderNo')
-            log(f"🎉 [{act_title}] 抽奖成功: 获得 [{prize_name}]")
-            draw_results.append(f"获得 [{prize_name}]")
+            is_thanks = prize.get('prizeType') == 'THANKS_FOR_PARTICIPATE' or '谢谢' in prize_name
+            log(f"🎉 [{act_title}] 抽奖成功: {prize_name}")
+            prize_names.append(prize_name)
 
-            if order_no and not prize_name.startswith('谢谢'):
+            if not is_thanks and order_no:
                 log(f"[{act_title}] 正在自动领取入账 (orderNo={order_no})...")
                 request_c005(sess, 'https://mapi-h5.bestpay.com.cn/gapi/op-lottery-system/DrawService/receivePrize', {
-                    'activityNo': act_no, 'sessionKey': session_key, 'productNo': phone, 'phoneNo': phone,
-                    'orderNo': order_no, 'fromChannelId': 'MINIPROG', 'fromchannelId': 'MINIPROG', 'encyType': 'C005'
+                    'activityNo': act_no,
+                    'sessionKey': session_key,
+                    'productNo': phone,
+                    'orderNo': order_no,
+                    'sourceChannel': 'APPLET',
+                    'fromChannelId': 'MINIPROG',
+                    'fromchannelId': 'MINIPROG',
+                    'encyType': 'C005'
                 }, phone, session_key, 'MINIPROG')
         else:
-            msg = draw_res.get('errorMsg', '抽奖未命中') if isinstance(draw_res, dict) else '响应异常'
-            log(f"[{act_title}] 抽奖反馈: {msg}")
-            draw_results.append(msg)
+            err = draw_res.get('errorMsg', '抽奖未成功') if isinstance(draw_res, dict) else '响应异常'
+            log(f"[{act_title}] 抽奖停止: {err}")
             break
         time.sleep(CONFIG.get("DELAY_SEC", 2))
 
-    res_str = " · ".join(draw_results) if draw_results else "抽奖完成"
-    set_today_reward(phone, "coin_draw", res_str)
-    return f"抽奖完成: {res_str}"
+    res_str = f"完成 {draw_count} 次，获得: [" + ", ".join(prize_names) + "]" if draw_count > 0 else "未产生抽奖"
+    set_today_reward(phone, act_no, res_str)
+    return res_str
 
-# 【任务 2：周三会员抽三次 (hd92859166 / 官方转盘兜底)】
-def task_wednesday_lucky_draw(sess: requests.Session, user: Dict[str, Any], session_key: Optional[str] = None) -> str:
-    phone = user["phone"]
-    m_phone = user["masked_phone"]
-    log(f"\n🎰 >>> 启动任务二：周三会员抽三次 ({m_phone}) <<<")
-
-    if session_key:
-        act_no = CONFIG.get("ACT_THRICE", "hd92859166")
-        count_res = request_c005(sess, 'https://mapi-h5.bestpay.com.cn/gapi/op-lottery-system/DrawService/getLotteryCount', {
-            'activityNo': act_no, 'sessionKey': session_key, 'productNo': phone, 'phoneNo': phone,
-            'deviceNo': f'miniprogram_{phone}', 'fromChannelId': 'MINIPROG', 'fromchannelId': 'MINIPROG', 'encyType': 'C005'
-        }, phone, session_key, 'MINIPROG')
-
-        if not isinstance(count_res, dict) or not count_res.get('success'):
-            err = count_res.get('errorMsg') if isinstance(count_res, dict) else '响应异常'
-            log(f"[周三抽三次] 查询未通过: {err}")
-            cached = get_today_reward(phone, "thrice_draw")
-            return f"今日已抽完 (今日战果: {cached})" if cached else f"{err}"
-
-        count = safe_get(count_res, 'result', 'lotteryCount', default=0)
-        log(f"[周三抽三次] 剩余次数: {count}")
-        if count <= 0:
-            cached = get_today_reward(phone, "thrice_draw")
-            return f"今日已抽完 (今日战果: {cached})" if cached else "本周抽奖次数已用尽"
-
-        draw_results = []
-        draw_count = 0
-        while count > 0:
-            draw_count += 1
-            log(f"[周三抽三次] 正在执行第 {draw_count} 次抽奖 (剩余 {count} 次)...")
-            draw_res = request_c005(sess, 'https://mapi-h5.bestpay.com.cn/gapi/op-lottery-system/DrawService/lotteryAward', {
-                'activityNo': act_no, 'sessionKey': session_key, 'productNo': phone, 'phoneNo': phone,
-                'deviceNo': f'miniprogram_{phone}', 'fromChannelId': 'MINIPROG', 'fromchannelId': 'MINIPROG', 'encyType': 'C005'
-            }, phone, session_key, 'MINIPROG')
-            if isinstance(draw_res, dict) and draw_res.get('success') and isinstance(draw_res.get('result'), dict):
-                count -= 1
-                prize = draw_res['result'].get('prizeName') or '礼品'
-                order_no = draw_res['result'].get('orderNo')
-                log(f"🎉 [周三抽三次] 抽奖成功: 获得 [{prize}]")
-                draw_results.append(prize)
-                if order_no and not prize.startswith('谢谢'):
-                    request_c005(sess, 'https://mapi-h5.bestpay.com.cn/gapi/op-lottery-system/DrawService/receivePrize', {
-                        'activityNo': act_no, 'sessionKey': session_key, 'productNo': phone, 'phoneNo': phone,
-                        'orderNo': order_no, 'fromChannelId': 'MINIPROG', 'fromchannelId': 'MINIPROG', 'encyType': 'C005'
-                    }, phone, session_key, 'MINIPROG')
-            else:
-                msg = draw_res.get('errorMsg', '抽奖未命中') if isinstance(draw_res, dict) else '响应异常'
-                draw_results.append(msg)
-                break
-            time.sleep(CONFIG.get("DELAY_SEC", 2))
-
-        final_str = f"完成 {draw_count} 次: [" + ", ".join(draw_results) + "]"
-        set_today_reward(phone, "thrice_draw", final_str)
-        return final_str
-
-    # 兜底走掌厅官方大转盘
-    if not user.get("bearer"):
-        return "未获取到大转盘抽奖凭证"
-
-    headers = {'Authorization': user['bearer']}
-    tab = api_req(sess, f"https://wapact.189.cn:9001/gateway/golden/api/queryTurnTable?userType=1&_={int(time.time()*1000)}", method='GET', headers=headers)
-    act_id = tab.get('biz', {}).get('wzTurntable', {}).get('code') if isinstance(tab, dict) and tab.get('code') == 0 else None
-    if not act_id:
-        return "未发现有效转盘活动"
-
-    chk = api_req(sess, f"https://wapact.189.cn:9001/gateway/standQuery/detail/check?activityId={act_id}", method='GET', headers=headers)
-    if isinstance(chk, dict) and chk.get('code') == 0:
-        remain = chk.get('biz', {}).get('resultInfo', {}).get('userMaximum', 0) - chk.get('biz', {}).get('resultInfo', {}).get('userCount', 0)
-        log(f"[官方转盘抽奖] 剩余可用次数: {remain}")
-        if remain <= 0:
-            cached = get_today_reward(phone, "wed_lucky")
-            if cached:
-                return f"今日已抽完 (今日战果: {cached})"
-            return "今日抽奖次数已用尽"
-
-        draw_results = []
-        for i in range(remain):
-            log(f"[官方转盘抽奖] 正在执行第 {i + 1}/{remain} 次抽奖...")
-            lottery_res = api_req(sess, 'https://wapact.189.cn:9001/gateway/golden/api/lottery', json={"activityId": act_id}, headers=headers)
-            if isinstance(lottery_res, dict) and lottery_res.get('code') == 0:
-                prize = lottery_res.get('biz', {}).get('prizeName') or lottery_res.get('biz', {}).get('name') or '金豆/话费'
-                log(f"🎉 [官方转盘抽奖] 获得 [{prize}]")
-                draw_results.append(f"获得 [{prize}]")
-            else:
-                msg = lottery_res.get('msg') or '未中奖(谢谢参与)' if isinstance(lottery_res, dict) else '未中奖'
-                draw_results.append(msg)
-            time.sleep(CONFIG.get("DELAY_SEC", 2))
-
-        final_str = " · ".join(draw_results)
-        set_today_reward(phone, "wed_lucky", final_str)
-        return f"抽奖完成: {final_str}"
-    return "转盘资格校验异常"
-
-# 【任务 3：权益商城幸运抽奖 (A2025011413413484352835699495179)】
-def task_lucky_mall_draw(sess: requests.Session, phone: str, session_key: str) -> str:
+def run_lucky_lottery(sess: requests.Session, act_id: str, act_title: str, session_key: str, phone: str) -> str:
+    """权益商城幸运抽奖标准化执行器 (对齐 telecom_draw.js: runLuckyLottery)"""
     m_phone = mask(phone)
-    act_id = CONFIG.get("ACT_LUCKY", "A2025011413413484352835699495179")
-    act_title = "权益商城幸运抽奖"
-    log(f"\n🎁 >>> 启动任务三：{act_title} [活动ID: {act_id}] ({m_phone}) <<<")
+    log(f"\n🎁 >>> 正在执行：{act_title} [活动ID: {act_id}] ({m_phone}) <<<")
 
-    # 1. 自动免费领机会
+    # 1. 查询活动详情以获取 lotteryId 与 lotteryActivityNo
+    act_res = request_c005(sess, 'https://mapi-h5.bestpay.com.cn/gapi/equitymall/client/Activity/queryActivityInfo', {
+        'activityId': act_id,
+        'sessionKey': session_key,
+        'productNo': phone,
+        'phoneNo': phone,
+        'fromChannelId': '5g_mini_program',
+        'fromchannelId': '5g_mini_program',
+        'encyType': 'C005'
+    }, phone, session_key, '5g_mini_program')
+
+    if not isinstance(act_res, dict) or not act_res.get('success'):
+        err_msg = act_res.get('errorMsg', '活动详情查询失败') if isinstance(act_res, dict) else '响应异常'
+        log(f"[{act_title}] 查询未通过: {err_msg}")
+        cached = get_today_reward(phone, act_id)
+        return f"今日已抽完 (今日战果: {cached})" if cached else f"活动反馈: {err_msg}"
+
+    t_obj = safe_get(act_res, 'result', 't') or {}
+    lottery_module = (t_obj.get('activityLotteryModules') or [{}])[0]
+    lottery_id = lottery_module.get('lotteryId') or 'LM202505282205492080223238537929'
+    lottery_act_no = lottery_module.get('lotteryActivityNo') or 'hd70226376'
+
+    # 2. 免费领取抽奖机会
     try:
         request_c005(sess, 'https://mapi-h5.bestpay.com.cn/gapi/equitymall/client/lottery/freeReceiveLotteryOpportunity', {
-            'activityId': act_id, 'lotteryId': 'LM202505282205492080223238537929', 'lotteryActivityNo': 'hd70226376',
-            'sessionKey': session_key, 'productNo': phone, 'phoneNo': phone,
-            'fromChannelId': '5g_mini_program', 'fromchannelId': '5g_mini_program', 'encyType': 'C005'
+            'activityId': act_id,
+            'lotteryId': lottery_id,
+            'lotteryActivityNo': lottery_act_no,
+            'sessionKey': session_key,
+            'productNo': phone,
+            'phoneNo': phone,
+            'fromChannelId': '5g_mini_program',
+            'fromchannelId': '5g_mini_program',
+            'encyType': 'C005'
         }, phone, session_key, '5g_mini_program')
     except Exception:
         pass
 
-    # 2. 自动完成浏览日常任务
+    # 3. 完成日常浏览与打卡任务
     for code in ['sharedToWeChat', 'viewActivity']:
         try:
             request_c005(sess, 'https://mapi-h5.bestpay.com.cn/gapi/equitymall/client/lottery/completeLotteryTask', {
-                'activityId': act_id, 'lotteryId': 'LM202505282205492080223238537929', 'taskCode': code,
-                'sessionKey': session_key, 'productNo': phone, 'phoneNo': phone,
-                'fromChannelId': '5g_mini_program', 'fromchannelId': '5g_mini_program', 'encyType': 'C005'
+                'activityId': act_id,
+                'lotteryId': lottery_id,
+                'taskCode': code,
+                'sessionKey': session_key,
+                'productNo': phone,
+                'phoneNo': phone,
+                'fromChannelId': '5g_mini_program',
+                'fromchannelId': '5g_mini_program',
+                'encyType': 'C005'
             }, phone, session_key, '5g_mini_program')
         except Exception:
             pass
 
-    # 3. 查询可用次数
+    # 4. 查询可用抽奖次数
     count_res = request_c005(sess, 'https://mapi-h5.bestpay.com.cn/gapi/equitymall/client/lottery/queryCustomerLotteryTimes', {
-        'activityId': act_id, 'lotteryId': 'LM202505282205492080223238537929',
-        'sessionKey': session_key, 'productNo': phone, 'phoneNo': phone,
-        'fromChannelId': '5g_mini_program', 'fromchannelId': '5g_mini_program', 'encyType': 'C005'
+        'activityId': act_id,
+        'lotteryId': lottery_id,
+        'sessionKey': session_key,
+        'productNo': phone,
+        'phoneNo': phone,
+        'fromChannelId': '5g_mini_program',
+        'fromchannelId': '5g_mini_program',
+        'encyType': 'C005'
     }, phone, session_key, '5g_mini_program')
-
-    if not isinstance(count_res, dict) or not count_res.get('success'):
-        err = count_res.get('errorMsg') if isinstance(count_res, dict) else '响应异常'
-        log(f"[{act_title}] 查询未通过: {err}")
-        cached = get_today_reward(phone, "lucky_draw")
-        return f"今日已抽完 (今日战果: {cached})" if cached else f"{err}"
 
     count = safe_get(count_res, 'result', 'lotteryCount', default=0)
     log(f"[{act_title}] 可用抽奖次数: {count}")
 
     if count <= 0:
-        cached = get_today_reward(phone, "lucky_draw")
+        cached = get_today_reward(phone, act_id)
         return f"今日已抽完 (今日战果: {cached})" if cached else "今日抽奖次数已用尽"
 
-    draw_results = []
+    # 5. 循环大转盘抽奖
     draw_count = 0
+    prize_names = []
     while count > 0:
         draw_count += 1
         log(f"[{act_title}] 正在执行第 {draw_count} 次抽奖 (剩余 {count} 次)...")
         draw_res = request_c005(sess, 'https://mapi-h5.bestpay.com.cn/gapi/equitymall/client/lottery/lotteryReceive', {
-            'activityId': act_id, 'lotteryId': 'LM202505282205492080223238537929',
-            'sessionKey': session_key, 'productNo': phone, 'phoneNo': phone,
-            'fromChannelId': '5g_mini_program', 'fromchannelId': '5g_mini_program', 'encyType': 'C005'
+            'activityId': act_id,
+            'lotteryId': lottery_id,
+            'sessionKey': session_key,
+            'productNo': phone,
+            'phoneNo': phone,
+            'fromChannelId': '5g_mini_program',
+            'fromchannelId': '5g_mini_program',
+            'encyType': 'C005'
         }, phone, session_key, '5g_mini_program')
 
         if isinstance(draw_res, dict) and draw_res.get('success'):
@@ -649,23 +575,27 @@ def task_lucky_mall_draw(sess: requests.Session, phone: str, session_key: str) -
             prize = draw_res.get('result') or {}
             prize_name = prize.get('prizeName') or prize.get('name') or '奖品入账'
             log(f"🎉 [{act_title}] 抽奖成功: 获得 [{prize_name}]")
-            draw_results.append(prize_name)
+            prize_names.append(prize_name)
         else:
             msg = draw_res.get('errorMsg', '抽奖未命中') if isinstance(draw_res, dict) else '响应异常'
             log(f"[{act_title}] 反馈: {msg}")
-            draw_results.append(msg)
             break
         time.sleep(CONFIG.get("DELAY_SEC", 2))
 
-    res_str = f"完成 {draw_count} 次: [" + ", ".join(draw_results) + "]"
-    set_today_reward(phone, "lucky_draw", res_str)
+    res_str = f"完成 {draw_count} 次，获得: [" + ", ".join(prize_names) + "]" if draw_count > 0 else "今日已抽完"
+    set_today_reward(phone, act_id, res_str)
     return res_str
 
-# 【资产回显：真实权益币余额】
 def query_equity_coin_balance(sess: requests.Session, phone: str, session_key: str) -> str:
+    """查询账户真实权益币余额"""
     res = request_c005(sess, 'https://mapi-h5.bestpay.com.cn/gapi/op-product-system/myCashPageService/myCashPage', {
-        'encyType': 'C005', 'appType': '116', 'fromchannelId': 'H5', 'fromChannelId': 'H5',
-        'traceLogId': f'trace_{int(time.time()*1000)}', 'productNo': phone, 'sessionKey': session_key
+        'encyType': 'C005',
+        'appType': '116',
+        'fromchannelId': 'H5',
+        'fromChannelId': 'H5',
+        'traceLogId': f'trace_{int(time.time()*1000)}',
+        'productNo': phone,
+        'sessionKey': session_key
     }, phone, session_key, 'H5')
 
     balance = safe_get(res, 'result', 'availableShowValue')
@@ -745,37 +675,35 @@ def main():
             continue
 
         session_key = direct_session_key
-        if not session_key and user_info.get("ticket"):
-            session_key = exchange_bestpay_session_key(sess, phone, user_info["ticket"])
-
         bullets = []
 
-        # 任务 1: 周三会员抽权益币 (hd76690472)
-        if session_key:
-            res_coin = task_wednesday_coin_draw(sess, user_info, session_key)
+        if not session_key:
+            bullets = [
+                "• 周三会员抽权益币: 需 SessionKey (未填第四段)",
+                "• 周三会员抽三次: 需 SessionKey (未填第四段)",
+                "• 权益商城幸运抽奖: 需 SessionKey (未填第四段)",
+                "• 账户当前权益币: 需 SessionKey 查验"
+            ]
+            log(f"⚠️ [{m_phone}] 未提供 SessionKey，已跳过翼支付专属抽奖")
         else:
-            cached_coin = get_today_reward(phone, "coin_draw")
-            res_coin = f"今日战果: {cached_coin}" if cached_coin else "需 SessionKey (请配第4段)"
-        bullets.append(f"• 周三会员抽权益币: {res_coin}")
+            # 任务 1: 周三会员抽权益币 (hd76690472 山西甄选周三会员日)
+            if CONFIG.get("ENABLE_WED_COIN_DRAW", True):
+                res_coin = run_wednesday_lottery(sess, CONFIG.get("ACT_COIN", "hd76690472"), "周三会员抽权益币", session_key, phone)
+                bullets.append(f"• 周三会员抽权益币: {res_coin}")
 
-        # 任务 2: 周三会员抽三次 (hd92859166 / 官方转盘兜底)
-        res_thrice = task_wednesday_lucky_draw(sess, user_info, session_key)
-        bullets.append(f"• 周三会员抽三次: {res_thrice}")
+            # 任务 2: 周三会员抽三次 (hd92859166 山西抽奖新-每周三次)
+            if CONFIG.get("ENABLE_WED_THRICE_DRAW", True):
+                res_thrice = run_wednesday_lottery(sess, CONFIG.get("ACT_THRICE", "hd92859166"), "周三会员抽三次", session_key, phone)
+                bullets.append(f"• 周三会员抽三次: {res_thrice}")
 
-        # 任务 3: 权益商城幸运抽奖 (A2025011413413484352835699495179)
-        if session_key:
-            res_lucky = task_lucky_mall_draw(sess, phone, session_key)
-        else:
-            cached_lucky = get_today_reward(phone, "lucky_draw")
-            res_lucky = f"今日战果: {cached_lucky}" if cached_lucky else "需 SessionKey (请配第4段)"
-        bullets.append(f"• 权益商城幸运抽奖: {res_lucky}")
+            # 任务 3: 权益商城幸运抽奖 (A2025011413413484352835699495179)
+            if CONFIG.get("ENABLE_LUCKY_MALL_DRAW", True):
+                res_lucky = run_lucky_lottery(sess, CONFIG.get("ACT_LUCKY", "A2025011413413484352835699495179"), "权益商城幸运抽奖", session_key, phone)
+                bullets.append(f"• 权益商城幸运抽奖: {res_lucky}")
 
-        # 资产回显: 账户当前真实权益币余额
-        if session_key:
+            # 资产回显: 真实权益币余额
             balance = query_equity_coin_balance(sess, phone, session_key)
-        else:
-            balance = "需 SessionKey 查验"
-        bullets.append(f"• 账户当前权益币: {balance}")
+            bullets.append(f"• 账户当前权益币: {balance}")
 
         if len(accounts) > 1:
             summary_report.append(f"【账号 {idx}: {m_phone}】\n" + "\n".join(bullets))
