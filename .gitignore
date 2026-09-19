@@ -19,3 +19,8 @@ node_modules/
 .DS_Store
 Thumbs.db
 *.log
+
+# Python & QL Cache
+__pycache__/
+*.pyc
+ql_script/*_cache.json
