@@ -5,8 +5,8 @@
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/c5/8d/9c/c58d9cbb-7d9c-8e05-4b81-74a950b559c9/AppIcon-0-0-1x_U007epad-0-1-0-sRGB-85-220.png/512x512bb.jpg
 #!tag = 去广告,空降助手,画质解锁,Bilibili
-#!version = 2.8.0
-#!date = 2026-09-19 12:30
+#!version = 2.8.2
+#!date = 2026-09-19 14:00
 
 [Argument]
 quality = switch, true, tag = [画质] 解锁1080P高码率/4K, desc = 开启后非大会员也可直接选择并切换1080P高码率、1080P60、杜比视界等画质
@@ -97,7 +97,6 @@ response if ${url} ~= /^https?:\/\/app\.bili(bili\.com|api\.net)\/x\/resource\/s
 response if ${url} ~= /^https?:\/\/(grpc|app)\.bili(bili\.com|api\.net)\/bilibili\.app\.show\.v1\.Mixture\/RegionList(?:\?.*)?$/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/bilibili/bilibili_region.js") with tag="[哔哩哔哩]全部分区优化(gRPC)", timeout=10, requires_body=true, binary_body_mode=true
 request if ${url} ~= /^https?:\/\/(grpc|app)\.bili(bili\.com|api\.net)\/bilibili\.app\.show\.v1\.Mixture\/RegionShortcut(?:\?.*)?$/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/bilibili/bilibili_region.js") with tag="[哔哩哔哩]快捷分区保存", timeout=10
 request if ${url} ~= /^https?:\/\/app\.bili(bili\.com|api\.net)\/x\/v2\/(channel\/region\/list|region\/index)\?/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/bilibili/bilibili_region.js") with tag="[哔哩哔哩]分区列表修复(HTTP)", timeout=10, requires_body=true
-request if ${url} ~= /^https:\/\/app\.bilibili\.com\/x\/v2\/region\/cards/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/bilibili/bilibili_region.js") with tag="[哔哩哔哩]卡片分区页面渲染", timeout=10
 
 # 自动捕获当前用户 access_key (供扫码登录签名生成使用)
 request if ${url} ~= /^https?:\/\/(?:app|api)\.bilibili\.com\/x\/(?:v2\/account\/mine|v2\/account\/myinfo|member\/app\/nickfree|resource\/show\/tab)/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/bilibili/bilibili_qrcode.js") with tag="[哔哩哔哩]凭证捕获"
