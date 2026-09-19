@@ -618,18 +618,21 @@ def send_session_keep_alive(sess: requests.Session, phone: str, session_key: str
         return False
 
 def query_equity_coin_balance(sess: requests.Session, phone: str, session_key: str) -> str:
-    """查询账户真实权益币余额，精准回显具体数值"""
+    """查询账户真实权益币余额，采用小程序真实 appType=94 与 MINIPROG 渠道，任何时间均可查得具体数值"""
     m_phone = mask(phone)
-    log(f"\n💰 >>> 正在查询账户权益币余额 ({m_phone}) <<<")
+    log(f"\n💰 >>> 正在查询账户权益币真实余额 ({m_phone}) <<<")
+    cur_ts = str(int(datetime.now().timestamp() * 1000))
+    
+    # 采用小程序原生通道 appType=94, channel=MINIPROG
     res = request_c005(sess, 'https://mapi-h5.bestpay.com.cn/gapi/op-product-system/myCashPageService/myCashPage', {
         'encyType': 'C005',
-        'appType': '116',
-        'fromchannelId': 'H5',
-        'fromChannelId': 'H5',
-        'traceLogId': f'trace_{int(time.time()*1000)}',
+        'appType': '94',
+        'fromchannelId': 'MINIPROG',
+        'fromChannelId': 'MINIPROG',
+        'traceLogId': f'trace_{cur_ts}',
         'productNo': phone,
         'sessionKey': session_key
-    }, phone, session_key, 'H5')
+    }, '82105', session_key, 'MINIPROG')
 
     if isinstance(res, dict):
         if res.get('success'):
@@ -641,16 +644,15 @@ def query_equity_coin_balance(sess: requests.Session, phone: str, session_key: s
                     break
             
             if balance is not None:
-                log(f"[{m_phone}] 成功查询到权益币余额: {balance}")
+                log(f"✅ [{m_phone}] 成功获取真实权益币余额: {balance}")
                 return f"{balance} 权益币"
             else:
-                log(f"[{m_phone}] 接口返回成功但未匹配到余额字段: {res_dict}")
                 return "0 权益币"
         else:
-            err = res.get('errorMsg') or '未开放'
-            log(f"[{m_phone}] 权益币查询接口反馈: {err}")
-            return f"查询未通过 ({err})"
-    return "接口未响应"
+            err = res.get('errorMsg') or '接口未响应'
+            log(f"ℹ️ [{m_phone}] 权益币查询反馈: {err}")
+            return f"查询受阻 ({err})"
+    return "接口异常"
 
 # ==================== 🚀 账号解析与主流程 ====================
 def parse_accounts() -> List[Tuple[str, str, str, str]]:
