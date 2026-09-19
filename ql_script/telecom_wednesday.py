@@ -753,19 +753,27 @@ def main():
         print(f"\n=================== 正在处理账号 [{idx}/{len(accounts)}] {m_phone} ===================")
         sess = create_session()
 
-        user_info = login_telecom(sess, phone, pwd, android_id)
-        if not user_info:
-            bullets = [
-                "• 账号认证: 登录未通过 (服务密码有误或触发安全验证)",
-                "• 任务状态: 三大抽奖任务已跳过"
-            ]
-            if len(accounts) > 1:
-                summary_report.append(f"【账号 {idx}: {m_phone}】\n" + "\n".join(bullets))
-            else:
-                summary_report.append("\n".join(bullets))
-            continue
-
         session_key = direct_session_key
+
+        # 优先使用直通 SessionKey 执行周三抽奖；若未提供则尝试电信官方协议验真
+        if not session_key:
+            user_info = login_telecom(sess, phone, pwd, android_id)
+            if not user_info:
+                bullets = [
+                    "• 账号认证: 登录未通过 (服务密码有误或触发安全验证)",
+                    "• 任务状态: 三大抽奖任务已跳过"
+                ]
+                if len(accounts) > 1:
+                    summary_report.append(f"【账号 {idx}: {m_phone}】\n" + "\n".join(bullets))
+                else:
+                    summary_report.append("\n".join(bullets))
+                continue
+        else:
+            # 已配 SessionKey 时执行电信官方验真（若遇风控不阻断周三抽奖业务）
+            try:
+                login_telecom(sess, phone, pwd, android_id)
+            except Exception:
+                pass
         bullets = []
 
         if not session_key:
