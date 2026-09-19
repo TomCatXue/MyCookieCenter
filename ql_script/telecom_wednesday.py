@@ -400,7 +400,7 @@ def login_telecom(sess: requests.Session, phone: str, password: str, android_id:
 def exchange_bestpay_session_key(sess: requests.Session, phone: str, ticket: str) -> Optional[str]:
     """通过电信 SSO Ticket 自动置换翼支付 sessionKey"""
     m_phone = mask(phone)
-    log(f"[置换] 正在通过 SSO Ticket 换发翼支付 sessionKey ({m_phone})...")
+    log(f"[置换] 正在尝试通过 SSO Ticket 置换翼支付 sessionKey ({m_phone})...")
     k_prod = str(int(datetime.now().timestamp()))
     biz = {
         "appType": "116",
@@ -416,10 +416,12 @@ def exchange_bestpay_session_key(sess: requests.Session, phone: str, ticket: str
     if isinstance(res, dict) and res.get('success'):
         session_key = res.get('result', {}).get('sessionKey')
         if session_key:
-            log(f"✅ [会话就绪] {m_phone}: 成功获取翼支付 SessionKey: {session_key[:8]}...")
+            log(f"✅ [会话就绪] {m_phone}: 成功置换翼支付 SessionKey: {session_key[:8]}...")
             return session_key
+
     err = res.get('errorMsg') if isinstance(res, dict) else '接口未响应'
-    log(f"ℹ️ [自动置换提示] {m_phone}: {err} (自动启用官方备用通道)")
+    log(f"ℹ️ [自动置换提示] {m_phone}: 翼支付网关反馈 '{err}' (该老旧接口已被官方维护下线)")
+    log(f"👉 提示: 若要完整执行翼支付三大活动，请在微信打开「中国电信5G会员」小程序复制 sessionKey，并在 dxlin 后拼接为第4段: 手机号#密码#AndroidID#sessionKey")
     return None
 
 # ==================== 🎯 核心业务三大抽奖任务 ====================
@@ -733,25 +735,35 @@ def main():
 
         bullets = []
 
-        # 任务 1: 周三幸运抽奖 (抽三次)
-        if CONFIG.get("ENABLE_WED_LUCKY_DRAW", True):
-            res_thrice = task_wednesday_lucky_draw(sess, user_info, session_key)
-            bullets.append(f"• 周三幸运抽奖: {res_thrice}")
-
-        # 任务 2: 周三会员抽权益币
-        if CONFIG.get("ENABLE_WED_COIN_DRAW", True):
+        # 任务 1: 周三会员抽权益币 (hd76690472 山西甄选周三会员日)
+        if session_key:
             res_coin = task_wednesday_coin_draw(sess, user_info, session_key)
-            bullets.append(f"• 会员日抽权益币: {res_coin}")
+        else:
+            cached_coin = get_today_reward(phone, "coin_draw")
+            res_coin = f"今日战果: {cached_coin}" if cached_coin else "需 SessionKey (请配第4段)"
+        bullets.append(f"• 周三会员抽权益币: {res_coin}")
 
-        # 任务 3: 会员特权任务与抽奖
-        if CONFIG.get("ENABLE_MEMBER_BENEFITS", True):
-            benefit_res = task_member_day_benefits(sess, user_info)
-            bullets.append(f"• 会员特权抽奖: {benefit_res}")
+        # 任务 2: 周三会员抽三次 (hd92859166 山西抽奖新-每周三次 / 官方转盘兜底)
+        if session_key:
+            res_thrice = task_wednesday_thrice_draw(sess, phone, session_key)
+        else:
+            res_thrice = task_wednesday_lucky_draw(sess, user_info, None)
+        bullets.append(f"• 周三会员抽三次: {res_thrice}")
 
-        # 资产回显 (若有 sessionKey 则回显权益币)
+        # 任务 3: 权益商城幸运抽奖 (A2025011413413484352835699495179)
+        if session_key:
+            res_lucky = task_lucky_mall_draw(sess, phone, session_key)
+        else:
+            cached_lucky = get_today_reward(phone, "lucky_draw")
+            res_lucky = f"今日战果: {cached_lucky}" if cached_lucky else "需 SessionKey (请配第4段)"
+        bullets.append(f"• 权益商城幸运抽奖: {res_lucky}")
+
+        # 资产回显: 账户当前真实权益币余额
         if session_key:
             balance = query_equity_coin_balance(sess, phone, session_key)
-            bullets.append(f"• 账户当前权益币: {balance}")
+        else:
+            balance = "需 SessionKey 查验"
+        bullets.append(f"• 账户当前权益币: {balance}")
 
         if len(accounts) > 1:
             summary_report.append(f"【账号 {idx}: {m_phone}】\n" + "\n".join(bullets))
