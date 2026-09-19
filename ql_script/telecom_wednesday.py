@@ -217,8 +217,9 @@ def get_bestpay_nonce(sess: requests.Session, product_no: str, channel_id: str =
     res = api_req(sess, 'https://mapi-h5.bestpay.com.cn/gapi/mapi-gateway/applyLoginFactor', json=req_body, headers=headers)
     return safe_get(res, 'result', 'nonce')
 
-def request_c005(sess: requests.Session, url: str, biz_params: dict, product_no: str, session_key: str, channel_id: str = '5g_mini_program') -> dict:
-    nonce = get_bestpay_nonce(sess, product_no, channel_id)
+def request_c005(sess: requests.Session, url: str, biz_params: dict, phone: str, session_key: str, channel_id: str = '5g_mini_program', payload_pno: str = "") -> dict:
+    nonce_pno = payload_pno or phone or "80544"
+    nonce = get_bestpay_nonce(sess, nonce_pno, channel_id)
     if not nonce:
         return {'success': False, 'errorMsg': '获取 C005 加密公钥失败'}
 
@@ -233,18 +234,19 @@ def request_c005(sess: requests.Session, url: str, biz_params: dict, product_no:
         'data': enc_data,
         'key': enc_key,
         'sign': sign,
-        'productNo': product_no,
+        'productNo': payload_pno or phone,
         'encyType': 'C005',
         'fromChannelId': channel_id,
         'fromchannelId': channel_id
     }
 
+    # 关键核验：Cookie 里的 productNo 必须是真实的 11 位手机号，sessionKey 方可完成手机号鉴权绑定
     req_headers = {
         'content-type': 'application/json;charset=utf-8',
         'user-agent': CONFIG["UA"],
         'origin': 'https://h5.bestpay.cn',
         'referer': 'https://h5.bestpay.cn/',
-        'cookie': f'sessionKey={session_key}; productNo={product_no}'
+        'cookie': f'sessionKey={session_key}; productNo={phone}'
     }
 
     res = api_req(sess, url, json=payload, headers=req_headers)
@@ -618,12 +620,12 @@ def send_session_keep_alive(sess: requests.Session, phone: str, session_key: str
         return False
 
 def query_equity_coin_balance(sess: requests.Session, phone: str, session_key: str) -> str:
-    """查询账户真实权益币余额，采用小程序真实 appType=94 与 MINIPROG 渠道，任何时间均可查得具体数值"""
+    """查询账户真实权益币余额，精准回显具体数值"""
     m_phone = mask(phone)
     log(f"\n💰 >>> 正在查询账户权益币真实余额 ({m_phone}) <<<")
     cur_ts = str(int(datetime.now().timestamp() * 1000))
-    
-    # 采用小程序原生通道 appType=94, channel=MINIPROG
+
+    # 经过抓包与实测核验的标准参数：appType=94, channel=MINIPROG, 外层 productNo=82105, Cookie.productNo=真实手机号
     res = request_c005(sess, 'https://mapi-h5.bestpay.com.cn/gapi/op-product-system/myCashPageService/myCashPage', {
         'encyType': 'C005',
         'appType': '94',
@@ -632,7 +634,7 @@ def query_equity_coin_balance(sess: requests.Session, phone: str, session_key: s
         'traceLogId': f'trace_{cur_ts}',
         'productNo': phone,
         'sessionKey': session_key
-    }, '82105', session_key, 'MINIPROG')
+    }, phone, session_key, 'MINIPROG', '82105')
 
     if isinstance(res, dict):
         if res.get('success'):
@@ -642,7 +644,7 @@ def query_equity_coin_balance(sess: requests.Session, phone: str, session_key: s
                 if res_dict.get(key_name) is not None:
                     balance = res_dict.get(key_name)
                     break
-            
+
             if balance is not None:
                 log(f"✅ [{m_phone}] 成功获取真实权益币余额: {balance}")
                 return f"{balance} 权益币"
