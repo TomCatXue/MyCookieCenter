@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 ===================================================================
-📌 版本: v1.0.7 (2026-09-20 身份Cookie补齐与全闭环翻牌版)
+📌 版本: v1.0.8 (2026-09-20 业务逻辑严密闭环与官方Cookie直换版)
 中国电信 · AI奇遇赢Pad (一键做同款获取点数与翻牌抽奖)
 ===================================================================
 new Env('中国电信 · AI奇遇赢Pad');
@@ -10,15 +10,14 @@ cron: 30 9 * * *
 tag: 中国电信
 # @tag 中国电信
 ===================================================================
-活动说明：
-  1. 完整身份指纹：补齐 loginState/cc/imusic 核心鉴权 Cookie，彻底解决制作接口 0007 报错。
-  2. 一键做同款与体验券闭环：
-     - 每次执行前通过 queryAiMakePkgInfo 实时核验官方制作余量(balanceMakeTimesTip)。
-     - 动态适配渠道模板，执行 AI 视频制作，每次获得 20点数 + 1张Pad抽奖券码。
-     - 若翻牌抽中「AI制作体验券」，自动前往继续制作赚取新点数，直到全部耗尽。
-  3. 点数翻牌抽奖：每次消耗 20 点数翻牌抽奖(act/LaborApi/operationIntegralLottery)，
-     若抽中点数(20/40点)则一直抽直到没有点数为止，汇报通知中严格统计共获得的话费总额。
-  4. 规范通知：对齐微信读书单行 Bullet 极简排版，使用青龙默认推送。
+修复与增强说明：
+  1. 修复话费判定优先级：优先判定“10元话费”再判定“1元话费”，彻底消除10元被识别为1元的Bug。
+  2. 修复积分脱节风险：翻牌请求成功(code==0000)后才扣减20积分；网络或接口异常不扣除本地积分。
+  3. 制作余量全部跑完：在做同款阶段持续制作，直至服务端明确返回10014(次数用尽)，用尽所有免费与体验券。
+  4. 官方Cookie原生下发：通过 /ca/w7x6?ticket= 入口触发官方下发真实 imusic 与 JSESSIONID Cookie，杜绝伪造。
+  5. 制作资格容错保护：资格查询失败时不作为0次处理，不盲目中断任务。
+  6. 体验券全闭环连抽：抽中体验券继续制作赚点，抽中点数继续翻牌，直到制作次数与点数均彻底耗尽。
+  7. 规范通知：严格按指令在汇报通知中统计共获得的话费总额，使用青龙默认推送。
 
 环境变量配置：
   dxlin (或 CHINA_TELECOM_AUTH / dxqy)
@@ -70,9 +69,9 @@ except ImportError:
     HAS_NOTIFY = False
     ql_send = None
 
-SCRIPT_VERSION = "v1.0.7"
+SCRIPT_VERSION = "v1.0.8"
 
-# ==================== 🛠️ 活动与平台常量配置 (对齐最新抓包事实) ====================
+# ==================== 🛠️ 活动与平台常量配置 ====================
 CHANNEL_ID = "156000009083"
 ACTIVITY_ID = "ai119"
 TEMPLATE_ID = "ve_4361"
@@ -263,7 +262,7 @@ def warmup_session(sess: requests.Session, crypto_inst: ImCrypto, token: str, mo
     time.sleep(0.3)
     return token
 
-def query_make_pkg_info(sess: requests.Session, crypto_inst: ImCrypto, token: str, mobile: str) -> Tuple[dict, str]:
+def query_make_pkg_info(sess: requests.Session, crypto_inst: ImCrypto, token: str, mobile: str) -> Tuple[Optional[dict], str]:
     try:
         r, token = post_encrypted_api(
             sess, crypto_inst, token, "/hapi/en/api",
@@ -277,11 +276,12 @@ def query_make_pkg_info(sess: requests.Session, crypto_inst: ImCrypto, token: st
         )
         dec = crypto_inst.decrypt(r.text)
         if dec.startswith('{'):
-            d = json.loads(dec).get("data") or {}
-            return d, token
+            d = json.loads(dec)
+            if d.get("code") == "0000":
+                return d.get("data", {}), token
     except Exception:
         pass
-    return {}, token
+    return None, token
 
 def premake_prepare(sess: requests.Session, crypto_inst: ImCrypto, token: str, mobile: str, template_meta: dict) -> str:
     active_token = token
@@ -377,7 +377,14 @@ def login_telecom(sess: requests.Session, phone: str, password: str, android_id:
         log(f"❌ [解析Ticket异常] {m_phone}: {str(e)}")
         return None
 
-    # 换发爱音乐平台 SSO 登录 Token，并主动预置官方关键身份 Cookie
+    # 1. 优先通过活动原生入口触发官方 Set-Cookie 下发真实 imusic 与 JSESSIONID
+    try:
+        entry_url = f"https://ai.imusic.cn/ca/w7x6?ticket={urllib.parse.quote(ticket)}&utm_scha=utm_ch-010001002009.utm_sch-hg_sy_aiczjdt-1.utm_af-1000000037.utm_as-566215800001.utm_sd1-S00173883"
+        sess.get(entry_url, timeout=12, allow_redirects=True)
+    except Exception:
+        pass
+
+    # 2. 换发爱音乐平台 SSO 登录 Token
     log(f"[认证] 正在向爱音乐网关换发活动鉴权 Token: {m_phone}")
     sso_payload = {
         "portal": "45",
@@ -401,10 +408,9 @@ def login_telecom(sess: requests.Session, phone: str, password: str, android_id:
         log(f"❌ [爱音乐SSO失败] {m_phone}: {sso_resp.get('description') or '未获取到平台Token'}")
         return None
 
-    # 补齐官方 /au/ 接口必需身份 Cookie
+    # 保障关键身份 Cookie 处于激活态
     sess.cookies.set('loginState', 'true', domain='ai.imusic.cn')
     sess.cookies.set('cc', CHANNEL_ID, domain='ai.imusic.cn')
-    sess.cookies.set('imusic', f'118100{int(time.time() * 1000)}', domain='ai.imusic.cn')
 
     log(f"✅ [认证成功] {m_phone}: 成功获取爱音乐活动鉴权 Token！")
     return {
@@ -496,16 +502,19 @@ def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
     except Exception:
         pass
 
-    # 3. 初始核验官方制作资格与余量
+    # 3. 初始核验官方制作资格与余量（失败时不当作0次阻断）
     pkg_data, token = query_make_pkg_info(sess, crypto, token, phone)
-    initial_tip = pkg_data.get("balanceMakeTimesTip", "")
-    exp_work_num = int(pkg_data.get("aiMakeExperienceWorkNum", 0) or pkg_data.get("privilegeVrbtAIMakeExperienceLeftNum", 0) or 0)
-    free_left_num = int(pkg_data.get("privilegeVrbtAIVideoLeftNum", 0) or pkg_data.get("aidDailyNum", 0) or 0)
-    log(f"[{m_phone}] 制作资格官方核验: {initial_tip or f'体验券{exp_work_num}次 / 免费{free_left_num}次'}")
+    if pkg_data is not None:
+        initial_tip = pkg_data.get("balanceMakeTimesTip", "")
+        exp_work_num = int(pkg_data.get("aiMakeExperienceWorkNum", 0) or pkg_data.get("privilegeVrbtAIMakeExperienceLeftNum", 0) or 0)
+        free_left_num = int(pkg_data.get("privilegeVrbtAIVideoLeftNum", 0) or pkg_data.get("aidDailyNum", 0) or 0)
+        log(f"[{m_phone}] 制作资格官方核验: {initial_tip or f'体验券{exp_work_num}次 / 免费{free_left_num}次'}")
+    else:
+        initial_tip = ""
+        log(f"[{m_phone}] 制作资格查询未直接返回，不阻断执行，继续尝试制作...")
 
-    # 4. 闭环执行：AI视频制作赚点数 <-> 翻牌抽大奖(抽中体验券继续制作，抽中点数继续抽奖)
+    # 4. 闭环执行：做同款赚点 <-> 翻牌抽大奖 (抽中体验券继续制作，抽中点数继续抽奖)
     total_make_success = 0
-    total_earned_points = 0
     total_draw_count = 0
     total_bill_won = 0.0
 
@@ -520,7 +529,8 @@ def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
         round_idx += 1
         round_made = 0
 
-        # --- A. 执行「一键做同款」制作（消耗免费额度或抽中的体验券）---
+        # --- A. 持续制作「一键做同款」，直到次数真正耗尽 ---
+        # 依次尝试当期可用推荐模板
         for t_item in candidate_templates:
             cur_tid = t_item.get("templateId") or TEMPLATE_ID
             cur_conf = t_item.get("templateConfId") or DEFAULT_TEMPLATE_CONF_ID
@@ -530,7 +540,9 @@ def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
             cur_bg = t_item.get("background") or ""
             cur_is_ai = 1 if str(t_item.get("isAI", 0)) == "1" else 0
 
-            for attempt in range(1, 4):
+            # 连续制作尝试（若有多次免费或体验券，全部跑完）
+            consecutive_fail_count = 0
+            while consecutive_fail_count < 2 and round_made < 10:
                 token = premake_prepare(sess, crypto, token, phone, t_item)
                 rand_name = f"{cur_vname}{random.randint(100000, 999999)}"
                 payload = OrderedDict([
@@ -544,7 +556,6 @@ def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
                     ("sessionId", ""), ("voice", ""), ("invitationCode", en_code)
                 ])
 
-                # 统一走标准 post_encrypted_api 加密通道
                 r_make, token = post_encrypted_api(sess, crypto, token, "/hapi/diy_video/au/template_make_add_v2", payload)
                 dec_resp = crypto.decrypt(r_make.text)
 
@@ -578,16 +589,19 @@ def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
                 if '"code":"0000"' in dec_resp:
                     round_made += 1
                     total_make_success += 1
-                    total_earned_points += 20
-                    log(f"[{m_phone}] ✅ 「一键做同款」制作成功！[{cur_vname}] (+20点数, +1Pad抽奖券码)")
+                    consecutive_fail_count = 0
+                    log(f"[{m_phone}] ✅ 「一键做同款」制作成功！[{cur_vname}] (已下发点数与Pad券码)")
                     time.sleep(1.5)
                 elif "10014" in dec_resp or "次数已用完" in dec_resp or "免费次数已用完" in dec_resp or "机会已用" in dec_resp or "不足" in dec_resp:
+                    consecutive_fail_count += 2
                     break
                 else:
+                    consecutive_fail_count += 1
                     log(f"[{m_phone}] 制作反馈: {dec_resp[:80]}")
                     break
 
-            if round_made > 0 or ("10014" in dec_resp or "次数已用完" in dec_resp):
+            # 若该模板成功制作且提示次数用尽，则本轮做同款结束
+            if "10014" in dec_resp or "次数已用完" in dec_resp:
                 break
 
         # --- B. 查询最新可用点数 ---
@@ -625,12 +639,10 @@ def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
         lottery_chances = remaining_score // LOTTERY_COST_SCORE
         log(f"[{m_phone}] [第{round_idx}轮] 积分核验: 可用点数={remaining_score}, 累计总点数={total_score}, 可翻牌={lottery_chances}次")
 
-        # --- C. 翻牌抽大奖：点数连抽直到没有点数为止 ---
+        # --- C. 翻牌抽大奖：点数连抽直到没有点数为止（成功才扣分，严密判断10元与1元话费）---
         round_won_tickets = 0
 
-        while remaining_score >= LOTTERY_COST_SCORE and total_draw_count < 80:
-            total_draw_count += 1
-            remaining_score -= LOTTERY_COST_SCORE
+        while remaining_score >= LOTTERY_COST_SCORE and total_draw_count < 150:
             send_stat_message(sess, crypto, token, phone, "activity_2603AI-meet_1.15", f"activityID_{ACTIVITY_ID}_entrance_{CHANNEL_ID}")
             time.sleep(0.05)
 
@@ -644,7 +656,7 @@ def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
                 ]))
                 dec_draw = crypto.decrypt(r_draw.text)
             except Exception as e:
-                log(f"[{m_phone}] 第 {total_draw_count} 次翻牌网络异常: {str(e)}")
+                log(f"[{m_phone}] 翻牌网络异常: {str(e)}，保留当前积分")
                 break
 
             if "0007" in dec_draw:
@@ -662,27 +674,30 @@ def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
 
             if dec_draw.startswith('{'):
                 d_obj = json.loads(dec_draw)
+                code = d_obj.get('code')
                 d_data = d_obj.get('data') or {}
-                p_name = d_data.get('awardName') or d_data.get('prizeName') or d_data.get('name')
+                p_name = d_data.get('awardName') or d_data.get('prizeName') or d_data.get('name') or '谢谢参与'
                 award_idx = str(d_data.get('awardIndex') or '')
 
-                if not p_name and d_obj.get('code') != '0000':
+                if code != '0000':
                     err_desc = d_obj.get('desc') or '翻牌未成功'
-                    log(f"[{m_phone}] 翻牌反馈: {err_desc}")
+                    log(f"[{m_phone}] 翻牌反馈: [{err_desc}]，停止当前连抽")
                     break
 
-                p_name = p_name or '谢谢参与'
+                # 仅在接口真正成功后才扣减单次翻牌积分
+                total_draw_count += 1
+                remaining_score -= LOTTERY_COST_SCORE
                 log(f"[{m_phone}] 🎴 第 {total_draw_count} 次翻牌获得: [{p_name}]")
 
-                # 1. 话费统计
-                if '1元' in p_name or award_idx in ['16320105', '16320205', '16320305']:
+                # 1. 严格优先判定 10 元话费，再判定 1 元话费（防止“10元”被“1元”模糊包含）
+                if '10元' in p_name or award_idx == '16330101':
+                    total_bill_won += 10.0
+                    log(f"[{m_phone}] 💰 斩获大额话费: +10.00元话费！")
+                elif '1元' in p_name or award_idx in ['16320105', '16320205', '16320305']:
                     total_bill_won += 1.0
                     log(f"[{m_phone}] 💰 斩获话费: +1.00元话费！")
-                elif '10元' in p_name or award_idx == '16330101':
-                    total_bill_won += 10.0
-                    log(f"[{m_phone}] 💰 斩获话费: +10.00元话费！")
 
-                # 2. 抽中点数立即回补累加，一直抽直到没有点数为止
+                # 2. 抽中点数实时累加回补，保证一直抽直到没有点数为止
                 if '20点数' in p_name or award_idx in ['16320101', '16320201', '16320301']:
                     remaining_score += 20
                     log(f"[{m_phone}] 🪙 抽中 20 点数，自动追加 1 次翻牌！(剩余可用: {remaining_score})")
@@ -690,20 +705,21 @@ def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
                     remaining_score += 40
                     log(f"[{m_phone}] 🪙 抽中 40 点数，自动追加 2 次翻牌！(剩余可用: {remaining_score})")
 
-                # 3. 抽中体验券：标记有新制作机会，退出抽奖后自动继续制作并赚取新点数！
+                # 3. 抽中体验券：标记本轮获得新制作机会，退出抽奖后自动继续制作并赚取新点数！
                 if '体验券' in p_name or '体验' in p_name or award_idx in ['16320103', '16320203', '16320303', '16320104', '16320204', '16320304']:
                     round_won_tickets += 1
                     log(f"[{m_phone}] 🎟️ 抽中 [{p_name}]！稍后将自动前往制作AI大片赚取新点数！")
             else:
-                log(f"[{m_phone}] 翻牌响应解析异常: {dec_draw[:60]}")
+                log(f"[{m_phone}] 翻牌响应解析异常: {dec_draw[:60]}，停止当前连抽")
                 break
 
             time.sleep(1.2)
 
         # --- D. 检查是否需要继续闭环循环 ---
         pkg_data, token = query_make_pkg_info(sess, crypto, token, phone)
-        exp_left = int(pkg_data.get("aiMakeExperienceWorkNum", 0) or pkg_data.get("privilegeVrbtAIMakeExperienceLeftNum", 0) or 0)
+        exp_left = int(safe_get(pkg_data, "aiMakeExperienceWorkNum", default=0) or safe_get(pkg_data, "privilegeVrbtAIMakeExperienceLeftNum", default=0) or 0) if pkg_data else 0
 
+        # 如果本轮未制作成功、未抽中体验券、体验券余额为0，且点数已不足以翻牌，说明今日所有机会全部耗尽，退出闭环
         if round_made == 0 and round_won_tickets == 0 and exp_left == 0 and remaining_score < LOTTERY_COST_SCORE:
             log(f"[{m_phone}] 今日制作机会与可用点数已全部耗尽，闭环任务结束。")
             break
@@ -712,7 +728,7 @@ def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
             log(f"[{m_phone}] 🔄 检测到有新的体验券制作机会(剩余{exp_left}次/本轮获{round_won_tickets}张)，即将自动开启下一轮制作与赚点！")
             time.sleep(1)
 
-    # 5. 任务结束复核最新资产与制作余量
+    # 5. 任务结束向服务器复核最新点数资产与制作余量
     try:
         r_score_after, _ = post_encrypted_api(sess, crypto, token, "/hapi/en/api", OrderedDict([
             ("activityId", ACTIVITY_ID),
@@ -730,13 +746,13 @@ def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
         pass
 
     final_pkg_data, _ = query_make_pkg_info(sess, crypto, token, phone)
-    final_tip = final_pkg_data.get("balanceMakeTimesTip", "")
-    final_exp = int(final_pkg_data.get("aiMakeExperienceWorkNum", 0) or 0)
-    final_free = int(final_pkg_data.get("privilegeVrbtAIVideoLeftNum", 0) or final_pkg_data.get("aidDailyNum", 0) or 0)
+    final_tip = safe_get(final_pkg_data, "balanceMakeTimesTip", default="") if final_pkg_data else ""
+    final_exp = int(safe_get(final_pkg_data, "aiMakeExperienceWorkNum", default=0) or 0) if final_pkg_data else 0
+    final_free = int(safe_get(final_pkg_data, "privilegeVrbtAIVideoLeftNum", default=0) or safe_get(final_pkg_data, "aidDailyNum", default=0) or 0) if final_pkg_data else 0
 
     # 6. 生成微信读书规范通知
     if total_make_success > 0:
-        bullets.append(f"• 一键做同款: 完成 {total_make_success} 次制作 [{tpl_meta['videoName']}] (+{total_earned_points}点数)")
+        bullets.append(f"• 一键做同款: 完成 {total_make_success} 次制作 [{tpl_meta['videoName']}]")
     else:
         if final_tip and ("剩余" in final_tip or "次" in final_tip) and "0" not in final_tip:
             bullets.append(f"• 一键做同款: 当期余量 [{final_tip}] (体验券{final_exp}次/免费{final_free}次)")
@@ -748,6 +764,7 @@ def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
     else:
         bullets.append(f"• Pad抽奖券码: {issue_name}总发放 {ticket_count} 张 (每期送iPad·自动开奖)")
 
+    # 严格按用户要求“只通知总共获得了多少话费”
     if total_bill_won > 0:
         bill_msg = f"共获得 {total_bill_won:.2f}元话费 (已自动入账)"
     else:
