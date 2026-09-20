@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 ===================================================================
-📌 版本: v1.0.6 (2026-09-20 实时制作余量核验与体验券连抽闭环版)
+📌 版本: v1.0.7 (2026-09-20 身份Cookie补齐与全闭环翻牌版)
 中国电信 · AI奇遇赢Pad (一键做同款获取点数与翻牌抽奖)
 ===================================================================
 new Env('中国电信 · AI奇遇赢Pad');
@@ -11,13 +11,13 @@ tag: 中国电信
 # @tag 中国电信
 ===================================================================
 活动说明：
-  1. 一键做同款与体验券闭环：
+  1. 完整身份指纹：补齐 loginState/cc/imusic 核心鉴权 Cookie，彻底解决制作接口 0007 报错。
+  2. 一键做同款与体验券闭环：
      - 每次执行前通过 queryAiMakePkgInfo 实时核验官方制作余量(balanceMakeTimesTip)。
      - 动态适配渠道模板，执行 AI 视频制作，每次获得 20点数 + 1张Pad抽奖券码。
      - 若翻牌抽中「AI制作体验券」，自动前往继续制作赚取新点数，直到全部耗尽。
-  2. 点数翻牌抽奖：每次消耗 20 点数翻牌抽奖(act/LaborApi/operationIntegralLottery)，
+  3. 点数翻牌抽奖：每次消耗 20 点数翻牌抽奖(act/LaborApi/operationIntegralLottery)，
      若抽中点数(20/40点)则一直抽直到没有点数为止，汇报通知中严格统计共获得的话费总额。
-  3. 全链路鉴权防失效：清除过时伪造请求，动态刷新时间戳，命中 10013(风控)与 0007(凭证过期)自动通过 Ticket 重签。
   4. 规范通知：对齐微信读书单行 Bullet 极简排版，使用青龙默认推送。
 
 环境变量配置：
@@ -70,7 +70,7 @@ except ImportError:
     HAS_NOTIFY = False
     ql_send = None
 
-SCRIPT_VERSION = "v1.0.6"
+SCRIPT_VERSION = "v1.0.7"
 
 # ==================== 🛠️ 活动与平台常量配置 (对齐最新抓包事实) ====================
 CHANNEL_ID = "156000009083"
@@ -229,7 +229,11 @@ def refresh_sso_token(sess: requests.Session, ticket: str) -> Optional[str]:
             headers={"Content-Type": "application/json", "Referer": f"https://ai.imusic.cn/h5v/fusion/ai-luck-winnew?cc={CHANNEL_ID}&ca=KCHF"},
             timeout=15
         ).json()
-        return res.get("token")
+        tok = res.get("token")
+        if tok:
+            sess.cookies.set('loginState', 'true', domain='ai.imusic.cn')
+            sess.cookies.set('cc', CHANNEL_ID, domain='ai.imusic.cn')
+        return tok
     except Exception:
         return None
 
@@ -373,7 +377,7 @@ def login_telecom(sess: requests.Session, phone: str, password: str, android_id:
         log(f"❌ [解析Ticket异常] {m_phone}: {str(e)}")
         return None
 
-    # 换发爱音乐平台 SSO 登录 Token
+    # 换发爱音乐平台 SSO 登录 Token，并主动预置官方关键身份 Cookie
     log(f"[认证] 正在向爱音乐网关换发活动鉴权 Token: {m_phone}")
     sso_payload = {
         "portal": "45",
@@ -396,6 +400,11 @@ def login_telecom(sess: requests.Session, phone: str, password: str, android_id:
     if not imusic_token:
         log(f"❌ [爱音乐SSO失败] {m_phone}: {sso_resp.get('description') or '未获取到平台Token'}")
         return None
+
+    # 补齐官方 /au/ 接口必需身份 Cookie
+    sess.cookies.set('loginState', 'true', domain='ai.imusic.cn')
+    sess.cookies.set('cc', CHANNEL_ID, domain='ai.imusic.cn')
+    sess.cookies.set('imusic', f'118100{int(time.time() * 1000)}', domain='ai.imusic.cn')
 
     log(f"✅ [认证成功] {m_phone}: 成功获取爱音乐活动鉴权 Token！")
     return {
@@ -487,7 +496,7 @@ def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
     except Exception:
         pass
 
-    # 3. 初始核验制作资格与余量
+    # 3. 初始核验官方制作资格与余量
     pkg_data, token = query_make_pkg_info(sess, crypto, token, phone)
     initial_tip = pkg_data.get("balanceMakeTimesTip", "")
     exp_work_num = int(pkg_data.get("aiMakeExperienceWorkNum", 0) or pkg_data.get("privilegeVrbtAIMakeExperienceLeftNum", 0) or 0)
@@ -512,7 +521,6 @@ def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
         round_made = 0
 
         # --- A. 执行「一键做同款」制作（消耗免费额度或抽中的体验券）---
-        # 依次尝试当期可用推荐模板
         for t_item in candidate_templates:
             cur_tid = t_item.get("templateId") or TEMPLATE_ID
             cur_conf = t_item.get("templateConfId") or DEFAULT_TEMPLATE_CONF_ID
@@ -535,17 +543,10 @@ def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
                     ("autoOrderUgc", 0), ("aiGatewayImagMakeId", ""), ("fromType", ""),
                     ("sessionId", ""), ("voice", ""), ("invitationCode", en_code)
                 ])
-                enc_str = crypto.encrypt(payload)
-                api_url = f"https://ai.imusic.cn/hapi/diy_video/au/template_make_add_v2?formData={urllib.parse.quote(enc_str)}"
-                h = get_imusic_headers(crypto, token)
-                try:
-                    r_make = sess.post(api_url, headers=h, data="", timeout=15)
-                    new_auth = r_make.headers.get("authorization") or r_make.headers.get("Authorization")
-                    if new_auth: token = new_auth.replace("Bearer ", "").strip()
-                    dec_resp = crypto.decrypt(r_make.text)
-                except Exception as e:
-                    log(f"[{m_phone}] 制作网络异常: {str(e)}")
-                    break
+
+                # 统一走标准 post_encrypted_api 加密通道
+                r_make, token = post_encrypted_api(sess, crypto, token, "/hapi/diy_video/au/template_make_add_v2", payload)
+                dec_resp = crypto.decrypt(r_make.text)
 
                 # 0007 Token 自动续期
                 if "0007" in dec_resp:
@@ -554,11 +555,8 @@ def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
                         token = new_tok
                         token = premake_prepare(sess, crypto, token, phone, t_item)
                         time.sleep(1)
-                        try:
-                            r_retry = sess.post(api_url, headers=get_imusic_headers(crypto, token), data="", timeout=15)
-                            dec_resp = crypto.decrypt(r_retry.text)
-                        except Exception:
-                            pass
+                        r_make, token = post_encrypted_api(sess, crypto, token, "/hapi/diy_video/au/template_make_add_v2", payload)
+                        dec_resp = crypto.decrypt(r_make.text)
 
                 # 10013 风控自动 remedy 补救
                 if "10013" in dec_resp:
@@ -572,8 +570,8 @@ def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
                         if new_tok: token = new_tok
                         token = premake_prepare(sess, crypto, token, phone, t_item)
                         time.sleep(1)
-                        r_make_retry = sess.post(api_url, headers=get_imusic_headers(crypto, token), data="", timeout=15)
-                        dec_resp = crypto.decrypt(r_make_retry.text)
+                        r_make, token = post_encrypted_api(sess, crypto, token, "/hapi/diy_video/au/template_make_add_v2", payload)
+                        dec_resp = crypto.decrypt(r_make.text)
                     except Exception:
                         pass
 
@@ -589,7 +587,6 @@ def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
                     log(f"[{m_phone}] 制作反馈: {dec_resp[:80]}")
                     break
 
-            # 若该模板成功制作过，或者已提示次数耗尽，无需尝试其他备用模板
             if round_made > 0 or ("10014" in dec_resp or "次数已用完" in dec_resp):
                 break
 
