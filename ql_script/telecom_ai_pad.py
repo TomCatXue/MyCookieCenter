@@ -115,8 +115,8 @@ def safe_get(d: Any, *keys, default=None) -> Any:
             return default
     return curr
 
-def encode_phone(s: str) -> str:
-    return base64.b64encode(s.encode('utf-8')).decode('utf-8')
+def encode(s: str) -> str:
+    return "".join(chr(ord(c) + 2) for c in s)
 
 # --- 网络适配器 ---
 class CustomSSLAdapter(HTTPAdapter):
@@ -208,13 +208,10 @@ def login_telecom(sess: requests.Session, phone: str, password: str, android_id:
     m_phone = mask(phone)
     log(f"[登录] 正在通过电信官方协议登录账号: {m_phone}")
 
-    pwd_clean = password.strip()
-    if len(pwd_clean) > 6 and pwd_clean[:6].isdigit():
-        pwd_clean = pwd_clean[:6]
-
+    pwd = password.strip()
     aid = android_id.strip() if android_id else rd_str(16)
     cur_ts = ts()
-    cipher_str = f"Xiaomi 20 8.0.0.{aid[:12]}{phone}{cur_ts}{pwd_clean}0$$$0."
+    cipher_str = f"Xiaomi 20 8.0.0.{aid[:12]}{phone}{cur_ts}{pwd}0$$$0."
     login_cipher = encrypt_rsa(cipher_str, KEYS['login_rsa'], 'b64')
 
     body = {
@@ -222,17 +219,17 @@ def login_telecom(sess: requests.Session, phone: str, password: str, android_id:
             "code": "userLoginNormal", "timestamp": cur_ts, "broadAccount": "", "broadToken": "",
             "clientType": "#11.0.0#channel8#Xiaomi 20#", "shopId": "20002",
             "source": "110003", "sourcePassword": "Sid98s", "token": "",
-            "userLoginName": encode_phone(phone)
+            "userLoginName": encode(phone)
         },
         "content": {
             "attach": "test",
             "fieldData": {
                 "loginType": "4", "accountType": "",
                 "loginAuthCipherAsymmertric": login_cipher,
-                "deviceUid": "", "phoneNum": encode_phone(phone),
+                "deviceUid": "", "phoneNum": encode(phone),
                 "isChinatelecom": "", "systemVersion": "8.0.0",
-                "androidId": encode_phone(aid), "loginAuthCipher": "",
-                "authentication": encode_phone(pwd_clean)
+                "androidId": encode(aid), "loginAuthCipher": "",
+                "authentication": encode(pwd)
             }
         }
     }
