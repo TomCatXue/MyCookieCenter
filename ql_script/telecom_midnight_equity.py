@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 ===================================================================
-📌 版本: v2.0.0 (2026-09-20 终极修复版)
+📌 版本: v2.1.0 (2026-09-20 平日测试增强版)
 中国电信 · 0点等级会员权益兑换（高并发秒杀抢购脚本）
 ===================================================================
 new Env('中国电信 · 0点等级权益兑换');
@@ -58,6 +58,16 @@ from Crypto.PublicKey import RSA
 from Crypto.Cipher import PKCS1_v1_5
 from Crypto.Util.Padding import pad, unpad
 from concurrent.futures import ThreadPoolExecutor, wait
+# ==================== 🛠️ 脚本功能开关配置 ====================
+CONFIG = {
+    "FORCE_RUN": False,         # 平日测试模式: False=仅夜间23:55~23:59准备并抢购; True=平时任何时间均可运行全链路测试
+    "INADVANCE": -100,          # 提前100毫秒首发抢购
+    "COUNT_PER_ACCOUNT": 5,     # 每个账号并发抢购数 (建议 3~5)
+    "INTERVAL_MS": 10,          # 并发请求微间隔(毫秒)
+    "ENABLE_RUISHU": False,     # 瑞数安全Cookie开关
+    "CLAIMED_LOG_FILE": "claimed_accounts.json"
+}
+
 # -------------------------- 青龙/呆呆通知模块 --------------------------
 try:
     from notify import send as ql_send
@@ -1841,41 +1851,15 @@ def build_summary(all_accounts, accounts_to_run, skipped_phones, result_log):
 # ============================================================
 
 def main():
-
     global debug, test_only
-
-    cli_test = any(
-        arg in sys.argv
-        for arg in [
-            '--test',
-            '--login-test',
-            '-t',
-            'test'
-        ]
-    ) or os.environ.get(
-        'LOGIN_TEST'
-    ) == '1'
-
-    cli_debug = any(
-        arg in sys.argv
-        for arg in [
-            '--debug',
-            '--debug-all'
-        ]
-    ) or os.environ.get(
-        'DEBUG'
-    ) == '1'
-
-    debug = (
-        DEBUG_MODE
-        or cli_debug
-        or cli_test
-    )
-
-    test_only = (
-        DEBUG_MODE
-        or cli_test
-    )
+    env_force = os.environ.get("FORCE_RUN", "").lower() in ["true", "1"] or \
+                os.environ.get("dxqy_force", "").lower() in ["true", "1"] or \
+                os.environ.get("TEST_RUN", "").lower() in ["true", "1"]
+    cli_test = any(arg in sys.argv for arg in ["--test", "--login-test", "-t", "test"]) or os.environ.get("LOGIN_TEST") == "1"
+    cli_debug = any(arg in sys.argv for arg in ["--debug", "--debug-all"]) or os.environ.get("DEBUG") == "1"
+    force_run = CONFIG.get("FORCE_RUN", False) or env_force or cli_test or cli_debug
+    debug = force_run or DEBUG_MODE
+    test_only = force_run or DEBUG_MODE
 
     if test_only:
 
@@ -2083,21 +2067,20 @@ def main():
     now = datetime.datetime.now()
     prepare_time = now.replace(hour=23, minute=59, second=0, microsecond=0)
 
-    if test_only:
-        printn("🧪 [测试模式] 立即开始准备链路测试，不等待23:59...")
-    elif debug:
-        printn("🐛 [DEBUG模式] 跳过等待，立即开始登录与抢购检测...")
-    elif now.hour == 23 and now.minute >= 55:
+    # 智能窗口调度保护 (完全对齐周三脚本规范)
+    if now.hour == 23 and now.minute >= 55 and not force_run:
         if now < prepare_time:
             wait_seconds = (prepare_time - now).total_seconds()
             printn(f"⏳ 距离 23:59:00 还有 {wait_seconds:.1f} 秒，等待预热...")
             time.sleep(wait_seconds)
         else:
             printn("⚡ 已处于 23:59:00 预热窗口内，立即启动并行登录！")
+    elif force_run:
+        printn("🚀 【平时测试/强制运行模式】跳过夜间等待，直接执行全账号登录与可领权益检测！")
     else:
-        printn(f"⚠️ 当前系统时间为 {now.strftime('%H:%M:%S')}，不在夜间 23:55~23:59 抢购准备期。")
-        printn("🛡️ 为避免长时间挂起被面板超时杀进程（SIGKILL），脚本已安全退出。")
-        printn("💡 提示：如需现在立即测试登录与权益检测，请加参数运行: task 0点权益.py --test")
+        printn(f"📅 【时间检查】当前系统时间为 {now.strftime('%H:%M:%S')}，非夜间抢购时段 (抢购准备期为 23:55~23:59)。")
+        printn("💡 电信0点权益兑换仅在月末夜间开放，脚本已自动进入省电休眠，防止后台挂起被面板超时杀进程。")
+        printn("👉 如需在平时进行联调测试，请在青龙面板添加环境变量: FORCE_RUN=true (或在脚本顶部将 'FORCE_RUN' 改为 True)。\n")
         return
 
     # ========================================================
