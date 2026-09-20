@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 ===================================================================
-📌 版本: v1.1.1 (2026-09-20 核心基准通道回归与全闭环自旋稳定版)
+📌 版本: v1.1.2 (2026-09-20 修复制作 Token 重试密文失配)
 中国电信 · AI奇遇赢Pad (一键做同款获取点数与翻牌抽奖)
 ===================================================================
 new Env('中国电信 · AI奇遇赢Pad');
@@ -67,7 +67,7 @@ except ImportError:
     HAS_NOTIFY = False
     ql_send = None
 
-SCRIPT_VERSION = "v1.1.1"
+SCRIPT_VERSION = "v1.1.2"
 
 # ==================== 🛠️ 活动与平台常量配置 (100%回归实测成功基准) ====================
 CHANNEL_ID = "156000009079"
@@ -207,6 +207,18 @@ def post_encrypted_api(sess: requests.Session, crypto_inst: ImCrypto, token: str
         if new_token:
             token = new_token
     return res, token
+
+def post_make_request(sess: requests.Session, crypto_inst: ImCrypto, token: str, payload: Any) -> Tuple[str, str]:
+    crypto_inst.refresh()
+    enc_data = crypto_inst.encrypt(payload)
+    url = f"https://ai.imusic.cn/hapi/diy_video/au/template_make_add_v2?formData={urllib.parse.quote(enc_data)}"
+    res = sess.post(url, headers=get_imusic_headers(crypto_inst, token), data="", timeout=15)
+    new_auth = res.headers.get("authorization") or res.headers.get("Authorization")
+    if new_auth:
+        new_token = new_auth.replace("Bearer ", "").strip()
+        if new_token:
+            token = new_token
+    return crypto_inst.decrypt(res.text), token
 
 def refresh_sso_token(sess: requests.Session, ticket: str) -> Optional[str]:
     try:
@@ -560,16 +572,8 @@ def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
                     ("sessionId", ""), ("voice", ""), ("invitationCode", en_code)
                 ])
 
-                # 采用抓包验证的直接发包形态
-                crypto.refresh()
-                enc_str = crypto.encrypt(payload)
-                api_url = f"https://ai.imusic.cn/hapi/diy_video/au/template_make_add_v2?formData={urllib.parse.quote(enc_str)}"
-                h = get_imusic_headers(crypto, token)
                 try:
-                    r_make = sess.post(api_url, headers=h, data="", timeout=15)
-                    new_auth = r_make.headers.get("authorization") or r_make.headers.get("Authorization")
-                    if new_auth: token = new_auth.replace("Bearer ", "").strip()
-                    dec_resp = crypto.decrypt(r_make.text)
+                    dec_resp, token = post_make_request(sess, crypto, token, payload)
                 except Exception as e:
                     log(f"[{m_phone}] 制作网络异常: {str(e)}")
                     break
@@ -581,9 +585,7 @@ def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
                         token = new_tok
                         token = premake_prepare(sess, crypto, token, phone, tpl_meta)
                         time.sleep(1)
-                        crypto.refresh()
-                        r_make = sess.post(api_url, headers=get_imusic_headers(crypto, token), data="", timeout=15)
-                        dec_resp = crypto.decrypt(r_make.text)
+                        dec_resp, token = post_make_request(sess, crypto, token, payload)
 
                 # 10013 风控自动 remedy 补救
                 if "10013" in dec_resp:
@@ -597,9 +599,7 @@ def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
                         if new_tok: token = new_tok
                         token = premake_prepare(sess, crypto, token, phone, tpl_meta)
                         time.sleep(1)
-                        crypto.refresh()
-                        r_make = sess.post(api_url, headers=get_imusic_headers(crypto, token), data="", timeout=15)
-                        dec_resp = crypto.decrypt(r_make.text)
+                        dec_resp, token = post_make_request(sess, crypto, token, payload)
                     except Exception:
                         pass
 
