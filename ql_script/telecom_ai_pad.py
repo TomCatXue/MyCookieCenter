@@ -2,8 +2,8 @@
 # -*- coding: utf-8 -*-
 """
 ===================================================================
-📌 版本: v1.0.2 (2026-09-20 纯净规范版)
-中国电信 · AI奇遇赢Pad (一键做同款获取点数与抽大奖)
+📌 版本: v1.0.3 (2026-09-20 点数翻牌抽奖与话费统计版)
+中国电信 · AI奇遇赢Pad (一键做同款获取点数与翻牌抽奖)
 ===================================================================
 new Env('中国电信 · AI奇遇赢Pad');
 cron: 30 9 * * *
@@ -11,9 +11,10 @@ tag: 中国电信
 # @tag 中国电信
 ===================================================================
 活动说明：
-  1. 一键做同款：每位电信用户每3天获赠3次免费制作机会，每制作1次获得20点数+1张Pad抽奖券码。
-  2. 券码抽iPad：每期15天送出苹果iPad平板，系统根据加密种子密文自动开奖。
-  3. 点数抽大奖：每消耗20点数可参与一次抽奖，可抽取话费、点数返还与体验券。
+  1. 一键做同款：每位电信用户每3天获赠3次免费AI制作，每次获得20点数+1张Pad抽奖券码。
+  2. 点数翻牌抽奖：每次消耗20点数翻牌抽奖(act/LaborApi/operationIntegralLottery)，
+     若抽中点数(20/40点)则一直抽直到没有点数为止，汇报通知中统计共获得的话费总额。
+  3. 券码抽iPad：每期15天送出苹果iPad平板，系统根据加密种子密文自动开奖。
   4. 规范通知：对齐微信读书单行 Bullet 极简排版，使用青龙默认推送。
 
 环境变量配置：
@@ -66,10 +67,10 @@ except ImportError:
     HAS_NOTIFY = False
     ql_send = None
 
-SCRIPT_VERSION = "v1.0.2"
+SCRIPT_VERSION = "v1.0.3"
 
 # ==================== 🛠️ 活动与平台常量配置 (对齐最新抓包事实) ====================
-CHANNEL_ID = "156000009079"
+CHANNEL_ID = "156000009083"
 ACTIVITY_ID = "ai119"
 ACTIVITY_ID_TPL = "ai119_4"
 TEMPLATE_ID = "ve_3949"
@@ -84,7 +85,7 @@ MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDBkLT15ThVgz6/NOl6s8GNPofdWzWbCkWnkaAm7O2L
     'data_rsa': """-----BEGIN PUBLIC KEY-----
 MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQC+ugG5A8cZ3FqUKDwM57GM4io6JGcStivT8UdGt67PEOihLZTw3P7371+N47PrmsCpnTRzbTgcupKtUv8ImZalYk65dU8rjC/ridwhw9ffW2LBwvkEnDkkKKRi2liWIItDftJVBiWOh17o6gfbPoNrWORcAdcbpk2L+udld5kZNwIDAQAB
 -----END PUBLIC KEY-----""",
-    'des3': b"1234567\x6090koiuyhgtfrdews"
+    'des3': b"1234567`90koiuyhgtfrdews"
 }
 
 def log(msg: str):
@@ -108,10 +109,11 @@ def md5(t: str) -> str:
 def safe_get(d: Any, *keys, default=None) -> Any:
     curr = d
     for k in keys:
-        if not isinstance(curr, dict):
-            return default
-        curr = curr.get(k)
-        if curr is None:
+        if isinstance(curr, dict) and k in curr:
+            curr = curr[k]
+        elif isinstance(curr, (list, tuple)) and isinstance(k, int) and 0 <= k < len(curr):
+            curr = curr[k]
+        else:
             return default
     return curr
 
@@ -144,10 +146,10 @@ def encrypt_des3(data: str, mode='enc') -> str:
 
 def encrypt_rsa(data: Any, key_pem: str, out: str = 'b64') -> str:
     cipher = PKCS1_v1_5.new(RSA.import_key(key_pem))
-    raw = json.dumps(data, separators=(',', ':')) if isinstance(data, (dict, list)) else str(data)
+    data = json.dumps(data, separators=(',', ':')) if isinstance(data, (dict, list)) else str(data)
     if out == 'hex':
-        return ''.join(cipher.encrypt(raw[i:i+32].encode('utf-8')).hex() for i in range(0, len(raw), 32))
-    return base64.b64encode(cipher.encrypt(raw.encode('utf-8'))).decode('utf-8')
+        return ''.join(cipher.encrypt(data[i:i+32].encode('utf-8')).hex() for i in range(0, len(data), 32))
+    return base64.b64encode(cipher.encrypt(data.encode('utf-8'))).decode('utf-8')
 
 # ==================== 🔐 爱音乐专属 AES 动态加解密引擎 ====================
 class ImCrypto:
@@ -179,7 +181,7 @@ def get_imusic_headers(crypto_inst: ImCrypto, token: str = "") -> dict:
         "User-Agent": "Mozilla/5.0 (Linux; Android 13; 22081212C Build/TKQ1.220829.002) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/104.0.5112.97 Mobile Safari/537.36",
         "Accept": "application/json, text/plain, */*",
         "Origin": "https://ai.imusic.cn",
-        "Referer": f"https://ai.imusic.cn/h5v/fusion/ai-luck-winnew?cc={CHANNEL_ID}&ca=w7x6",
+        "Referer": f"https://ai.imusic.cn/h5v/fusion/ai-luck-winnew?cc={CHANNEL_ID}&ca=KCHF",
         "imencrypt": "1",
         "imtimestamp": crypto_inst.ts,
         "imrandomnum": crypto_inst.rdm,
@@ -194,8 +196,7 @@ def post_encrypted_api(sess: requests.Session, crypto_inst: ImCrypto, token: str
     enc_data = crypto_inst.encrypt(payload)
     url = f"https://ai.imusic.cn{api_path}?formData={urllib.parse.quote(enc_data)}"
     headers = get_imusic_headers(crypto_inst, token)
-    res = sess.post(url, headers=headers, data="")
-    # 动态捕获下发刷新的 Token
+    res = sess.post(url, headers=headers, data="", timeout=15)
     new_auth = res.headers.get("authorization") or res.headers.get("Authorization")
     if new_auth:
         new_token = new_auth.replace("Bearer ", "").strip()
@@ -289,7 +290,12 @@ def login_telecom(sess: requests.Session, phone: str, password: str, android_id:
         }
     }
 
-    res = sess.post('https://appgologin.189.cn:9031/login/client/userLoginNormal', json=body, timeout=15).json()
+    try:
+        res = sess.post('https://appgologin.189.cn:9031/login/client/userLoginNormal', json=body, timeout=15).json()
+    except Exception as e:
+        log(f"❌ [登录异常] {m_phone}: {str(e)}")
+        return None
+
     login_data = safe_get(res, 'responseData', 'data', 'loginSuccessResult')
     if not login_data:
         err_msg = safe_get(res, 'responseData', 'resultDesc') or safe_get(res, 'headerInfos', 'reason') or '服务密码校验未通过'
@@ -300,7 +306,11 @@ def login_telecom(sess: requests.Session, phone: str, password: str, android_id:
     user_id = login_data.get('userId', '')
 
     xml = f'''<Request><HeaderInfos><Code>getSingle</Code><Timestamp>{cur_ts}</Timestamp><BroadAccount></BroadAccount><BroadToken></BroadToken><ClientType>#9.6.1#channel50#iPhone 14 Pro Max#</ClientType><ShopId>20002</ShopId><Source>110003</Source><SourcePassword>Sid98s</SourcePassword><Token>{app_token}</Token><UserLoginName>{phone}</UserLoginName></HeaderInfos><Content><Attach>test</Attach><FieldData><TargetId>{encrypt_des3(user_id)}</TargetId><Url>4a6862274835b451</Url></FieldData></Content></Request>'''
-    xml_res = sess.post('https://appgologin.189.cn:9031/map/clientXML', data=xml.encode('utf-8'), headers={'Content-Type': 'application/xml'}, timeout=15).text
+    try:
+        xml_res = sess.post('https://appgologin.189.cn:9031/map/clientXML', data=xml.encode('utf-8'), headers={'Content-Type': 'application/xml'}, timeout=15).text
+    except Exception as e:
+        log(f"❌ [换取Ticket异常] {m_phone}: {str(e)}")
+        return None
 
     if '<Ticket>' not in xml_res:
         log(f"❌ [换取Ticket失败] {m_phone}: 响应未包含有效 Ticket 节点")
@@ -321,12 +331,16 @@ def login_telecom(sess: requests.Session, phone: str, password: str, android_id:
         "ticket": ticket,
         "user118100cn": "user118100cn"
     }
-    sso_resp = sess.post(
-        "https://ai.imusic.cn/vapi/vue_login/sso_login_v2",
-        json=sso_payload,
-        headers={"Content-Type": "application/json", "Referer": f"https://ai.imusic.cn/h5v/fusion/ai-luck-winnew?cc={CHANNEL_ID}&ca=w7x6"},
-        timeout=15
-    ).json()
+    try:
+        sso_resp = sess.post(
+            "https://ai.imusic.cn/vapi/vue_login/sso_login_v2",
+            json=sso_payload,
+            headers={"Content-Type": "application/json", "Referer": f"https://ai.imusic.cn/h5v/fusion/ai-luck-winnew?cc={CHANNEL_ID}&ca=KCHF"},
+            timeout=15
+        ).json()
+    except Exception as e:
+        log(f"❌ [爱音乐SSO异常] {m_phone}: {str(e)}")
+        return None
 
     imusic_token = sso_resp.get("token")
     if not imusic_token:
@@ -338,7 +352,8 @@ def login_telecom(sess: requests.Session, phone: str, password: str, android_id:
         "phone": phone,
         "mobile": phone,
         "token": imusic_token,
-        "ticket": ticket
+        "ticket": ticket,
+        "en_code": sso_resp.get("enDataCode", "")
     }
 
 # ==================== 🎬 动态拉取当期模板元数据 ====================
@@ -350,7 +365,9 @@ def query_template_meta(sess: requests.Session, token: str) -> dict:
         "templateConfId": DEFAULT_TEMPLATE_CONF_ID,
         "arrangeId": DEFAULT_ARRANGE_ID,
         "videoName": "太空奇旅",
-        "userWords": "复古科幻风格，太空宇航员与飞船探索宇宙"
+        "userWords": "复古科幻风格，太空宇航员与飞船探索宇宙",
+        "background": "",
+        "isAI": 0
     }
     try:
         r = sess.post(url, headers=headers, timeout=10).json()
@@ -362,7 +379,9 @@ def query_template_meta(sess: requests.Session, token: str) -> dict:
                 "templateConfId": t.get("templateConfId") or DEFAULT_TEMPLATE_CONF_ID,
                 "arrangeId": t.get("arrangeId") or DEFAULT_ARRANGE_ID,
                 "videoName": t.get("videoName") or "太空奇旅",
-                "userWords": t.get("userWords") or default_meta["userWords"]
+                "userWords": t.get("userWords") or default_meta["userWords"],
+                "background": t.get("background") or "",
+                "isAI": 1 if str(t.get("isAI", 0)) == "1" else 0
             }
     except Exception:
         pass
@@ -373,35 +392,11 @@ def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
     phone = user['phone']
     m_phone = mask(phone)
     token = user['token']
+    ticket = user.get('ticket', '')
+    en_code = user.get('en_code', '')
     bullets = []
 
     crypto = ImCrypto()
-
-    # 1. 查询当期开奖期数与抽奖券码
-    ticket_count = "0"
-    issue_name = "当期"
-    try:
-        _, token = post_encrypted_api(sess, crypto, token, "/hapi/en/api", OrderedDict([
-            ("activityId", ACTIVITY_ID),
-            ("apiName", "act/LaborApi/getOperationCurrentIssueInfo"),
-            ("channelId", CHANNEL_ID),
-            ("portal", "45")
-        ]))
-        r_tick, token = post_encrypted_api(sess, crypto, token, "/hapi/en/api", OrderedDict([
-            ("activityId", ACTIVITY_ID),
-            ("apiName", "act/LaborApi/getOperationIssueTicketNum"),
-            ("channelId", CHANNEL_ID),
-            ("portal", "45")
-        ]))
-        dec_tick = crypto.decrypt(r_tick.text)
-        data_val = safe_get(json.loads(dec_tick), 'data') if dec_tick.startswith('{') else None
-        if data_val:
-            ticket_count = str(data_val)
-    except Exception:
-        pass
-
-    ticket = user.get('ticket', '')
-    en_code = user.get('en_code', '')
 
     # 1. 启动会话 Warmup 模拟与准备
     token = warmup_session(sess, crypto, token, phone)
@@ -438,7 +433,7 @@ def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
         # 检查是否命中 10013 风控并触发官方 remedy 自动补救
         if "10013" in dec_resp:
             log(f"[{m_phone}] 触发风控校验 (10013)，正在执行官方 remedy 自动补救...")
-            trace_id = safe_get(json.loads(dec_resp), "imuTraceId", default="") if dec_resp.startsWith('{') else ""
+            trace_id = safe_get(json.loads(dec_resp), "imuTraceId", default="") if dec_resp.startswith('{') else ""
             try:
                 send_stat_message(sess, crypto, token, phone, "page_vring_index", f"玩转AI赢手机_activityID_{ACTIVITY_ID}_entrance_{CHANNEL_ID}")
                 send_stat_message(sess, crypto, token, phone, "activity_vring_make_1.9", f"_activityID_{ACTIVITY_ID}_entrance_{CHANNEL_ID}")
@@ -448,7 +443,7 @@ def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
                 res_refresh = sess.post(
                     "https://ai.imusic.cn/vapi/vue_login/sso_login_v2",
                     json={"portal": "45", "channelId": CHANNEL_ID, "ticket": ticket, "user118100cn": "user118100cn"},
-                    headers={"Content-Type": "application/json", "Referer": f"https://ai.imusic.cn/h5v/fusion/ai-luck-winnew?cc={CHANNEL_ID}&ca=w7x6"},
+                    headers={"Content-Type": "application/json", "Referer": f"https://ai.imusic.cn/h5v/fusion/ai-luck-winnew?cc={CHANNEL_ID}&ca=KCHF"},
                     timeout=15
                 ).json()
                 if res_refresh.get("token"):
@@ -477,9 +472,44 @@ def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
     else:
         bullets.append("• 一键做同款: 今日免费制作次数已用完 (每3天赠送3次)")
 
-    bullets.append(f"• Pad抽奖券码: 当期总发放 {ticket_count} 张 (每期送iPad·自动开奖)")
+    # 3. 查询当期开奖期数与抽奖券码 (玩法一)
+    ticket_count = "0"
+    issue_name = "当期"
+    draw_date_str = ""
+    try:
+        r_issue, token = post_encrypted_api(sess, crypto, token, "/hapi/en/api", OrderedDict([
+            ("activityId", ACTIVITY_ID),
+            ("apiName", "act/LaborApi/getOperationCurrentIssueInfo"),
+            ("channelId", CHANNEL_ID),
+            ("portal", "45")
+        ]))
+        dec_issue = crypto.decrypt(r_issue.text)
+        if dec_issue.startswith('{'):
+            i_data = json.loads(dec_issue).get('data') or {}
+            issue_name = i_data.get('issueName') or "当期"
+            raw_dt = i_data.get('drawTime') or ""
+            if raw_dt:
+                draw_date_str = raw_dt[5:10]
 
-    # 3. 查询总点数与可用点数
+        r_tick, token = post_encrypted_api(sess, crypto, token, "/hapi/en/api", OrderedDict([
+            ("activityId", ACTIVITY_ID),
+            ("apiName", "act/LaborApi/getOperationIssueTicketNum"),
+            ("channelId", CHANNEL_ID),
+            ("portal", "45")
+        ]))
+        dec_tick = crypto.decrypt(r_tick.text)
+        data_val = safe_get(json.loads(dec_tick), 'data') if dec_tick.startswith('{') else None
+        if data_val:
+            ticket_count = str(data_val)
+    except Exception:
+        pass
+
+    if draw_date_str:
+        bullets.append(f"• Pad抽奖券码: {issue_name}总发放 {ticket_count} 张 ({draw_date_str} 11:00自动开奖)")
+    else:
+        bullets.append(f"• Pad抽奖券码: {issue_name}总发放 {ticket_count} 张 (每期送iPad·自动开奖)")
+
+    # 4. 查询总点数与可用点数 (玩法二)
     total_score = "0"
     remaining_score = 0
     try:
@@ -498,55 +528,101 @@ def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
     except Exception:
         pass
 
-    # 4. 点数抽大奖 (每20点数抽奖1次)
-    lottery_count = remaining_score // LOTTERY_COST_SCORE
-    log(f"[{m_phone}] 积分核验: 可用点数={remaining_score}, 累计总点数={total_score}, 可抽奖={lottery_count}次")
+    # 5. 点数翻牌抽奖 (每20点数翻牌1次；若抽到点数则一直抽直到没有点数为止；严格统计获得话费)
+    lottery_chances = remaining_score // LOTTERY_COST_SCORE
+    log(f"[{m_phone}] 积分核验: 可用点数={remaining_score}, 累计总点数={total_score}, 可翻牌={lottery_chances}次")
 
     prizes = []
-    if lottery_count > 0:
-        for idx in range(1, lottery_count + 1):
+    total_bill_won = 0.0
+    max_draws = 60
+    draw_idx = 0
+
+    while remaining_score >= LOTTERY_COST_SCORE and draw_idx < max_draws:
+        draw_idx += 1
+        remaining_score -= LOTTERY_COST_SCORE
+        # 触发官方翻牌埋点
+        send_stat_message(sess, crypto, token, phone, "activity_2603AI-meet_1.15", f"activityID_{ACTIVITY_ID}_entrance_{CHANNEL_ID}")
+        time.sleep(0.05)
+
+        try:
             r_draw, token = post_encrypted_api(sess, crypto, token, "/hapi/en/api", OrderedDict([
                 ("activityId", ACTIVITY_ID),
                 ("mobile", phone),
-                ("apiName", "act/LaborApi/funPlayFestivalLottery"),
+                ("apiName", "act/LaborApi/operationIntegralLottery"),
                 ("channelId", CHANNEL_ID),
                 ("portal", "45")
             ]))
             dec_draw = crypto.decrypt(r_draw.text)
-            if dec_draw.startswith('{'):
-                d_obj = json.loads(dec_draw)
-                p_name = safe_get(d_obj, 'data', 'awardName') or safe_get(d_obj, 'data', 'prizeName') or '神秘礼包'
-                prizes.append(p_name)
-                log(f"[{m_phone}] 🎁 第 {idx} 次抽奖获得: {p_name}")
-            time.sleep(1)
+        except Exception as e:
+            log(f"[{m_phone}] 第 {draw_idx} 次翻牌网络异常: {str(e)}")
+            break
 
-    if prizes:
-        bullets.append(f"• 点数抽大奖: 完成 {len(prizes)} 次: [{', '.join(prizes)}]")
+        if dec_draw.startswith('{'):
+            d_obj = json.loads(dec_draw)
+            d_data = d_obj.get('data') or {}
+            p_name = d_data.get('awardName') or d_data.get('prizeName') or d_data.get('name')
+            award_idx = str(d_data.get('awardIndex') or '')
+
+            if not p_name and d_obj.get('code') != '0000':
+                err_desc = d_obj.get('desc') or '翻牌未成功'
+                log(f"[{m_phone}] 翻牌反馈: {err_desc}")
+                break
+
+            p_name = p_name or '谢谢参与'
+            prizes.append(p_name)
+            log(f"[{m_phone}] 🎴 第 {draw_idx} 次翻牌获得: [{p_name}]")
+
+            # 统计话费奖励
+            if '1元' in p_name or award_idx in ['16320105', '16320205', '16320305']:
+                total_bill_won += 1.0
+                log(f"[{m_phone}] 💰 斩获话费: +1.00元话费！")
+            elif '10元' in p_name or award_idx == '16330101':
+                total_bill_won += 10.0
+                log(f"[{m_phone}] 💰 斩获话费: +10.00元话费！")
+
+            # 抽中点数立即自动累加，实现一直抽直到没有点数为止
+            if '20点数' in p_name or award_idx in ['16320101', '16320201', '16320301']:
+                remaining_score += 20
+                log(f"[{m_phone}] 🪙 抽中 20 点数，自动追加 1 次翻牌抽奖！(剩余点数: {remaining_score})")
+            elif '40点数' in p_name or award_idx in ['16320102', '16320202', '16320302']:
+                remaining_score += 40
+                log(f"[{m_phone}] 🪙 抽中 40 点数，自动追加 2 次翻牌抽奖！(剩余点数: {remaining_score})")
+        else:
+            log(f"[{m_phone}] 翻牌响应解析异常: {dec_draw[:60]}")
+            break
+
+        time.sleep(1.2)
+
+    # 翻牌结束后向服务器复核最新点数资产
+    try:
+        r_score_after, _ = post_encrypted_api(sess, crypto, token, "/hapi/en/api", OrderedDict([
+            ("activityId", ACTIVITY_ID),
+            ("mobile", phone),
+            ("apiName", "act/LaborApi/getOperationTotalScoreOrRemainingScore"),
+            ("channelId", CHANNEL_ID),
+            ("portal", "45")
+        ]))
+        dec_score_after = crypto.decrypt(r_score_after.text)
+        if dec_score_after.startswith('{'):
+            s_data_after = json.loads(dec_score_after).get("data") or {}
+            total_score = str(s_data_after.get("totalScore", total_score))
+            remaining_score = int(s_data_after.get("remainingScore", remaining_score) or 0)
+    except Exception:
+        pass
+
+    # 6. 微信读书规范通知：只通知总共获得了多少话费
+    if total_bill_won > 0:
+        bill_msg = f"共获得 {total_bill_won:.2f}元话费 (已自动入账)"
     else:
-        # 回显最近一次历史中奖
-        try:
-            r_hist, token = post_encrypted_api(sess, crypto, token, "/hapi/en/api", OrderedDict([
-                ("activityId", ACTIVITY_ID),
-                ("mobile", phone),
-                ("pageNo", 1),
-                ("pageSize", 1),
-                ("apiName", "act/LaborApi/getOperationPrizeRecordList"),
-                ("channelId", CHANNEL_ID),
-                ("portal", "45")
-            ]))
-            dec_hist = crypto.decrypt(r_hist.text)
-            h_items = safe_get(json.loads(dec_hist), 'data', 'list') or []
-            if h_items:
-                last_award = h_items[0].get('awardName', '礼品')
-                last_date = (h_items[0].get('lotteryDate') or '')[5:10]
-                bullets.append(f"• 点数抽大奖: 今日点数已抽完 · 最近中奖: [{last_date} {last_award}]")
-            else:
-                bullets.append("• 点数抽大奖: 今日可用点数已耗尽 (每20点抽1次)")
-        except Exception:
-            bullets.append("• 点数抽大奖: 今日可用点数已耗尽 (每20点抽1次)")
+        bill_msg = "共获得 0元话费"
 
-    # 5. 账户总点数
-    bullets.append(f"• 账户当前点数: 剩余 {remaining_score % 20} 点数 (累计总点数: {total_score})")
+    if draw_idx > 0:
+        bullets.append(f"• 点数翻牌抽奖: {bill_msg} (翻牌 {draw_idx} 次)")
+    else:
+        bullets.append(f"• 点数翻牌抽奖: {bill_msg} (今日可用点数已耗尽)")
+
+    # 7. 账户总点数
+    bullets.append(f"• 账户当前点数: 剩余 {remaining_score} 点数 (累计总点数: {total_score})")
     return bullets
 
 # ==================== 🚀 账号解析与主流程 ====================
