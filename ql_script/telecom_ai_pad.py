@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 ===================================================================
-📌 版本: v1.1.2 (2026-09-20 修复制作 Token 重试密文失配)
+📌 版本: v1.1.3 (2026-09-20 修复 0007 重复消费 Ticket)
 中国电信 · AI奇遇赢Pad (一键做同款获取点数与翻牌抽奖)
 ===================================================================
 new Env('中国电信 · AI奇遇赢Pad');
@@ -34,7 +34,7 @@ import base64
 import hashlib
 import certifi
 import urllib.parse
-from typing import Dict, Any, Union, Optional, List, Tuple
+from typing import Dict, Any, Union, Optional, List, Tuple, Callable
 from datetime import datetime
 from collections import OrderedDict
 
@@ -67,7 +67,7 @@ except ImportError:
     HAS_NOTIFY = False
     ql_send = None
 
-SCRIPT_VERSION = "v1.1.2"
+SCRIPT_VERSION = "v1.1.3"
 
 # ==================== 🛠️ 活动与平台常量配置 (100%回归实测成功基准) ====================
 CHANNEL_ID = "156000009079"
@@ -284,7 +284,7 @@ def query_make_pkg_info(sess: requests.Session, crypto_inst: ImCrypto, token: st
         pass
     return None, token
 
-def query_server_score(sess: requests.Session, crypto_inst: ImCrypto, token: str, mobile: str, ticket: str) -> Tuple[str, int, str]:
+def query_server_score(sess: requests.Session, crypto_inst: ImCrypto, token: str, mobile: str, ticket: str, reauth: Optional[Callable[[], Optional[str]]] = None) -> Tuple[str, int, str]:
     total_score = "0"
     remaining_score = 0
     try:
@@ -297,7 +297,7 @@ def query_server_score(sess: requests.Session, crypto_inst: ImCrypto, token: str
         ]))
         dec_score = crypto_inst.decrypt(r_score.text)
         if "0007" in dec_score:
-            new_tok = refresh_sso_token(sess, ticket)
+            new_tok = reauth() if reauth else refresh_sso_token(sess, ticket)
             if new_tok:
                 token = new_tok
                 r_score, token = post_encrypted_api(sess, crypto_inst, token, "/hapi/en/api", OrderedDict([
@@ -446,7 +446,9 @@ def login_telecom(sess: requests.Session, phone: str, password: str, android_id:
         "mobile": phone,
         "token": imusic_token,
         "ticket": ticket,
-        "en_code": sso_resp.get("enDataCode", "")
+        "en_code": sso_resp.get("enDataCode", ""),
+        "password": password,
+        "android_id": android_id
     }
 
 # ==================== 🎬 动态拉取当期模板元数据 ====================
@@ -487,9 +489,23 @@ def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
     token = user['token']
     ticket = user.get('ticket', '')
     en_code = user.get('en_code', '')
+    password = user.get('password', '')
+    android_id = user.get('android_id', '')
     bullets = []
 
     crypto = ImCrypto()
+
+    def reauthenticate() -> Optional[str]:
+        nonlocal token, ticket, en_code
+        if not password:
+            return None
+        refreshed_user = login_telecom(sess, phone, password, android_id)
+        if not refreshed_user:
+            return None
+        token = refreshed_user['token']
+        ticket = refreshed_user.get('ticket', '')
+        en_code = refreshed_user.get('en_code', '')
+        return token
 
     # 1. 启动会话 Warmup 模拟与准备
     token = warmup_session(sess, crypto, token, phone)
@@ -580,7 +596,7 @@ def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
 
                 # 0007 Token 自动续期并重试
                 if "0007" in dec_resp:
-                    new_tok = refresh_sso_token(sess, ticket)
+                    new_tok = reauthenticate()
                     if new_tok:
                         token = new_tok
                         token = premake_prepare(sess, crypto, token, phone, tpl_meta)
@@ -595,7 +611,7 @@ def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
                         send_stat_message(sess, crypto, token, phone, "activity_vring_make_1.9", f"_activityID_{ACTIVITY_ID}_entrance_{CHANNEL_ID}")
                         rem_en = crypto.encrypt({"method": "remedy", "traceId": trace_id, "mobile": phone})
                         sess.post(f"https://ai.imusic.cn/hapi/en/api?formData={urllib.parse.quote(rem_en)}", headers=get_imusic_headers(crypto, token), data="", timeout=15)
-                        new_tok = refresh_sso_token(sess, ticket)
+                        new_tok = reauthenticate()
                         if new_tok: token = new_tok
                         token = premake_prepare(sess, crypto, token, phone, tpl_meta)
                         time.sleep(1)
@@ -616,7 +632,7 @@ def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
                     break
 
         # --- B. 查询服务端实时权威积分 ---
-        total_score, remaining_score, token = query_server_score(sess, crypto, token, phone, ticket)
+        total_score, remaining_score, token = query_server_score(sess, crypto, token, phone, ticket, reauthenticate)
         lottery_chances = remaining_score // LOTTERY_COST_SCORE
         log(f"[{m_phone}] [闭环第{outer_loop_count}轮] 积分核验: 可用点数={remaining_score}, 累计总点数={total_score}, 可翻牌={lottery_chances}次")
 
@@ -645,7 +661,7 @@ def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
                 else:
                     log(f"[{m_phone}] 兑换反馈: {rdm_obj.get('desc') or dec_rdm[:60]}")
             time.sleep(1)
-            total_score, remaining_score, token = query_server_score(sess, crypto, token, phone, ticket)
+            total_score, remaining_score, token = query_server_score(sess, crypto, token, phone, ticket, reauthenticate)
 
         # --- D. 翻牌抽大奖循环 (点数 >= 20，接口成功才扣除20点) ---
         won_tickets_count = 0
@@ -667,7 +683,7 @@ def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
                 break
 
             if "0007" in dec_draw:
-                new_tok = refresh_sso_token(sess, ticket)
+                new_tok = reauthenticate()
                 if new_tok:
                     token = new_tok
                     r_draw, token = post_encrypted_api(sess, crypto, token, "/hapi/en/api", OrderedDict([
@@ -721,7 +737,7 @@ def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
             time.sleep(1.2)
 
         # 翻牌后再次复核服务端权威积分
-        total_score, remaining_score, token = query_server_score(sess, crypto, token, phone, ticket)
+        total_score, remaining_score, token = query_server_score(sess, crypto, token, phone, ticket, reauthenticate)
 
         # --- E. 闭环检查：若有新体验券，继续进入下一轮制作赚点 ---
         pkg_data, token = query_make_pkg_info(sess, crypto, token, phone)
@@ -751,7 +767,7 @@ def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
             consecutive_idle_rounds = 0
 
     # 5. 任务结束向服务器复核最新点数资产与制作余量
-    total_score, remaining_score, token = query_server_score(sess, crypto, token, phone, ticket)
+    total_score, remaining_score, token = query_server_score(sess, crypto, token, phone, ticket, reauthenticate)
 
     final_pkg_data, _ = query_make_pkg_info(sess, crypto, token, phone)
     final_tip = safe_get(final_pkg_data, "balanceMakeTimesTip", default="") if final_pkg_data else ""
