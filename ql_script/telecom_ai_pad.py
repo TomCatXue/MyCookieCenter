@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 ===================================================================
-📌 版本: v1.0.5 (2026-09-20 体验券制作与点数连抽闭环版)
+📌 版本: v1.0.6 (2026-09-20 实时制作余量核验与体验券连抽闭环版)
 中国电信 · AI奇遇赢Pad (一键做同款获取点数与翻牌抽奖)
 ===================================================================
 new Env('中国电信 · AI奇遇赢Pad');
@@ -12,12 +12,12 @@ tag: 中国电信
 ===================================================================
 活动说明：
   1. 一键做同款与体验券闭环：
-     - 每位电信用户每3天获赠3次免费AI制作，每次获得20点数+1张Pad抽奖券码。
-     - 若翻牌抽中「AI制作体验券」，自动前往继续制作，获取新点数后再继续翻牌。
-     - 循环执行，直至当天的全部制作次数与可用点数全部耗尽。
-  2. 点数翻牌抽奖：每次消耗20点数翻牌抽奖(act/LaborApi/operationIntegralLottery)，
+     - 每次执行前通过 queryAiMakePkgInfo 实时核验官方制作余量(balanceMakeTimesTip)。
+     - 动态适配渠道模板，执行 AI 视频制作，每次获得 20点数 + 1张Pad抽奖券码。
+     - 若翻牌抽中「AI制作体验券」，自动前往继续制作赚取新点数，直到全部耗尽。
+  2. 点数翻牌抽奖：每次消耗 20 点数翻牌抽奖(act/LaborApi/operationIntegralLottery)，
      若抽中点数(20/40点)则一直抽直到没有点数为止，汇报通知中严格统计共获得的话费总额。
-  3. 全链路鉴权防失效：动态刷新时间戳，命中 10013(风控)与 0007(凭证过期)自动通过 Ticket 重签。
+  3. 全链路鉴权防失效：清除过时伪造请求，动态刷新时间戳，命中 10013(风控)与 0007(凭证过期)自动通过 Ticket 重签。
   4. 规范通知：对齐微信读书单行 Bullet 极简排版，使用青龙默认推送。
 
 环境变量配置：
@@ -70,16 +70,26 @@ except ImportError:
     HAS_NOTIFY = False
     ql_send = None
 
-SCRIPT_VERSION = "v1.0.5"
+SCRIPT_VERSION = "v1.0.6"
 
 # ==================== 🛠️ 活动与平台常量配置 (对齐最新抓包事实) ====================
 CHANNEL_ID = "156000009083"
 ACTIVITY_ID = "ai119"
-ACTIVITY_ID_TPL = "ai119_4"
-TEMPLATE_ID = "ve_3949"
-DEFAULT_TEMPLATE_CONF_ID = "2JCd"
-DEFAULT_ARRANGE_ID = 463
+TEMPLATE_ID = "ve_4361"
+DEFAULT_TEMPLATE_CONF_ID = "2T3C"
+DEFAULT_ARRANGE_ID = 451
 LOTTERY_COST_SCORE = 20
+
+CHANNEL_RANKS = {
+    "156000008545": "ai119_1",
+    "156000009009": "ai119_2",
+    "156000008996": "ai119_3",
+    "156000009079": "ai119_4",
+    "156000009080": "ai119_5",
+    "156000009081": "ai119_6",
+    "156000009082": "ai119_7",
+    "156000009083": "ai119_8"
+}
 
 KEYS = {
     'login_rsa': """-----BEGIN PUBLIC KEY-----
@@ -244,12 +254,6 @@ def warmup_session(sess: requests.Session, crypto_inst: ImCrypto, token: str, mo
         r2 = sess.post(f"https://ai.imusic.cn/vapi/vrbt/check_user_state?mobile={mobile}&is4G=1&is5G=1&isDX=1&channelId={CHANNEL_ID}&portal=45", headers=get_imusic_headers(crypto_inst, token), data="", timeout=10)
         auth2 = r2.headers.get("authorization") or r2.headers.get("Authorization")
         if auth2: token = auth2.replace("Bearer ", "").strip()
-        
-        en_init = crypto_inst.encrypt({"channelId": CHANNEL_ID, "portal": "45", "mobile": mobile, "method": "init"})
-        sess.post(f"https://ai.imusic.cn/hapi/en/api?formData={urllib.parse.quote(en_init)}", headers=get_imusic_headers(crypto_inst, token), data="", timeout=10)
-        
-        ugc_p = crypto_inst.encrypt({"channelId": CHANNEL_ID, "portal": "45", "mobile": mobile})
-        sess.post(f"https://ai.imusic.cn/hapi/diy_ugc/imu/get_ugc_info?formData={urllib.parse.quote(ugc_p)}", headers=get_imusic_headers(crypto_inst, token), data="", timeout=10)
     except Exception:
         pass
     time.sleep(0.3)
@@ -404,16 +408,18 @@ def login_telecom(sess: requests.Session, phone: str, password: str, android_id:
 
 # ==================== 🎬 动态拉取当期模板元数据 ====================
 def query_template_meta(sess: requests.Session, token: str) -> dict:
-    url = f"https://ai.imusic.cn/hapi/de/api?pageNo=1&pageSize=10&activityId={ACTIVITY_ID_TPL}&apiName=diy/DiyVideoApi/queryActRecommendTemplateList&channelId={CHANNEL_ID}&portal=45"
+    rank_id = CHANNEL_RANKS.get(CHANNEL_ID, "ai119_8")
+    url = f"https://ai.imusic.cn/hapi/de/api?pageNo=1&pageSize=10&activityId={rank_id}&apiName=diy/DiyVideoApi/queryActRecommendTemplateList&channelId={CHANNEL_ID}&portal=45"
     headers = {"Authorization": f"Bearer {token}", "User-Agent": "Mozilla/5.0 (Linux; Android 13)"}
     default_meta = {
         "templateId": TEMPLATE_ID,
         "templateConfId": DEFAULT_TEMPLATE_CONF_ID,
         "arrangeId": DEFAULT_ARRANGE_ID,
-        "videoName": "太空奇旅",
+        "videoName": "月满庆中秋",
         "userWords": "复古科幻风格，太空宇航员与飞船探索宇宙",
         "background": "",
-        "isAI": 0
+        "isAI": 0,
+        "all_templates": []
     }
     try:
         r = sess.post(url, headers=headers, timeout=10).json()
@@ -424,10 +430,11 @@ def query_template_meta(sess: requests.Session, token: str) -> dict:
                 "templateId": t.get("templateId") or TEMPLATE_ID,
                 "templateConfId": t.get("templateConfId") or DEFAULT_TEMPLATE_CONF_ID,
                 "arrangeId": t.get("arrangeId") or DEFAULT_ARRANGE_ID,
-                "videoName": t.get("videoName") or "太空奇旅",
+                "videoName": t.get("videoName") or "月满庆中秋",
                 "userWords": t.get("userWords") or default_meta["userWords"],
                 "background": t.get("background") or "",
-                "isAI": 1 if str(t.get("isAI", 0)) == "1" else 0
+                "isAI": 1 if str(t.get("isAI", 0)) == "1" else 0,
+                "all_templates": items
             }
     except Exception:
         pass
@@ -480,7 +487,14 @@ def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
     except Exception:
         pass
 
-    # 3. 闭环执行：AI视频制作赚点数 <-> 翻牌抽大奖(抽中体验券继续制作，抽中点数继续抽奖)
+    # 3. 初始核验制作资格与余量
+    pkg_data, token = query_make_pkg_info(sess, crypto, token, phone)
+    initial_tip = pkg_data.get("balanceMakeTimesTip", "")
+    exp_work_num = int(pkg_data.get("aiMakeExperienceWorkNum", 0) or pkg_data.get("privilegeVrbtAIMakeExperienceLeftNum", 0) or 0)
+    free_left_num = int(pkg_data.get("privilegeVrbtAIVideoLeftNum", 0) or pkg_data.get("aidDailyNum", 0) or 0)
+    log(f"[{m_phone}] 制作资格官方核验: {initial_tip or f'体验券{exp_work_num}次 / 免费{free_left_num}次'}")
+
+    # 4. 闭环执行：AI视频制作赚点数 <-> 翻牌抽大奖(抽中体验券继续制作，抽中点数继续抽奖)
     total_make_success = 0
     total_earned_points = 0
     total_draw_count = 0
@@ -489,78 +503,94 @@ def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
     round_idx = 0
     max_rounds = 15  # 安全上限轮次
 
+    candidate_templates = tpl_meta.get("all_templates", [])
+    if not candidate_templates:
+        candidate_templates = [tpl_meta]
+
     while round_idx < max_rounds:
         round_idx += 1
         round_made = 0
 
-        # --- A. 尝试执行「一键做同款」制作（消耗免费额度或抽中的体验券）---
-        for attempt in range(1, 4):
-            token = premake_prepare(sess, crypto, token, phone, tpl_meta)
-            rand_name = f"{tpl_meta['videoName']}{random.randint(100000, 999999)}"
-            payload = OrderedDict([
-                ("channelId", CHANNEL_ID), ("portal", "45"), ("mobile", phone),
-                ("openId", ""), ("makeId", ""), ("background", tpl_meta.get("background", "")), ("userPhotos", ""),
-                ("userWords", tpl_meta["userWords"]),
-                ("templateName", rand_name), ("videoName", rand_name),
-                ("templateId", tpl_meta["templateId"]), ("templateConfId", tpl_meta["templateConfId"]), ("aid", ACTIVITY_ID),
-                ("inviterMobile", en_code), ("isAI", tpl_meta.get("isAI", 0)), ("aiPack", 0), ("arrangeId", tpl_meta.get("arrangeId", DEFAULT_ARRANGE_ID)),
-                ("autoOrderUgc", 0), ("aiGatewayImagMakeId", ""), ("fromType", ""),
-                ("sessionId", ""), ("voice", ""), ("invitationCode", en_code)
-            ])
-            enc_str = crypto.encrypt(payload)
-            api_url = f"https://ai.imusic.cn/hapi/diy_video/au/template_make_add_v2?formData={urllib.parse.quote(enc_str)}"
-            h = get_imusic_headers(crypto, token)
-            try:
-                r_make = sess.post(api_url, headers=h, data="", timeout=15)
-                new_auth = r_make.headers.get("authorization") or r_make.headers.get("Authorization")
-                if new_auth: token = new_auth.replace("Bearer ", "").strip()
-                dec_resp = crypto.decrypt(r_make.text)
-            except Exception as e:
-                log(f"[{m_phone}] 第 {attempt} 次制作网络异常: {str(e)}")
-                break
+        # --- A. 执行「一键做同款」制作（消耗免费额度或抽中的体验券）---
+        # 依次尝试当期可用推荐模板
+        for t_item in candidate_templates:
+            cur_tid = t_item.get("templateId") or TEMPLATE_ID
+            cur_conf = t_item.get("templateConfId") or DEFAULT_TEMPLATE_CONF_ID
+            cur_arr = t_item.get("arrangeId") or DEFAULT_ARRANGE_ID
+            cur_vname = t_item.get("videoName") or tpl_meta["videoName"]
+            cur_words = t_item.get("userWords") or tpl_meta["userWords"]
+            cur_bg = t_item.get("background") or ""
+            cur_is_ai = 1 if str(t_item.get("isAI", 0)) == "1" else 0
 
-            # 0007 Token 自动续期
-            if "0007" in dec_resp:
-                new_tok = refresh_sso_token(sess, ticket)
-                if new_tok:
-                    token = new_tok
-                    token = premake_prepare(sess, crypto, token, phone, tpl_meta)
-                    time.sleep(1)
+            for attempt in range(1, 4):
+                token = premake_prepare(sess, crypto, token, phone, t_item)
+                rand_name = f"{cur_vname}{random.randint(100000, 999999)}"
+                payload = OrderedDict([
+                    ("channelId", CHANNEL_ID), ("portal", "45"), ("mobile", phone),
+                    ("openId", ""), ("makeId", ""), ("background", cur_bg), ("userPhotos", ""),
+                    ("userWords", cur_words),
+                    ("templateName", rand_name), ("videoName", rand_name),
+                    ("templateId", cur_tid), ("templateConfId", cur_conf), ("aid", ACTIVITY_ID),
+                    ("inviterMobile", en_code), ("isAI", cur_is_ai), ("aiPack", 0), ("arrangeId", cur_arr),
+                    ("autoOrderUgc", 0), ("aiGatewayImagMakeId", ""), ("fromType", ""),
+                    ("sessionId", ""), ("voice", ""), ("invitationCode", en_code)
+                ])
+                enc_str = crypto.encrypt(payload)
+                api_url = f"https://ai.imusic.cn/hapi/diy_video/au/template_make_add_v2?formData={urllib.parse.quote(enc_str)}"
+                h = get_imusic_headers(crypto, token)
+                try:
+                    r_make = sess.post(api_url, headers=h, data="", timeout=15)
+                    new_auth = r_make.headers.get("authorization") or r_make.headers.get("Authorization")
+                    if new_auth: token = new_auth.replace("Bearer ", "").strip()
+                    dec_resp = crypto.decrypt(r_make.text)
+                except Exception as e:
+                    log(f"[{m_phone}] 制作网络异常: {str(e)}")
+                    break
+
+                # 0007 Token 自动续期
+                if "0007" in dec_resp:
+                    new_tok = refresh_sso_token(sess, ticket)
+                    if new_tok:
+                        token = new_tok
+                        token = premake_prepare(sess, crypto, token, phone, t_item)
+                        time.sleep(1)
+                        try:
+                            r_retry = sess.post(api_url, headers=get_imusic_headers(crypto, token), data="", timeout=15)
+                            dec_resp = crypto.decrypt(r_retry.text)
+                        except Exception:
+                            pass
+
+                # 10013 风控自动 remedy 补救
+                if "10013" in dec_resp:
+                    trace_id = safe_get(json.loads(dec_resp), "imuTraceId", default="") if dec_resp.startswith('{') else ""
                     try:
-                        r_retry = sess.post(api_url, headers=get_imusic_headers(crypto, token), data="", timeout=15)
-                        dec_resp = crypto.decrypt(r_retry.text)
+                        send_stat_message(sess, crypto, token, phone, "page_vring_index", f"玩转AI赢手机_activityID_{ACTIVITY_ID}_entrance_{CHANNEL_ID}")
+                        send_stat_message(sess, crypto, token, phone, "activity_vring_make_1.9", f"_activityID_{ACTIVITY_ID}_entrance_{CHANNEL_ID}")
+                        rem_en = crypto.encrypt({"method": "remedy", "traceId": trace_id, "mobile": phone})
+                        sess.post(f"https://ai.imusic.cn/hapi/en/api?formData={urllib.parse.quote(rem_en)}", headers=get_imusic_headers(crypto, token), data="", timeout=15)
+                        new_tok = refresh_sso_token(sess, ticket)
+                        if new_tok: token = new_tok
+                        token = premake_prepare(sess, crypto, token, phone, t_item)
+                        time.sleep(1)
+                        r_make_retry = sess.post(api_url, headers=get_imusic_headers(crypto, token), data="", timeout=15)
+                        dec_resp = crypto.decrypt(r_make_retry.text)
                     except Exception:
                         pass
 
-            # 10013 风控自动 remedy 补救
-            if "10013" in dec_resp:
-                trace_id = safe_get(json.loads(dec_resp), "imuTraceId", default="") if dec_resp.startswith('{') else ""
-                try:
-                    send_stat_message(sess, crypto, token, phone, "page_vring_index", f"玩转AI赢手机_activityID_{ACTIVITY_ID}_entrance_{CHANNEL_ID}")
-                    send_stat_message(sess, crypto, token, phone, "activity_vring_make_1.9", f"_activityID_{ACTIVITY_ID}_entrance_{CHANNEL_ID}")
-                    rem_en = crypto.encrypt({"method": "remedy", "traceId": trace_id, "mobile": phone})
-                    sess.post(f"https://ai.imusic.cn/hapi/en/api?formData={urllib.parse.quote(rem_en)}", headers=get_imusic_headers(crypto, token), data="", timeout=15)
-                    new_tok = refresh_sso_token(sess, ticket)
-                    if new_tok: token = new_tok
-                    token = premake_prepare(sess, crypto, token, phone, tpl_meta)
-                    time.sleep(1)
-                    r_make_retry = sess.post(api_url, headers=get_imusic_headers(crypto, token), data="", timeout=15)
-                    dec_resp = crypto.decrypt(r_make_retry.text)
-                except Exception:
-                    pass
+                if '"code":"0000"' in dec_resp:
+                    round_made += 1
+                    total_make_success += 1
+                    total_earned_points += 20
+                    log(f"[{m_phone}] ✅ 「一键做同款」制作成功！[{cur_vname}] (+20点数, +1Pad抽奖券码)")
+                    time.sleep(1.5)
+                elif "10014" in dec_resp or "次数已用完" in dec_resp or "免费次数已用完" in dec_resp or "机会已用" in dec_resp or "不足" in dec_resp:
+                    break
+                else:
+                    log(f"[{m_phone}] 制作反馈: {dec_resp[:80]}")
+                    break
 
-            if '"code":"0000"' in dec_resp:
-                round_made += 1
-                total_make_success += 1
-                total_earned_points += 20
-                log(f"[{m_phone}] ✅ 「一键做同款」制作成功！(+20点数, +1Pad抽奖券码)")
-                time.sleep(1.5)
-            elif "10014" in dec_resp or "次数已用完" in dec_resp or "免费次数已用完" in dec_resp or "机会已用" in dec_resp or "不足" in dec_resp:
-                if round_idx == 1 and attempt == 1:
-                    log(f"[{m_phone}] 免费制作次数已耗尽 (每3天赠送3次免费机会)")
-                break
-            else:
-                log(f"[{m_phone}] 制作反馈: {dec_resp[:80]}")
+            # 若该模板成功制作过，或者已提示次数耗尽，无需尝试其他备用模板
+            if round_made > 0 or ("10014" in dec_resp or "次数已用完" in dec_resp):
                 break
 
         # --- B. 查询最新可用点数 ---
@@ -596,7 +626,7 @@ def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
             pass
 
         lottery_chances = remaining_score // LOTTERY_COST_SCORE
-        log(f"[{m_phone}] [轮次{round_idx}] 积分核验: 可用点数={remaining_score}, 累计总点数={total_score}, 可翻牌={lottery_chances}次")
+        log(f"[{m_phone}] [第{round_idx}轮] 积分核验: 可用点数={remaining_score}, 累计总点数={total_score}, 可翻牌={lottery_chances}次")
 
         # --- C. 翻牌抽大奖：点数连抽直到没有点数为止 ---
         round_won_tickets = 0
@@ -673,20 +703,19 @@ def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
 
             time.sleep(1.2)
 
-        # --- D. 检查是否需要继续循环 ---
-        # 若本轮未做成功、未抽中体验券，且剩余点数不足以翻牌，说明今日所有机会全部耗尽，退出大循环
+        # --- D. 检查是否需要继续闭环循环 ---
         pkg_data, token = query_make_pkg_info(sess, crypto, token, phone)
         exp_left = int(pkg_data.get("aiMakeExperienceWorkNum", 0) or pkg_data.get("privilegeVrbtAIMakeExperienceLeftNum", 0) or 0)
 
         if round_made == 0 and round_won_tickets == 0 and exp_left == 0 and remaining_score < LOTTERY_COST_SCORE:
-            log(f"[{m_phone}] 今日制作次数与点数均已全部耗尽，任务结束。")
+            log(f"[{m_phone}] 今日制作机会与可用点数已全部耗尽，闭环任务结束。")
             break
 
         if round_won_tickets > 0 or exp_left > 0:
             log(f"[{m_phone}] 🔄 检测到有新的体验券制作机会(剩余{exp_left}次/本轮获{round_won_tickets}张)，即将自动开启下一轮制作与赚点！")
             time.sleep(1)
 
-    # 4. 任务结束复核最新资产
+    # 5. 任务结束复核最新资产与制作余量
     try:
         r_score_after, _ = post_encrypted_api(sess, crypto, token, "/hapi/en/api", OrderedDict([
             ("activityId", ACTIVITY_ID),
@@ -703,11 +732,19 @@ def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
     except Exception:
         pass
 
-    # 5. 生成微信读书规范通知
+    final_pkg_data, _ = query_make_pkg_info(sess, crypto, token, phone)
+    final_tip = final_pkg_data.get("balanceMakeTimesTip", "")
+    final_exp = int(final_pkg_data.get("aiMakeExperienceWorkNum", 0) or 0)
+    final_free = int(final_pkg_data.get("privilegeVrbtAIVideoLeftNum", 0) or final_pkg_data.get("aidDailyNum", 0) or 0)
+
+    # 6. 生成微信读书规范通知
     if total_make_success > 0:
         bullets.append(f"• 一键做同款: 完成 {total_make_success} 次制作 [{tpl_meta['videoName']}] (+{total_earned_points}点数)")
     else:
-        bullets.append("• 一键做同款: 今日制作次数已耗尽 (每3天赠送3次免费机会)")
+        if final_tip and ("剩余" in final_tip or "次" in final_tip) and "0" not in final_tip:
+            bullets.append(f"• 一键做同款: 当期余量 [{final_tip}] (体验券{final_exp}次/免费{final_free}次)")
+        else:
+            bullets.append("• 一键做同款: 今日制作次数已耗尽 (每3天赠送3次免费机会)")
 
     if draw_date_str:
         bullets.append(f"• Pad抽奖券码: {issue_name}总发放 {ticket_count} 张 ({draw_date_str} 11:00自动开奖)")
