@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 ===================================================================
-📌 版本: v1.1.3 (2026-09-20 修复 0007 重复消费 Ticket)
+📌 版本: v1.1.4 (2026-09-21 切换官方现网制作接口(/template_make_add)，消除频控重登与鉴权失效)
 中国电信 · AI奇遇赢Pad (一键做同款获取点数与翻牌抽奖)
 ===================================================================
 new Env('中国电信 · AI奇遇赢Pad');
@@ -67,7 +67,7 @@ except ImportError:
     HAS_NOTIFY = False
     ql_send = None
 
-SCRIPT_VERSION = "v1.1.3"
+SCRIPT_VERSION = "v1.1.4"
 
 # ==================== 🛠️ 活动与平台常量配置 (100%回归实测成功基准) ====================
 CHANNEL_ID = "156000009079"
@@ -208,17 +208,79 @@ def post_encrypted_api(sess: requests.Session, crypto_inst: ImCrypto, token: str
             token = new_token
     return res, token
 
-def post_make_request(sess: requests.Session, crypto_inst: ImCrypto, token: str, payload: Any) -> Tuple[str, str]:
+def post_make_request(sess: requests.Session, crypto_inst: ImCrypto, token: str, mobile: str, tpl_meta: dict, rand_name: str) -> Tuple[str, str]:
+    t_id = tpl_meta.get("templateId") or TEMPLATE_ID
+    arr_id = tpl_meta.get("arrangeId") or DEFAULT_ARRANGE_ID
+    words = tpl_meta.get("userWords", "")
+    bg = tpl_meta.get("background", "")
+
+    # 主通道：官方现网生产标准接口 (/hapi/diy_video/au/template_make_add)
+    primary_payload = OrderedDict([
+        ("mobile", mobile),
+        ("makeId", ""),
+        ("userPhotos", ""),
+        ("userWords", words),
+        ("background", bg),
+        ("videoName", rand_name),
+        ("templateId", t_id),
+        ("templateName", rand_name),
+        ("aid", ACTIVITY_ID),
+        ("arrangeId", arr_id),
+        ("aiGatewayImagMakeId", ""),
+        ("lastTaskId", ""),
+        ("autoAddUgc", 0),
+        ("imuOtherParam", 1),
+        ("channelId", CHANNEL_ID),
+        ("portal", "45")
+    ])
+
     crypto_inst.refresh()
-    enc_data = crypto_inst.encrypt(payload)
-    url = f"https://ai.imusic.cn/hapi/diy_video/au/template_make_add_v2?formData={urllib.parse.quote(enc_data)}"
-    res = sess.post(url, headers=get_imusic_headers(crypto_inst, token), data="", timeout=15)
-    new_auth = res.headers.get("authorization") or res.headers.get("Authorization")
-    if new_auth:
-        new_token = new_auth.replace("Bearer ", "").strip()
-        if new_token:
-            token = new_token
-    return crypto_inst.decrypt(res.text), token
+    enc_data = crypto_inst.encrypt(primary_payload)
+    url = f"https://ai.imusic.cn/hapi/diy_video/au/template_make_add?formData={urllib.parse.quote(enc_data)}"
+    try:
+        res = sess.post(url, headers=get_imusic_headers(crypto_inst, token), data="", timeout=15)
+        new_auth = res.headers.get("authorization") or res.headers.get("Authorization")
+        if new_auth:
+            new_tok = new_auth.replace("Bearer ", "").strip()
+            if new_tok:
+                token = new_tok
+        dec_resp = crypto_inst.decrypt(res.text)
+    except Exception as e:
+        dec_resp = f'{{"code":"9999","desc":"网络异常: {str(e)}"}}'
+
+    if '"code":"0000"' in dec_resp or any(k in dec_resp for k in ["10014", "次数已用完", "免费次数已用完", "机会已用", "火爆", "不足"]):
+        return dec_resp, token
+
+    # 备用免鉴权通道: /hapi/en/api (diy/DiyVideoApi/unTemplateMake)
+    time.sleep(0.5)
+    fallback_payload = OrderedDict([
+        ("apiName", "diy/DiyVideoApi/unTemplateMake"),
+        ("mobile", mobile),
+        ("makeId", ""),
+        ("userPhotos", ""),
+        ("userWords", words),
+        ("background", bg),
+        ("videoName", rand_name),
+        ("templateId", t_id),
+        ("templateName", rand_name),
+        ("aid", ACTIVITY_ID),
+        ("arrangeId", arr_id),
+        ("aiGatewayImagMakeId", ""),
+        ("lastTaskId", ""),
+        ("autoAddUgc", 0),
+        ("imuOtherParam", 1),
+        ("channelId", CHANNEL_ID),
+        ("portal", "45")
+    ])
+    try:
+        r_fb, token = post_encrypted_api(sess, crypto_inst, token, "/hapi/en/api", fallback_payload)
+        dec_fb = crypto_inst.decrypt(r_fb.text)
+        if '"code":"0000"' in dec_fb or any(k in dec_fb for k in ["10014", "次数已用完", "免费次数已用完", "机会已用", "火爆", "不足"]):
+            return dec_fb, token
+    except Exception:
+        pass
+
+    return dec_resp, token
 
 def refresh_sso_token(sess: requests.Session, ticket: str) -> Optional[str]:
     try:
@@ -284,7 +346,7 @@ def query_make_pkg_info(sess: requests.Session, crypto_inst: ImCrypto, token: st
         pass
     return None, token
 
-def query_server_score(sess: requests.Session, crypto_inst: ImCrypto, token: str, mobile: str, ticket: str, reauth: Optional[Callable[[], Optional[str]]] = None) -> Tuple[str, int, str]:
+def query_server_score(sess: requests.Session, crypto_inst: ImCrypto, token: str, mobile: str, ticket: str = "") -> Tuple[str, int, str]:
     total_score = "0"
     remaining_score = 0
     try:
@@ -296,19 +358,6 @@ def query_server_score(sess: requests.Session, crypto_inst: ImCrypto, token: str
             ("portal", "45")
         ]))
         dec_score = crypto_inst.decrypt(r_score.text)
-        if "0007" in dec_score:
-            new_tok = reauth() if reauth else refresh_sso_token(sess, ticket)
-            if new_tok:
-                token = new_tok
-                r_score, token = post_encrypted_api(sess, crypto_inst, token, "/hapi/en/api", OrderedDict([
-                    ("activityId", ACTIVITY_ID),
-                    ("mobile", mobile),
-                    ("apiName", "act/LaborApi/getOperationTotalScoreOrRemainingScore"),
-                    ("channelId", CHANNEL_ID),
-                    ("portal", "45")
-                ]))
-                dec_score = crypto_inst.decrypt(r_score.text)
-
         if dec_score.startswith('{'):
             s_data = json.loads(dec_score).get("data") or {}
             total_score = str(s_data.get("totalScore", "0"))
@@ -416,16 +465,16 @@ def login_telecom(sess: requests.Session, phone: str, password: str, android_id:
     sso_payload = {
         "portal": "45",
         "channelId": CHANNEL_ID,
-        "ticket": ticket,
-        "user118100cn": "user118100cn"
+        "ticket": ticket
     }
     try:
-        sso_resp = sess.post(
+        sso_raw = sess.post(
             "https://ai.imusic.cn/vapi/vue_login/sso_login_v2",
             json=sso_payload,
             headers={"Content-Type": "application/json", "Referer": f"https://ai.imusic.cn/h5v/fusion/ai-luck-winnew?cc={CHANNEL_ID}&ca=w7x6"},
             timeout=15
-        ).json()
+        )
+        sso_resp = sso_raw.json()
     except Exception as e:
         log(f"❌ [爱音乐SSO异常] {m_phone}: {str(e)}")
         return None
@@ -435,7 +484,11 @@ def login_telecom(sess: requests.Session, phone: str, password: str, android_id:
         log(f"❌ [爱音乐SSO失败] {m_phone}: {sso_resp.get('description') or '未获取到平台Token'}")
         return None
 
-    # 注入官方会话 Cookie
+    # 提取并确保爱音乐认证核心 Cookie (user118100cn / JSESSIONID / loginState / cc)
+    u_cookie = sso_raw.cookies.get('user118100cn') or sess.cookies.get('user118100cn')
+    if u_cookie:
+        sess.cookies.set('user118100cn', u_cookie, domain='ai.imusic.cn')
+        sess.cookies.set('user118100cn', u_cookie, domain='.imusic.cn')
     sess.cookies.set('loginState', 'true', domain='ai.imusic.cn')
     sess.cookies.set('cc', CHANNEL_ID, domain='ai.imusic.cn')
     sess.cookies.set('imusic', f'118100{int(time.time() * 1000)}', domain='ai.imusic.cn')
@@ -446,9 +499,7 @@ def login_telecom(sess: requests.Session, phone: str, password: str, android_id:
         "mobile": phone,
         "token": imusic_token,
         "ticket": ticket,
-        "en_code": sso_resp.get("enDataCode", ""),
-        "password": password,
-        "android_id": android_id
+        "en_code": sso_resp.get("enDataCode", "")
     }
 
 # ==================== 🎬 动态拉取当期模板元数据 ====================
@@ -489,23 +540,9 @@ def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
     token = user['token']
     ticket = user.get('ticket', '')
     en_code = user.get('en_code', '')
-    password = user.get('password', '')
-    android_id = user.get('android_id', '')
     bullets = []
 
     crypto = ImCrypto()
-
-    def reauthenticate() -> Optional[str]:
-        nonlocal token, ticket, en_code
-        if not password:
-            return None
-        refreshed_user = login_telecom(sess, phone, password, android_id)
-        if not refreshed_user:
-            return None
-        token = refreshed_user['token']
-        ticket = refreshed_user.get('ticket', '')
-        en_code = refreshed_user.get('en_code', '')
-        return token
 
     # 1. 启动会话 Warmup 模拟与准备
     token = warmup_session(sess, crypto, token, phone)
@@ -545,94 +582,67 @@ def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
 
     # 3. 初始核验官方制作资格与余量
     pkg_data, token = query_make_pkg_info(sess, crypto, token, phone)
+    initial_tip = ""
+    exp_work_num = 0
+    free_left_num = 0
     if pkg_data is not None:
         initial_tip = pkg_data.get("balanceMakeTimesTip", "")
         exp_work_num = int(pkg_data.get("aiMakeExperienceWorkNum", 0) or pkg_data.get("privilegeVrbtAIMakeExperienceLeftNum", 0) or 0)
         free_left_num = int(pkg_data.get("privilegeVrbtAIVideoLeftNum", 0) or pkg_data.get("aidDailyNum", 0) or 0)
         log(f"[{m_phone}] 制作资格官方核验: {initial_tip or f'体验券{exp_work_num}次 / 免费{free_left_num}次'}")
     else:
-        initial_tip = ""
-        log(f"[{m_phone}] 制作资格查询暂未响应，不阻断执行，继续尝试制作...")
+        log(f"[{m_phone}] 制作资格查询暂未响应，继续执行制作与翻牌...")
+
+    # 若官方明确返回体验券0次且免费0次（或已耗尽/0次），初期跳过制作直接进入查积分与翻牌
+    can_make_more = True
+    if initial_tip and any(k in initial_tip for k in ["0次", "已耗尽", "无可用"]) and (exp_work_num == 0 and free_left_num == 0):
+        can_make_more = False
 
     # ==================== 4. 闭环自旋状态机主循环 ====================
-    # 制作AI视频(赚点) -> 查询积分 -> 满1000兑换10元 -> 翻牌抽奖 -> 抽中点数连抽 -> 抽中体验券制作赚点 -> 循环
     total_make_success = 0
     total_draw_count = 0
     total_bill_won = 0.0
     redeemed_10_count = 0
 
-    can_make_more = True
     consecutive_idle_rounds = 0
-    max_outer_loops = 30
+    max_outer_loops = 20
     outer_loop_count = 0
 
     while outer_loop_count < max_outer_loops:
         outer_loop_count += 1
         has_progress = False
 
-        # --- A. 制作环节（消耗免费额度或体验券，全部跑完） ---
+        # --- A. 制作环节（消耗免费额度或体验券，直至耗尽） ---
         if can_make_more:
             attempt_count = 0
             while attempt_count < 10:
                 attempt_count += 1
                 token = premake_prepare(sess, crypto, token, phone, tpl_meta)
                 rand_name = f"{tpl_meta['videoName']}{random.randint(100000, 999999)}"
-                payload = OrderedDict([
-                    ("channelId", CHANNEL_ID), ("portal", "45"), ("mobile", phone),
-                    ("openId", ""), ("makeId", ""), ("background", tpl_meta.get("background", "")), ("userPhotos", ""),
-                    ("userWords", tpl_meta["userWords"]),
-                    ("templateName", rand_name), ("videoName", rand_name),
-                    ("templateId", tpl_meta["templateId"]), ("templateConfId", tpl_meta["templateConfId"]), ("aid", ACTIVITY_ID),
-                    ("inviterMobile", en_code), ("isAI", tpl_meta.get("isAI", 0)), ("aiPack", 0), ("arrangeId", tpl_meta.get("arrangeId", DEFAULT_ARRANGE_ID)),
-                    ("autoOrderUgc", 0), ("aiGatewayImagMakeId", ""), ("fromType", ""),
-                    ("sessionId", ""), ("voice", ""), ("invitationCode", en_code)
-                ])
 
                 try:
-                    dec_resp, token = post_make_request(sess, crypto, token, payload)
+                    dec_resp, token = post_make_request(sess, crypto, token, phone, tpl_meta, rand_name)
                 except Exception as e:
                     log(f"[{m_phone}] 制作网络异常: {str(e)}")
+                    can_make_more = False
                     break
-
-                # 0007 Token 自动续期并重试
-                if "0007" in dec_resp:
-                    new_tok = reauthenticate()
-                    if new_tok:
-                        token = new_tok
-                        token = premake_prepare(sess, crypto, token, phone, tpl_meta)
-                        time.sleep(1)
-                        dec_resp, token = post_make_request(sess, crypto, token, payload)
-
-                # 10013 风控自动 remedy 补救
-                if "10013" in dec_resp:
-                    trace_id = safe_get(json.loads(dec_resp), "imuTraceId", default="") if dec_resp.startswith('{') else ""
-                    try:
-                        send_stat_message(sess, crypto, token, phone, "page_vring_index", f"玩转AI赢手机_activityID_{ACTIVITY_ID}_entrance_{CHANNEL_ID}")
-                        send_stat_message(sess, crypto, token, phone, "activity_vring_make_1.9", f"_activityID_{ACTIVITY_ID}_entrance_{CHANNEL_ID}")
-                        rem_en = crypto.encrypt({"method": "remedy", "traceId": trace_id, "mobile": phone})
-                        sess.post(f"https://ai.imusic.cn/hapi/en/api?formData={urllib.parse.quote(rem_en)}", headers=get_imusic_headers(crypto, token), data="", timeout=15)
-                        new_tok = reauthenticate()
-                        if new_tok: token = new_tok
-                        token = premake_prepare(sess, crypto, token, phone, tpl_meta)
-                        time.sleep(1)
-                        dec_resp, token = post_make_request(sess, crypto, token, payload)
-                    except Exception:
-                        pass
 
                 if '"code":"0000"' in dec_resp:
                     total_make_success += 1
                     has_progress = True
                     log(f"[{m_phone}] ✅ 「一键做同款」制作成功！[{tpl_meta['videoName']}] (已下发点数与Pad券码)")
                     time.sleep(1.5)
-                elif "10014" in dec_resp or "次数已用完" in dec_resp or "免费次数已用完" in dec_resp or "机会已用" in dec_resp or "不足" in dec_resp:
+                elif any(k in dec_resp for k in ["10014", "10007", "次数已用完", "免费次数已用完", "机会已用", "火爆", "不足"]):
+                    log(f"[{m_phone}] ℹ️ 当期制作机会已耗尽 (每3天赠送3次免费机会)，转入积分翻牌环节")
                     can_make_more = False
                     break
                 else:
                     log(f"[{m_phone}] 制作反馈: {dec_resp[:80]}")
+                    can_make_more = False
                     break
 
         # --- B. 查询服务端实时权威积分 ---
-        total_score, remaining_score, token = query_server_score(sess, crypto, token, phone, ticket, reauthenticate)
+        total_score, remaining_score, token = query_server_score(sess, crypto, token, phone, ticket)
         lottery_chances = remaining_score // LOTTERY_COST_SCORE
         log(f"[{m_phone}] [闭环第{outer_loop_count}轮] 积分核验: 可用点数={remaining_score}, 累计总点数={total_score}, 可翻牌={lottery_chances}次")
 
@@ -652,21 +662,24 @@ def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
             if dec_rdm.startswith('{'):
                 rdm_obj = json.loads(dec_rdm)
                 if rdm_obj.get("code") == "0000":
-                    total_bill_won += 10.0
                     redeemed_10_count += 1
+                    total_bill_won += 10.0
                     has_progress = True
-                    log(f"[{m_phone}] 💰 兑换成功！累计获得 10.00元话费！")
-                elif rdm_obj.get("code") == "10003":
-                    log(f"[{m_phone}] 10元话费当期名额已抢光 ({rdm_obj.get('desc')})")
+                    log(f"[{m_phone}] 🎉 成功兑换 10 元话费！(累计获得话费: {total_bill_won:.2f}元)")
                 else:
                     log(f"[{m_phone}] 兑换反馈: {rdm_obj.get('desc') or dec_rdm[:60]}")
             time.sleep(1)
-            total_score, remaining_score, token = query_server_score(sess, crypto, token, phone, ticket, reauthenticate)
+            total_score, remaining_score, token = query_server_score(sess, crypto, token, phone, ticket)
 
-        # --- D. 翻牌抽大奖循环 (点数 >= 20，接口成功才扣除20点) ---
+        # --- D. 翻牌抽大奖循环 (点数 >= 20，接口成功后扣除20点) ---
         won_tickets_count = 0
-        while remaining_score >= LOTTERY_COST_SCORE and total_draw_count < 150:
-            send_stat_message(sess, crypto, token, phone, "activity_2603AI-meet_1.15", f"activityID_{ACTIVITY_ID}_entrance_{CHANNEL_ID}")
+        while remaining_score >= LOTTERY_COST_SCORE and total_draw_count < 80:
+            total_draw_count += 1
+            has_progress = True
+
+            send_stat_message(sess, crypto, token, phone, "page_2603AI-meet_12", f"activityID_{ACTIVITY_ID}_entrance_{CHANNEL_ID}")
+            time.sleep(0.05)
+            send_stat_message(sess, crypto, token, phone, "activity_2603AI-meet_1.11", f"activityID_{ACTIVITY_ID}_entrance_{CHANNEL_ID}")
             time.sleep(0.05)
 
             try:
@@ -679,128 +692,97 @@ def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
                 ]))
                 dec_draw = crypto.decrypt(r_draw.text)
             except Exception as e:
-                log(f"[{m_phone}] 翻牌网络异常: {str(e)}，保留当前积分")
+                log(f"[{m_phone}] 第 {total_draw_count} 次翻牌网络异常: {str(e)}")
                 break
-
-            if "0007" in dec_draw:
-                new_tok = reauthenticate()
-                if new_tok:
-                    token = new_tok
-                    r_draw, token = post_encrypted_api(sess, crypto, token, "/hapi/en/api", OrderedDict([
-                        ("activityId", ACTIVITY_ID),
-                        ("mobile", phone),
-                        ("apiName", "act/LaborApi/operationIntegralLottery"),
-                        ("channelId", CHANNEL_ID),
-                        ("portal", "45")
-                    ]))
-                    dec_draw = crypto.decrypt(r_draw.text)
 
             if dec_draw.startswith('{'):
                 d_obj = json.loads(dec_draw)
-                code = d_obj.get('code')
-                d_data = d_obj.get('data') or {}
-                p_name = d_data.get('awardName') or d_data.get('prizeName') or d_data.get('name') or '谢谢参与'
-                award_idx = str(d_data.get('awardIndex') or '')
+                if d_obj.get('code') == '0000':
+                    remaining_score -= LOTTERY_COST_SCORE
+                    d_data = d_obj.get('data') or {}
+                    p_name = d_data.get('awardName') or d_data.get('prizeName') or d_data.get('name') or '谢谢参与'
+                    award_idx = str(d_data.get('awardIndex') or '')
 
-                if code != '0000':
-                    log(f"[{m_phone}] 翻牌未通过: [{d_obj.get('desc') or '失败'}]，结束本轮连抽")
+                    log(f"[{m_phone}] 🎴 第 {total_draw_count} 次翻牌获得: [{p_name}]")
+
+                    # 统计话费奖励（先匹配 10元 避免被 1元 截断）
+                    if '10元' in p_name or award_idx == '16330101':
+                        total_bill_won += 10.0
+                        log(f"[{m_phone}] 💰 斩获话费: +10.00元话费！(累计: {total_bill_won:.2f}元)")
+                    elif '1元' in p_name or award_idx in ['16320105', '16320205', '16320305']:
+                        total_bill_won += 1.0
+                        log(f"[{m_phone}] 💰 斩获话费: +1.00元话费！(累计: {total_bill_won:.2f}元)")
+
+                    # 抽中点数立即自动累加
+                    if '20点数' in p_name or award_idx in ['16320101', '16320201', '16320301']:
+                        remaining_score += 20
+                        log(f"[{m_phone}] 🪙 抽中 20 点数，自动追加 1 次翻牌抽奖！(可用点数: {remaining_score})")
+                    elif '40点数' in p_name or award_idx in ['16320102', '16320202', '16320302']:
+                        remaining_score += 40
+                        log(f"[{m_phone}] 🪙 抽中 40 点数，自动追加 2 次翻牌抽奖！(可用点数: {remaining_score})")
+                    elif '体验券' in p_name or '制作' in p_name:
+                        won_tickets_count += 1
+                        can_make_more = True
+                        log(f"[{m_phone}] 🎫 抽中「AI制作体验券」，自动激活新一轮制作任务！")
+                else:
+                    err_desc = d_obj.get('desc') or '翻牌未成功'
+                    log(f"[{m_phone}] 翻牌反馈: {err_desc}")
                     break
-
-                # 接口确认成功才扣减单次翻牌积分
-                total_draw_count += 1
-                remaining_score -= LOTTERY_COST_SCORE
-                has_progress = True
-                log(f"[{m_phone}] 🎴 第 {total_draw_count} 次翻牌获得: [{p_name}]")
-
-                # 1. 统计翻牌抽中的 1 元话费（奖池唯一话费项，概率0.04%）
-                if '话费' in p_name or award_idx in ['16320105', '16320205', '16320305']:
-                    total_bill_won += 1.0
-                    log(f"[{m_phone}] 💰 斩获话费: +1.00元话费！")
-
-                # 2. 抽中点数实时累加回补，保证一直抽直到没有点数为止
-                if '20点数' in p_name or award_idx in ['16320101', '16320201', '16320301']:
-                    remaining_score += 20
-                    log(f"[{m_phone}] 🪙 抽中 20 点数，自动追加 1 次翻牌！(剩余可用: {remaining_score})")
-                elif '40点数' in p_name or award_idx in ['16320102', '16320202', '16320302']:
-                    remaining_score += 40
-                    log(f"[{m_phone}] 🪙 抽中 40 点数，自动追加 2 次翻牌！(剩余可用: {remaining_score})")
-
-                # 3. 抽中体验券：激活制作资格，稍后前往制作赚取新点数！
-                if '体验券' in p_name or '体验' in p_name or award_idx in ['16320103', '16320203', '16320303', '16320104', '16320204', '16320304']:
-                    won_tickets_count += 1
-                    can_make_more = True
-                    log(f"[{m_phone}] 🎟️ 翻牌抽中 [{p_name}]！已激活新的制作机会，稍后制作赚点！")
             else:
-                log(f"[{m_phone}] 翻牌响应解析异常: {dec_draw[:60]}，停止当前连抽")
+                log(f"[{m_phone}] 翻牌响应解析异常: {dec_draw[:60]}")
                 break
 
             time.sleep(1.2)
 
         # 翻牌后再次复核服务端权威积分
-        total_score, remaining_score, token = query_server_score(sess, crypto, token, phone, ticket, reauthenticate)
+        total_score, remaining_score, token = query_server_score(sess, crypto, token, phone, ticket)
 
         # --- E. 闭环检查：若有新体验券，继续进入下一轮制作赚点 ---
         pkg_data, token = query_make_pkg_info(sess, crypto, token, phone)
-        exp_left = int(safe_get(pkg_data, "aiMakeExperienceWorkNum", default=0) or safe_get(pkg_data, "privilegeVrbtAIMakeExperienceLeftNum", default=0) or 0) if pkg_data else 0
+        if pkg_data is not None:
+            new_exp = int(pkg_data.get("aiMakeExperienceWorkNum", 0) or pkg_data.get("privilegeVrbtAIMakeExperienceLeftNum", 0) or 0)
+            if new_exp > 0 or won_tickets_count > 0:
+                can_make_more = True
+                has_progress = True
 
-        if exp_left > 0 or won_tickets_count > 0:
-            can_make_more = True
-            log(f"[{m_phone}] 🔄 发现体验券/制作机会可用 (余量{exp_left}次/本轮抽中{won_tickets_count}张)，重新启动制作与赚点！")
-            time.sleep(1)
-            continue
-
-        # 终极退出条件：同时满足
-        # 1. 没有普通或体验券制作机会 (not can_make_more)
-        # 2. 体验券余量为 0 (exp_left == 0)
-        # 3. 积分不足 20 点 (remaining_score < 20)
-        # 4. 积分不足 1000 点 (remaining_score < 1000)
-        if not can_make_more and exp_left == 0 and remaining_score < LOTTERY_COST_SCORE and remaining_score < 1000:
-            log(f"[{m_phone}] 🏁 制作机会、体验券与可用点数全部耗尽 (剩余{remaining_score}点)，闭环任务圆满完成。")
+        if not can_make_more and (pkg_data is None or int(pkg_data.get("aiMakeExperienceWorkNum", 0) or 0) == 0) and remaining_score < LOTTERY_COST_SCORE and remaining_score < 1000:
+            log(f"[{m_phone}] 🏁 制作机会、体验券与可用点数已全部耗尽 (剩余{remaining_score}点)，闭环任务圆满完成。")
             break
 
         if not has_progress:
             consecutive_idle_rounds += 1
-            if consecutive_idle_rounds >= 2:
+            if consecutive_idle_rounds >= 1:
                 log(f"[{m_phone}] ⚠️ 任务链无进一步可推进状态，安全退出。")
                 break
         else:
             consecutive_idle_rounds = 0
 
     # 5. 任务结束向服务器复核最新点数资产与制作余量
-    total_score, remaining_score, token = query_server_score(sess, crypto, token, phone, ticket, reauthenticate)
+    total_score, remaining_score, token = query_server_score(sess, crypto, token, phone, ticket)
 
     final_pkg_data, _ = query_make_pkg_info(sess, crypto, token, phone)
     final_tip = safe_get(final_pkg_data, "balanceMakeTimesTip", default="") if final_pkg_data else ""
-    final_exp = int(safe_get(final_pkg_data, "aiMakeExperienceWorkNum", default=0) or 0) if final_pkg_data else 0
-    final_free = int(safe_get(final_pkg_data, "privilegeVrbtAIVideoLeftNum", default=0) or safe_get(final_pkg_data, "aidDailyNum", default=0) or 0) if final_pkg_data else 0
 
     # 6. 生成微信读书规范通知
     if total_make_success > 0:
-        bullets.append(f"• 一键做同款: 完成 {total_make_success} 次制作 [{tpl_meta['videoName']}]")
+        bullets.append(f"• 一键做同款: 完成 {total_make_success} 次制作 [{tpl_meta['videoName']}] (获得 {total_make_success * 20}点数与券码)")
     else:
-        if final_tip and ("剩余" in final_tip or "次" in final_tip) and "0" not in final_tip:
-            bullets.append(f"• 一键做同款: 当期余量 [{final_tip}] (体验券{final_exp}次/免费{final_free}次)")
-        else:
-            bullets.append("• 一键做同款: 今日制作次数已耗尽 (每3天赠送3次免费机会)")
+        bullets.append("• 一键做同款: 今日制作次数已耗尽 (每3天赠送3次免费机会)")
 
     if draw_date_str:
         bullets.append(f"• Pad抽奖券码: {issue_name}总发放 {ticket_count} 张 ({draw_date_str} 11:00自动开奖)")
     else:
         bullets.append(f"• Pad抽奖券码: {issue_name}总发放 {ticket_count} 张 (每期送iPad·自动开奖)")
 
-    # 严格按用户要求“只通知总共获得了多少话费”
     if total_bill_won > 0:
-        if redeemed_10_count > 0:
-            bill_msg = f"共获得 {total_bill_won:.2f}元话费 (含1000点兑换{redeemed_10_count}次·已自动入账)"
-        else:
-            bill_msg = f"共获得 {total_bill_won:.2f}元话费 (已自动入账)"
+        bill_won_str = f"共获得 {total_bill_won:.2f}元话费 (已自动入账)"
     else:
-        bill_msg = "共获得 0元话费"
+        bill_won_str = "共获得 0元话费"
 
     if total_draw_count > 0:
-        bullets.append(f"• 点数翻牌抽奖: {bill_msg} (累计翻牌 {total_draw_count} 次)")
+        bullets.append(f"• 点数翻牌抽奖: {bill_won_str} (翻牌 {total_draw_count} 次)")
     else:
-        bullets.append(f"• 点数翻牌抽奖: {bill_msg} (今日可用点数已耗尽)")
+        bullets.append(f"• 点数翻牌抽奖: {bill_won_str} (今日可用点数已耗尽)")
 
     bullets.append(f"• 账户当前点数: 剩余 {remaining_score} 点数 (累计总点数: {total_score})")
     return bullets
