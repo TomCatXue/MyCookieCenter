@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 ===================================================================
-📌 版本: v1.1.0 (2026-09-20 体验券制作·积分翻牌·千分兑换全闭环自旋版)
+📌 版本: v1.1.1 (2026-09-20 核心基准通道回归与全闭环自旋稳定版)
 中国电信 · AI奇遇赢Pad (一键做同款获取点数与翻牌抽奖)
 ===================================================================
 new Env('中国电信 · AI奇遇赢Pad');
@@ -10,10 +10,12 @@ cron: 30 9 * * *
 tag: 中国电信
 # @tag 中国电信
 ===================================================================
-完整业务闭环架构：
-  制作AI视频(赚点) -> 查询积分 -> [积分>=1000:兑换10元继续] -> [积分>=20:翻牌抽奖]
-  -> 抽中20/40点(继续翻牌) -> 抽中体验券(回到制作继续赚点) -> 翻牌 -> 闭环自旋
-  直至：制作次数为0 且 体验券为0 且 积分不足20点且不足1000点，所有可执行链耗尽方休。
+架构说明：
+  1. 回归已实测成功的官方基准通道配置 (CHANNEL_ID=156000009079, ve_3949/2JCd/463)。
+  2. 消除二次消费 Ticket 导致的 0007 报错；直连官方 SSO 换发，自动注入官方会话 Cookie。
+  3. 闭环自旋状态机：做同款赚点 -> 积分>=1000兑换10元 -> 积分>=20翻牌抽奖 -> 抽中体验券继续做同款。
+  4. 严格统计话费：累计 1000点兑换的10元与翻牌抽中的1元话费总额。
+  5. 规范通知：对齐微信读书单行 Bullet 极简排版，使用青龙默认推送。
 
 环境变量配置：
   dxlin (或 CHINA_TELECOM_AUTH / dxqy)
@@ -65,26 +67,16 @@ except ImportError:
     HAS_NOTIFY = False
     ql_send = None
 
-SCRIPT_VERSION = "v1.1.0"
+SCRIPT_VERSION = "v1.1.1"
 
-# ==================== 🛠️ 活动与平台常量配置 ====================
-CHANNEL_ID = "156000009083"
+# ==================== 🛠️ 活动与平台常量配置 (100%回归实测成功基准) ====================
+CHANNEL_ID = "156000009079"
 ACTIVITY_ID = "ai119"
-TEMPLATE_ID = "ve_4361"
-DEFAULT_TEMPLATE_CONF_ID = "2T3C"
-DEFAULT_ARRANGE_ID = 451
+ACTIVITY_ID_TPL = "ai119_4"
+TEMPLATE_ID = "ve_3949"
+DEFAULT_TEMPLATE_CONF_ID = "2JCd"
+DEFAULT_ARRANGE_ID = 463
 LOTTERY_COST_SCORE = 20
-
-CHANNEL_RANKS = {
-    "156000008545": "ai119_1",
-    "156000009009": "ai119_2",
-    "156000008996": "ai119_3",
-    "156000009079": "ai119_4",
-    "156000009080": "ai119_5",
-    "156000009081": "ai119_6",
-    "156000009082": "ai119_7",
-    "156000009083": "ai119_8"
-}
 
 KEYS = {
     'login_rsa': """-----BEGIN PUBLIC KEY-----
@@ -192,7 +184,7 @@ def get_imusic_headers(crypto_inst: ImCrypto, token: str = "") -> dict:
         "User-Agent": "Mozilla/5.0 (Linux; Android 13; 22081212C Build/TKQ1.220829.002) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/104.0.5112.97 Mobile Safari/537.36",
         "Accept": "application/json, text/plain, */*",
         "Origin": "https://ai.imusic.cn",
-        "Referer": f"https://ai.imusic.cn/h5v/fusion/ai-luck-winnew?cc={CHANNEL_ID}&ca=KCHF",
+        "Referer": f"https://ai.imusic.cn/h5v/fusion/ai-luck-winnew?cc={CHANNEL_ID}&ca=w7x6",
         "imencrypt": "1",
         "imtimestamp": crypto_inst.ts,
         "imrandomnum": crypto_inst.rdm,
@@ -221,13 +213,14 @@ def refresh_sso_token(sess: requests.Session, ticket: str) -> Optional[str]:
         res = sess.post(
             "https://ai.imusic.cn/vapi/vue_login/sso_login_v2",
             json={"portal": "45", "channelId": CHANNEL_ID, "ticket": ticket, "user118100cn": "user118100cn"},
-            headers={"Content-Type": "application/json", "Referer": f"https://ai.imusic.cn/h5v/fusion/ai-luck-winnew?cc={CHANNEL_ID}&ca=KCHF"},
+            headers={"Content-Type": "application/json", "Referer": f"https://ai.imusic.cn/h5v/fusion/ai-luck-winnew?cc={CHANNEL_ID}&ca=w7x6"},
             timeout=15
         ).json()
         tok = res.get("token")
         if tok:
             sess.cookies.set('loginState', 'true', domain='ai.imusic.cn')
             sess.cookies.set('cc', CHANNEL_ID, domain='ai.imusic.cn')
+            sess.cookies.set('imusic', f'118100{int(time.time() * 1000)}', domain='ai.imusic.cn')
         return tok
     except Exception:
         return None
@@ -249,7 +242,7 @@ def warmup_session(sess: requests.Session, crypto_inst: ImCrypto, token: str, mo
         r1 = sess.post(f"https://ai.imusic.cn/vapi/new_member/get_user_info?channelId={CHANNEL_ID}&portal=45&mobile={mobile}", headers=h, data="", timeout=10)
         auth1 = r1.headers.get("authorization") or r1.headers.get("Authorization")
         if auth1: token = auth1.replace("Bearer ", "").strip()
-        
+
         r2 = sess.post(f"https://ai.imusic.cn/vapi/vrbt/check_user_state?mobile={mobile}&is4G=1&is5G=1&isDX=1&channelId={CHANNEL_ID}&portal=45", headers=get_imusic_headers(crypto_inst, token), data="", timeout=10)
         auth2 = r2.headers.get("authorization") or r2.headers.get("Authorization")
         if auth2: token = auth2.replace("Bearer ", "").strip()
@@ -406,14 +399,7 @@ def login_telecom(sess: requests.Session, phone: str, password: str, android_id:
         log(f"❌ [解析Ticket异常] {m_phone}: {str(e)}")
         return None
 
-    # 1. 优先通过活动原生入口触发官方 Set-Cookie 下发真实 imusic 与 JSESSIONID
-    try:
-        entry_url = f"https://ai.imusic.cn/ca/w7x6?ticket={urllib.parse.quote(ticket)}&utm_scha=utm_ch-010001002009.utm_sch-hg_sy_aiczjdt-1.utm_af-1000000037.utm_as-566215800001.utm_sd1-S00173883"
-        sess.get(entry_url, timeout=12, allow_redirects=True)
-    except Exception:
-        pass
-
-    # 2. 换发爱音乐平台 SSO 登录 Token
+    # 直连换发爱音乐平台 SSO 登录 Token (保护 Ticket 单次消费时效)
     log(f"[认证] 正在向爱音乐网关换发活动鉴权 Token: {m_phone}")
     sso_payload = {
         "portal": "45",
@@ -425,7 +411,7 @@ def login_telecom(sess: requests.Session, phone: str, password: str, android_id:
         sso_resp = sess.post(
             "https://ai.imusic.cn/vapi/vue_login/sso_login_v2",
             json=sso_payload,
-            headers={"Content-Type": "application/json", "Referer": f"https://ai.imusic.cn/h5v/fusion/ai-luck-winnew?cc={CHANNEL_ID}&ca=KCHF"},
+            headers={"Content-Type": "application/json", "Referer": f"https://ai.imusic.cn/h5v/fusion/ai-luck-winnew?cc={CHANNEL_ID}&ca=w7x6"},
             timeout=15
         ).json()
     except Exception as e:
@@ -437,9 +423,10 @@ def login_telecom(sess: requests.Session, phone: str, password: str, android_id:
         log(f"❌ [爱音乐SSO失败] {m_phone}: {sso_resp.get('description') or '未获取到平台Token'}")
         return None
 
-    # 保障关键身份 Cookie 处于激活态
+    # 注入官方会话 Cookie
     sess.cookies.set('loginState', 'true', domain='ai.imusic.cn')
     sess.cookies.set('cc', CHANNEL_ID, domain='ai.imusic.cn')
+    sess.cookies.set('imusic', f'118100{int(time.time() * 1000)}', domain='ai.imusic.cn')
 
     log(f"✅ [认证成功] {m_phone}: 成功获取爱音乐活动鉴权 Token！")
     return {
@@ -452,18 +439,16 @@ def login_telecom(sess: requests.Session, phone: str, password: str, android_id:
 
 # ==================== 🎬 动态拉取当期模板元数据 ====================
 def query_template_meta(sess: requests.Session, token: str) -> dict:
-    rank_id = CHANNEL_RANKS.get(CHANNEL_ID, "ai119_8")
-    url = f"https://ai.imusic.cn/hapi/de/api?pageNo=1&pageSize=10&activityId={rank_id}&apiName=diy/DiyVideoApi/queryActRecommendTemplateList&channelId={CHANNEL_ID}&portal=45"
+    url = f"https://ai.imusic.cn/hapi/de/api?pageNo=1&pageSize=10&activityId={ACTIVITY_ID_TPL}&apiName=diy/DiyVideoApi/queryActRecommendTemplateList&channelId={CHANNEL_ID}&portal=45"
     headers = {"Authorization": f"Bearer {token}", "User-Agent": "Mozilla/5.0 (Linux; Android 13)"}
     default_meta = {
         "templateId": TEMPLATE_ID,
         "templateConfId": DEFAULT_TEMPLATE_CONF_ID,
         "arrangeId": DEFAULT_ARRANGE_ID,
-        "videoName": "月满庆中秋",
+        "videoName": "太空奇旅",
         "userWords": "复古科幻风格，太空宇航员与飞船探索宇宙",
         "background": "",
-        "isAI": 0,
-        "all_templates": []
+        "isAI": 0
     }
     try:
         r = sess.post(url, headers=headers, timeout=10).json()
@@ -474,17 +459,16 @@ def query_template_meta(sess: requests.Session, token: str) -> dict:
                 "templateId": t.get("templateId") or TEMPLATE_ID,
                 "templateConfId": t.get("templateConfId") or DEFAULT_TEMPLATE_CONF_ID,
                 "arrangeId": t.get("arrangeId") or DEFAULT_ARRANGE_ID,
-                "videoName": t.get("videoName") or "月满庆中秋",
+                "videoName": t.get("videoName") or "太空奇旅",
                 "userWords": t.get("userWords") or default_meta["userWords"],
                 "background": t.get("background") or "",
-                "isAI": 1 if str(t.get("isAI", 0)) == "1" else 0,
-                "all_templates": items
+                "isAI": 1 if str(t.get("isAI", 0)) == "1" else 0
             }
     except Exception:
         pass
     return default_meta
 
-# ==================== 🎯 核心业务执行（闭环自旋状态机） ====================
+# ==================== 🎯 核心业务执行（全闭环自旋状态机） ====================
 def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
     phone = user['phone']
     m_phone = mask(phone)
@@ -540,10 +524,10 @@ def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
         log(f"[{m_phone}] 制作资格官方核验: {initial_tip or f'体验券{exp_work_num}次 / 免费{free_left_num}次'}")
     else:
         initial_tip = ""
-        log(f"[{m_phone}] 制作资格查询接口暂未返回，不阻断执行，继续尝试制作...")
+        log(f"[{m_phone}] 制作资格查询暂未响应，不阻断执行，继续尝试制作...")
 
-    # ==================== 4. 闭环状态机主循环 ====================
-    # 制作AI视频 -> 赚取点数 -> 满1000兑换10元 -> 翻牌抽奖 -> 抽中点数连抽 -> 抽中体验券制作 -> 循环推进
+    # ==================== 4. 闭环自旋状态机主循环 ====================
+    # 制作AI视频(赚点) -> 查询积分 -> 满1000兑换10元 -> 翻牌抽奖 -> 抽中点数连抽 -> 抽中体验券制作赚点 -> 循环
     total_make_success = 0
     total_draw_count = 0
     total_bill_won = 0.0
@@ -554,86 +538,81 @@ def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
     max_outer_loops = 30
     outer_loop_count = 0
 
-    candidate_templates = tpl_meta.get("all_templates", [])
-    if not candidate_templates:
-        candidate_templates = [tpl_meta]
-
     while outer_loop_count < max_outer_loops:
         outer_loop_count += 1
         has_progress = False
 
-        # --- A. 制作环节（若有制作额度/体验券） ---
+        # --- A. 制作环节（消耗免费额度或体验券，全部跑完） ---
         if can_make_more:
-            round_made = 0
-            for t_item in candidate_templates:
-                cur_tid = t_item.get("templateId") or TEMPLATE_ID
-                cur_conf = t_item.get("templateConfId") or DEFAULT_TEMPLATE_CONF_ID
-                cur_arr = t_item.get("arrangeId") or DEFAULT_ARRANGE_ID
-                cur_vname = t_item.get("videoName") or tpl_meta["videoName"]
-                cur_words = t_item.get("userWords") or tpl_meta["userWords"]
-                cur_bg = t_item.get("background") or ""
-                cur_is_ai = 1 if str(t_item.get("isAI", 0)) == "1" else 0
+            attempt_count = 0
+            while attempt_count < 10:
+                attempt_count += 1
+                token = premake_prepare(sess, crypto, token, phone, tpl_meta)
+                rand_name = f"{tpl_meta['videoName']}{random.randint(100000, 999999)}"
+                payload = OrderedDict([
+                    ("channelId", CHANNEL_ID), ("portal", "45"), ("mobile", phone),
+                    ("openId", ""), ("makeId", ""), ("background", tpl_meta.get("background", "")), ("userPhotos", ""),
+                    ("userWords", tpl_meta["userWords"]),
+                    ("templateName", rand_name), ("videoName", rand_name),
+                    ("templateId", tpl_meta["templateId"]), ("templateConfId", tpl_meta["templateConfId"]), ("aid", ACTIVITY_ID),
+                    ("inviterMobile", en_code), ("isAI", tpl_meta.get("isAI", 0)), ("aiPack", 0), ("arrangeId", tpl_meta.get("arrangeId", DEFAULT_ARRANGE_ID)),
+                    ("autoOrderUgc", 0), ("aiGatewayImagMakeId", ""), ("fromType", ""),
+                    ("sessionId", ""), ("voice", ""), ("invitationCode", en_code)
+                ])
 
-                attempt_count = 0
-                while attempt_count < 10:
-                    attempt_count += 1
-                    token = premake_prepare(sess, crypto, token, phone, t_item)
-                    rand_name = f"{cur_vname}{random.randint(100000, 999999)}"
-                    payload = OrderedDict([
-                        ("channelId", CHANNEL_ID), ("portal", "45"), ("mobile", phone),
-                        ("openId", ""), ("makeId", ""), ("background", cur_bg), ("userPhotos", ""),
-                        ("userWords", cur_words),
-                        ("templateName", rand_name), ("videoName", rand_name),
-                        ("templateId", cur_tid), ("templateConfId", cur_conf), ("aid", ACTIVITY_ID),
-                        ("inviterMobile", en_code), ("isAI", cur_is_ai), ("aiPack", 0), ("arrangeId", cur_arr),
-                        ("autoOrderUgc", 0), ("aiGatewayImagMakeId", ""), ("fromType", ""),
-                        ("sessionId", ""), ("voice", ""), ("invitationCode", en_code)
-                    ])
-
-                    r_make, token = post_encrypted_api(sess, crypto, token, "/hapi/diy_video/au/template_make_add_v2", payload)
+                # 采用抓包验证的直接发包形态
+                crypto.refresh()
+                enc_str = crypto.encrypt(payload)
+                api_url = f"https://ai.imusic.cn/hapi/diy_video/au/template_make_add_v2?formData={urllib.parse.quote(enc_str)}"
+                h = get_imusic_headers(crypto, token)
+                try:
+                    r_make = sess.post(api_url, headers=h, data="", timeout=15)
+                    new_auth = r_make.headers.get("authorization") or r_make.headers.get("Authorization")
+                    if new_auth: token = new_auth.replace("Bearer ", "").strip()
                     dec_resp = crypto.decrypt(r_make.text)
+                except Exception as e:
+                    log(f"[{m_phone}] 制作网络异常: {str(e)}")
+                    break
 
-                    # 0007 Token 自动续期
-                    if "0007" in dec_resp:
+                # 0007 Token 自动续期并重试
+                if "0007" in dec_resp:
+                    new_tok = refresh_sso_token(sess, ticket)
+                    if new_tok:
+                        token = new_tok
+                        token = premake_prepare(sess, crypto, token, phone, tpl_meta)
+                        time.sleep(1)
+                        crypto.refresh()
+                        r_make = sess.post(api_url, headers=get_imusic_headers(crypto, token), data="", timeout=15)
+                        dec_resp = crypto.decrypt(r_make.text)
+
+                # 10013 风控自动 remedy 补救
+                if "10013" in dec_resp:
+                    trace_id = safe_get(json.loads(dec_resp), "imuTraceId", default="") if dec_resp.startswith('{') else ""
+                    try:
+                        send_stat_message(sess, crypto, token, phone, "page_vring_index", f"玩转AI赢手机_activityID_{ACTIVITY_ID}_entrance_{CHANNEL_ID}")
+                        send_stat_message(sess, crypto, token, phone, "activity_vring_make_1.9", f"_activityID_{ACTIVITY_ID}_entrance_{CHANNEL_ID}")
+                        rem_en = crypto.encrypt({"method": "remedy", "traceId": trace_id, "mobile": phone})
+                        sess.post(f"https://ai.imusic.cn/hapi/en/api?formData={urllib.parse.quote(rem_en)}", headers=get_imusic_headers(crypto, token), data="", timeout=15)
                         new_tok = refresh_sso_token(sess, ticket)
-                        if new_tok:
-                            token = new_tok
-                            token = premake_prepare(sess, crypto, token, phone, t_item)
-                            time.sleep(1)
-                            r_make, token = post_encrypted_api(sess, crypto, token, "/hapi/diy_video/au/template_make_add_v2", payload)
-                            dec_resp = crypto.decrypt(r_make.text)
+                        if new_tok: token = new_tok
+                        token = premake_prepare(sess, crypto, token, phone, tpl_meta)
+                        time.sleep(1)
+                        crypto.refresh()
+                        r_make = sess.post(api_url, headers=get_imusic_headers(crypto, token), data="", timeout=15)
+                        dec_resp = crypto.decrypt(r_make.text)
+                    except Exception:
+                        pass
 
-                    # 10013 风控自动 remedy 补救
-                    if "10013" in dec_resp:
-                        trace_id = safe_get(json.loads(dec_resp), "imuTraceId", default="") if dec_resp.startswith('{') else ""
-                        try:
-                            send_stat_message(sess, crypto, token, phone, "page_vring_index", f"玩转AI赢手机_activityID_{ACTIVITY_ID}_entrance_{CHANNEL_ID}")
-                            send_stat_message(sess, crypto, token, phone, "activity_vring_make_1.9", f"_activityID_{ACTIVITY_ID}_entrance_{CHANNEL_ID}")
-                            rem_en = crypto.encrypt({"method": "remedy", "traceId": trace_id, "mobile": phone})
-                            sess.post(f"https://ai.imusic.cn/hapi/en/api?formData={urllib.parse.quote(rem_en)}", headers=get_imusic_headers(crypto, token), data="", timeout=15)
-                            new_tok = refresh_sso_token(sess, ticket)
-                            if new_tok: token = new_tok
-                            token = premake_prepare(sess, crypto, token, phone, t_item)
-                            time.sleep(1)
-                            r_make, token = post_encrypted_api(sess, crypto, token, "/hapi/diy_video/au/template_make_add_v2", payload)
-                            dec_resp = crypto.decrypt(r_make.text)
-                        except Exception:
-                            pass
-
-                    if '"code":"0000"' in dec_resp:
-                        round_made += 1
-                        total_make_success += 1
-                        has_progress = True
-                        log(f"[{m_phone}] ✅ 「一键做同款」制作成功！[{cur_vname}] (已下发点数与Pad券码)")
-                        time.sleep(1.5)
-                    elif "10014" in dec_resp or "次数已用完" in dec_resp or "免费次数已用完" in dec_resp or "机会已用" in dec_resp or "不足" in dec_resp:
-                        can_make_more = False
-                        break
-                    else:
-                        log(f"[{m_phone}] 制作反馈: {dec_resp[:80]}")
-                        break
-
-                if not can_make_more or round_made > 0:
+                if '"code":"0000"' in dec_resp:
+                    total_make_success += 1
+                    has_progress = True
+                    log(f"[{m_phone}] ✅ 「一键做同款」制作成功！[{tpl_meta['videoName']}] (已下发点数与Pad券码)")
+                    time.sleep(1.5)
+                elif "10014" in dec_resp or "次数已用完" in dec_resp or "免费次数已用完" in dec_resp or "机会已用" in dec_resp or "不足" in dec_resp:
+                    can_make_more = False
+                    break
+                else:
+                    log(f"[{m_phone}] 制作反馈: {dec_resp[:80]}")
                     break
 
         # --- B. 查询服务端实时权威积分 ---
@@ -641,7 +620,7 @@ def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
         lottery_chances = remaining_score // LOTTERY_COST_SCORE
         log(f"[{m_phone}] [闭环第{outer_loop_count}轮] 积分核验: 可用点数={remaining_score}, 累计总点数={total_score}, 可翻牌={lottery_chances}次")
 
-        # --- C. 满 1000 点兑换 10 元话费（兑换成功继续闭环，不结束任务） ---
+        # --- C. 满 1000 点兑换 10 元话费（兑换成功继续闭环，绝不结束任务） ---
         if remaining_score >= 1000:
             log(f"[{m_phone}] 💎 发现当前可用点数 >= 1000 ({remaining_score}点)，立即执行兑换 10 元话费...")
             send_stat_message(sess, crypto, token, phone, "activity_2603AI-meet_1.12", f"activityID_{ACTIVITY_ID}_entrance_{CHANNEL_ID}")
@@ -666,10 +645,9 @@ def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
                 else:
                     log(f"[{m_phone}] 兑换反馈: {rdm_obj.get('desc') or dec_rdm[:60]}")
             time.sleep(1)
-            # 兑换后重新查询服务端积分，不结束任务，继续当前主闭环
             total_score, remaining_score, token = query_server_score(sess, crypto, token, phone, ticket)
 
-        # --- D. 翻牌抽大奖循环 (点数 >= 20，接口成功才扣分) ---
+        # --- D. 翻牌抽大奖循环 (点数 >= 20，接口成功才扣除20点) ---
         won_tickets_count = 0
         while remaining_score >= LOTTERY_COST_SCORE and total_draw_count < 150:
             send_stat_message(sess, crypto, token, phone, "activity_2603AI-meet_1.15", f"activityID_{ACTIVITY_ID}_entrance_{CHANNEL_ID}")
@@ -712,7 +690,7 @@ def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
                     log(f"[{m_phone}] 翻牌未通过: [{d_obj.get('desc') or '失败'}]，结束本轮连抽")
                     break
 
-                # 只有接口明确成功后才扣减单次翻牌积分
+                # 接口确认成功才扣减单次翻牌积分
                 total_draw_count += 1
                 remaining_score -= LOTTERY_COST_SCORE
                 has_progress = True
@@ -742,7 +720,7 @@ def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
 
             time.sleep(1.2)
 
-        # 翻牌后再次复核服务端真实积分
+        # 翻牌后再次复核服务端权威积分
         total_score, remaining_score, token = query_server_score(sess, crypto, token, phone, ticket)
 
         # --- E. 闭环检查：若有新体验券，继续进入下一轮制作赚点 ---
