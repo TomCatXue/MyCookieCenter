@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 ===================================================================
-📌 版本: v1.0.3 (2026-09-20 点数翻牌抽奖与话费统计版)
+📌 版本: v1.0.4 (2026-09-20 自动翻牌连抽与Token防失效增强版)
 中国电信 · AI奇遇赢Pad (一键做同款获取点数与翻牌抽奖)
 ===================================================================
 new Env('中国电信 · AI奇遇赢Pad');
@@ -13,8 +13,8 @@ tag: 中国电信
 活动说明：
   1. 一键做同款：每位电信用户每3天获赠3次免费AI制作，每次获得20点数+1张Pad抽奖券码。
   2. 点数翻牌抽奖：每次消耗20点数翻牌抽奖(act/LaborApi/operationIntegralLottery)，
-     若抽中点数(20/40点)则一直抽直到没有点数为止，汇报通知中统计共获得的话费总额。
-  3. 券码抽iPad：每期15天送出苹果iPad平板，系统根据加密种子密文自动开奖。
+     若抽中点数(20/40点)则一直抽直到没有点数为止，汇报通知中严格统计共获得的话费总额。
+  3. 全链路鉴权防失效：动态刷新时间戳，命中 10013(风控)与 0007(凭证过期)自动通过 Ticket 重签。
   4. 规范通知：对齐微信读书单行 Bullet 极简排版，使用青龙默认推送。
 
 环境变量配置：
@@ -67,7 +67,7 @@ except ImportError:
     HAS_NOTIFY = False
     ql_send = None
 
-SCRIPT_VERSION = "v1.0.3"
+SCRIPT_VERSION = "v1.0.4"
 
 # ==================== 🛠️ 活动与平台常量配置 (对齐最新抓包事实) ====================
 CHANNEL_ID = "156000009083"
@@ -154,6 +154,9 @@ def encrypt_rsa(data: Any, key_pem: str, out: str = 'b64') -> str:
 # ==================== 🔐 爱音乐专属 AES 动态加解密引擎 ====================
 class ImCrypto:
     def __init__(self):
+        self.refresh()
+
+    def refresh(self):
         self.ts = str(int(time.time() * 1000))
         self.rdm = ''.join(random.choices(string.ascii_lowercase + string.digits, k=16))
         m_ts = md5(self.ts)
@@ -193,6 +196,7 @@ def get_imusic_headers(crypto_inst: ImCrypto, token: str = "") -> dict:
     return headers
 
 def post_encrypted_api(sess: requests.Session, crypto_inst: ImCrypto, token: str, api_path: str, payload: Any) -> Tuple[requests.Response, str]:
+    crypto_inst.refresh()
     enc_data = crypto_inst.encrypt(payload)
     url = f"https://ai.imusic.cn{api_path}?formData={urllib.parse.quote(enc_data)}"
     headers = get_imusic_headers(crypto_inst, token)
@@ -203,6 +207,18 @@ def post_encrypted_api(sess: requests.Session, crypto_inst: ImCrypto, token: str
         if new_token:
             token = new_token
     return res, token
+
+def refresh_sso_token(sess: requests.Session, ticket: str) -> Optional[str]:
+    try:
+        res = sess.post(
+            "https://ai.imusic.cn/vapi/vue_login/sso_login_v2",
+            json={"portal": "45", "channelId": CHANNEL_ID, "ticket": ticket, "user118100cn": "user118100cn"},
+            headers={"Content-Type": "application/json", "Referer": f"https://ai.imusic.cn/h5v/fusion/ai-luck-winnew?cc={CHANNEL_ID}&ca=KCHF"},
+            timeout=15
+        ).json()
+        return res.get("token")
+    except Exception:
+        return None
 
 def send_stat_message(sess: requests.Session, crypto_inst: ImCrypto, token: str, mobile: str, actname: str, actparam: str) -> Tuple[requests.Response, str]:
     payload = OrderedDict([
@@ -218,12 +234,19 @@ def send_stat_message(sess: requests.Session, crypto_inst: ImCrypto, token: str,
 def warmup_session(sess: requests.Session, crypto_inst: ImCrypto, token: str, mobile: str) -> str:
     h = get_imusic_headers(crypto_inst, token)
     try:
-        sess.post(f"https://ai.imusic.cn/vapi/new_member/get_user_info?channelId={CHANNEL_ID}&portal=45&mobile={mobile}", headers=h, data="", timeout=10)
-        sess.post(f"https://ai.imusic.cn/vapi/vrbt/check_user_state?mobile={mobile}&is4G=1&is5G=1&isDX=1&channelId={CHANNEL_ID}&portal=45", headers=h, data="", timeout=10)
+        r1 = sess.post(f"https://ai.imusic.cn/vapi/new_member/get_user_info?channelId={CHANNEL_ID}&portal=45&mobile={mobile}", headers=h, data="", timeout=10)
+        auth1 = r1.headers.get("authorization") or r1.headers.get("Authorization")
+        if auth1: token = auth1.replace("Bearer ", "").strip()
+        
+        r2 = sess.post(f"https://ai.imusic.cn/vapi/vrbt/check_user_state?mobile={mobile}&is4G=1&is5G=1&isDX=1&channelId={CHANNEL_ID}&portal=45", headers=get_imusic_headers(crypto_inst, token), data="", timeout=10)
+        auth2 = r2.headers.get("authorization") or r2.headers.get("Authorization")
+        if auth2: token = auth2.replace("Bearer ", "").strip()
+        
         en_init = crypto_inst.encrypt({"channelId": CHANNEL_ID, "portal": "45", "mobile": mobile, "method": "init"})
-        sess.post(f"https://ai.imusic.cn/hapi/en/api?formData={urllib.parse.quote(en_init)}", headers=h, data="", timeout=10)
+        sess.post(f"https://ai.imusic.cn/hapi/en/api?formData={urllib.parse.quote(en_init)}", headers=get_imusic_headers(crypto_inst, token), data="", timeout=10)
+        
         ugc_p = crypto_inst.encrypt({"channelId": CHANNEL_ID, "portal": "45", "mobile": mobile})
-        sess.post(f"https://ai.imusic.cn/hapi/diy_ugc/imu/get_ugc_info?formData={urllib.parse.quote(ugc_p)}", headers=h, data="", timeout=10)
+        sess.post(f"https://ai.imusic.cn/hapi/diy_ugc/imu/get_ugc_info?formData={urllib.parse.quote(ugc_p)}", headers=get_imusic_headers(crypto_inst, token), data="", timeout=10)
     except Exception:
         pass
     time.sleep(0.3)
@@ -425,10 +448,26 @@ def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
         h = get_imusic_headers(crypto, token)
         try:
             r_make = sess.post(api_url, headers=h, data="", timeout=15)
+            new_auth = r_make.headers.get("authorization") or r_make.headers.get("Authorization")
+            if new_auth: token = new_auth.replace("Bearer ", "").strip()
             dec_resp = crypto.decrypt(r_make.text)
         except Exception as e:
             log(f"[{m_phone}] 第 {attempt} 次制作网络异常: {str(e)}")
             break
+
+        # 检查是否命中 0007 (Token异常/需重登)，自动重新签发 SSO 刷新凭证
+        if "0007" in dec_resp:
+            log(f"[{m_phone}] 触发凭据刷新 (0007)，正在通过 SSO Ticket 自动续期...")
+            new_tok = refresh_sso_token(sess, ticket)
+            if new_tok:
+                token = new_tok
+                token = premake_prepare(sess, crypto, token, phone, tpl_meta)
+                time.sleep(1)
+                try:
+                    r_retry = sess.post(api_url, headers=get_imusic_headers(crypto, token), data="", timeout=15)
+                    dec_resp = crypto.decrypt(r_retry.text)
+                except Exception:
+                    pass
 
         # 检查是否命中 10013 风控并触发官方 remedy 自动补救
         if "10013" in dec_resp:
@@ -439,15 +478,8 @@ def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
                 send_stat_message(sess, crypto, token, phone, "activity_vring_make_1.9", f"_activityID_{ACTIVITY_ID}_entrance_{CHANNEL_ID}")
                 rem_en = crypto.encrypt({"method": "remedy", "traceId": trace_id, "mobile": phone})
                 sess.post(f"https://ai.imusic.cn/hapi/en/api?formData={urllib.parse.quote(rem_en)}", headers=get_imusic_headers(crypto, token), data="", timeout=15)
-                # 重新刷新 SSO Token
-                res_refresh = sess.post(
-                    "https://ai.imusic.cn/vapi/vue_login/sso_login_v2",
-                    json={"portal": "45", "channelId": CHANNEL_ID, "ticket": ticket, "user118100cn": "user118100cn"},
-                    headers={"Content-Type": "application/json", "Referer": f"https://ai.imusic.cn/h5v/fusion/ai-luck-winnew?cc={CHANNEL_ID}&ca=KCHF"},
-                    timeout=15
-                ).json()
-                if res_refresh.get("token"):
-                    token = res_refresh["token"]
+                new_tok = refresh_sso_token(sess, ticket)
+                if new_tok: token = new_tok
                 token = premake_prepare(sess, crypto, token, phone, tpl_meta)
                 time.sleep(1)
                 r_make_retry = sess.post(api_url, headers=get_imusic_headers(crypto, token), data="", timeout=15)
@@ -460,7 +492,7 @@ def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
             earned_points += 20
             log(f"[{m_phone}] 第 {attempt} 次「一键做同款」制作成功！(+20点数, +1Pad抽奖券码)")
             time.sleep(1.5)
-        elif "免费次数已用完" in dec_resp or "机会已用" in dec_resp or "不足" in dec_resp:
+        elif "10014" in dec_resp or "次数已用完" in dec_resp or "免费次数已用完" in dec_resp or "机会已用" in dec_resp or "不足" in dec_resp:
             log(f"[{m_phone}] 免费制作次数已耗尽 (每3天赠送3次免费机会)")
             break
         else:
@@ -521,6 +553,19 @@ def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
             ("portal", "45")
         ]))
         dec_score = crypto.decrypt(r_score.text)
+        if "0007" in dec_score:
+            new_tok = refresh_sso_token(sess, ticket)
+            if new_tok:
+                token = new_tok
+                r_score, token = post_encrypted_api(sess, crypto, token, "/hapi/en/api", OrderedDict([
+                    ("activityId", ACTIVITY_ID),
+                    ("mobile", phone),
+                    ("apiName", "act/LaborApi/getOperationTotalScoreOrRemainingScore"),
+                    ("channelId", CHANNEL_ID),
+                    ("portal", "45")
+                ]))
+                dec_score = crypto.decrypt(r_score.text)
+
         if dec_score.startswith('{'):
             s_data = json.loads(dec_score).get("data") or {}
             total_score = str(s_data.get("totalScore", "0"))
@@ -556,6 +601,20 @@ def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
         except Exception as e:
             log(f"[{m_phone}] 第 {draw_idx} 次翻牌网络异常: {str(e)}")
             break
+
+        if "0007" in dec_draw:
+            log(f"[{m_phone}] 翻牌触发鉴权刷新 (0007)，正在重新换发 SSO 凭证...")
+            new_tok = refresh_sso_token(sess, ticket)
+            if new_tok:
+                token = new_tok
+                r_draw, token = post_encrypted_api(sess, crypto, token, "/hapi/en/api", OrderedDict([
+                    ("activityId", ACTIVITY_ID),
+                    ("mobile", phone),
+                    ("apiName", "act/LaborApi/operationIntegralLottery"),
+                    ("channelId", CHANNEL_ID),
+                    ("portal", "45")
+                ]))
+                dec_draw = crypto.decrypt(r_draw.text)
 
         if dec_draw.startswith('{'):
             d_obj = json.loads(dec_draw)
