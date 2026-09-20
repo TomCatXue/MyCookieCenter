@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 ===================================================================
-📌 版本: v1.1.3 (2026-09-20 微信读书通知版)
+📌 版本: v1.1.4 (2026-09-20 具体收益与战果回显版)
 中国联通 · 每日签到与福利任务聚合脚本
 ===================================================================
 new Env('中国联通 · 每日签到与福利');
@@ -54,7 +54,7 @@ from requests.packages.urllib3.util.retry import Retry
 from Crypto.Cipher import AES, PKCS1_v1_5
 from Crypto.PublicKey import RSA
 from Crypto.Util.Padding import pad, unpad
-SCRIPT_VERSION = "v1.1.3"
+SCRIPT_VERSION = "v1.1.4"
 # ========================================
 # 全局配置 (globalConfig)
 # true=开启, false=关闭
@@ -6622,88 +6622,109 @@ def format_wechat_reading_summary(users):
             balance_msg = None
             for l in logs:
                 if "当前余额" in l and "实时话费" in l:
-                    m = re.search(r"当前余额:s*([^,]+),s*实时话费:s*([^\s]+)", l)
+                    m = re.search(r"当前余额:\s*([^,]+),\s*实时话费:\s*([^\s]+)", l)
                     if m:
                         balance_msg = f"余额 {m.group(1)} · 实时话费 {m.group(2)}"
                         break
             if balance_msg:
                 bullets.append(f"• 账户话费资产: {balance_msg}")
 
-            # 2. 首页签到
-            sign_info = []
+            # 2. 首页日常签到
+            sign_earned = None
             for l in logs:
-                if "签到区今天已签到" in l or "签到区今天未签到" in l:
-                    sign_info.append("今日已签到" if "已签到" in l else "今日新签到")
-                elif "签到区-话费红包" in l:
-                    m = re.search(r"增加s*([0-9\.]+元)", l)
+                if "签到区-话费红包" in l:
+                    m = re.search(r"增加\s*([0-9\.]+元)", l)
                     if m:
-                        sign_info.append(f"红包 +{m.group(1)}")
-            if sign_info:
-                bullets.append(f"• 首页日常签到: {' · '.join(sign_info)}")
+                        sign_earned = f"获得 {m.group(1)}话费红包"
+                        break
+                elif "签到区-月签有礼" in l:
+                    sign_earned = l.split("月签有礼:")[-1].strip()
+                    break
+            
+            is_signed = any("签到区今天已签到" in l for l in logs)
+            if sign_earned:
+                bullets.append(f"• 首页日常签到: {sign_earned} · 今日已签")
+            elif is_signed:
+                bullets.append("• 首页日常签到: 今日已完成签到 (+0元红包)")
             else:
-                bullets.append("• 首页日常签到: 签到打卡已完成")
+                bullets.append("• 首页日常签到: 签到打卡完成")
 
             # 3. 联通爱听
             aiting_info = None
             for l in logs:
                 if "爱听任务: 积分概览" in l:
-                    m = re.search(r"今日已赚s*([^,]+),s*当前余额s*([^\s]+)", l)
+                    m = re.search(r"今日已赚\s*([^,]+),\s*当前余额\s*([^\s]+)", l)
                     if m:
                         aiting_info = f"今日已赚 {m.group(1)}积分 · 积分余额 {m.group(2)}"
                         break
+                elif "爱听任务: 获得" in l:
+                    aiting_info = l.split("爱听任务:")[-1].strip()
             if aiting_info:
                 bullets.append(f"• 联通爱听积分: {aiting_info}")
 
             # 4. 天天领现金
-            ttlxj_info = []
+            ttlxj_prize = None
             for l in logs:
-                if "天天领现金" in l:
-                    if "已打卡" in l:
-                        ttlxj_info.append("今日已打卡")
-                    elif "抽奖成功" in l:
-                        p = l.split("抽奖成功:")[-1].strip()
-                        ttlxj_info.append(f"抽中 [{p}]")
-            if ttlxj_info:
-                bullets.append(f"• 天天领现金: {' · '.join(ttlxj_info)}")
+                if "天天领现金" in l and "抽奖成功" in l:
+                    p = l.split("抽奖成功:")[-1].strip()
+                    ttlxj_prize = f"抽中 [{p}]"
+                    break
+                elif "天天领现金: 获得" in l or "天天领现金: 打卡" in l:
+                    ttlxj_prize = l.split("天天领现金:")[-1].strip()
+            
+            if ttlxj_prize:
+                bullets.append(f"• 天天领现金: {ttlxj_prize} · 打卡成功")
+            elif any("天天领现金: 今天已打卡" in l for l in logs):
+                bullets.append("• 天天领现金: 今日已打卡完成")
 
             # 5. 权益超市
-            market_info = []
+            market_rewards = []
             for l in logs:
                 if "权益超市" in l:
                     if "抽奖成功" in l:
                         p = l.split("抽奖成功:")[-1].strip()
-                        market_info.append(f"抽奖获得 [{p}]")
+                        market_rewards.append(f"抽奖获得 [{p}]")
+                    elif "未中奖" in l:
+                        market_rewards.append("抽奖未中")
                     elif "会员中心" in l and "获得" in l:
                         p = l.split("会员中心:")[-1].strip()
-                        market_info.append(p.replace("✅", "").strip())
-            if market_info:
-                bullets.append(f"• 权益超市福利: {' · '.join(market_info[:2])}")
+                        market_rewards.append(p.replace("✅", "").strip())
+            if market_rewards:
+                bullets.append(f"• 权益超市福利: {' · '.join(market_rewards[:2])}")
             else:
-                bullets.append("• 权益超市福利: 任务与抽奖已完成")
+                bullets.append("• 权益超市福利: 领奖与抽奖已全部完成")
 
             # 6. 沃云手机
-            cloud_info = []
+            cloud_points = None
+            cloud_sign = None
             for l in logs:
                 if "沃云手机" in l:
                     if "当前积分" in l:
-                        p = l.split("当前积分")[-1].strip()
-                        cloud_info.append(f"当前积分 {p}")
+                        cloud_points = l.split("当前积分")[-1].strip()
                     elif "签到：" in l:
-                        p = l.split("签到：")[-1].strip()
-                        cloud_info.append(f"签到 {p}")
-            if cloud_info:
-                bullets.append(f"• 沃云手机福利: {' · '.join(cloud_info[:2])}")
+                        cloud_sign = l.split("签到：")[-1].strip()
+            
+            if cloud_points or cloud_sign:
+                cloud_desc = []
+                if cloud_sign: cloud_desc.append(f"签到: {cloud_sign}")
+                if cloud_points: cloud_desc.append(f"积分: {cloud_points}")
+                bullets.append(f"• 沃云手机福利: {' · '.join(cloud_desc)}")
 
-            # 7. 其他/安全管家/云盘
-            other_info = []
+            # 7. 其他专项福利
+            specials = []
             for l in logs:
-                if "安全管家: 用户" in l and "变动" in l:
-                    other_info.append("安全管家积分已领")
-                elif "家乡打卡" in l and "抽奖结果" in l:
+                if "家乡打卡" in l and "抽奖结果" in l:
                     p = l.split("抽奖结果")[-1].strip()
-                    other_info.append(f"云盘打卡 [{p}]")
-            if other_info:
-                bullets.append(f"• 专项福利汇聚: {' · '.join(other_info)}")
+                    specials.append(f"云盘抽奖 [{p}]")
+                elif "安全管家" in l and ("积分变动" in l or "新增" in l):
+                    m = re.search(r"新增:\s*([0-9]+)", l)
+                    if m: specials.append(f"安全管家 +{m.group(1)}积分")
+                elif "通通乡村" in l and "碳能量" in l:
+                    m = re.search(r"碳能量([0-9]+)g", l)
+                    if m: specials.append(f"乡村能量 +{m.group(1)}g")
+            
+            if specials:
+                bullets.append(f"• 专项福利收获: {' · '.join(specials[:2])}")
 
         if total_count > 1:
             blocks.append(f"【账号 {u.index}: {phone_str}】\n" + "\n".join(bullets))

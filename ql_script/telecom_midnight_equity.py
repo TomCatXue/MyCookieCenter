@@ -2,16 +2,16 @@
 # -*- coding: utf-8 -*-
 """
 ===================================================================
-📌 版本: v2.1.0 (2026-09-20 平日测试增强版)
+📌 版本: v2.2.0 (2026-09-20 每日轮询·抢到即休眠版)
 中国电信 · 0点等级会员权益兑换（高并发秒杀抢购脚本）
 ===================================================================
 new Env('中国电信 · 0点等级权益兑换');
-cron: 58 23 28-31 * *
+cron: 58 23 * * *
 tag: 中国电信
 # @tag 中国电信
 ===================================================================
 功能说明：
-  1. 提前预热：夜间 23:59:00 并行多账号登录换取 Ticket，并发建立会话。
+  1. 每日轮询：每天夜间 23:58 自动启动，未抢到天天抢，直到抢到为止！\n  2. 自动休眠：本月一旦抢到话费券，当月后续天数自动休眠跳过，直到下月重置。\n  3. 提前预热：夜间 23:59:00 并行多账号登录换取 Ticket，并发建立会话。
   2. 0点秒杀：00:00:00.100 准点突发高并发请求抢兑电信星级会员话费券。
   3. 智能窗口：非 23:55~23:59 期间触发安全退出，杜绝内存死等与面板超时杀进程。
   4. 支持调试：带参数 --test 可跳过等待立即测试账号登录与全链路准备。
@@ -1853,15 +1853,17 @@ def build_summary(all_accounts, accounts_to_run, skipped_phones, result_log):
 # ============================================================
 
 def main():
-    global debug, test_only
+    global debug, test_only, claimed_log_file
+    claimed_log_file = globals().get("claimed_log_file") or "claimed_accounts.json"
     env_force = os.environ.get("FORCE_RUN", "").lower() in ["true", "1"] or \
                 os.environ.get("dxqy_force", "").lower() in ["true", "1"] or \
                 os.environ.get("TEST_RUN", "").lower() in ["true", "1"]
     cli_test = any(arg in sys.argv for arg in ["--test", "--login-test", "-t", "test"]) or os.environ.get("LOGIN_TEST") == "1"
     cli_debug = any(arg in sys.argv for arg in ["--debug", "--debug-all"]) or os.environ.get("DEBUG") == "1"
     force_run = CONFIG.get("FORCE_RUN", False) or env_force or cli_test or cli_debug
-    debug = force_run or DEBUG_MODE
-    test_only = force_run or DEBUG_MODE
+    debug_flag = globals().get("DEBUG_MODE", False)
+    debug = force_run or debug_flag
+    test_only = force_run or debug_flag
 
     if test_only:
 
