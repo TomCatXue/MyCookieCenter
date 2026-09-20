@@ -689,11 +689,8 @@ def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
                 remaining_score -= LOTTERY_COST_SCORE
                 log(f"[{m_phone}] 🎴 第 {total_draw_count} 次翻牌获得: [{p_name}]")
 
-                # 1. 严格优先判定 10 元话费，再判定 1 元话费（防止“10元”被“1元”模糊包含）
-                if '10元' in p_name or award_idx == '16330101':
-                    total_bill_won += 10.0
-                    log(f"[{m_phone}] 💰 斩获大额话费: +10.00元话费！")
-                elif '1元' in p_name or award_idx in ['16320105', '16320205', '16320305']:
+                # 1. 统计翻牌抽中的话费奖励 (翻牌奖池仅有 1元电信话费，概率 0.04%)
+                if '话费' in p_name or award_idx in ['16320105', '16320205', '16320305']:
                     total_bill_won += 1.0
                     log(f"[{m_phone}] 💰 斩获话费: +1.00元话费！")
 
