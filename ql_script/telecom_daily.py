@@ -38,6 +38,9 @@ from Crypto.Cipher import PKCS1_v1_5, DES3, AES
 from Crypto.Util.Padding import pad, unpad
 from requests.adapters import HTTPAdapter
 from urllib3.util.ssl_ import create_urllib3_context
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
 
 if hasattr(sys.stdout, 'reconfigure'):
     try:
@@ -165,63 +168,89 @@ def api_req(sess: requests.Session, url: str, method: str = 'POST', raw: bool = 
 # ==================== 📱 电信官方协议登录 ====================
 def login_telecom(sess: requests.Session, phone: str, password: str, android_id: str = "") -> Optional[Dict[str, Any]]:
     m_phone = mask(phone)
-    log(f"[登录] 正在通过电信官方协议登录: {m_phone}")
+    log(f"[登录] 正在通过电信官方协议登录账号: {m_phone}")
 
     pwd_clean = password.strip()
     if len(pwd_clean) > 6 and pwd_clean[:6].isdigit():
         pwd_clean = pwd_clean[:6]
 
-    aid = "".join(c for c in (android_id or "") if c in "0123456789abcdefABCDEF")[:16]
-    if len(aid) < 12:
-        aid = rd_str(16)
+    modes = ['0716_xiaomi', '0point_redmi'] if android_id else ['0point_redmi', '0716_xiaomi']
+    login_data = None
+    last_err_msg = ""
 
-    cur_ts = ts()
-    cipher_str = f"Xiaomi 20 8.0.0.{aid[:12]}{phone}{cur_ts}{pwd_clean}0$$$0."
-    login_cipher = encrypt_rsa(cipher_str, 'login', 'b64')
-
-    body = {
-        "headerInfos": {
-            "code": "userLoginNormal",
-            "timestamp": cur_ts,
-            "broadAccount": "",
-            "broadToken": "",
-            "clientType": "#11.0.0#channel8#Xiaomi 20#",
-            "shopId": "20002",
-            "source": "110003",
-            "sourcePassword": "Sid98s",
-            "token": "",
-            "userLoginName": encode_phone(phone)
-        },
-        "content": {
-            "attach": "test",
-            "fieldData": {
-                "loginType": "4",
-                "accountType": "",
-                "loginAuthCipherAsymmertric": login_cipher,
-                "deviceUid": "",
-                "phoneNum": encode_phone(phone),
-                "isChinatelecom": "",
-                "systemVersion": "8.0.0",
-                "androidId": encode_phone(aid),
-                "loginAuthCipher": "",
-                "authentication": encode_phone(pwd_clean)
+    for mode in modes:
+        cur_ts = ts()
+        if mode == '0716_xiaomi':
+            aid = android_id if android_id else rd_str(16)
+            cipher_str = f"Xiaomi 20 8.0.0.{aid[:12]}{phone}{cur_ts}{pwd_clean}0$$$0."
+            login_cipher = encrypt_rsa(cipher_str, KEYS['login_rsa'], 'b64')
+            body = {
+                "headerInfos": {
+                    "code": "userLoginNormal", "timestamp": cur_ts, "broadAccount": "", "broadToken": "",
+                    "clientType": "#11.0.0#channel8#Xiaomi 20#", "shopId": "20002",
+                    "source": "110003", "sourcePassword": "Sid98s", "token": "",
+                    "userLoginName": encode_phone(phone)
+                },
+                "content": {
+                    "attach": "test",
+                    "fieldData": {
+                        "loginType": "4", "accountType": "",
+                        "loginAuthCipherAsymmertric": login_cipher,
+                        "deviceUid": "", "phoneNum": encode_phone(phone),
+                        "isChinatelecom": "", "systemVersion": "8.0.0",
+                        "androidId": encode_phone(aid), "loginAuthCipher": "",
+                        "authentication": encode_phone(pwd_clean)
+                    }
+                }
             }
-        }
-    }
+        else:
+            device_hash = hashlib.md5(("iPhone14_" + phone).encode('utf-8')).hexdigest()
+            uuid_parts = [device_hash[:8], device_hash[8:12], "4" + device_hash[13:16], device_hash[16:20], device_hash[20:32]]
+            cipher_str = f"iPhone 14 15.4.{uuid_parts[0]}{uuid_parts[1]}{phone}{cur_ts}{pwd_clean[:6]}0$$$0."
+            login_cipher = encrypt_rsa(cipher_str, KEYS['login_rsa'], 'b64')
+            body = {
+                "headerInfos": {
+                    "code": "userLoginNormal", "timestamp": cur_ts, "broadAccount": "", "broadToken": "",
+                    "clientType": "#11.3.0#channel35#Xiaomi Redmi K30 Pro#", "shopId": "20002",
+                    "source": "110003", "sourcePassword": "Sid98s", "token": "",
+                    "userLoginName": encode_phone(phone)
+                },
+                "content": {
+                    "attach": "test",
+                    "fieldData": {
+                        "loginType": "4", "accountType": "",
+                        "loginAuthCipherAsymmertric": login_cipher,
+                        "deviceUid": uuid_parts[0] + uuid_parts[1] + uuid_parts[2],
+                        "phoneNum": encode_phone(phone), "isChinatelecom": "0",
+                        "systemVersion": "12", "androidId": "",
+                        "loginAuthCipher": "", "authentication": encode_phone(pwd_clean)
+                    }
+                }
+            }
 
-    res = api_req(sess, 'https://appgologin.189.cn:9031/login/client/userLoginNormal', json=body)
-    if not isinstance(res, dict):
-        log(f"❌ [登录失败] {m_phone}: 响应非JSON")
-        return None
+        res = api_req(sess, 'https://appgologin.189.cn:9031/login/client/userLoginNormal', json=body)
+        if isinstance(res, dict):
+            resp_data = res.get('responseData') if isinstance(res.get('responseData'), dict) else {}
+            data_block = resp_data.get('data') if isinstance(resp_data.get('data'), dict) else {}
+            login_data = data_block.get('loginSuccessResult') if isinstance(data_block.get('loginSuccessResult'), dict) else None
 
-    login_data = safe_get(res, 'responseData', 'data', 'loginSuccessResult')
+            if login_data:
+                log(f"✅ [登录成功] {m_phone}: 通过 {'0716 协议通道' if mode == '0716_xiaomi' else '0点权益 协议通道'} 验证")
+                break
+            else:
+                header_infos = res.get('headerInfos') if isinstance(res.get('headerInfos'), dict) else {}
+                last_err_msg = data_block.get('resultMsg') or resp_data.get('resultDesc') or header_infos.get('reason') or '服务密码校验未通过'
+                log(f"ℹ️ [{mode} 尝试未通过] {m_phone}: {last_err_msg}")
+        time.sleep(1)
+
     if not login_data:
-        err_msg = safe_get(res, 'responseData', 'resultDesc') or safe_get(res, 'headerInfos', 'reason') or '密码有误或触发风控'
-        log(f"❌ [登录失败] {m_phone}: {err_msg}")
+        log(f"❌ [登录失败] {m_phone}: {last_err_msg}")
         return None
 
-    # 获取 Ticket
-    xml = f"""<Request>
+    app_token = login_data.get('token', '')
+    user_id = login_data.get('userId', '')
+
+    xml_data = f'''<Request>
         <HeaderInfos>
             <Code>getSingle</Code>
             <Timestamp>{ts()}</Timestamp>
@@ -231,41 +260,37 @@ def login_telecom(sess: requests.Session, phone: str, password: str, android_id:
             <ShopId>20002</ShopId>
             <Source>110003</Source>
             <SourcePassword>Sid98s</SourcePassword>
-            <Token>{login_data["token"]}</Token>
+            <Token>{app_token}</Token>
             <UserLoginName>{phone}</UserLoginName>
         </HeaderInfos>
         <Content>
             <Attach>test</Attach>
             <FieldData>
-                <TargetId>{encrypt_des3(login_data["userId"])}</TargetId>
+                <TargetId>{encrypt_des3(user_id)}</TargetId>
                 <Url>4a6862274835b451</Url>
             </FieldData>
         </Content>
-    </Request>"""
+    </Request>'''
 
-    xml_res = api_req(sess, 'https://appgologin.189.cn:9031/map/clientXML', data=xml.encode('utf-8'), headers={'Content-Type': 'application/xml; charset=UTF-8'}, raw=True)
-    if not isinstance(xml_res, str):
-        log(f"❌ [Ticket失败] {m_phone}: 响应非字符串")
+    xml_res = api_req(sess, 'https://appgologin.189.cn:9031/map/clientXML', data=xml_data.encode('utf-8'), headers={'Content-Type': 'application/xml'}, raw=True)
+    if '<Ticket>' not in xml_res:
+        log(f"❌ [换取Ticket失败] {m_phone}: 响应未包含有效 Ticket 节点")
         return None
 
-    m_ticket = re.search(r'<Ticket>(.*?)</Ticket>', xml_res)
-    if not m_ticket:
-        log(f"❌ [Ticket失败] {m_phone}: 提取票据为空")
+    try:
+        raw_ticket = xml_res.split('<Ticket>')[1].split('</Ticket>')[0]
+        ticket = encrypt_des3(raw_ticket, 'dec')
+        return {
+            "phone": phone,
+            "masked_phone": m_phone,
+            "userId": user_id,
+            "ticket": ticket,
+            "uid": ticket,
+            "Authorization": f"Bearer {app_token}" if app_token else None
+        }
+    except Exception as e:
+        log(f"❌ [解析Ticket异常] {m_phone}: {str(e)}")
         return None
-
-    ticket = m_ticket.group(1)
-    log(f"✅ [登录成功] {m_phone}: 成功获取官方 Ticket")
-
-    auth_bearer = None
-    if 'token' in login_data:
-        auth_bearer = f"Bearer {login_data['token']}"
-
-    return {
-        'phone': phone,
-        'uid': ticket,
-        'Authorization': auth_bearer,
-        'userId': login_data.get('userId', '')
-    }
 
 # ==================== 🎯 每日签到与金豆任务执行 ====================
 def run_daily_telecom_tasks(sess: requests.Session, user: dict) -> List[str]:
