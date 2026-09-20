@@ -26,6 +26,7 @@ tag: 中国电信
 import os
 import sys
 import re
+import hashlib
 import json
 import time
 import random
@@ -142,16 +143,24 @@ def encrypt_aes(data: Union[dict, str], key=KEYS['aes_def'], b64=False) -> str:
     enc = cipher.encrypt(padded)
     return base64.b64encode(enc).decode('utf-8') if b64 else enc.hex()
 
-def encrypt_rsa(data: Union[dict, str], key_type='data', out='hex') -> str:
+def encrypt_rsa(data: Union[dict, str], key_type="data", out="hex") -> str:
     if isinstance(data, dict):
-        data = json.dumps(data, separators=(',', ':'))
-    rsa_key = RSA.import_key(KEYS[f"{key_type}_rsa"])
+        data = json.dumps(data, separators=(",", ":"))
+    if isinstance(key_type, str) and "BEGIN PUBLIC KEY" in key_type:
+        pem = key_type
+    elif f"{key_type}_rsa" in KEYS:
+        pem = KEYS[f"{key_type}_rsa"]
+    elif key_type in KEYS:
+        pem = KEYS[key_type]
+    else:
+        pem = KEYS.get("data_rsa") or KEYS.get("login_rsa")
+    rsa_key = RSA.import_key(pem)
     cipher = PKCS1_v1_5.new(rsa_key)
     max_chunk = 117
-    data_bytes = data.encode('utf-8')
+    data_bytes = data.encode("utf-8")
     chunks = [data_bytes[i:i + max_chunk] for i in range(0, len(data_bytes), max_chunk)]
-    encrypted = b''.join([cipher.encrypt(chunk) for chunk in chunks])
-    return encrypted.hex() if out == 'hex' else base64.b64encode(encrypted).decode('utf-8')
+    encrypted = b"".join([cipher.encrypt(chunk) for chunk in chunks])
+    return base64.b64encode(encrypted).decode("utf-8") if out == "b64" else encrypted.hex()
 
 def api_req(sess: requests.Session, url: str, method: str = 'POST', raw: bool = False, **kwargs) -> Union[Dict[str, Any], str]:
     kwargs.setdefault('timeout', 15)
