@@ -65,7 +65,13 @@ except ImportError:
     HAS_NOTIFY = False
     ql_send = None
 
-SCRIPT_VERSION = "v1.0.2"
+SCRIPT_VERSION = "v1.0.3"
+
+CONFIG = {
+    "UA": "Mozilla/5.0 (Linux; Android 13; 22081212C Build/TKQ1.220829.002) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/104.0.5112.97 Mobile Safari/537.36",
+    "DELAY_SEC": 2
+}
+
 
 KEYS = {
     'login_rsa': """-----BEGIN PUBLIC KEY-----
@@ -101,7 +107,7 @@ def safe_get(d: Any, *keys, default=None) -> Any:
     return curr
 
 def encode_phone(s: str) -> str:
-    return ''.join(chr(ord(c) + 2) for c in s)
+    return base64.b64encode(s.encode('utf-8')).decode('utf-8')
 
 # ==================== 🌐 SSL 兼容层与 HTTP 会话 ====================
 class CustomSSLAdapter(HTTPAdapter):
