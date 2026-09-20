@@ -2,11 +2,12 @@
 # -*- coding: utf-8 -*-
 """
 ===================================================================
-📌 版本: v1.3.0 (2026-09-19 战果回显版)
+📌 版本: v1.4.0 (2026-09-20 全自动心跳保活版)
 中国电信 · 周三会员双抽奖与幸运抽奖聚合脚本
 ===================================================================
 new Env('中国电信 · 周三会员抽奖');
 cron: 0 9 * * 3
+tag: 中国电信
 ===================================================================
 功能说明：
   1. 任务一：周三会员抽权益币 (专属抽权益币) —— 山西甄选周三会员日 (hd76690472)
@@ -65,7 +66,7 @@ except ImportError:
 
 # ==================== 🛠️ 脚本功能开关配置 ====================
 
-SCRIPT_VERSION = "v1.3.0"
+SCRIPT_VERSION = "v1.4.0"
 
 CONFIG = {
     "ENABLE_WED_COIN_DRAW": True,   # 任务 1: 周三会员抽权益币 (专场抽权益币, 默认 hd76690472)
@@ -727,15 +728,13 @@ def main():
 
     now = datetime.now()
     is_wednesday = now.weekday() == 2  # 0=周一, 2=周三
-    force_run = CONFIG.get("FORCE_RUN", False)
+    force_run = CONFIG.get("FORCE_RUN", False) or os.environ.get("FORCE_RUN", "").lower() in ["true", "1"]
+    weekday_names = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
+    today_name = weekday_names[now.weekday()]
 
     if not is_wednesday and not force_run:
-        weekday_names = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
-        today_name = weekday_names[now.weekday()]
-        print(f"\n📅 【日期检查】今天是 {today_name}，非周三特权活动日。")
-        print("💡 周三会员双抽奖活动仅在每周三开放，脚本已自动进入省电休眠。")
-        print("👉 如需在平时进行联调测试，请在脚本顶部将 'FORCE_RUN' 改为 True。\n")
-        return
+        print(f"\n📅 【平日自动保活】今天是 {today_name} (非周三活动日)")
+        print("💓 脚本将自动为各账号执行 SessionKey 心跳保活与资产核验，顺延服务端生命周期，防止凭证过期！\n")
 
     accounts = parse_accounts()
     if not accounts:
