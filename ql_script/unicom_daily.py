@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 ===================================================================
-📌 版本: v1.1.5 (2026-09-20 奖品明细与权益精炼版)
+📌 版本: v1.2.0 (2026-09-20 核心服务逆向优化版)
 中国联通 · 每日签到与福利任务聚合脚本
 ===================================================================
 new Env('中国联通 · 每日签到与福利');
@@ -54,7 +54,7 @@ from requests.packages.urllib3.util.retry import Retry
 from Crypto.Cipher import AES, PKCS1_v1_5
 from Crypto.PublicKey import RSA
 from Crypto.Util.Padding import pad, unpad
-SCRIPT_VERSION = "v1.1.5"
+SCRIPT_VERSION = "v1.2.0"
 # ========================================
 # 全局配置 (globalConfig)
 # true=开启, false=关闭
@@ -1908,10 +1908,10 @@ class UserService:
             self.cloudDiskUrls = {
                 'getTicketByNative': "https://m.client.10010.com/edop_ng/getTicketByNative",
                 'ltypDispatcher': "https://panservice.mail.wo.cn/wohome/dispatcher",
-                'wohomeDispatcher': "https://s.pan.wo.cn/wohome/dispatcher",
-                'getScanState': "https://s.pan.wo.cn/wohome/intelligentClean/getScanStateAndResult",
-                'getCleanData': "https://s.pan.wo.cn/wohome/intelligentClean/getCleanData",
-                'batchClean': "https://s.pan.wo.cn/wohome/intelligentClean/batchClean",
+                'wohomeDispatcher': "https://panservice.mail.wo.cn/wohome/dispatcher",
+                'getScanState': "https://panservice.mail.wo.cn/wohome/intelligentClean/getScanStateAndResult",
+                'getCleanData': "https://panservice.mail.wo.cn/wohome/intelligentClean/getCleanData",
+                'batchClean': "https://panservice.mail.wo.cn/wohome/intelligentClean/batchClean",
             }
 
     def getTicketByNative_cloud(self):
@@ -2031,21 +2031,21 @@ class UserService:
         headers = {
             'X-YP-Device-Id': 'kQ+77Ax9QjhBHAFAAVbCoTTly6IDtegY',
             'accesstoken': token,
-            'appversion': '5.5.0',
+            'appversion': '6.3.0',
             'bundleid': 'com.chinaunicom.bol.cloudapp',
             'platfomr': '1',
             'width': '900',
             'height': '1600',
             'appchannel': 'yyb',
             'app-type': 'liantongyunpanapp',
-            'User-Agent': 'LianTongYunPan/5.5.0 (Android 9)',
+            'User-Agent': 'LianTongYunPan/6.3.0 (Android 12)',
             'network-type': 'mobile',
             'oaid': '00000000',
             'Access-Token': token,
-            'App-Version': 'yp-app/5.5.0',
+            'App-Version': 'yp-app/6.3.0',
             'platform': '1',
-            'sys-version': 'Android/9',
-            'Sys-Version': 'Android/9',
+            'sys-version': 'Android/12',
+            'Sys-Version': 'Android/12',
             'Client-Id': str(client_id),
             'Content-Type': 'application/json; charset=utf-8',
         }
@@ -2458,7 +2458,11 @@ class UserService:
                 if times and int(times) > 0:
                     self.log(f"家乡打卡: 剩余抽奖次数 {times}")
             else:
-                self.log(f"家乡打卡: 抽奖失败 {(res.get('meta') or {}).get('message', '未知错误')}")
+                msg = (res.get("meta") or {}).get("message", "未知错误")
+                if any(k in msg for k in ["不存在", "有效期", "已结束"]):
+                    self.log("家乡打卡: 本期活动已下线，跳过抽奖")
+                else:
+                    self.log(f"家乡打卡: 抽奖反馈 {msg}")
         except Exception as e:
             self.log(f"家乡打卡: 抽奖出错 {e}")
 
@@ -3247,7 +3251,11 @@ class UserService:
             res = response.json()
             if res.get("code") == "0000":
                 return True
-            self.log(f"签到失败：{res.get('msg') if res else '状态未知'}")
+            msg = res.get('msg') if res else '状态未知'
+            if '付费用户' in str(msg):
+                self.log(f"安全管家: 需开通专属特权，跳过签到")
+            else:
+                self.log(f"安全管家: 签到反馈 - {msg}")
             return False
         except Exception as e:
             self.log(f"安全管家: 签到异常: {e}")
@@ -4178,7 +4186,11 @@ class UserService:
             if result and not result.get("plant"):
                 result["plant"] = plant
             return result or land
-        self.log(f"通通乡村: 地块{land_index}充能失败[{data.get('code')}]: {data.get('msg', '')}")
+        msg = str(data.get('msg', ''))
+        if '余额不足' in msg or str(data.get('code')) in ['-1', '-2']:
+            self.log(f"通通乡村: 地块{land_index}能量不足以充能，今日跳过")
+        else:
+            self.log(f"通通乡村: 地块{land_index}充能反馈: {msg}")
         return None
 
     def ttxc_harvest_and_replant(self, land):
@@ -4923,19 +4935,23 @@ class UserService:
         }
 
     def wostore_cloud_bucp_get(self, path, user_token):
-        url = f"https://uphone.wo-adv.cn/bucp{path}"
+        url = f"https://uphone.wostore.cn/bucp{path}"
         try:
-            return self.session.get(url, headers=self.wostore_cloud_headers(user_token), timeout=WOSTORE_CLOUD_TIMEOUT).json()
-        except Exception as e:
-            self.log(f"沃云手机: 请求异常 {e}")
+            r = self.session.get(url, headers=self.wostore_cloud_headers(user_token), timeout=WOSTORE_CLOUD_TIMEOUT)
+            if not r.text or not r.text.strip():
+                return {}
+            return r.json()
+        except Exception:
             return {}
 
     def wostore_cloud_bucp_post(self, path, user_token, payload=None):
-        url = f"https://uphone.wo-adv.cn/bucp{path}"
+        url = f"https://uphone.wostore.cn/bucp{path}"
         try:
-            return self.session.post(url, json=payload or {}, headers=self.wostore_cloud_headers(user_token), timeout=WOSTORE_CLOUD_TIMEOUT).json()
-        except Exception as e:
-            self.log(f"沃云手机: 请求异常 {e}")
+            r = self.session.post(url, json=payload or {}, headers=self.wostore_cloud_headers(user_token), timeout=WOSTORE_CLOUD_TIMEOUT)
+            if not r.text or not r.text.strip():
+                return {}
+            return r.json()
+        except Exception:
             return {}
 
     def wostore_cloud_activity_post(self, path, payload, user_token="", label="云手机请求"):
