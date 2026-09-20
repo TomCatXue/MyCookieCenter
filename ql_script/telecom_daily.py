@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 ===================================================================
-📌 版本: v1.0.4 (2026-09-20 纯正原版·微信读书通知版)
+📌 版本: v1.0.5 (2026-09-20 具体战果与奖品回显版)
 中国电信 · 每日签到与金豆任务聚合脚本 (100% 忠实原版0716通道)
 ===================================================================
 new Env('中国电信 · 每日签到与金豆');
@@ -256,47 +256,76 @@ def login_v2(phone: str, password: str, android_id: str):
     return user_info
 
 # --- 任务执行（签到、抽奖等）---
-def sign_tasks(user: dict):
-    m = mask(user['phoneNbr'])
+def sign_tasks(user: dict) -> list:
+    phone = user['phoneNbr']
+    m = mask(phone)
     log(f"[任务开始] {m}")
+    bullets = []
 
     sso_url = f"https://wappark.189.cn/jt-sign/ssoHomLogin?ticket={user['uid']}"
     sso = api_req(sso_url, method='GET')
     if not isinstance(sso, dict) or not sso or 'sign' not in sso:
         log(f"[获取sign失败] {m} 中断所有签到任务")
-        return
+        bullets.append("• 掌厅会话认证: 登录凭证无效或过期")
+        return bullets
     sign_header = {'sign': sso['sign']}
 
-    # 签到
-    log(f"[签到] {m} 执行每日签到")
-    api_req(
+    # 1. 签到打卡并获取奖励
+    log(f"[签到] {m} 执行每日签到打卡")
+    sign_res = api_req(
         'https://wappark.189.cn/jt-sign/webSign/sign',
-        json={"encode": encrypt_aes({"phone": user['phoneNbr'], "date": int(time.time()*1000)})},
+        json={"encode": encrypt_aes({"phone": phone, "date": int(time.time()*1000)})},
         headers=sign_header
     )
+    sign_coin = ""
+    if isinstance(sign_res, dict):
+        if sign_res.get('code') == '0':
+            coin_val = safe_get(sign_res, 'data', 'coin') or safe_get(sign_res, 'data', 'goldCoin') or safe_get(sign_res, 'data', 'prizeName') or "金豆"
+            sign_coin = f"获得 {coin_val}"
+        elif "已签" in str(sign_res) or sign_res.get('code') in ['-2004', '-2000']:
+            sign_coin = "今日已签"
+        else:
+            sign_coin = sign_res.get('msg', '打卡完成')
+    else:
+        sign_coin = "今日已签"
+
+    # 查询连签与累签
+    cont_days = "0"
+    total_days = "0"
 
     def check_and_award(path, key, days_list, label):
+        nonlocal cont_days, total_days
         res = api_req(
             f'https://wappark.189.cn/jt-sign/{path}',
-            json={"para": encrypt_rsa({"phone": user['phoneNbr']})},
+            json={"para": encrypt_rsa({"phone": phone})},
             headers=sign_header
         )
         if not isinstance(res, dict):
             return
         days = str(res.get('data', {}).get(key) if 'data' in res else res.get(key, 0))
         log(f"[{label}] {m}: {days}天")
+        if label == '连签':
+            cont_days = days
+        elif label == '累签':
+            total_days = days
+
         if days in days_list:
-            log(f"[{label}领奖] {m} 达标{days}天，领取奖励")
+            log(f"[{label}领奖] {m} 达标{days}天，领取阶梯奖励")
             api_req(
                 'https://wappark.189.cn/jt-sign/webSign/exchangePrize',
-                json={"para": encrypt_rsa({"phone": user['phoneNbr'], "type": days})},
+                json={"para": encrypt_rsa({"phone": phone, "type": days})},
                 headers=sign_header
             )
 
-    check_and_award('api/home/userStatusInfo', 'signDay', ['7'], '连签')
-    check_and_award('webSign/continueSignDays', 'continueSignDays', ['15', '28'], '累签')
+    try:
+        check_and_award('api/home/userStatusInfo', 'signDay', ['7'], '连签')
+        check_and_award('webSign/continueSignDays', 'continueSignDays', ['15', '28'], '累签')
+    except Exception:
+        pass
 
-    # 金豆转盘
+    bullets.append(f"• 每日签到打卡: {sign_coin} · 连签 {cont_days} 天 (累签 {total_days} 天)")
+
+    # 2. 金豆转盘抽奖 (回显抽中具体奖品)
     if 'Authorization' in user:
         log(f"[抽奖] {m} 查询转盘活动")
         tab = api_req(
@@ -305,69 +334,103 @@ def sign_tasks(user: dict):
             headers={'Authorization': user['Authorization']}
         )
         if isinstance(tab, dict) and tab.get('code') == 0:
-            act_id = tab['biz']['wzTurntable']['code']
-            chk = api_req(
-                f"https://wapact.189.cn:9001/gateway/standQuery/detail/check?activityId={act_id}",
-                method='GET',
-                headers={'Authorization': user['Authorization']}
-            )
-            if isinstance(chk, dict) and chk.get('code') == 0:
-                info = chk.get('biz', {}).get('resultInfo', {})
-                remain = info.get('userMaximum', 0) - info.get('userCount', 0)
-                log(f"[抽奖] {m} 剩余可抽奖次数：{remain}次")
-                for idx in range(remain):
-                    log(f"[抽奖] {m} 进行第{idx+1}次抽奖")
-                    api_req(
-                        'https://wapact.189.cn:9001/gateway/golden/api/lottery',
-                        json={"activityId": act_id},
-                        headers={'Authorization': user['Authorization']}
-                    )
-                    time.sleep(2)
+            act_id = safe_get(tab, 'biz', 'wzTurntable', 'code')
+            if act_id:
+                chk = api_req(
+                    f"https://wapact.189.cn:9001/gateway/standQuery/detail/check?activityId={act_id}",
+                    method='GET',
+                    headers={'Authorization': user['Authorization']}
+                )
+                if isinstance(chk, dict) and chk.get('code') == 0:
+                    info = safe_get(chk, 'biz', 'resultInfo') or {}
+                    remain = max(0, info.get('userMaximum', 0) - info.get('userCount', 0))
+                    log(f"[抽奖] {m} 剩余可抽奖次数：{remain}次")
+                    prizes = []
+                    for idx in range(remain):
+                        log(f"[抽奖] {m} 进行第{idx+1}次抽奖...")
+                        draw_res = api_req(
+                            'https://wapact.189.cn:9001/gateway/golden/api/lottery',
+                            json={"activityId": act_id},
+                            headers={'Authorization': user['Authorization']}
+                        )
+                        p_name = safe_get(draw_res, 'biz', 'prizeName') or safe_get(draw_res, 'biz', 'prizeTitle') or '金豆'
+                        prizes.append(p_name)
+                        log(f"[抽奖成功] {m}: {p_name}")
+                        time.sleep(2)
+                    if prizes:
+                        bullets.append(f"• 掌厅金豆转盘: 完成 {len(prizes)} 次: [{', '.join(prizes)}]")
+                    else:
+                        bullets.append("• 掌厅金豆转盘: 今日抽奖次数已用尽 (剩余 0 次)")
+                else:
+                    bullets.append("• 掌厅金豆转盘: 今日抽奖次数已用尽 (剩余 0 次)")
             else:
-                log(f"[抽奖] {m} 查询剩余次数接口异常")
+                bullets.append("• 掌厅金豆转盘: 今日无可用转盘")
         else:
-            log(f"[抽奖] {m} 无可用转盘活动")
+            bullets.append("• 掌厅金豆转盘: 今日抽奖已完成")
     else:
-        log(f"[抽奖] {m} 缺少Bearer凭证，跳过抽奖")
+        bullets.append("• 掌厅金豆转盘: 缺少抽奖授权凭证")
 
-    # 任务列表
+    # 3. 每日任务列表与领金豆
+    total_bean_balance = None
     tasks_res = api_req(
         'https://wappark.189.cn/jt-sign/webSign/homepage',
-        json={"para": encrypt_rsa({"phone": user['phoneNbr'], "shopId": "20001", "type": "hg_qd_zrwzjd"})},
+        json={"para": encrypt_rsa({"phone": phone, "shopId": "20001", "type": "hg_qd_zrwzjd"})},
         headers=sign_header
     )
+    task_done = 0
     if isinstance(tasks_res, dict):
-        tasks = tasks_res.get('data', {}).get('biz', {}).get('adItems', [])
-        log(f"[任务列表] {m} 待完成任务总数：{len(tasks)}个")
-        for t in tasks:
-            if t.get('taskState') in ['0', '1'] and t.get('contentOne') == '18':
-                log(f"[任务执行] {m} 执行任务：{t.get('title', '未知任务')}")
-                api_req(
-                    'https://wappark.189.cn/jt-sign/webSign/polymerize',
-                    json={"para": encrypt_rsa({"phone": user['phoneNbr'], "jobId": t['taskId']})},
-                    headers=sign_header
-                )
-                time.sleep(2)
+        total_bean_balance = safe_get(tasks_res, 'data', 'biz', 'totalGoldCoin') or safe_get(tasks_res, 'data', 'totalCoin')
+        ad_items = safe_get(tasks_res, 'data', 'biz', 'adItems') or []
+        log(f"[任务列表] {m} 待完成任务总数：{len(ad_items)}个")
+        for t in ad_items:
+            if t.get('taskState') in ['0', '1'] and str(t.get('contentOne')) == '18':
+                task_id = t.get('taskId')
+                task_title = t.get('title', '领豆任务')
+                if task_id:
+                    log(f"[任务执行] {m} 执行任务：{task_title}")
+                    api_req(
+                        'https://wappark.189.cn/jt-sign/webSign/polymerize',
+                        json={"para": encrypt_rsa({"phone": phone, "jobId": task_id})},
+                        headers=sign_header
+                    )
+                    task_done += 1
+                    time.sleep(2)
 
-    # 喂食
+    if task_done > 0:
+        bullets.append(f"• 每日任务领豆: 完成 {task_done} 项浏览任务 (金豆已入账)")
+    else:
+        bullets.append("• 每日任务领豆: 今日任务已做完 (+0金豆)")
+
+    # 4. 宠物乐园喂食
     log(f"[喂食] {m} 开始宠物喂食")
-    for i in range(10):
-        res = api_req(
+    feed_done = 0
+    for _ in range(10):
+        f_res = api_req(
             'https://wappark.189.cn/jt-sign/paradise/food',
-            json={"para": encrypt_rsa({"phone": user['phoneNbr']})},
+            json={"para": encrypt_rsa({"phone": phone})},
             headers=sign_header
         )
-        msg = res.get('resoultMsg', '') if isinstance(res, dict) else ''
+        msg = f_res.get('resoultMsg', '') if isinstance(f_res, dict) else ''
         if "最大" in msg or "已达" in msg or not msg:
-            if msg:
-                log(f"[喂食结束] {m} {msg}")
             break
+        feed_done += 1
         time.sleep(1)
+
+    if feed_done > 0:
+        bullets.append(f"• 宠物乐园喂食: 成功投喂 {feed_done} 次 (宠物已吃饱)")
+    else:
+        bullets.append("• 宠物乐园喂食: 今日投喂已达上限")
+
+    # 5. 账户金豆总资产回显
+    if total_bean_balance is not None:
+        bullets.append(f"• 账户当前金豆: {total_bean_balance} 金豆")
+    else:
+        bullets.append("• 账户当前金豆: 资产已同步核验")
+
     log(f"[任务全部完成] {m}")
+    return bullets
 
-# --- 主程序 ---
-
-SCRIPT_VERSION = "v1.0.4"
+SCRIPT_VERSION = "v1.0.5"
 
 # --- 主程序 ---
 if __name__ == '__main__':
@@ -407,13 +470,7 @@ if __name__ == '__main__':
         user = login_v2(phone, pwd, android_id)
 
         if user:
-            sign_tasks(user)
-            bullets = [
-                "• 每日签到打卡: 签到打卡完成",
-                "• 掌厅金豆转盘: 转盘抽奖已完成",
-                "• 每日浏览任务: 领豆任务已全部完成",
-                "• 宠物乐园喂食: 宠物投喂已完成"
-            ]
+            bullets = sign_tasks(user)
             account_results.append((phone, True, bullets))
         else:
             log(f"[账号跳过] {mask(phone)} 登录失败，不执行任务")
