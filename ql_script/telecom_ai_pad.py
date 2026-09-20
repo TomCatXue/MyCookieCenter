@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 ===================================================================
-📌 版本: v1.1.5 (2026-09-21 动态阶段模板对齐、真实点数到账校验与官方券码核验)
+📌 版本: v1.1.6 (2026-09-21 纳入全部AI制作券/权益制作额度，彻底消除漏做与假闭环)
 中国电信 · AI奇遇赢Pad (一键做同款获取点数与翻牌抽奖)
 ===================================================================
 new Env('中国电信 · AI奇遇赢Pad');
@@ -67,7 +67,7 @@ except ImportError:
     HAS_NOTIFY = False
     ql_send = None
 
-SCRIPT_VERSION = "v1.1.5"
+SCRIPT_VERSION = "v1.1.6"
 
 # ==================== 🛠️ 活动与平台常量配置 (100%回归实测成功基准) ====================
 CHANNEL_ID = "156000009079"
@@ -590,28 +590,39 @@ def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
     except Exception:
         pass
 
-    # 3. 核验官方制作资格与余量（区分活动免费机会与彩铃VIP配额）
+    # 3. 核验官方全部可用制作资格（包含抽奖获得的AI制作券、权益制作次数与活动赠送）
     pkg_data, token = query_make_pkg_info(sess, crypto, token, phone)
-    initial_vrbt_tip = ""
+    initial_tip = ""
     exp_work_num = 0
+    vrbt_left_num = 0
     aid_daily_num = 0
+    available_chances = 0
+
     if pkg_data is not None:
-        initial_vrbt_tip = pkg_data.get("balanceMakeTimesTip", "")
+        initial_tip = pkg_data.get("balanceMakeTimesTip", "")
         exp_work_num = int(pkg_data.get("aiMakeExperienceWorkNum", 0) or pkg_data.get("privilegeVrbtAIMakeExperienceLeftNum", 0) or 0)
+        vrbt_left_num = int(pkg_data.get("privilegeVrbtAIVideoLeftNum", 0) or 0)
         aid_daily_num = int(pkg_data.get("aidDailyNum", 0) or 0)
-        log(f"[{m_phone}] 资格核验: 当期活动赠送{aid_daily_num}次 / 体验券{exp_work_num}次 (彩铃VIP月配额: {initial_vrbt_tip or '无'})")
+
+        # 只要拥有制作券(vrbt_left_num)、体验券(exp_work_num)或活动免费次数(aid_daily_num)，皆为可用制作机会
+        available_chances = max(vrbt_left_num, exp_work_num, aid_daily_num)
+        if available_chances == 0 and initial_tip:
+            m_digit = re.search(r'(\d+)', initial_tip)
+            if m_digit:
+                available_chances = int(m_digit.group(1))
+
+        log(f"[{m_phone}] 制作资格核验: 可用AI制作余量={available_chances}次 (含抽奖获得的AI制作券/权益次数, 官方状态: {initial_tip or f'剩余{available_chances}次'})")
     else:
-        log(f"[{m_phone}] 制作资格查询暂未响应，继续执行制作与翻牌...")
+        log(f"[{m_phone}] 制作资格查询暂未响应，尝试执行制作与翻牌...")
 
     # 初始积分核验
     total_score, remaining_score, token = query_server_score(sess, crypto, token, phone, ticket)
     lottery_chances = remaining_score // LOTTERY_COST_SCORE
     log(f"[{m_phone}] 初始积分: 可用点数={remaining_score}, 累计总点数={total_score}, 可翻牌={lottery_chances}次")
 
-    # 判断是否已有可用制作机会
-    can_make_more = (aid_daily_num > 0 or exp_work_num > 0)
+    can_make_more = (available_chances > 0)
     if not can_make_more:
-        log(f"[{m_phone}] ℹ️ 活动当期赠送制作机会已全部用尽 (每3天赠送3次免费机会)，直接进入积分与翻牌环节")
+        log(f"[{m_phone}] ℹ️ 当前无可用AI制作券或赠送机会，直接进入积分与翻牌环节")
 
     # ==================== 4. 闭环自旋状态机主循环 ====================
     total_make_success = 0
@@ -630,7 +641,7 @@ def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
         # --- A. 制作环节（消耗免费额度或体验券，直至耗尽） ---
         if can_make_more:
             attempt_count = 0
-            while attempt_count < 10:
+            while attempt_count < max(available_chances + 2, 15):
                 attempt_count += 1
                 token = premake_prepare(sess, crypto, token, phone, tpl_meta)
                 rand_name = f"{tpl_meta['videoName']}{random.randint(100000, 999999)}"
@@ -765,25 +776,21 @@ def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
         # 翻牌后再次复核服务端权威积分
         total_score, remaining_score, token = query_server_score(sess, crypto, token, phone, ticket)
 
-        # --- E. 闭环检查：若有新体验券，继续进入下一轮制作赚点 ---
-        pkg_data, token = query_make_pkg_info(sess, crypto, token, phone)
-        if pkg_data is not None:
-            new_exp = int(pkg_data.get("aiMakeExperienceWorkNum", 0) or pkg_data.get("privilegeVrbtAIMakeExperienceLeftNum", 0) or 0)
-            if new_exp > 0 or won_tickets_count > 0:
-                can_make_more = True
-                has_progress = True
+        # --- E. 闭环检查：若本轮翻牌抽中新体验券，继续进入下一轮制作赚点与翻牌 ---
+        if won_tickets_count > 0:
+            can_make_more = True
+            log(f"[{m_phone}] 🔄 本轮翻牌抽中 {won_tickets_count} 张AI体验券，继续启动制作与翻牌闭环！")
+            time.sleep(1)
+            continue
 
-        if not can_make_more and (pkg_data is None or int(pkg_data.get("aiMakeExperienceWorkNum", 0) or 0) == 0) and remaining_score < LOTTERY_COST_SCORE and remaining_score < 1000:
+        # 终极结束条件：制作无法继续获得新点数，且当前点数已不足以翻牌
+        if remaining_score < LOTTERY_COST_SCORE and remaining_score < 1000:
             log(f"[{m_phone}] 🏁 制作机会、体验券与可用点数已全部耗尽 (剩余{remaining_score}点)，闭环任务圆满完成。")
             break
 
         if not has_progress:
-            consecutive_idle_rounds += 1
-            if consecutive_idle_rounds >= 1:
-                log(f"[{m_phone}] ⚠️ 任务链无进一步可推进状态，安全退出。")
-                break
-        else:
-            consecutive_idle_rounds = 0
+            log(f"[{m_phone}] ⚠️ 任务链无进一步可推进状态，安全退出。")
+            break
 
     # 5. 任务结束向服务器复核最新点数资产与官方券码
     total_score, remaining_score, token = query_server_score(sess, crypto, token, phone, ticket)
