@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 ===================================================================
-📌 版本: v1.0.5 (2026-09-20 具体战果与奖品回显版)
+📌 版本: v1.0.6 (2026-09-20 补齐安全取值函数版)
 中国电信 · 每日签到与金豆任务聚合脚本 (100% 忠实原版0716通道)
 ===================================================================
 new Env('中国电信 · 每日签到与金豆');
@@ -82,6 +82,17 @@ def ts() -> str:
 
 def rd_str(length: int) -> str:
     return ''.join(random.choices(string.ascii_letters + string.digits, k=length))
+
+def safe_get(d: Any, *keys, default=None) -> Any:
+    curr = d
+    for k in keys:
+        if isinstance(curr, dict) and k in curr:
+            curr = curr[k]
+        elif isinstance(curr, (list, tuple)) and isinstance(k, int) and 0 <= k < len(curr):
+            curr = curr[k]
+        else:
+            return default
+    return curr
 
 def encode(s: str) -> str:
     return ''.join(chr(ord(c) + 2) for c in s)
@@ -430,7 +441,7 @@ def sign_tasks(user: dict) -> list:
     log(f"[任务全部完成] {m}")
     return bullets
 
-SCRIPT_VERSION = "v1.0.5"
+SCRIPT_VERSION = "v1.0.6"
 
 # --- 主程序 ---
 if __name__ == '__main__':
