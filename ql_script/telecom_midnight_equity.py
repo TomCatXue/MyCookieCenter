@@ -2,19 +2,22 @@
 # -*- coding: utf-8 -*-
 """
 ===================================================================
-📌 版本: v2.2.0 (2026-09-20 每日轮询·抢到即休眠版)
-中国电信 · 0点等级会员权益兑换（高并发秒杀抢购脚本）
+📌 版本: v2.3.0 (2026-09-22 毫秒级抗脱水抢兑加固版：CPU提权/自旋锁/防漂移熔断)
+中国电信 · 0点等级会员权益兑换（每日限量102份·高并发秒杀脚本）
 ===================================================================
 new Env('中国电信 · 0点等级权益兑换');
 cron: 58 23 * * *
 tag: 中国电信
 # @tag 中国电信
 ===================================================================
-功能说明：
-  1. 每日轮询：每天夜间 23:58 自动启动，未抢到天天抢，直到抢到为止！\n  2. 自动休眠：本月一旦抢到话费券，当月后续天数自动休眠跳过，直到下月重置。\n  3. 提前预热：夜间 23:59:00 并行多账号登录换取 Ticket，并发建立会话。
-  2. 0点秒杀：00:00:00.100 准点突发高并发请求抢兑电信星级会员话费券。
-  3. 智能窗口：非 23:55~23:59 期间触发安全退出，杜绝内存死等与面板超时杀进程。
-  4. 支持调试：带参数 --test 可跳过等待立即测试账号登录与全链路准备。
+业务规则与抗脱水机制：
+  1. 业务规则：每日 00:00 准点开抢，每日限量 102 份，每号每月限领 1 次。未抢到天天抢，抢到自动休眠至下月。
+  2. 调度提权（Anti-Freeze）：启动时自动调用 os.nice(-20) 与 mlockall，锁定 CPU 最高优先级与物理内存，
+     彻底免疫 00:00 零点面板批量拉起其他定时任务导致的 CPU 饥饿与内存 Swap 换出脱水。
+  3. 毫秒级自旋微循环（Spin-lock）：目标前 1.2 秒由休眠切换为高频微循环自旋，牢牢锚定 CPU 时间片，
+     确保在 23:59:59.900 毫秒级准点打出突发包。
+  4. 漂移安全熔断：若宿主机休眠断电导致唤醒时间严重偏离（超过 30 秒），判定凭证已超时失效，立即安全熔断，
+     杜绝携带过期凭证盲目冲击接口招致 401 报错。
 
 环境变量配置：
   dxqy (或 dxlin) : 手机号#服务密码#AndroidID (亦兼容四段式 SessionKey)
@@ -115,6 +118,28 @@ class BlockAll(cookiejar.CookiePolicy):
 
 
 requests.packages.urllib3.disable_warnings()
+
+
+def boost_process_priority():
+    """
+    提升当前进程调度优先级并锁定内存，防止 Linux 内核在 00:00 因面板高并发起多任务而产生 CPU 饥饿与 Swap 换出脱水。
+    """
+    # 1. 提升 CPU 调度优先级 (Linux nice -20，最高优先级)
+    try:
+        os.nice(-20)
+    except Exception:
+        try:
+            os.nice(-10)
+        except Exception:
+            pass
+
+    # 2. 尝试物理内存锁定 (防止零点内存抖动时被 Linux 换出到 Swap 分区)
+    try:
+        import ctypes
+        libc = ctypes.CDLL("libc.so.6")
+        libc.mlockall(1 | 2)
+    except Exception:
+        pass
 
 
 def printn(m):
@@ -889,12 +914,36 @@ async def async_staggered_burst_worker(
         )
     )
 
-    wait_seconds = (
-        fire_time - datetime.datetime.now()
-    ).total_seconds()
+    if not debug:
+        # 1. 粗粒度异步休眠（休眠至目标时间前 1.5 秒）
+        wait_seconds = (fire_time - datetime.datetime.now()).total_seconds()
+        if wait_seconds > 1.5:
+            await asyncio.sleep(wait_seconds - 1.2)
 
-    if wait_seconds > 0 and not debug:
-        await asyncio.sleep(wait_seconds)
+        # 2. 毫秒级自旋微循环（最后 1.2 秒紧锁 CPU，防止被内核 CFS 调度器挂起脱水）
+        while True:
+            diff = (fire_time - datetime.datetime.now()).total_seconds()
+            if diff <= 0:
+                break
+            if diff > 0.05:
+                await asyncio.sleep(0.01)
+
+        # 3. 严重时钟漂移与容器脱水保护熔断（如果当前时间偏离目标超过 30 秒，判定系统此前发生严重脱水，凭证已过期，中止发送）
+        drift = (datetime.datetime.now() - fire_time).total_seconds()
+        if drift > 30:
+            printn(
+                f"⚠️【{phone}】[任务{task_index}] 调度严重漂移 (+{drift:.1f}s)，"
+                f"检测到系统此前发生停滞脱水，凭证已过期失效，自动熔断安全退出。"
+            )
+            with result_lock:
+                if phone not in result_log:
+                    result_log[phone] = {
+                        'status': 'EXPIRED_DRIFT',
+                        'message': f'调度漂移(+{drift:.1f}s)凭证过期',
+                        'level': level,
+                        'amount': amount,
+                    }
+            return
 
     if (
         local_stop_event.is_set()
@@ -1848,6 +1897,7 @@ def build_summary(all_accounts, accounts_to_run, skipped_phones, result_log):
 
 def main():
     global debug, test_only, claimed_log_file
+    boost_process_priority()
     claimed_log_file = globals().get("claimed_log_file") or "claimed_accounts.json"
     env_force = os.environ.get("FORCE_RUN", "").lower() in ["true", "1"] or \
                 os.environ.get("dxqy_force", "").lower() in ["true", "1"] or \
@@ -2077,7 +2127,7 @@ def main():
         printn("🚀 【平时测试/强制运行模式】跳过夜间等待，直接执行全账号登录与可领权益检测！")
     else:
         printn(f"📅 【时间检查】当前系统时间为 {now.strftime('%H:%M:%S')}，非夜间抢购时段 (抢购准备期为 23:55~23:59)。")
-        printn("💡 电信0点权益兑换仅在月末夜间开放，脚本已自动进入省电休眠，防止后台挂起被面板超时杀进程。")
+        printn("💡 电信0点权益兑换为每日限量102份（每号每月限领1次），脚本将在每天 23:58 自动启动并于 00:00 准点抢兑...")
         printn("👉 如需在平时进行联调测试，请在青龙面板添加环境变量: FORCE_RUN=true (或在脚本顶部将 'FORCE_RUN' 改为 True)。\n")
         return
 
