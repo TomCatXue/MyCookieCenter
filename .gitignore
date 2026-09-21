@@ -24,3 +24,7 @@ Thumbs.db
 __pycache__/
 *.pyc
 ql_script/*_cache.json
+
+# 本地Agent规范与私有备忘文档（不上传至公共仓库）
+AGENTS.md
+Agents.md
