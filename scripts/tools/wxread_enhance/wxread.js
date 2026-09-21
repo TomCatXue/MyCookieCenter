@@ -2,8 +2,8 @@
 ------------------------------------------
 @Description: 微信读书 · 防强更与全弹窗净化
 @Author: TomCatXue
-@Version: 3.5.0
-@Date: 2026-09-17 12:30
+@Version: 3.6.1
+@Date: 2026-09-22 02:00
 ------------------------------------------
 功能：
   1. 深度拦截 i.weread.qq.com 与 weread.qq.com 下的 feature、config、reconf、upgrade 等接口
@@ -110,14 +110,22 @@ function deepSanitize(target) {
     // 2. 深度遍历全量净化
     const modified = deepSanitize(data);
 
-    // 3. 针对 feature 特性节点做特别锁定
-    if (data.feature && typeof data.feature === "object") {
-      data.feature.VIPRightTimerSeconds = 8640000;
-      data.feature.disableUpgrade = 1;
-      data.feature.closeUpgrade = 1;
+    // 3. 针对 feature 和 configsets 配置节点做强效锁定与消隐
+    const targetConfigs = [data.feature, data.configsets].filter(o => o && typeof o === "object");
+    for (const cfg of targetConfigs) {
+      cfg.VIPRightTimerSeconds = 8640000;
+      cfg.disableUpgrade = 1;
+      cfg.closeUpgrade = 1;
+      cfg.upgrade = 0;
+      cfg.upgrade_query_interval = 0;
+      cfg.upgrade_seconds_to_notify = 0;
+      cfg.notice_type = 0;
+      cfg.notice_interval = 0;
+      cfg.notice_title = "";
+      cfg.notice_msg = "";
     }
 
-    if (modified || data.feature) {
+    if (modified || targetConfigs.length > 0) {
       const newBody = isBase64 ? b64encode(JSON.stringify(data)) : JSON.stringify(data);
       $.log(`[微信读书·防强更] 成功拦截并全面净化升级弹窗配置! url=${url.slice(0, 60)}`);
       $done({ body: newBody });
