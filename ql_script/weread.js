@@ -680,6 +680,36 @@ async function runFlipTask(auth) {
         return { cardIndex, giftIndex };
     }
 
+    function isExplicitFlippedCard(card) {
+        let s = card?.status;
+        return s === 1 || s === 2 || s === 3 || s === 4;
+    }
+
+    function getCardIndex(card, fallbackIndex) {
+        return typeof card?.cardIndex === "number" ? card.cardIndex : fallbackIndex;
+    }
+
+    function findCardByIndex(cards, cardIndex) {
+        if (!Array.isArray(cards)) return null;
+        for (let i = 0; i < cards.length; i++) {
+            if (getCardIndex(cards[i], i) === cardIndex) return cards[i];
+        }
+        return null;
+    }
+
+    function getFlippedCards(data) {
+        let flipIndexes = Array.isArray(data?.flipList) ? data.flipList.filter(i => typeof i === "number") : [];
+        let cards = Array.isArray(data?.cardList) ? data.cardList : [];
+
+        if (flipIndexes.length > 0 && cards.length > 0) {
+            return flipIndexes.map(i => findCardByIndex(cards, i)).filter(c => c && (typeof c.status === "undefined" || isExplicitFlippedCard(c)));
+        }
+        if (flipIndexes.length > 0 && Array.isArray(data?.initialList)) {
+            return flipIndexes.map(i => data.initialList[i]).filter(Boolean);
+        }
+        return cards.filter(isExplicitFlippedCard);
+    }
+
     // 1. 查询当前卡片列表与可用翻牌额度
     let listRes = await get(FLIP_API + "/flipCardList?pf=ios&platform=ios_html", getFlipHeaders(auth));
     if (listRes.status === 401 || listRes.status === 499 || listRes.status === 403) {
@@ -703,13 +733,8 @@ async function runFlipTask(auth) {
     let remainingCount = typeof listData?.remainingCount === "number" ? listData.remainingCount : 0;
     let flipList = Array.isArray(listData?.flipList) ? listData.flipList : [];
 
-    // 解析当前已翻出的历史卡片与奖品（已翻出的卡片唯一存储于 cardList；若无则映射 flipList 对应的卡片）
-    let existingCards = [];
-    if (Array.isArray(listData?.cardList) && listData.cardList.length > 0) {
-        existingCards = listData.cardList;
-    } else if (Array.isArray(listData?.flipList) && listData.flipList.length > 0 && Array.isArray(listData?.initialList)) {
-        existingCards = listData.flipList.map(idx => listData.initialList[idx]).filter(Boolean);
-    }
+    // 只统计 flipList 或 status 明确标记为已翻出的卡片，避免把整个奖池 cardList 算进历史奖励。
+    let existingCards = getFlippedCards(listData);
 
     for (let c of existingCards) {
         if (!c) continue;
