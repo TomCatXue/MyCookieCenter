@@ -49,7 +49,7 @@ const CONFIG = {
 // 常量与系统配置
 // ================================================================================
 const SCRIPT_NAME = "微信读书 · 全功能任务";
-const SCRIPT_VERSION = "3.5.2";
+const SCRIPT_VERSION = "3.5.3";
 const AUTH_KEY = "weread_auth_v2";
 const CACHE_FILE = "./weread_session.json";
 const API = "https://i.weread.qq.com";
@@ -629,16 +629,19 @@ async function runFlipTask(auth) {
         if (data.reward) return data.reward;
         if (data.giftName) return data.giftName;
 
-        let cards = (Array.isArray(data.cardList) ? data.cardList : []).concat(Array.isArray(data.initialList) ? data.initialList : []);
+        let cards = Array.isArray(data.cardList) && data.cardList.length > 0 ? data.cardList : (Array.isArray(data.initialList) ? data.initialList : []);
         if (typeof justFlippedIndex === "number") {
             for (let i = 0; i < cards.length; i++) {
-                if (cards[i].cardIndex === justFlippedIndex) {
+                if (cards[i] && cards[i].cardIndex === justFlippedIndex) {
                     return describeCardPrize(cards[i]);
                 }
             }
+            if (cards[justFlippedIndex]) {
+                return describeCardPrize(cards[justFlippedIndex]);
+            }
         }
         for (let i = 0; i < cards.length; i++) {
-            let s = cards[i].status;
+            let s = cards[i]?.status;
             if (s === 1 || s === 2 || s === 3 || s === 4) {
                 return describeCardPrize(cards[i]);
             }
@@ -700,17 +703,16 @@ async function runFlipTask(auth) {
     let remainingCount = typeof listData?.remainingCount === "number" ? listData.remainingCount : 0;
     let flipList = Array.isArray(listData?.flipList) ? listData.flipList : [];
 
-    // 解析当前已翻出的历史卡片与奖品
-    let existingCards = (Array.isArray(listData?.cardList) ? listData.cardList : []).concat(
-        Array.isArray(listData?.initialList) ? listData.initialList.filter(c => c && c.status > 0) : []
-    );
-    let seenCards = new Set();
+    // 解析当前已翻出的历史卡片与奖品（已翻出的卡片唯一存储于 cardList；若无则映射 flipList 对应的卡片）
+    let existingCards = [];
+    if (Array.isArray(listData?.cardList) && listData.cardList.length > 0) {
+        existingCards = listData.cardList;
+    } else if (Array.isArray(listData?.flipList) && listData.flipList.length > 0 && Array.isArray(listData?.initialList)) {
+        existingCards = listData.flipList.map(idx => listData.initialList[idx]).filter(Boolean);
+    }
+
     for (let c of existingCards) {
         if (!c) continue;
-        let cIdx = typeof c.cardIndex === "number" ? c.cardIndex : seenCards.size;
-        if (seenCards.has(cIdx)) continue;
-        seenCards.add(cIdx);
-
         let p = describeCardPrize(c);
         if (p && p !== "未知奖励") {
             result.flippedPrizes.push(p);
