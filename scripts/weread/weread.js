@@ -47,7 +47,7 @@ const CONFIG = {
 // 常量与系统配置
 // ================================================================================
 const SCRIPT_NAME = "微信读书 · 全功能任务";
-const SCRIPT_VERSION = "3.5.1";
+const SCRIPT_VERSION = "3.5.2";
 const AUTH_KEY = "weread_auth_v2";
 const CACHE_FILE = "./weread_session.json";
 const API = "https://i.weread.qq.com";
@@ -585,7 +585,9 @@ async function runFlipTask(auth) {
         flippedCardDays: 0,
         flippedCoins: 0,
         flippedBooks: [],
-        flippedPrizes: []
+        flippedPrizes: [],
+        newlyFlipped: 0,
+        newlyFlippedPrizes: []
     };
 
     const FLIP_CARD_ORDER = [2, 5, 4, 7, 8, 6, 0, 1, 3];
@@ -604,7 +606,7 @@ async function runFlipTask(auth) {
 
     function describeCardPrize(card) {
         if (!card) return "未知奖励";
-        if (card.bookInfo && card.bookInfo.title) return card.bookInfo.title;
+        if (card.bookInfo && card.bookInfo.title) return `《${card.bookInfo.title}》`;
         if (card.cardType === "money" || card.type === "money") {
             let count = card.count || card.amount || card.coins || 1;
             return count > 1 ? `${count}个书币` : "书币";
@@ -614,7 +616,7 @@ async function runFlipTask(auth) {
             return count > 1 ? `体验卡${count}天` : "体验卡";
         }
         if (card.cardType === "book") {
-            return card.bookInfo && card.bookInfo.title ? card.bookInfo.title : "书籍";
+            return card.bookInfo && card.bookInfo.title ? `《${card.bookInfo.title}》` : "书籍";
         }
         return "未知奖励";
     }
@@ -695,11 +697,40 @@ async function runFlipTask(auth) {
     try { listData = JSON.parse(listRes.body || "{}"); } catch (e) { }
     let remainingCount = typeof listData?.remainingCount === "number" ? listData.remainingCount : 0;
     let flipList = Array.isArray(listData?.flipList) ? listData.flipList : [];
-    $.log(`[WeRead] 翻牌 — flipCardList 成功, remainingCount=${remainingCount}, flipList.length=${flipList.length}`);
 
+    // 解析当前已翻出的历史卡片与奖品
+    let existingCards = (Array.isArray(listData?.cardList) ? listData.cardList : []).concat(
+        Array.isArray(listData?.initialList) ? listData.initialList.filter(c => c && c.status > 0) : []
+    );
+    let seenCards = new Set();
+    for (let c of existingCards) {
+        if (!c) continue;
+        let cIdx = typeof c.cardIndex === "number" ? c.cardIndex : seenCards.size;
+        if (seenCards.has(cIdx)) continue;
+        seenCards.add(cIdx);
+
+        let p = describeCardPrize(c);
+        if (p && p !== "未知奖励") {
+            result.flippedPrizes.push(p);
+            let q = parsePrizeQuantity(p);
+            result.flippedCardDays += q.cardDays;
+            result.flippedCoins += q.coins;
+            if (q.books.length) result.flippedBooks.push(...q.books);
+        }
+    }
+
+    $.log(`[WeRead] 翻牌 — flipCardList 成功: 可用次数 remainingCount=${remainingCount}, 本周已翻=${flipList.length}张` + (result.flippedPrizes.length ? ` (已斩获: ${result.flippedPrizes.join(', ')})` : ''));
+
+    // 如果当前已无剩余翻牌额度
     if (remainingCount <= 0) {
         result.success = true;
-        result.details = flipList.length >= 6 ? `本周已完成全部 6 次翻牌` : `今日无可用翻牌次数`;
+        if (result.flippedPrizes.length > 0) {
+            result.details = `本周已翻 ${result.flippedPrizes.length} 次，斩获: 体验卡 +${result.flippedCardDays}天 · 书币 +${result.flippedCoins}个` + (result.flippedBooks.length ? ` · ${result.flippedBooks.join(',')}` : '') + ` (剩余 0 次)`;
+        } else if (flipList.length >= 6) {
+            result.details = `本周已完成全部 6 次翻牌 (剩余 0 次)`;
+        } else {
+            result.details = `今日无可用翻牌次数 (本周尚未获取翻牌额度)`;
+        }
         $.log(`[WeRead] ℹ️ ${result.details}`);
         return result;
     }
@@ -744,6 +775,8 @@ async function runFlipTask(auth) {
             if (q.books.length) result.flippedBooks.push(...q.books);
 
             result.flippedPrizes.push(prize);
+            result.newlyFlipped++;
+            result.newlyFlippedPrizes.push(prize);
             $.log(`[WeRead] 🎯 翻牌成功: 第 ${attempts} 次获得 -> ${prize}`);
 
             if (typeof flipData?.remainingCount === "number" && flipData.remainingCount <= 0) {
@@ -761,10 +794,12 @@ async function runFlipTask(auth) {
     }
 
     result.success = true;
-    if (result.flippedPrizes.length > 0) {
-        result.details = `获得: 体验卡 +${result.flippedCardDays}天 · 书币 +${result.flippedCoins}个` + (result.flippedBooks.length ? ` · ${result.flippedBooks.join(',')}` : "");
+    if (result.newlyFlipped > 0) {
+        result.details = `本次翻中 ${result.newlyFlipped} 次 [${result.newlyFlippedPrizes.join(', ')}] · 本周累计: 体验卡 +${result.flippedCardDays}天 · 书币 +${result.flippedCoins}个` + (result.flippedBooks.length ? ` · ${result.flippedBooks.join(',')}` : "");
+    } else if (result.flippedPrizes.length > 0) {
+        result.details = `本周已翻 ${result.flippedPrizes.length} 次，斩获: 体验卡 +${result.flippedCardDays}天 · 书币 +${result.flippedCoins}个` + (result.flippedBooks.length ? ` · ${result.flippedBooks.join(',')}` : '') + ` (剩余 0 次)`;
     } else if (remainingCount <= 0) {
-        result.details = flipList.length >= 6 ? `本周已完成全部 6 次翻牌` : `今日无可用翻牌次数`;
+        result.details = flipList.length >= 6 ? `本周已完成全部 6 次翻牌 (剩余 0 次)` : `今日无可用翻牌次数 (本周尚未获取翻牌额度)`;
     } else {
         result.details = `翻牌尝试未成功 (HTTP 异常)`;
     }
@@ -934,9 +969,7 @@ async function main() {
             : (resClaim?.details || "暂无数据");
 
         let flipText = canFlip
-            ? (resFlip?.flippedPrizes?.length
-                ? `翻牌总计获得: 体验卡 +${resFlip.flippedCardDays}天 · 书币 +${resFlip.flippedCoins}个` + (resFlip.flippedBooks?.length ? ` · ${resFlip.flippedBooks.join(',')}` : '')
-                : (resFlip?.details || "今日无可用翻牌次数"))
+            ? (resFlip?.details || "今日无可用翻牌次数")
             : "非周二自动跳过";
 
         let freeText = canFree
