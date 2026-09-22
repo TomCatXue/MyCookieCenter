@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 ===================================================================
-📌 版本: v1.4.0 (2026-09-20 全自动心跳保活版)
+📌 版本: v1.5.0 (2026-09-23 权益商城抽奖通道修正版)
 中国电信 · 周三会员双抽奖与幸运抽奖聚合脚本
 ===================================================================
 new Env('中国电信 · 周三会员抽奖');
@@ -13,7 +13,10 @@ tag: 中国电信
 功能说明：
   1. 任务一：周三会员抽权益币 (专属抽权益币) —— 山西甄选周三会员日 (hd76690472)
   2. 任务二：周三会员抽三次 (专属抽3次) —— 山西抽奖新-每周三次 (hd92859166)
-  3. 任务三：权益商城幸运抽奖 (大转盘抽奖) —— 免费领机会 + 自动做任务 + 抽大奖 (A2025011413413484352835699495179)
+  3. 任务三：权益商城幸运抽奖 (大转盘抽奖) —— 读取真实活动配置(抽奖活动号/任务清单) + 走可达抽奖引擎真实抽奖并回显奖品
+     (A2025011413413484352835699495179，可用环境变量 TELECOM_WED_LUCKY_ACT 覆盖)
+     ⚠️ 说明：权益商城抽奖接口 IRedBagLotteryService.* 仅在翼支付小程序 mgs 通道开放，
+        H5 网关 mapi-h5 无此服务(API500002)，故任务三改走 H5 可达的活动配置 + op-lottery-system 抽奖引擎。
   4. 资产回显：自动查询并回显当前账户真实权益币余额
 
 环境变量配置：
@@ -67,7 +70,7 @@ except ImportError:
 
 # ==================== 🛠️ 脚本功能开关配置 ====================
 
-SCRIPT_VERSION = "v1.4.0"
+SCRIPT_VERSION = "v1.5.0"
 
 CONFIG = {
     "ENABLE_WED_COIN_DRAW": True,   # 任务 1: 周三会员抽权益币 (专场抽权益币, 默认 hd76690472)
@@ -77,7 +80,7 @@ CONFIG = {
     "DELAY_SEC": 2,                 # 各接口请求间隔(秒)，避免触发电信风控频控
     "ACT_COIN": "hd76690472",       # 周三抽权益币活动代号
     "ACT_THRICE": "hd92859166",     # 周三抽3次活动代号
-    "ACT_LUCKY": "A2025011413413484352835699495179", # 权益商城大转盘活动ID
+    "ACT_LUCKY": "A2025011413413484352835699495179", # 权益商城大转盘活动ID (可用环境变量 TELECOM_WED_LUCKY_ACT 覆盖)
     "UA": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 MicroMessenger/8.0.38(0x1800262c) NetType/WIFI Language/zh_CN"
 }
 
@@ -419,7 +422,8 @@ def query_recent_lottery_history(sess: requests.Session, phone: str, session_key
     except Exception as e:
         return "今日抽奖次数已用尽"
 
-def run_wednesday_lottery(sess: requests.Session, act_no: str, act_title: str, session_key: str, phone: str) -> str:
+def run_wednesday_lottery(sess: requests.Session, act_no: str, act_title: str, session_key: str, phone: str,
+                          closed_hint: str = "非周三活动暂未开放 (每周三 09:00 开放)") -> str:
     """周三抽奖标准化执行器 (对齐 telecom_draw.js: runWednesdayLottery)"""
     m_phone = mask(phone)
     log(f"\n🎰 >>> 正在执行：{act_title} [活动号: {act_no}] ({m_phone}) <<<")
@@ -442,7 +446,7 @@ def run_wednesday_lottery(sess: requests.Session, act_no: str, act_title: str, s
         # 若非周三活动日访问周三活动，电信网关会对未开启的活动抛出 100008 拦截，绝非 SessionKey 失效
         now_weekday = datetime.now().weekday()
         if now_weekday != 2:
-            return "非周三活动暂未开放 (每周三 09:00 开放)"
+            return closed_hint
         if '登录' in err_msg or '100003' in err_msg or '100008' in err_msg:
             return "SessionKey已失效，请进小程序刷新"
         cached = get_today_reward(phone, act_no)
@@ -522,11 +526,27 @@ def run_wednesday_lottery(sess: requests.Session, act_no: str, act_title: str, s
     return res_str
 
 def run_lucky_lottery(sess: requests.Session, act_id: str, act_title: str, session_key: str, phone: str) -> str:
-    """权益商城幸运抽奖标准化执行器 (对齐 telecom_draw.js: runLuckyLottery)"""
+    """
+    权益商城幸运抽奖执行器。
+
+    2026-09-23 抓包复核 + 线上探测结论（源码 → 网络机制 → 实现原理）：
+      1. 权益商城抽奖接口 IRedBagLotteryService.*（freeReceiveLotteryOpportunity / completeLotteryTask /
+         queryCustomerLotteryTimes / lotteryReceive）只在**翼支付小程序 mgs 通道**
+         (spanner.bestpay.com.cn:10081，operation-type 头 + 小程序容器原生加密信封) 开放；
+         H5 网关 mapi-h5.bestpay.com.cn/gapi/equitymall/client/lottery/* 实测返回
+         API500002「接口服务不存在」，故旧版按 H5 网关直连必然全部失败（既做不了任务也抽不了奖）。
+      2. H5 可达的是活动配置与抽奖引擎两条通道：
+         - /gapi/equitymall/client/Activity/queryActivityInfo （C005，无需登录）→ 返回真实
+           lotteryActivityNo（真实抽奖活动号）、lotteryId、taskList（真实任务码）与资格状态；
+         - /gapi/op-lottery-system/DrawService/*（C005）→ 与周三会员抽奖同一个抽奖引擎，
+           用上面的 lotteryActivityNo 即可查询次数、真实抽奖并回显奖品。
+      3. 任务本身（sharedToWeChat / orderMallMember / inviteFriends / pointsExchange）属于小程序侧
+         用户行为，H5 通道无对应接口，脚本只回显任务清单，不再伪造"已完成任务"。
+    """
     m_phone = mask(phone)
     log(f"\n🎁 >>> 正在执行：{act_title} [活动ID: {act_id}] ({m_phone}) <<<")
 
-    # 1. 查询活动详情以获取 lotteryId 与 lotteryActivityNo
+    # 1. 查询权益商城活动配置（H5 C005 通道可达，无需登录），拿到真实抽奖活动号与任务清单
     act_res = request_c005(sess, 'https://mapi-h5.bestpay.com.cn/gapi/equitymall/client/Activity/queryActivityInfo', {
         'activityId': act_id,
         'sessionKey': session_key,
@@ -537,98 +557,50 @@ def run_lucky_lottery(sess: requests.Session, act_id: str, act_title: str, sessi
         'encyType': 'C005'
     }, phone, session_key, '5g_mini_program')
 
-    if not isinstance(act_res, dict) or not act_res.get('success'):
-        err_msg = act_res.get('errorMsg', '活动详情查询失败') if isinstance(act_res, dict) else '响应异常'
-        log(f"[{act_title}] 查询未通过: {err_msg}")
+    module: Dict[str, Any] = {}
+    if isinstance(act_res, dict) and act_res.get('success'):
+        module = safe_get(act_res, 'result', 't', 'activityLotteryModules', default=None) or []
+        module = module[0] if isinstance(module, list) and module else {}
+
+    if not module:
+        detail = safe_get(act_res, 'result', 'errMsg') or safe_get(act_res, 'errorMsg') or '活动配置不可用'
+        log(f"[{act_title}] 活动配置查询未通过: {detail}")
         cached = get_today_reward(phone, act_id)
-        return f"今日已抽完 (今日战果: {cached})" if cached else f"活动反馈: {err_msg}"
+        return f"活动配置反馈: {detail}" + (f" (今日战果: {cached})" if cached else "")
 
-    t_obj = safe_get(act_res, 'result', 't') or {}
-    lottery_module = (t_obj.get('activityLotteryModules') or [{}])[0]
-    lottery_id = lottery_module.get('lotteryId') or 'LM202505282205492080223238537929'
-    lottery_act_no = lottery_module.get('lotteryActivityNo') or 'hd70226376'
+    lottery_act_no = module.get('lotteryActivityNo') or 'hd70226376'
+    task_codes = module.get('taskList') or []
+    task_status = module.get('taskLotteryStatus') or ''
+    free_status = module.get('freeLotteryStatus') or ''
+    log(f"[{act_title}] 活动号: {lottery_act_no}，任务抽奖状态: {task_status or '未知'}，"
+        f"免费抽奖: {free_status or '未知'}，任务清单: {','.join(task_codes) or '无'}")
 
-    # 2. 免费领取抽奖机会
-    try:
-        request_c005(sess, 'https://mapi-h5.bestpay.com.cn/gapi/equitymall/client/lottery/freeReceiveLotteryOpportunity', {
-            'activityId': act_id,
-            'lotteryId': lottery_id,
-            'lotteryActivityNo': lottery_act_no,
-            'sessionKey': session_key,
-            'productNo': phone,
-            'phoneNo': phone,
-            'fromChannelId': '5g_mini_program',
-            'fromchannelId': '5g_mini_program',
-            'encyType': 'C005'
-        }, phone, session_key, '5g_mini_program')
-    except Exception:
-        pass
+    TASK_LABELS = {
+        'sharedToWeChat': '分享给微信好友',
+        'orderMallMember': '订购权益商城会员',
+        'inviteFriends': '邀请好友助力',
+        'pointsExchange': '积分兑换抽奖机会',
+        'viewActivity': '浏览活动页',
+    }
+    # 订购会员属于付费行为，按要求不参与、也不在通知里提示；其余任务需小程序内手动完成
+    PENDING_TASKS = [c for c in task_codes if c not in ('orderMallMember',)]
+    task_desc = "、".join(TASK_LABELS.get(c, c) for c in PENDING_TASKS)
 
-    # 3. 完成日常浏览与打卡任务
-    for code in ['sharedToWeChat', 'viewActivity']:
-        try:
-            request_c005(sess, 'https://mapi-h5.bestpay.com.cn/gapi/equitymall/client/lottery/completeLotteryTask', {
-                'activityId': act_id,
-                'lotteryId': lottery_id,
-                'taskCode': code,
-                'sessionKey': session_key,
-                'productNo': phone,
-                'phoneNo': phone,
-                'fromChannelId': '5g_mini_program',
-                'fromchannelId': '5g_mini_program',
-                'encyType': 'C005'
-            }, phone, session_key, '5g_mini_program')
-        except Exception:
-            pass
+    # 2. 走同一抽奖引擎（H5 C005 可达）查询次数并真实抽奖，直接回显真实奖品
+    draw_res = run_wednesday_lottery(sess, lottery_act_no, f"{act_title}·抽奖引擎", session_key, phone,
+                                     closed_hint="权益商城抽奖活动未开放或已结束")
 
-    # 4. 查询可用抽奖次数
-    count_res = request_c005(sess, 'https://mapi-h5.bestpay.com.cn/gapi/equitymall/client/lottery/queryCustomerLotteryTimes', {
-        'activityId': act_id,
-        'lotteryId': lottery_id,
-        'sessionKey': session_key,
-        'productNo': phone,
-        'phoneNo': phone,
-        'fromChannelId': '5g_mini_program',
-        'fromchannelId': '5g_mini_program',
-        'encyType': 'C005'
-    }, phone, session_key, '5g_mini_program')
+    # 3. 任务核销接口只在小程序 mgs 通道开放（H5 实测 API500002），脚本无法代办，
+    #    这里如实回显待办任务与"完成后再跑会自动抽完"的指引，绝不伪报已完成任务
+    no_lottery = ('未产生抽奖' in draw_res or '今日已抽完' in draw_res or '暂无历史中奖记录' in draw_res
+                  or '需 SessionKey' in draw_res)
+    if task_desc and no_lottery:
+        res_str = f"{draw_res}；待办任务(需在翼支付小程序内完成，脚本无法代办): {task_desc}；完成后本脚本会自动把机会抽完并回显奖品"
+    elif task_desc:
+        res_str = f"{draw_res}；其余任务(需小程序内完成): {task_desc}"
+    else:
+        res_str = draw_res
 
-    count = safe_get(count_res, 'result', 'lotteryCount', default=0)
-    log(f"[{act_title}] 可用抽奖次数: {count}")
-
-    if count <= 0:
-        return query_recent_lottery_history(sess, phone, session_key, lottery_act_no, top_n=3)
-
-    # 5. 循环大转盘抽奖
-    draw_count = 0
-    prize_names = []
-    while count > 0:
-        draw_count += 1
-        log(f"[{act_title}] 正在执行第 {draw_count} 次抽奖 (剩余 {count} 次)...")
-        draw_res = request_c005(sess, 'https://mapi-h5.bestpay.com.cn/gapi/equitymall/client/lottery/lotteryReceive', {
-            'activityId': act_id,
-            'lotteryId': lottery_id,
-            'sessionKey': session_key,
-            'productNo': phone,
-            'phoneNo': phone,
-            'fromChannelId': '5g_mini_program',
-            'fromchannelId': '5g_mini_program',
-            'encyType': 'C005'
-        }, phone, session_key, '5g_mini_program')
-
-        if isinstance(draw_res, dict) and draw_res.get('success'):
-            count -= 1
-            prize = draw_res.get('result') or {}
-            prize_name = prize.get('prizeName') or prize.get('name') or '奖品入账'
-            log(f"🎉 [{act_title}] 抽奖成功: 获得 [{prize_name}]")
-            prize_names.append(prize_name)
-        else:
-            msg = draw_res.get('errorMsg', '抽奖未命中') if isinstance(draw_res, dict) else '响应异常'
-            log(f"[{act_title}] 反馈: {msg}")
-            break
-        time.sleep(CONFIG.get("DELAY_SEC", 2))
-
-    res_str = f"完成 {draw_count} 次，获得: [" + ", ".join(prize_names) + "]" if draw_count > 0 else "今日已抽完"
     set_today_reward(phone, act_id, res_str)
     return res_str
 
@@ -797,7 +769,8 @@ def main():
 
             # 任务 3: 权益商城幸运抽奖 (A2025011413413484352835699495179)
             if CONFIG.get("ENABLE_LUCKY_MALL_DRAW", True):
-                res_lucky = run_lucky_lottery(sess, CONFIG.get("ACT_LUCKY", "A2025011413413484352835699495179"), "权益商城幸运抽奖", session_key, phone)
+                lucky_act = os.environ.get("TELECOM_WED_LUCKY_ACT") or CONFIG.get("ACT_LUCKY", "A2025011413413484352835699495179")
+                res_lucky = run_lucky_lottery(sess, lucky_act, "权益商城幸运抽奖", session_key, phone)
                 bullets.append(f"• 权益商城幸运抽奖: {res_lucky}")
 
             # 资产回显: 真实权益币余额
