@@ -47,7 +47,7 @@ const CONFIG = {
 // 常量与系统配置
 // ================================================================================
 const SCRIPT_NAME = "微信读书 · 全功能任务";
-const SCRIPT_VERSION = "3.5.0";
+const SCRIPT_VERSION = "3.5.1";
 const AUTH_KEY = "weread_auth_v2";
 const CACHE_FILE = "./weread_session.json";
 const API = "https://i.weread.qq.com";
@@ -596,18 +596,92 @@ async function runFlipTask(auth) {
         return {
             "User-Agent": flipUa,
             "Accept": "application/json, text/plain, */*",
-            "Referer": "https://weread.qq.com/flip-card-game",
+            "Accept-Language": "zh-CN,zh-Hans;q=0.9",
+            "Referer": "https://weread.qq.com/flip-card-game?isAnimateNavBarBackground=1&isShowNavBarShadow=0&isStatusbarLight=1",
             "Cookie": `wr_skey=${wrSkey}; wr_vid=${wrVid}`
         };
     };
 
+    function describeCardPrize(card) {
+        if (!card) return "未知奖励";
+        if (card.bookInfo && card.bookInfo.title) return card.bookInfo.title;
+        if (card.cardType === "money" || card.type === "money") {
+            let count = card.count || card.amount || card.coins || 1;
+            return count > 1 ? `${count}个书币` : "书币";
+        }
+        if (card.cardType === "infinite" || card.type === "infinite") {
+            let count = card.count || card.amount || card.days || 1;
+            return count > 1 ? `体验卡${count}天` : "体验卡";
+        }
+        if (card.cardType === "book") {
+            return card.bookInfo && card.bookInfo.title ? card.bookInfo.title : "书籍";
+        }
+        return "未知奖励";
+    }
+
+    function describeFlipResult(data, justFlippedIndex) {
+        if (!data) return "未知奖励";
+        if (data.prizeName) return data.prizeName;
+        if (data.reward) return data.reward;
+        if (data.giftName) return data.giftName;
+
+        let cards = (Array.isArray(data.cardList) ? data.cardList : []).concat(Array.isArray(data.initialList) ? data.initialList : []);
+        if (typeof justFlippedIndex === "number") {
+            for (let i = 0; i < cards.length; i++) {
+                if (cards[i].cardIndex === justFlippedIndex) {
+                    return describeCardPrize(cards[i]);
+                }
+            }
+        }
+        for (let i = 0; i < cards.length; i++) {
+            let s = cards[i].status;
+            if (s === 1 || s === 2 || s === 3 || s === 4) {
+                return describeCardPrize(cards[i]);
+            }
+        }
+        return "未知奖励";
+    }
+
+    function pickNextFlip(data) {
+        let cards = data.cardList || [];
+        let used = {};
+        cards.forEach(c => {
+            if (typeof c.cardIndex === "number" && c.cardIndex >= 0) {
+                used[c.cardIndex] = true;
+            }
+        });
+
+        let candidates = [];
+        let seen = {};
+        (data.initialList || []).forEach((c, i) => {
+            if (c.status === 0 && !used[i] && !seen[i]) { candidates.push(i); seen[i] = true; }
+        });
+        cards.forEach((c, i) => {
+            if (c.status === 0 && !used[i] && !seen[i]) { candidates.push(i); seen[i] = true; }
+        });
+        if (candidates.length === 0) {
+            for (let i = 0; i < FLIP_CARD_ORDER.length; i++) {
+                let candidate = FLIP_CARD_ORDER[i];
+                if (!used[candidate] && !seen[candidate]) {
+                    candidates.push(candidate);
+                }
+            }
+        }
+        if (candidates.length === 0) return null;
+        let cardIndex = candidates[0];
+        let giftIndex = Array.isArray(data.flipList) ? data.flipList.length : 0;
+        return { cardIndex, giftIndex };
+    }
+
+    // 1. 查询当前卡片列表与可用翻牌额度
     let listRes = await get(FLIP_API + "/flipCardList?pf=ios&platform=ios_html", getFlipHeaders(auth));
     if (listRes.status === 401 || listRes.status === 499 || listRes.status === 403) {
-        $.log("[WeRead] 翻牌 Cookie 过期，启动脱机换票自愈...");
+        $.log(`[WeRead] 翻牌 flipCardList 返回 HTTP ${listRes.status} (登录超时)，正在通过 /login 接口脱机自动换票...`);
         let refreshed = await tryRefreshLogin(auth);
         if (refreshed && refreshed.wrSkey) {
-            auth = refreshed;
+            Object.assign(auth, refreshed);
             listRes = await get(FLIP_API + "/flipCardList?pf=ios&platform=ios_html", getFlipHeaders(auth));
+            $.log(`[WeRead] 自动换票刷新成功！重试 flipCardList HTTP ${listRes.status}`);
         }
     }
 
@@ -618,48 +692,83 @@ async function runFlipTask(auth) {
     }
 
     let listData = null;
-    try { listData = JSON.parse(listRes.body); } catch (e) { }
-    let flipList = listData?.flipList || [];
-    let remaining = Math.max(0, 6 - flipList.length);
+    try { listData = JSON.parse(listRes.body || "{}"); } catch (e) { }
+    let remainingCount = typeof listData?.remainingCount === "number" ? listData.remainingCount : 0;
+    let flipList = Array.isArray(listData?.flipList) ? listData.flipList : [];
+    $.log(`[WeRead] 翻牌 — flipCardList 成功, remainingCount=${remainingCount}, flipList.length=${flipList.length}`);
 
-    if (remaining <= 0) {
+    if (remainingCount <= 0) {
         result.success = true;
-        result.details = `本周已完成全部 6 次翻牌`;
-        $.log(`[WeRead] ✅ ${result.details}`);
+        result.details = flipList.length >= 6 ? `本周已完成全部 6 次翻牌` : `今日无可用翻牌次数`;
+        $.log(`[WeRead] ℹ️ ${result.details}`);
         return result;
     }
 
-    for (let targetIndex of FLIP_CARD_ORDER) {
-        if (flipList.includes(targetIndex)) continue;
+    // 2. 依次执行可用翻牌（真实接口: GET /flipCardFlip?cardIndex=...&giftIndex=...&pf=ios&platform=ios_html）
+    let state = listData;
+    let attempts = 0;
+    const maxFlips = Math.min(6, remainingCount);
 
-        let giftIndex = flipList.length;
-        let drawRes = await post(
-            FLIP_API + "/flipCard",
-            JSON.stringify({ cardIndex: targetIndex, giftIndex: giftIndex, pf: "ios" }),
-            Object.assign(getFlipHeaders(auth), { "Content-Type": "application/json" })
-        );
+    while (attempts < maxFlips) {
+        let target = pickNextFlip(state);
+        if (!target) {
+            $.log("[WeRead] 翻牌 — 没有未翻开的卡片");
+            break;
+        }
+
+        attempts++;
+        $.log(`[WeRead] 翻牌 — 正在执行第 ${attempts}/${maxFlips} 次: cardIndex=${target.cardIndex}, giftIndex=${target.giftIndex}`);
+
+        let flipUrl = `${FLIP_API}/flipCardFlip?cardIndex=${target.cardIndex}&giftIndex=${target.giftIndex}&pf=ios&platform=ios_html`;
+        let drawRes = await get(flipUrl, getFlipHeaders(auth));
+
+        // 遇到 401/403/499 自动换票重试
+        if (drawRes.status === 401 || drawRes.status === 403 || drawRes.status === 499) {
+            $.log(`[WeRead] 翻牌 HTTP ${drawRes.status}，尝试通过 /login 刷新 wr_skey 并重试当前卡片...`);
+            let refreshed = await tryRefreshLogin(auth);
+            if (refreshed && refreshed.wrSkey) {
+                Object.assign(auth, refreshed);
+                drawRes = await get(flipUrl, getFlipHeaders(auth));
+            }
+        }
 
         if (drawRes.status === 200) {
-            let resData = null;
-            try { resData = JSON.parse(drawRes.body); } catch (e) { }
-            let prize = resData?.prizeName || resData?.reward || resData?.giftName || "奖励入账";
+            let flipData = null;
+            try { flipData = JSON.parse(drawRes.body || "{}"); } catch (e) { }
+            state = flipData || state;
+
+            let prize = describeFlipResult(flipData, target.cardIndex);
             let q = parsePrizeQuantity(prize);
             result.flippedCardDays += q.cardDays;
             result.flippedCoins += q.coins;
             if (q.books.length) result.flippedBooks.push(...q.books);
 
-            result.flippedPrizes.push(`位置${targetIndex}[${prize}]`);
-            flipList.push(targetIndex);
-            $.log(`[WeRead] 🎯 翻牌成功: 位置 ${targetIndex} -> ${prize}`);
+            result.flippedPrizes.push(prize);
+            $.log(`[WeRead] 🎯 翻牌成功: 第 ${attempts} 次获得 -> ${prize}`);
+
+            if (typeof flipData?.remainingCount === "number" && flipData.remainingCount <= 0) {
+                $.log("[WeRead] ℹ️ 翻牌 — 无剩余翻牌次数");
+                break;
+            }
         } else {
+            $.log(`[WeRead] ❌ 翻牌 — 第 ${attempts} 次失败 HTTP ${drawRes.status}: ${(drawRes.body || "").slice(0, 100)}`);
             break;
         }
-        await new Promise(r => setTimeout(r, 1500));
+
+        if (attempts < maxFlips) {
+            await new Promise(r => setTimeout(r, 1500));
+        }
     }
 
     result.success = true;
-    result.details = result.flippedPrizes.length > 0 ? `完成 ${result.flippedPrizes.length} 次翻牌: ${result.flippedPrizes.join(', ')}` : `今日无可用翻牌次数`;
-    $.log(`[WeRead] ✅ ${result.details}`);
+    if (result.flippedPrizes.length > 0) {
+        result.details = `获得: 体验卡 +${result.flippedCardDays}天 · 书币 +${result.flippedCoins}个` + (result.flippedBooks.length ? ` · ${result.flippedBooks.join(',')}` : "");
+    } else if (remainingCount <= 0) {
+        result.details = flipList.length >= 6 ? `本周已完成全部 6 次翻牌` : `今日无可用翻牌次数`;
+    } else {
+        result.details = `翻牌尝试未成功 (HTTP 异常)`;
+    }
+    $.log(`[WeRead] ✅ [周二翻牌] 结果: ${result.details}`);
     return result;
 }
 
