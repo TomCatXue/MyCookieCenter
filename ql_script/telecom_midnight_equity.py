@@ -6,7 +6,7 @@
 中国电信 · 0点等级会员权益兑换（每日限量102份·高并发秒杀脚本）
 ===================================================================
 new Env('中国电信 · 0点等级权益兑换');
-cron: 59 23 * * *
+cron: 20 59 23 * * *
 tag: 中国电信
 # @tag 中国电信
 ===================================================================
@@ -974,6 +974,10 @@ async def async_staggered_burst_worker(
     if rights_stat is None:
         rights_stat = {}
 
+    # 安全默认值（避免异常分支引用未定义变量）
+    request_time = datetime.datetime.now().strftime('%H:%M:%S.%f')[:-3]
+    request_perf = time.perf_counter()
+
     try:
 
         value = {
@@ -1296,6 +1300,21 @@ async def async_staggered_burst_worker(
                     f"{rights_tag} 空响应，继续尝试..."
                 )
 
+            elif status == 'HTTP_ERROR':
+
+                printn(
+                    f"🌐【{phone}】@{request_time} "
+                    f"{rights_tag} HTTP错误 "
+                    f"(状态码{http_status}): {text[:200]}"
+                )
+
+            elif status == 'JSON_ERROR':
+
+                printn(
+                    f"🧾【{phone}】@{request_time} "
+                    f"{rights_tag} JSON解析失败: {text[:200]}"
+                )
+
             else:
 
                 printn(
@@ -1470,10 +1489,6 @@ def _derive_rights_status(stat):
     """根据单个权益统计字典推导该权益的最终状态。"""
     if stat.get('success_count'):
         return 'SUCCESS'
-    if stat.get('sold_out_count') and not stat.get('request_count') == 0:
-        if stat.get('success_count') == 0 and stat.get('crowd_count') == 0 \
-                and stat.get('rate_limit_count') == 0:
-            return 'SOLD_OUT'
     if stat.get('sold_out_count'):
         return 'SOLD_OUT'
     if stat.get('rate_limit_count'):
@@ -1482,6 +1497,10 @@ def _derive_rights_status(stat):
         return 'CROWD'
     if stat.get('timeout_count'):
         return 'TIMEOUT'
+    if stat.get('http_error_count'):
+        return 'HTTP_ERROR'
+    if stat.get('json_error_count'):
+        return 'JSON_ERROR'
     if stat.get('empty_count'):
         return 'EMPTY'
     if stat.get('unknown_count'):
@@ -1567,6 +1586,8 @@ async def run_async_bursts(
             'crowd_count': 0,
             'timeout_count': 0,
             'empty_count': 0,
+            'http_error_count': 0,
+            'json_error_count': 0,
             'unknown_count': 0,
         }
         rights_tasks_meta.append({
@@ -1687,6 +1708,8 @@ async def run_async_bursts(
                 f"  操作频繁：{stat['rate_limit_count']}\n"
                 f"  超时：{stat['timeout_count']}\n"
                 f"  空响应：{stat['empty_count']}\n"
+                f"  HTTP错误：{stat['http_error_count']}\n"
+                f"  JSON错误：{stat['json_error_count']}\n"
                 f"  其他：{stat['unknown_count']}"
             )
 
@@ -2480,16 +2503,16 @@ def main():
     )
 
     now = datetime.datetime.now()
-    prepare_time = now.replace(hour=23, minute=59, second=0, microsecond=0)
+    prepare_time = now.replace(hour=23, minute=59, second=20, microsecond=0)
 
     # 智能窗口调度保护 (完全对齐周三脚本规范)
     if now.hour == 23 and now.minute >= 55 and not force_run:
         if now < prepare_time:
             wait_seconds = (prepare_time - now).total_seconds()
-            printn(f"⏳ 距离 23:59:00 还有 {wait_seconds:.1f} 秒，等待预热...")
+            printn(f"⏳ 距离 23:59:20 还有 {wait_seconds:.1f} 秒，等待预热...")
             time.sleep(wait_seconds)
         else:
-            printn("⚡ 已处于 23:59:00 预热窗口内，立即启动并行登录！")
+            printn("⚡ 已处于 23:59:20 预热窗口内，立即启动并行登录！")
     elif force_run:
         printn("🚀 【平时测试/强制运行模式】跳过夜间等待，直接执行全账号登录与可领权益检测！")
     else:
