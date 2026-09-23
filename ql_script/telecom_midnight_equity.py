@@ -64,7 +64,9 @@ CONFIG = {
     "COUNT_PER_ACCOUNT": 5,     # 每个账号并发抢购数 (建议 3~5)
     "INTERVAL_MS": 10,          # 并发请求微间隔(毫秒)
     "ENABLE_RUISHU": False,     # 瑞数安全Cookie开关
-    "CLAIMED_LOG_FILE": "claimed_accounts.json"
+    "CLAIMED_LOG_FILE": "claimed_accounts.json",
+    "ENABLE_MULTI_RIGHTS": False,   # 多权益并发领取: False=仅抢 rightsList[0] 默认权益; True=对接口返回的每个权益独立并发领取
+    "MAX_MULTI_RIGHTS_TASKS": 20    # 多权益模式单账号最大并发请求任务数上限
 }
 
 # -------------------------- 青龙/呆呆通知模块 --------------------------
@@ -888,6 +890,13 @@ def diagnose_receiver_rights(
 # 正式异步抢购
 # ============================================================
 
+def _record_stat(stat_dict, key):
+    """线程/协程安全的权益统计自增（单协程内顺序执行，无需额外锁）。"""
+    if stat_dict is None:
+        return
+    stat_dict[key] = stat_dict.get(key, 0) + 1
+
+
 async def async_staggered_burst_worker(
     session,
     phone,
@@ -899,12 +908,16 @@ async def async_staggered_burst_worker(
     amount,
     global_stop_event,
     local_stop_event,
+    rights_stop_event,
     task_index,
     base_target_time,
     result_log,
     result_lock,
     file_lock,
-    num_accounts_to_run
+    num_accounts_to_run,
+    rights_index=0,
+    rights_count=1,
+    rights_stat=None
 ):
 
     fire_time = (
@@ -946,10 +959,20 @@ async def async_staggered_burst_worker(
             return
 
     if (
-        local_stop_event.is_set()
+        rights_stop_event.is_set()
+        or local_stop_event.is_set()
         or global_stop_event.is_set()
     ):
         return
+
+    # 权益/任务维度标签（多权益模式下用于日志区分）
+    if rights_count > 1:
+        rights_tag = f"[权益{rights_index}][任务{task_index}]"
+    else:
+        rights_tag = f"[任务{task_index}]"
+
+    if rights_stat is None:
+        rights_stat = {}
 
     try:
 
@@ -982,6 +1005,18 @@ async def async_staggered_burst_worker(
             "jt-sign/paradise/receiverRights"
         )
 
+        # ---- 实际请求开始时间（HTTP 请求执行前记录） ----
+        request_time = (
+            datetime.datetime.now()
+            .strftime('%H:%M:%S.%f')[:-3]
+        )
+        request_perf = time.perf_counter()
+
+        # 理论调度时间（fire_time）已在上方计算，此处换算偏差
+        actual_drift_ms = (
+            datetime.datetime.now() - fire_time
+        ).total_seconds() * 1000
+
         async with session.post(
             url,
             json={"para": paraV},
@@ -989,10 +1024,12 @@ async def async_staggered_burst_worker(
             headers=headers
         ) as response:
 
-            request_time = (
-                datetime.datetime.now()
-                .strftime('%H:%M:%S.%f')[:-3]
-            )
+            http_status = response.status
+
+            # ---- 请求耗时 ----
+            elapsed_ms = (
+                time.perf_counter() - request_perf
+            ) * 1000
 
             text = ""
 
@@ -1005,7 +1042,11 @@ async def async_staggered_burst_worker(
             except asyncio.TimeoutError:
                 printn(
                     f"⏰【{phone}】@{request_time} "
-                    f"[任务{task_index}] 响应读取超时"
+                    f"{rights_tag} 响应读取超时"
+                    f" | HTTP={http_status} | 耗时{elapsed_ms:.1f}ms"
+                )
+                _record_stat(
+                    rights_stat, 'timeout_count'
                 )
                 return
 
@@ -1017,6 +1058,9 @@ async def async_staggered_burst_worker(
 
             res_json = {}
             res_text = ""
+            status = "UNKNOWN"
+            status_msg = ""
+            json_parsed = False
 
             try:
                 clean_text = text.strip()
@@ -1030,6 +1074,7 @@ async def async_staggered_burst_worker(
                         res_json,
                         ensure_ascii=False
                     )
+                    json_parsed = True
                 else:
                     res_text = "[空响应]"
 
@@ -1042,34 +1087,129 @@ async def async_staggered_burst_worker(
                     f"非JSON响应: {text[:100]}"
                 )
 
-            if (
+            # ---- 状态分类 ----
+            if not (200 <= http_status < 300):
+                # HTTP 非 2xx
+                status = "HTTP_ERROR"
+                status_msg = (
+                    f"HTTP {http_status}: {text[:200]}"
+                )
+
+            elif res_text == "[空响应]":
+                status = "EMPTY"
+                status_msg = "响应为空"
+
+            elif not json_parsed:
+                # 服务器有响应但非合法 JSON
+                status = "JSON_ERROR"
+                status_msg = (
+                    f"非JSON响应: {text[:200]}"
+                )
+
+            elif (
                 "已领完" in res_text
                 or "活动已结束" in res_text
             ):
+                status = "SOLD_OUT"
+                status_msg = "已售罄/活动已结束"
+
+            elif (
+                "成功" in res_text
+                or "已领取过该权益" in res_text
+            ):
+                status = "SUCCESS"
+                status_msg = res_json.get(
+                    'resoultMsg', '成功/已领取'
+                )
+
+            elif (
+                "操作频繁" in res_text
+                or "请稍后再试" in res_text
+                or "请求过于频繁" in res_text
+                or "频繁" in res_text
+            ):
+                status = "RATE_LIMIT"
+                status_msg = "操作频繁"
+
+            elif "当前抢购人数过多" in res_text:
+                status = "CROWD"
+                status_msg = "人数过多"
+
+            else:
+                status = "UNKNOWN"
+                status_msg = (
+                    res_text[:200]
+                    if res_text
+                    else "未知响应"
+                )
+
+            # ---- 统一打印请求诊断信息 ----
+            printn(
+                f"📡【{phone}】@{request_time} "
+                f"{rights_tag} "
+                f"理论:{fire_time.strftime('%H:%M:%S.%f')[:-3]} "
+                f"偏差:{actual_drift_ms:+.0f}ms "
+                f"HTTP:{http_status} 耗时:{elapsed_ms:.1f}ms "
+                f"状态:{status}"
+            )
+
+            # ---- 记录权益统计 ----
+            _record_stat(rights_stat, 'request_count')
+            rights_stat['last_http_status'] = http_status
+            rights_stat['last_latency_ms'] = round(elapsed_ms, 1)
+
+            if status == 'SUCCESS':
+                _record_stat(rights_stat, 'success_count')
+            elif status == 'SOLD_OUT':
+                _record_stat(rights_stat, 'sold_out_count')
+            elif status == 'RATE_LIMIT':
+                _record_stat(rights_stat, 'rate_limit_count')
+            elif status == 'CROWD':
+                _record_stat(rights_stat, 'crowd_count')
+            elif status == 'TIMEOUT':
+                _record_stat(rights_stat, 'timeout_count')
+            elif status == 'EMPTY':
+                _record_stat(rights_stat, 'empty_count')
+            elif status == 'HTTP_ERROR':
+                _record_stat(rights_stat, 'http_error_count')
+            elif status == 'JSON_ERROR':
+                _record_stat(rights_stat, 'json_error_count')
+            elif status == 'UNKNOWN':
+                _record_stat(rights_stat, 'unknown_count')
+
+            # ---- 按状态处理 ----
+            if status == 'SOLD_OUT':
 
                 printn(
                     f"💨【{phone}】@{request_time} "
-                    f"[任务{task_index}] 已售罄! "
-                    f"停止该账号后续请求。"
+                    f"{rights_tag} 已售罄! "
+                    f"停止当前权益后续请求。"
                 )
 
-                if not local_stop_event.is_set():
-                    local_stop_event.set()
+                # 权益级停止：只停止当前权益
+                rights_stop_event.set()
+
+                # 单权益模式：保持账号级停止原语义
+                if rights_count <= 1:
+                    if not local_stop_event.is_set():
+                        local_stop_event.set()
 
                 with result_lock:
 
-                    if (
-                        phone not in result_log
-                        or result_log.get(phone, {}).get(
-                            'status'
-                        ) != 'SUCCESS'
-                    ):
-                        result_log[phone] = {
-                            'status': 'SOLD_OUT',
-                            'message': '已售罄',
-                            'level': level,
-                            'amount': amount,
-                        }
+                    # 单权益模式：直接写账号级结果；多权益模式：由 run_async_bursts 末尾统一汇总
+                    if rights_count <= 1:
+                        if (
+                            phone not in result_log
+                            or result_log.get(phone, {}).get(
+                                'status'
+                            ) != 'SUCCESS'
+                        ):
+                            result_log[phone] = {
+                                'status': 'SOLD_OUT',
+                                'message': '已售罄',
+                                'level': level,
+                                'amount': amount,
+                            }
 
                     finished_count = len([
                         r
@@ -1084,7 +1224,8 @@ async def async_staggered_burst_worker(
                     )
 
                     if (
-                        not has_success
+                        rights_count <= 1
+                        and not has_success
                         and finished_count == num_accounts_to_run
                         and not global_stop_event.is_set()
                     ):
@@ -1097,36 +1238,30 @@ async def async_staggered_burst_worker(
                             "触发全局停止信号！"
                         )
 
-            elif (
-                "成功" in res_text
-                or "已领取过该权益" in res_text
-            ):
+            elif status == 'SUCCESS':
 
                 printn(
                     f"🎉【{phone}】@{request_time} "
-                    f"[任务{task_index}] 成功或已领取!"
+                    f"{rights_tag} 成功或已领取!"
                 )
 
-                if not local_stop_event.is_set():
+                # 权益级停止：只停止当前权益，其他权益继续
+                rights_stop_event.set()
 
-                    local_stop_event.set()
-
-                    printn(
-                        f"🛑【{phone}】个人停止信号已发出 "
-                        f"(原因: 成功)。"
-                    )
+                # 单权益模式：保持账号级停止原语义
+                if rights_count <= 1:
+                    if not local_stop_event.is_set():
+                        local_stop_event.set()
 
                 with result_lock:
-                    result_log[phone] = {
-                        'status': 'SUCCESS',
-                        'message':
-                            res_json.get(
-                                'resoultMsg',
-                                '成功/已领取'
-                            ),
-                        'level': level,
-                        'amount': amount,
-                    }
+                    # 单权益模式：直接写账号级结果；多权益模式：由 run_async_bursts 末尾统一汇总
+                    if rights_count <= 1:
+                        result_log[phone] = {
+                            'status': 'SUCCESS',
+                            'message': status_msg,
+                            'level': level,
+                            'amount': amount,
+                        }
 
                 loop = asyncio.get_running_loop()
 
@@ -1138,20 +1273,35 @@ async def async_staggered_burst_worker(
                     file_lock
                 )
 
-            elif "当前抢购人数过多" in res_text:
+            elif status == 'RATE_LIMIT':
+
+                printn(
+                    f"⚠️【{phone}】@{request_time} "
+                    f"{rights_tag} RATE_LIMIT / 操作频繁，"
+                    f"继续尝试..."
+                )
+
+            elif status == 'CROWD':
 
                 printn(
                     f"👥【{phone}】@{request_time} "
-                    f"[任务{task_index}] "
+                    f"{rights_tag} "
                     f"人数过多，继续尝试..."
+                )
+
+            elif status == 'EMPTY':
+
+                printn(
+                    f"📭【{phone}】@{request_time} "
+                    f"{rights_tag} 空响应，继续尝试..."
                 )
 
             else:
 
                 printn(
                     f"💬【{phone}】@{request_time} "
-                    f"[任务{task_index}] "
-                    f"响应: {res_text}"
+                    f"{rights_tag} "
+                    f"未知响应: {res_text}"
                 )
 
     except asyncio.CancelledError:
@@ -1159,27 +1309,24 @@ async def async_staggered_burst_worker(
 
     except asyncio.TimeoutError:
 
-        request_time = (
-            datetime.datetime.now()
-            .strftime('%H:%M:%S.%f')[:-3]
-        )
+        elapsed_ms = (
+            time.perf_counter() - request_perf
+        ) * 1000
+
+        _record_stat(rights_stat, 'timeout_count')
 
         printn(
             f"⏰【{phone}】@{request_time} "
-            f"[任务{task_index}] "
-            f"请求超时 (连接或响应)"
+            f"{rights_tag} "
+            f"请求超时 (连接或响应) | 耗时{elapsed_ms:.1f}ms "
+            f"| 异常类型: asyncio.TimeoutError"
         )
 
     except Exception as e:
 
-        request_time = (
-            datetime.datetime.now()
-            .strftime('%H:%M:%S.%f')[:-3]
-        )
-
         printn(
             f"🚨【{phone}】@{request_time} "
-            f"[任务{task_index}] "
+            f"{rights_tag} "
             f"未预期异常: "
             f"{e.__class__.__name__} - {str(e)}"
         )
@@ -1250,25 +1397,35 @@ def run_attack_campaign(
                 "未能获取到权益ID"
             )
 
-        rights = rightsList[0]
-        rightsId = rights['activityId']
+        # 单权益模式：仅抢 rightsList[0]（保持 v2.3.0 原语义）
+        if not enable_multi_rights:
+            rights_to_claim = [rightsList[0]]
+        else:
+            # 多权益模式：接口实际返回的每个权益均作为独立任务
+            rights_to_claim = rightsList
+
+        rights = rights_to_claim[0]
         level = rights['level']
         amount = rights['amount']
 
-        printn(
-            f"✅【{phone}】凭证准备就绪，"
-            f"切换至异步并发抢购..."
-        )
+        if enable_multi_rights and len(rights_to_claim) > 1:
+            printn(
+                f"🎁【{phone}】多权益模式启用，"
+                f"共 {len(rights_to_claim)} 个权益进入独立并发任务。"
+            )
+        else:
+            printn(
+                f"✅【{phone}】凭证准备就绪，"
+                f"切换至异步并发抢购..."
+            )
 
         asyncio.run(
             run_async_bursts(
                 phone,
-                rightsId,
+                rights_to_claim,
                 accId,
                 sign,
                 rs_cookies,
-                level,
-                amount,
                 global_stop_event,
                 result_log,
                 result_lock,
@@ -1309,14 +1466,57 @@ def run_attack_campaign(
 # 异步抢购调度
 # ============================================================
 
+def _derive_rights_status(stat):
+    """根据单个权益统计字典推导该权益的最终状态。"""
+    if stat.get('success_count'):
+        return 'SUCCESS'
+    if stat.get('sold_out_count') and not stat.get('request_count') == 0:
+        if stat.get('success_count') == 0 and stat.get('crowd_count') == 0 \
+                and stat.get('rate_limit_count') == 0:
+            return 'SOLD_OUT'
+    if stat.get('sold_out_count'):
+        return 'SOLD_OUT'
+    if stat.get('rate_limit_count'):
+        return 'RATE_LIMIT'
+    if stat.get('crowd_count'):
+        return 'CROWD'
+    if stat.get('timeout_count'):
+        return 'TIMEOUT'
+    if stat.get('empty_count'):
+        return 'EMPTY'
+    if stat.get('unknown_count'):
+        return 'UNKNOWN'
+    return 'UNKNOWN'
+
+
+def _derive_overall_status(rights_result):
+    """多权益模式：账号级总体状态。"""
+    statuses = [r.get('status') for r in rights_result]
+    if 'SUCCESS' in statuses:
+        return 'SUCCESS'
+    if statuses and all(s == 'SOLD_OUT' for s in statuses):
+        return 'SOLD_OUT'
+    if statuses and all(s in ('SUCCESS', 'SOLD_OUT') for s in statuses):
+        return 'PARTIAL'
+    return 'FAIL'
+
+
+def _derive_overall_msg(rights_result):
+    """多权益模式：账号级总体消息摘要。"""
+    parts = []
+    for r in rights_result:
+        parts.append(
+            f"V{r.get('level')}｜{r.get('amount')}｜{r.get('status')}"
+        )
+    return "；".join(parts)
+
+
 async def run_async_bursts(
     phone,
-    rightsId,
+    rights_list,
     accId,
     sign,
     rs_cookies,
-    level,
-    amount,
     global_stop_event,
     result_log,
     result_lock,
@@ -1343,7 +1543,45 @@ async def run_async_bursts(
         )
     )
 
+    # 账号级停止信号（单权益模式下沿用原语义：账号内任意权益成功/售罄即停止该账号）
     local_stop_event = AsyncioEvent()
+
+    rights_count = len(rights_list)
+
+    # 每个权益独立的任务数 + 独立统计字典
+    rights_tasks_meta = []
+
+    total_tasks = 0
+
+    for r_idx, rights in enumerate(rights_list):
+        rights_stat = {
+            'rightsId': rights.get('activityId'),
+            'level': rights.get('level'),
+            'amount': rights.get('amount'),
+            'title': rights.get('title', ''),
+            'plan_count': 0,
+            'request_count': 0,
+            'success_count': 0,
+            'sold_out_count': 0,
+            'rate_limit_count': 0,
+            'crowd_count': 0,
+            'timeout_count': 0,
+            'empty_count': 0,
+            'unknown_count': 0,
+        }
+        rights_tasks_meta.append({
+            'rights': rights,
+            'stat': rights_stat,
+        })
+        total_tasks += count_per_account
+
+    # ---- 并发任务上限（多权益模式） ----
+    if rights_count > 1 and total_tasks > max_multi_rights_tasks:
+        printn(
+            f"🚦【{phone}】多权益模式: 理论任务数 {total_tasks} "
+            f"超过上限 {max_multi_rights_tasks}，"
+            f"将按上限削减任务。"
+        )
 
     ssl_ctx = ssl.create_default_context(
         cafile=certifi.where()
@@ -1366,32 +1604,123 @@ async def run_async_bursts(
         timeout=timeout
     ) as async_session:
 
-        tasks = [
-            async_staggered_burst_worker(
-                async_session,
-                phone,
-                rightsId,
-                accId,
-                sign,
-                rs_cookies,
-                level,
-                amount,
-                global_stop_event,
-                local_stop_event,
-                i,
-                base_target_time,
-                result_log,
-                result_lock,
-                file_lock,
-                num_accounts_to_run
-            )
-            for i in range(count_per_account)
-        ]
+        tasks = []
+        created_tasks = 0
+
+        for r_idx, meta in enumerate(rights_tasks_meta):
+            rights = meta['rights']
+            rights_stat = meta['stat']
+
+            rightsId = rights['activityId']
+            level = rights['level']
+            amount = rights['amount']
+
+            # 每个权益独立的 stop event（权益级停止）
+            rights_stop_event = AsyncioEvent()
+
+            # 该权益最多计划的任务数
+            plan_count = count_per_account
+
+            # 多权益模式下受全局任务上限约束
+            if rights_count > 1:
+                remaining = max_multi_rights_tasks - created_tasks
+                if remaining <= 0:
+                    plan_count = 0
+                else:
+                    plan_count = min(plan_count, remaining)
+
+            rights_stat['plan_count'] = plan_count
+
+            for i in range(plan_count):
+                tasks.append(
+                    async_staggered_burst_worker(
+                        async_session,
+                        phone,
+                        rightsId,
+                        accId,
+                        sign,
+                        rs_cookies,
+                        level,
+                        amount,
+                        global_stop_event,
+                        local_stop_event,
+                        rights_stop_event,
+                        i,
+                        base_target_time,
+                        result_log,
+                        result_lock,
+                        file_lock,
+                        num_accounts_to_run,
+                        rights_index=r_idx,
+                        rights_count=rights_count,
+                        rights_stat=rights_stat
+                    )
+                )
+                created_tasks += 1
 
         await asyncio.gather(
             *tasks,
             return_exceptions=True
         )
+
+        # ---- 账号结束后输出每个权益的独立统计 ----
+        printn(
+            f"📊【{phone}】领取统计"
+        )
+
+        for r_idx, meta in enumerate(rights_tasks_meta):
+            stat = meta['stat']
+            tag = (
+                f"权益{r_idx}｜V{stat['level']}｜{stat['amount']}"
+                if rights_count > 1
+                else f"V{stat['level']}｜{stat['amount']}"
+            )
+
+            printn(
+                f"  {tag}\n"
+                f"  权益ID：{stat['rightsId']}\n"
+                f"  计划：{stat['plan_count']}\n"
+                f"  实际：{stat['request_count']}\n"
+                f"  成功：{stat['success_count']}\n"
+                f"  售罄：{stat['sold_out_count']}\n"
+                f"  人数过多：{stat['crowd_count']}\n"
+                f"  操作频繁：{stat['rate_limit_count']}\n"
+                f"  超时：{stat['timeout_count']}\n"
+                f"  空响应：{stat['empty_count']}\n"
+                f"  其他：{stat['unknown_count']}"
+            )
+
+        # ---- 汇总到 result_log 的 rights 列表（多权益模式） ----
+        if rights_count > 1:
+            rights_result = []
+
+            for meta in rights_tasks_meta:
+                stat = meta['stat']
+                rights_result.append({
+                    'rightsId': stat['rightsId'],
+                    'level': stat['level'],
+                    'amount': stat['amount'],
+                    'status': _derive_rights_status(stat),
+                    'message': _derive_rights_status(stat),
+                    'request_count': stat['request_count'],
+                    'success_count': stat['success_count'],
+                    'rate_limit_count': stat['rate_limit_count'],
+                    'crowd_count': stat['crowd_count'],
+                    'last_http_status': stat.get('last_http_status'),
+                    'last_latency_ms': stat.get('last_latency_ms'),
+                })
+
+            with result_lock:
+                overall = _derive_overall_status(
+                    rights_result
+                )
+                result_log[phone] = {
+                    'status': overall,
+                    'message': _derive_overall_msg(rights_result),
+                    'level': rights_result[0].get('level') if rights_result else '-',
+                    'amount': rights_result[0].get('amount') if rights_result else '-',
+                    'rights': rights_result,
+                }
 
 
 # ============================================================
@@ -1880,6 +2209,42 @@ def build_summary(all_accounts, accounts_to_run, skipped_phones, result_log):
             lines.append(
                 f"*{masked_md}* ｜ _{level_md}_ ｜ _{amount_md}_ ｜ {status_md}"
             )
+
+            # 多权益模式：逐权益展示状态摘要（保持简洁，避免冗长调试信息）
+            rights_info = res.get('rights')
+            if isinstance(rights_info, list) and rights_info:
+                for r in rights_info:
+                    r_level = r.get('level')
+                    r_amount = r.get('amount')
+                    r_status = r.get('status', 'UNKNOWN')
+
+                    r_level_str = (
+                        f"V{r_level}"
+                        if r_level not in (None, '-', '')
+                        else '-'
+                    )
+                    r_amount_str = (
+                        str(r_amount)
+                        if r_amount not in (None, '-', '')
+                        else '-'
+                    )
+
+                    if r_status == 'SUCCESS':
+                        r_status_md = '🎉 成功'
+                    elif r_status == 'SOLD_OUT':
+                        r_status_md = '💨 售罄'
+                    elif r_status == 'RATE_LIMIT':
+                        r_status_md = '⚠️ 操作频繁'
+                    elif r_status == 'CROWD':
+                        r_status_md = '👥 人数过多'
+                    else:
+                        r_status_md = '❌ 失败'
+
+                    lines.append(
+                        f"  ↳ _{_md_esc(r_level_str)}_ ｜ "
+                        f"_{_md_esc(r_amount_str)}_ ｜ "
+                        f"{r_status_md}"
+                    )
         else:
             lines.append(
                 f"*{masked_md}* ｜ _\\-_ ｜ _\\-_ ｜ ❌ *失败*"
@@ -1896,9 +2261,11 @@ def build_summary(all_accounts, accounts_to_run, skipped_phones, result_log):
 # ============================================================
 
 def main():
-    global debug, test_only, claimed_log_file
+    global debug, test_only, claimed_log_file, enable_multi_rights, max_multi_rights_tasks
     boost_process_priority()
     claimed_log_file = globals().get("claimed_log_file") or "claimed_accounts.json"
+    enable_multi_rights = globals().get("enable_multi_rights", False)
+    max_multi_rights_tasks = globals().get("max_multi_rights_tasks", 20)
     env_force = os.environ.get("FORCE_RUN", "").lower() in ["true", "1"] or \
                 os.environ.get("dxqy_force", "").lower() in ["true", "1"] or \
                 os.environ.get("TEST_RUN", "").lower() in ["true", "1"]
@@ -2201,9 +2568,14 @@ def main():
 
 if __name__ == '__main__':
 
-    inadvance = -100
-    count_per_account = 5
-    interval = 10
+    # 运行时变量统一来源于 CONFIG，保持与 v2.3.0 一致的语义
+    inadvance = int(CONFIG.get("INADVANCE", -100))
+    count_per_account = int(CONFIG.get("COUNT_PER_ACCOUNT", 5))
+    interval = int(CONFIG.get("INTERVAL_MS", 10))
+    enable_ruishu = bool(CONFIG.get("ENABLE_RUISHU", False))
+    claimed_log_file = CONFIG.get("CLAIMED_LOG_FILE", "claimed_accounts.json")
+    enable_multi_rights = bool(CONFIG.get("ENABLE_MULTI_RIGHTS", False))
+    max_multi_rights_tasks = int(CONFIG.get("MAX_MULTI_RIGHTS_TASKS", 20))
 
     hour = 0
     minute = 0
@@ -2223,9 +2595,9 @@ if __name__ == '__main__':
 
     test_only = DEBUG_MODE
 
-    ENABLE_RUISHU = False
+    ENABLE_RUISHU = enable_ruishu
 
-    claimed_log_file = "claimed_accounts.json"
+    claimed_log_file = claimed_log_file
 
     print(
         "=" * 52
@@ -2263,6 +2635,12 @@ if __name__ == '__main__':
     print(
         f"🤖 瑞数Cookie: "
         f"{'启用' if ENABLE_RUISHU else '禁用'}"
+    )
+
+    print(
+        f"🎁 多权益并发: "
+        f"{'启用' if enable_multi_rights else '禁用'}"
+        f"{f' (上限{max_multi_rights_tasks}任务)' if enable_multi_rights else ''}"
     )
 
     print(
