@@ -12,7 +12,7 @@
 ================================================================================
 @Name: 微信读书 · 全功能自动化任务（青龙面板专版）
 @Author: TomCatXue
-@Version: 3.5.5
+@Version: 1.1.5
 @Updated: 2026-09-23
 ================================================================================
 使用说明：
@@ -49,7 +49,7 @@ const CONFIG = {
 // 常量与系统配置
 // ================================================================================
 const SCRIPT_NAME = "微信读书 · 全功能任务";
-const SCRIPT_VERSION = "3.5.5";
+const SCRIPT_VERSION = "1.1.5";
 const AUTH_KEY = "weread_auth_v2";
 const CACHE_FILE = "./weread_session.json";
 const API = "https://i.weread.qq.com";
@@ -567,7 +567,7 @@ async function runClaimTask(auth) {
                 if (typeof coins === "number") result.accountCoins = coins;
             }
         }
-    } catch(e) { }
+    } catch (e) { }
 
     result.success = true;
     result.details = `本周已读: ${result.readingMin}分钟(${result.readingDay}天), 本周达标已领: 体验卡 ${result.weekTotalCardDays}天 · 书币 ${result.weekTotalCoins}个`
@@ -968,7 +968,7 @@ async function main() {
     const canFlip = (envTasks ? envTasks.includes("flip") : CONFIG.ENABLE_FLIP) && (isTuesday || forceRun);
     const canFree = (envTasks ? envTasks.includes("free") : CONFIG.ENABLE_FREE) && (isFriday || forceRun);
 
-    $.log(`📅 当前时间: ${now.toLocaleString()} (星期${['日','一','二','三','四','五','六'][dayOfWeek]})`);
+    $.log(`📅 当前时间: ${now.toLocaleString()} (星期${['日', '一', '二', '三', '四', '五', '六'][dayOfWeek]})`);
     $.log(`⚙️ 任务队列: [每日领卡: ${canClaim ? '执行' : '跳过'}] [周二翻牌: ${canFlip ? '执行' : (isTuesday ? '已禁用' : '非周二跳过')}] [周五限免: ${canFree ? '执行' : (isFriday ? '已禁用' : '非周五跳过')}]`);
 
     const summaryReport = [];
