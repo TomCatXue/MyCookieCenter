@@ -6,7 +6,7 @@
 中国电信 · 0点等级会员权益兑换（每日限量102份·高并发秒杀脚本）
 ===================================================================
 new Env('中国电信 · 0点等级权益兑换');
-cron: 20 59 23 * * *
+cron: 59 23 * * *
 tag: 中国电信
 # @tag 中国电信
 ===================================================================
@@ -42,6 +42,16 @@ import base64
 import random
 import certifi
 import datetime
+from datetime import timezone, timedelta
+try:
+    from zoneinfo import ZoneInfo
+    CN_TZ = ZoneInfo("Asia/Shanghai")
+except Exception:
+    CN_TZ = timezone(timedelta(hours=8))
+
+def now_cn() -> datetime.datetime:
+    return datetime.datetime.now(CN_TZ)
+
 import requests
 import binascii
 import traceback
@@ -145,7 +155,7 @@ def boost_process_priority():
 
 
 def printn(m):
-    current_time = datetime.datetime.now().strftime("%H:%M:%S.%f")[:-3]
+    current_time = now_cn().strftime("%H:%M:%S.%f")[:-3]
     print(f'\n[{current_time}] {m}')
 
 
@@ -322,7 +332,7 @@ def save_claimed_account(filename, phone, lock):
     with lock:
         claimed_data = load_claimed_accounts(filename)
 
-        current_month = datetime.datetime.now().strftime("%Y-%m")
+        current_month = now_cn().strftime("%Y-%m")
 
         claimed_data[phone] = current_month
 
@@ -364,7 +374,7 @@ test_only = False
 
 def get_ticket(phone, userId, token, ss):
     try:
-        timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+        timestamp = now_cn().strftime("%Y%m%d%H%M%S")
 
         enc_target = encrypt_des3(userId)
 
@@ -488,7 +498,7 @@ def get_ticket(phone, userId, token, ss):
 
 def userLoginNormal(phone, password, android_id, ss):
     try:
-        timestamp = datetime.datetime.now().strftime(
+        timestamp = now_cn().strftime(
             "%Y%m%d%H%M%S"
         )
 
@@ -929,20 +939,20 @@ async def async_staggered_burst_worker(
 
     if not debug:
         # 1. 粗粒度异步休眠（休眠至目标时间前 1.5 秒）
-        wait_seconds = (fire_time - datetime.datetime.now()).total_seconds()
+        wait_seconds = (fire_time - now_cn()).total_seconds()
         if wait_seconds > 1.5:
             await asyncio.sleep(wait_seconds - 1.2)
 
         # 2. 毫秒级自旋微循环（最后 1.2 秒紧锁 CPU，防止被内核 CFS 调度器挂起脱水）
         while True:
-            diff = (fire_time - datetime.datetime.now()).total_seconds()
+            diff = (fire_time - now_cn()).total_seconds()
             if diff <= 0:
                 break
             if diff > 0.05:
                 await asyncio.sleep(0.01)
 
         # 3. 严重时钟漂移与容器脱水保护熔断（如果当前时间偏离目标超过 30 秒，判定系统此前发生严重脱水，凭证已过期，中止发送）
-        drift = (datetime.datetime.now() - fire_time).total_seconds()
+        drift = (now_cn() - fire_time).total_seconds()
         if drift > 30:
             printn(
                 f"⚠️【{phone}】[任务{task_index}] 调度严重漂移 (+{drift:.1f}s)，"
@@ -975,7 +985,7 @@ async def async_staggered_burst_worker(
         rights_stat = {}
 
     # 安全默认值（避免异常分支引用未定义变量）
-    request_time = datetime.datetime.now().strftime('%H:%M:%S.%f')[:-3]
+    request_time = now_cn().strftime('%H:%M:%S.%f')[:-3]
     request_perf = time.perf_counter()
 
     try:
@@ -1011,14 +1021,14 @@ async def async_staggered_burst_worker(
 
         # ---- 实际请求开始时间（HTTP 请求执行前记录） ----
         request_time = (
-            datetime.datetime.now()
+            now_cn()
             .strftime('%H:%M:%S.%f')[:-3]
         )
         request_perf = time.perf_counter()
 
         # 理论调度时间（fire_time）已在上方计算，此处换算偏差
         actual_drift_ms = (
-            datetime.datetime.now() - fire_time
+            now_cn() - fire_time
         ).total_seconds() * 1000
 
         async with session.post(
@@ -1543,7 +1553,7 @@ async def run_async_bursts(
     num_accounts_to_run
 ):
 
-    now = datetime.datetime.now()
+    now = now_cn()
 
     target_time = now.replace(
         hour=hour,
@@ -2283,6 +2293,44 @@ def build_summary(all_accounts, accounts_to_run, skipped_phones, result_log):
 # 主程序
 # ============================================================
 
+def print_midnight_diagnostics(force_run: bool) -> bool:
+    local_now = datetime.datetime.now()
+    cn_now = now_cn()
+    utc_now = datetime.datetime.now(timezone.utc)
+    biz_date = cn_now.strftime('%Y-%m-%d')
+    local_str = local_now.strftime('%Y-%m-%d %H:%M:%S')
+    cn_str = cn_now.strftime('%Y-%m-%d %H:%M:%S')
+    utc_str = utc_now.strftime('%Y-%m-%d %H:%M:%S')
+    tz_consistent = " (系统本地时间与中国时间一致)" if local_str == cn_str else " (系统本地时间与中国时间不一致，已校准为中国时间)"
+
+    print("=" * 52)
+    print("[时间诊断]")
+    print(f"系统本地时间: {local_str}")
+    print(f"中国时间:     {cn_str}")
+    print(f"UTC时间:      {utc_str}")
+    print(f"业务日期:     {biz_date}")
+    print(f"时区:         Asia/Shanghai{tz_consistent}")
+    print("=" * 52)
+
+    in_window = (cn_now.hour == 23 and cn_now.minute >= 55)
+    print("[调度诊断]")
+    print(f"当前中国时间: {cn_now.strftime('%H:%M:%S')}")
+    print("正式运行窗口: 23:55~23:59")
+    print(f"FORCE_RUN: {'true' if force_run else 'false'}")
+
+    if not in_window and not force_run:
+        print("当前不在正式抢兑时间窗口，本次任务正常退出。")
+        print("当前不是正式抢兑时间，脚本不会进入正式抢兑流程。")
+        print("如需测试，请开启 FORCE_RUN=true。\n")
+        return False
+    elif in_window and not force_run:
+        print("进入正式抢兑准备流程。\n")
+        return True
+    else:
+        print("FORCE_RUN=true，跳过正式时间窗口限制，仅用于测试。\n")
+        return True
+
+
 def main():
     global debug, test_only, claimed_log_file, enable_multi_rights, max_multi_rights_tasks
     boost_process_priority()
@@ -2298,6 +2346,9 @@ def main():
     debug_flag = globals().get("DEBUG_MODE", False)
     debug = force_run or debug_flag
     test_only = force_run or debug_flag
+
+    if not print_midnight_diagnostics(force_run):
+        return
 
     if test_only:
 
@@ -2340,7 +2391,7 @@ def main():
             "跳过主程序等待，直接执行完整流程"
         )
 
-    start_time = datetime.datetime.now()
+    start_time = time.monotonic()
 
     PHONES = os.environ.get('dxqy') or os.environ.get('dxlin') or os.environ.get('CHINA_TELECOM_AUTH')
 
@@ -2402,9 +2453,14 @@ def main():
         claimed_log_file
     )
 
-    current_month = datetime.datetime.now().strftime(
-        "%Y-%m"
-    )
+    now = now_cn()
+    # 23点准备时抢兑目标为次日0点（跨午夜），月份取次日月份；其余时间取当前月份
+    if now.hour == 23:
+        target_month = (now + datetime.timedelta(hours=1)).strftime("%Y-%m")
+    else:
+        target_month = now.strftime("%Y-%m")
+
+    current_month = target_month
 
     accounts_to_run = []
     skipped_accounts = []
@@ -2502,24 +2558,19 @@ def main():
         accounts_to_run
     )
 
-    now = datetime.datetime.now()
+    now = now_cn()
     prepare_time = now.replace(hour=23, minute=59, second=20, microsecond=0)
 
-    # 智能窗口调度保护 (完全对齐周三脚本规范)
-    if now.hour == 23 and now.minute >= 55 and not force_run:
+    # 智能预热调度保护
+    if not force_run:
         if now < prepare_time:
             wait_seconds = (prepare_time - now).total_seconds()
             printn(f"⏳ 距离 23:59:20 还有 {wait_seconds:.1f} 秒，等待预热...")
             time.sleep(wait_seconds)
         else:
             printn("⚡ 已处于 23:59:20 预热窗口内，立即启动并行登录！")
-    elif force_run:
-        printn("🚀 【平时测试/强制运行模式】跳过夜间等待，直接执行全账号登录与可领权益检测！")
     else:
-        printn(f"📅 【时间检查】当前系统时间为 {now.strftime('%H:%M:%S')}，非夜间抢购时段 (抢购准备期为 23:55~23:59)。")
-        printn("💡 电信0点权益兑换为每日限量102份（每号每月限领1次），脚本将在每天 23:58 自动启动并于 00:00 准点抢兑...")
-        printn("👉 如需在平时进行联调测试，请在青龙面板添加环境变量: FORCE_RUN=true (或在脚本顶部将 'FORCE_RUN' 改为 True)。\n")
-        return
+        printn("🚀 【平时测试/强制运行模式】跳过夜间等待，直接执行全账号登录与可领权益检测！")
 
     # ========================================================
     # 并发处理账号
@@ -2545,11 +2596,7 @@ def main():
 
         wait(futures)
 
-    end_time = datetime.datetime.now()
-
-    duration = (
-        end_time - start_time
-    ).total_seconds()
+    duration = time.monotonic() - start_time
 
     # ========================================================
     # 总结

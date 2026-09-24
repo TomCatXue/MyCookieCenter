@@ -35,8 +35,17 @@ if hasattr(sys.stderr, 'reconfigure'):
     except Exception:
         pass
 from typing import Dict, Any, Union
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
+
+try:
+    from zoneinfo import ZoneInfo
+    CN_TZ = ZoneInfo("Asia/Shanghai")
+except Exception:
+    CN_TZ = timezone(timedelta(hours=8))
+
+def now_cn() -> datetime:
+    return datetime.now(CN_TZ)
 from Crypto.PublicKey import RSA
 from Crypto.Cipher import PKCS1_v1_5, DES3, AES
 from Crypto.Util.Padding import pad, unpad
@@ -67,7 +76,7 @@ global_logs = []
 
 # --- 工具函数 ---
 def log(msg: str):
-    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    timestamp = now_cn().strftime('%Y-%m-%d %H:%M:%S')
     full_msg = f"[{timestamp}] {msg}"
     global_logs.append(full_msg)
     print(full_msg)
@@ -78,7 +87,26 @@ def mask(s: str) -> str:
     return f"{s[:3]}****{s[-4:]}"
 
 def ts() -> str:
-    return datetime.now().strftime('%Y%m%d%H%M%S')
+    return now_cn().strftime('%Y%m%d%H%M%S')
+
+def print_time_diagnosis():
+    local_now = datetime.now()
+    cn_now = now_cn()
+    utc_now = datetime.now(timezone.utc)
+    biz_date = cn_now.strftime('%Y-%m-%d')
+    local_str = local_now.strftime('%Y-%m-%d %H:%M:%S')
+    cn_str = cn_now.strftime('%Y-%m-%d %H:%M:%S')
+    utc_str = utc_now.strftime('%Y-%m-%d %H:%M:%S')
+    tz_consistent = " (系统本地时间与中国时间一致)" if local_str == cn_str else " (系统本地时间与中国时间不一致，已校准为中国时间)"
+
+    print("=" * 65)
+    print("[时间诊断]")
+    print(f"系统本地时间: {local_str}")
+    print(f"中国时间:     {cn_str}")
+    print(f"UTC时间:      {utc_str}")
+    print(f"业务日期:     {biz_date}")
+    print(f"时区:         Asia/Shanghai{tz_consistent}")
+    print("=" * 65)
 
 def rd_str(length: int) -> str:
     return ''.join(random.choices(string.ascii_letters + string.digits, k=length))
@@ -467,6 +495,7 @@ if __name__ == '__main__':
     print("=" * 65)
     print(f"  🎉 [{SCRIPT_VERSION}] 中国电信 · 每日签到与金豆任务聚合脚本 🎉  ")
     print("=" * 65)
+    print_time_diagnosis()
 
     raw = os.environ.get('dxlin') or \
           os.environ.get('CHINA_TELECOM_AUTH') or \
