@@ -375,17 +375,6 @@ function decode(str) {
     return null;
 }
 
-function encode(obj) {
-    let str = typeof obj === "string" ? obj : JSON.stringify(obj);
-    if (typeof $base64 !== "undefined") {
-        return $base64.encode(str);
-    }
-    if (typeof Buffer !== "undefined") {
-        return Buffer.from(str, "utf-8").toString("base64");
-    }
-    return str;
-}
-
 // 核心自愈：通过 /login 换票刷新 skey 与 wr_skey
 async function tryRefreshLogin(auth) {
     if (!auth || !auth.refreshToken || !auth.deviceId) {
@@ -940,14 +929,14 @@ async function runFreeTask(auth) {
         return result;
     }
 
-    // 4. 正确构建复数 bookIds 数组并 Base64 编码发送
-    let addPayload = { bookIds: bookIds };
-    let addRes = await post(API + "/shelf/add", encode(addPayload), getHeaders(auth));
+    // 4. 正确构建复数 bookIds 数组并发送原生 JSON (禁止 Base64 避免触发服务端 json格式错误)
+    let addPayload = JSON.stringify({ bookIds: bookIds });
+    let addRes = await post(API + "/shelf/add", addPayload, getHeaders(auth));
     if (addRes.status === 401 || addRes.status === 499) {
         let refreshed = await tryRefreshLogin(auth);
         if (refreshed) {
             auth = refreshed;
-            addRes = await post(API + "/shelf/add", encode(addPayload), getHeaders(auth));
+            addRes = await post(API + "/shelf/add", addPayload, getHeaders(auth));
         }
     }
 
