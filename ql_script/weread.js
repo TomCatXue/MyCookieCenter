@@ -12,7 +12,7 @@
 ================================================================================
 @Name: 微信读书 · 全功能自动化任务（青龙面板专版）
 @Author: TomCatXue
-@Version: 1.1.5
+@Version: 1.1.6
 @Updated: 2026-09-23
 ================================================================================
 使用说明：
@@ -49,7 +49,7 @@ const CONFIG = {
 // 常量与系统配置
 // ================================================================================
 const SCRIPT_NAME = "微信读书 · 全功能任务";
-const SCRIPT_VERSION = "1.1.5";
+const SCRIPT_VERSION = "1.1.6";
 const AUTH_KEY = "weread_auth_v2";
 const CACHE_FILE = "./weread_session.json";
 const API = "https://i.weread.qq.com";
@@ -373,6 +373,17 @@ function decode(str) {
         }
     } catch (e) { }
     return null;
+}
+
+function encode(obj) {
+    let str = typeof obj === "string" ? obj : JSON.stringify(obj);
+    if (typeof $base64 !== "undefined") {
+        return $base64.encode(str);
+    }
+    if (typeof Buffer !== "undefined") {
+        return Buffer.from(str, "utf-8").toString("base64");
+    }
+    return str;
 }
 
 // 核心自愈：通过 /login 换票刷新 skey 与 wr_skey
@@ -859,6 +870,28 @@ async function runFreeTask(auth) {
         "skey": a.skey || ""
     });
 
+    // 1. 检查领书资格与本期配额（每期最多 2 本）
+    try {
+        let qRes = await get(API + "/checkfreequalify?type=book&vid=" + auth.vid, getHeaders(auth));
+        if (qRes.status === 401 || qRes.status === 499) {
+            let refreshed = await tryRefreshLogin(auth);
+            if (refreshed) {
+                auth = refreshed;
+                qRes = await get(API + "/checkfreequalify?type=book&vid=" + auth.vid, getHeaders(auth));
+            }
+        }
+        let qData = decode(qRes.body);
+        if (qData && qData.reachedMax === 1) {
+            result.success = true;
+            result.details = "本期免费图书馆领书配额已达上限 (已领满2本)";
+            $.log(`[WeRead] ℹ️ ${result.details}`);
+            return result;
+        }
+    } catch (e) {
+        $.log("[WeRead] checkfreequalify 请求异常: " + String(e));
+    }
+
+    // 2. 拉取官方限免书库列表
     let listRes = await get(API + "/free/library/list?count=120&receiveStatus=1&type=book&v=2", getHeaders(auth));
     if (listRes.status === 401 || listRes.status === 499) {
         $.log("[WeRead] 限免图书接口 401/499，启动脱机换票自愈...");
@@ -876,28 +909,60 @@ async function runFreeTask(auth) {
     }
 
     let freeData = decode(listRes.body);
-    let books = freeData?.books || [];
-    if (!books.length) {
+    let rawList = freeData?.books || freeData?.data || freeData?.items || [];
+    if (!rawList.length) {
         result.success = true;
-        result.details = "本期限免书库暂无新书或已全入架";
+        result.details = "本期限免书库暂无新书";
+        $.log(`[WeRead] ℹ️ ${result.details}`);
         return result;
     }
 
-    for (let b of books.slice(0, 2)) {
-        let bInfo = b.bookInfo || b;
-        let bId = bInfo.bookId || bInfo.id;
-        let bTitle = bInfo.title || bInfo.name || "图书";
-        if (bId) {
-            let addRes = await post(API + "/shelf/add", JSON.stringify({ bookId: String(bId) }), getHeaders(auth));
-            if (addRes.status === 200) {
-                result.addedBooks.push(`《${bTitle}》`);
-            }
+    // 3. 提取书籍并优先挑选未领取的 (received !== 1)
+    let books = [];
+    rawList.forEach(b => {
+        let bInfo = b.bookInfo || b.book || b;
+        let bid = bInfo.bookId || bInfo.id;
+        let title = bInfo.title || bInfo.name || "图书";
+        let received = typeof b.received !== "undefined" ? b.received : (bInfo.received || 0);
+        if (bid) {
+            books.push({ bookId: String(bid), title: String(title), received: Number(received) });
+        }
+    });
+
+    let candidates = books.filter(b => b.received !== 1);
+    let targetBooks = (candidates.length > 0 ? candidates : books).slice(0, 2);
+    let bookIds = targetBooks.map(b => b.bookId);
+
+    if (bookIds.length === 0) {
+        result.success = true;
+        result.details = "本期限免好书已全部在书架中";
+        $.log(`[WeRead] ✅ ${result.details}`);
+        return result;
+    }
+
+    // 4. 正确构建复数 bookIds 数组并 Base64 编码发送
+    let addPayload = { bookIds: bookIds };
+    let addRes = await post(API + "/shelf/add", encode(addPayload), getHeaders(auth));
+    if (addRes.status === 401 || addRes.status === 499) {
+        let refreshed = await tryRefreshLogin(auth);
+        if (refreshed) {
+            auth = refreshed;
+            addRes = await post(API + "/shelf/add", encode(addPayload), getHeaders(auth));
         }
     }
 
-    result.success = true;
-    result.details = result.addedBooks.length > 0 ? `成功加入书架: ${result.addedBooks.join(', ')}` : "本期限免好书已在书架中";
-    $.log(`[WeRead] ✅ ${result.details}`);
+    let resData = decode(addRes.body);
+    // 5. 校验真实落库响应（succ 或 已在书架 errcode -2449）
+    if (addRes.status === 200 && resData && (resData.succ || resData.synckey || resData.errcode === -2449)) {
+        result.success = true;
+        result.addedBooks = targetBooks.map(b => `《${b.title}》`);
+        result.details = `成功加入书架: ${result.addedBooks.join(', ')}`;
+        $.log(`[WeRead] ✅ ${result.details}`);
+    } else {
+        result.details = `加入书架失败: ${resData?.errmsg || resData?.message || ("HTTP " + addRes.status)}`;
+        $.log(`[WeRead] ❌ ${result.details}`);
+    }
+
     return result;
 }
 
