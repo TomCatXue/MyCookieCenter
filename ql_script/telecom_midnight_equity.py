@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 ===================================================================
-📌 版本: v2.3.0 (2026-09-22 毫秒级抗脱水抢兑加固版：CPU提权/自旋锁/防漂移熔断)
+📌 版本: v2.4.0 (2026-09-26 预计算密文/抗限流频控优化/细分推送版)
 中国电信 · 0点等级会员权益兑换（每日限量102份·高并发秒杀脚本）
 ===================================================================
 new Env('中国电信 · 0点等级权益兑换');
@@ -70,9 +70,9 @@ from concurrent.futures import ThreadPoolExecutor, wait
 # ==================== 🛠️ 脚本功能开关配置 ====================
 CONFIG = {
     "FORCE_RUN": False,         # 平日测试模式: False=仅夜间23:55~23:59准备并抢购; True=平时任何时间均可运行全链路测试
-    "INADVANCE": -100,          # 提前100毫秒首发抢购
-    "COUNT_PER_ACCOUNT": 5,     # 每个账号并发抢购数 (建议 3~5)
-    "INTERVAL_MS": 10,          # 并发请求微间隔(毫秒)
+    "INADVANCE": -150,          # 提前150毫秒首发抢购（对冲机器与网络30~50ms固有偏差）
+    "COUNT_PER_ACCOUNT": 3,     # 每个账号并发抢购数 (调低至3，避免短时连续发包触发网关频控)
+    "INTERVAL_MS": 100,         # 并发请求微间隔(毫秒，拉大至100ms错开网关滑动窗口)
     "ENABLE_RUISHU": False,     # 瑞数安全Cookie开关
     "CLAIMED_LOG_FILE": "claimed_accounts.json",
     "ENABLE_MULTI_RIGHTS": False,   # 多权益并发领取: False=仅抢 rightsList[0] 默认权益; True=对接口返回的每个权益独立并发领取
@@ -270,7 +270,7 @@ def get_ruishu_cookies():
 def send_pushplus_notification(token, title, content):
     """优先使用呆呆面板默认通知；不在面板环境时回退到 pushplus。"""
 
-    # ---------- 呆呆面板默认通知 ----------
+    # ---------- 呆呆面板/青龙默认通知 ----------
     if _HAS_DAIDAI_NOTIFY:
         try:
             daidai_send(
@@ -280,6 +280,14 @@ def send_pushplus_notification(token, title, content):
             )
             printn("✅ 呆呆面板默认推送成功!")
             return
+        except TypeError:
+            try:
+                daidai_send(title, content)
+                printn("✅ 青龙面板默认推送成功!")
+                return
+            except Exception as e:
+                printn(f"❌ 青龙面板推送失败: {e}")
+                return
         except Exception as e:
             printn(f"❌ 呆呆面板推送失败: {e}")
             return
@@ -927,7 +935,8 @@ async def async_staggered_burst_worker(
     num_accounts_to_run,
     rights_index=0,
     rights_count=1,
-    rights_stat=None
+    rights_stat=None,
+    cached_para=None
 ):
 
     fire_time = (
@@ -990,15 +999,17 @@ async def async_staggered_burst_worker(
 
     try:
 
-        value = {
-            "id": rightsId,
-            "accId": accId,
-            "showType": "9003",
-            "showEffect": "8",
-            "czValue": "0"
-        }
-
-        paraV = encrypt_para_rsa_new(value)
+        if cached_para:
+            paraV = cached_para
+        else:
+            value = {
+                "id": rightsId,
+                "accId": accId,
+                "showType": "9003",
+                "showEffect": "8",
+                "czValue": "0"
+            }
+            paraV = encrypt_para_rsa_new(value)
 
         headers = {
             "sign": sign,
@@ -1583,6 +1594,16 @@ async def run_async_bursts(
     total_tasks = 0
 
     for r_idx, rights in enumerate(rights_list):
+        # 预计算 RSA 密文，消除秒杀发包瞬间的 CPU 加密阻塞与多协程排队延迟
+        val = {
+            "id": rights.get('activityId'),
+            "accId": accId,
+            "showType": "9003",
+            "showEffect": "8",
+            "czValue": "0"
+        }
+        cached_para = encrypt_para_rsa_new(val)
+
         rights_stat = {
             'rightsId': rights.get('activityId'),
             'level': rights.get('level'),
@@ -1603,6 +1624,7 @@ async def run_async_bursts(
         rights_tasks_meta.append({
             'rights': rights,
             'stat': rights_stat,
+            'cached_para': cached_para,
         })
         total_tasks += count_per_account
 
@@ -1626,8 +1648,8 @@ async def run_async_bursts(
     )
 
     timeout = aiohttp.ClientTimeout(
-        total=15,
-        connect=10
+        total=4,
+        connect=2
     )
 
     async with aiohttp.ClientSession(
@@ -1662,6 +1684,8 @@ async def run_async_bursts(
 
             rights_stat['plan_count'] = plan_count
 
+            cached_para = meta.get('cached_para')
+
             for i in range(plan_count):
                 tasks.append(
                     async_staggered_burst_worker(
@@ -1684,7 +1708,8 @@ async def run_async_bursts(
                         num_accounts_to_run,
                         rights_index=r_idx,
                         rights_count=rights_count,
-                        rights_stat=rights_stat
+                        rights_stat=rights_stat,
+                        cached_para=cached_para
                     )
                 )
                 created_tasks += 1
@@ -1723,7 +1748,7 @@ async def run_async_bursts(
                 f"  其他：{stat['unknown_count']}"
             )
 
-        # ---- 汇总到 result_log 的 rights 列表（多权益模式） ----
+        # ---- 汇总到 result_log 的 rights 列表（多权益模式 / 单权益模式） ----
         if rights_count > 1:
             rights_result = []
 
@@ -1754,6 +1779,19 @@ async def run_async_bursts(
                     'amount': rights_result[0].get('amount') if rights_result else '-',
                     'rights': rights_result,
                 }
+        else:
+            # 单权益模式：若未曾记录成功/售罄，根据统计推导精确失败原因写入日志
+            stat = rights_tasks_meta[0]['stat']
+            derived_st = _derive_rights_status(stat)
+            with result_lock:
+                cur_status = result_log.get(phone, {}).get('status')
+                if phone not in result_log or cur_status not in ('SUCCESS', 'SOLD_OUT'):
+                    result_log[phone] = {
+                        'status': derived_st,
+                        'message': derived_st,
+                        'level': stat.get('level'),
+                        'amount': stat.get('amount'),
+                    }
 
 
 # ============================================================
@@ -2233,9 +2271,24 @@ def build_summary(all_accounts, accounts_to_run, skipped_phones, result_log):
                 else '\\-'
             )
 
-            if res.get('status') == 'SUCCESS':
+            status = res.get('status')
+            if status == 'SUCCESS':
                 status_md = '🎉 *成功*'
                 success_count += 1
+            elif status == 'SOLD_OUT':
+                status_md = '💨 *已售罄*'
+            elif status == 'RATE_LIMIT':
+                status_md = '⚠️ *操作频繁*'
+            elif status == 'TIMEOUT':
+                status_md = '⏰ *请求超时*'
+            elif status == 'CROWD':
+                status_md = '👥 *人数过多*'
+            elif status == 'EXPIRED_DRIFT':
+                status_md = '⚠️ *时钟漂移*'
+            elif status in ('TICKET_FAIL', 'LOGIN_FAIL'):
+                status_md = '❌ *登录失败*'
+            elif status in ('SIGN_FAIL', 'RIGHTS_FAIL'):
+                status_md = '❌ *凭据异常*'
             else:
                 status_md = '❌ *失败*'
 
