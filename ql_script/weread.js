@@ -12,7 +12,7 @@
 ================================================================================
 @Name: 微信读书 · 全功能自动化任务（青龙面板专版）
 @Author: TomCatXue
-@Version: 1.2.3
+@Version: 1.2.4
 @Updated: 2026-09-26
 ================================================================================
 使用说明：
@@ -58,7 +58,7 @@ const CONFIG = {
 // 常量与系统配置
 // ================================================================================
 const SCRIPT_NAME = "微信读书 · 全功能任务";
-const SCRIPT_VERSION = "1.2.3";
+const SCRIPT_VERSION = "1.2.4";
 const AUTH_KEY = "weread_auth_v2";
 const CACHE_FILE = "./weread_session.json";
 const API = "https://i.weread.qq.com";
@@ -1001,7 +1001,19 @@ async function runFreeTask(auth, helperAuth) {
         $.log("[WeRead] checkfreequalify 请求异常: " + String(e));
     }
 
-    // 2. 拉取官方限免书库列表 (携带 vol 期数参数)
+    // 2. 预读主号当前书架全量书籍，用于双重交叉核验入架状态
+    let shelfBookIds = new Set();
+    try {
+        let sRes = await get(API + "/shelf/sync?album=1&onlyBookid=1&synckey=0", getHeaders(auth));
+        let sData = decode(sRes.body);
+        let sList = sData?.bookIds || sData?.books || [];
+        sList.forEach(item => {
+            let id = typeof item === "string" ? item : (item?.bookId || item?.id);
+            if (id) shelfBookIds.add(String(id));
+        });
+    } catch (e) { }
+
+    // 3. 拉取官方限免书库列表 (携带 vol 期数参数)
     let currentVol = getFreeVol();
     let listRes = await get(API + `/free/library/list?count=120&receiveStatus=1&type=book&v=2&vol=${currentVol}`, getHeaders(auth));
     if (listRes.status === 401 || listRes.status === 499) {
@@ -1055,23 +1067,23 @@ async function runFreeTask(auth, helperAuth) {
         }
     });
 
-    // 优先统计当前书库中已被官方标记为已领取 (received === 1) 的书籍
-    let alreadyClaimed = books.filter(b => b.received === 1);
+    // 优先统计已被官方标记为已领取 (received === 1) 或已实际存在于个人书架中的书籍
+    let alreadyClaimed = books.filter(b => b.received === 1 || shelfBookIds.has(String(b.bookId)));
     let alreadyTitles = alreadyClaimed.map(b => `《${b.title}》`);
 
-    // 若本周 2 本名额已全部领取完毕，直接完成并汇报书名，无需重复请求
+    // 若本周 2 本名额已在书架中，直接判定领满并汇报书名，绝不重复发包或误发链接
     if (alreadyClaimed.length >= 2) {
         result.success = true;
         result.allClaimed = true;
-        result.addedBooks = alreadyTitles;
-        result.details = `本周已领满入架: ${alreadyTitles.join(', ')}`;
+        result.addedBooks = alreadyTitles.slice(0, 2);
+        result.details = `本期限免图书已在书架中: ${result.addedBooks.join(', ')}`;
         $.log(`[WeRead] ✅ ${result.details}`);
         return result;
     }
 
     // 计算当期剩余需领数量 (2 - 已领数量)
     let needCount = 2 - alreadyClaimed.length;
-    let candidates = books.filter(b => b.received !== 1 && b.v && b.sn);
+    let candidates = books.filter(b => b.received !== 1 && !shelfBookIds.has(String(b.bookId)) && b.v && b.sn);
 
     if (!candidates.length) {
         result.success = true;
