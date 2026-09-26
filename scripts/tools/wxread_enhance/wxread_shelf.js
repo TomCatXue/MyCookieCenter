@@ -2,8 +2,8 @@
 ------------------------------------------
 @Description: 微信读书 · 优雅书架 (下架书籍虚拟注入与全鉴权放行)
 @Author: TomCatXue
-@Version: 1.0.0
-@Date: 2026-09-26 16:45
+@Version: 1.0.1
+@Date: 2026-09-26 16:55
 ------------------------------------------
 核心特性：
   1. 订阅下架书全自动捕获（/subscription/books, /shelf/opus）：
@@ -19,7 +19,7 @@
 */
 
 const SCRIPT_NAME = "微信读书·优雅书架";
-const SCRIPT_VERSION = "1.0.0";
+const SCRIPT_VERSION = "1.0.1";
 const $ = new Env(SCRIPT_NAME);
 
 function b64encode(str) {
@@ -64,7 +64,13 @@ function getArgumentValue(argKey) {
   if (typeof $argument === "undefined" || !$argument) return "";
   if (typeof $argument === "object") return $argument[argKey] || "";
   if (typeof $argument === "string") {
-    const match = $argument.match(new RegExp("(?:^|[&,;\\s])" + argKey + "=([^&,;\\s]+)"));
+    const trimmed = $argument.trim();
+    // 兼容 Loon 直接传值模式（如 "23665510,490081"）
+    if (/^[0-9\s,;|]+$/.test(trimmed)) {
+      return trimmed;
+    }
+    // 兼容 key=val 传参模式
+    const match = trimmed.match(new RegExp("(?:^|[&,;\\s])" + argKey + "=([^&,;\\s]+)"));
     if (match) return decodeURIComponent(match[1]);
   }
   return "";
