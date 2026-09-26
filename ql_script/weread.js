@@ -1,8 +1,8 @@
 /**
  * 微信读书 · 全功能任务
  * 
- * 每日阅读时长领卡 + 周二翻牌抽奖 + 周五限免图书入架 (支持全自动脱机自愈换票)
- * cron: 0 23 * * *
+ * 每周日汇总领取本周全部奖励：阅读时长领卡 + 翻牌抽奖 + 限免好书入架 (支持全自动脱机换票)
+ * cron: 0 23 * * 0
  * tag: 微信读书
  * @tag 微信读书
  * new Env('微信读书 · 全功能任务')
@@ -12,7 +12,7 @@
 ================================================================================
 @Name: 微信读书 · 全功能自动化任务（青龙面板专版）
 @Author: TomCatXue
-@Version: 1.2.8
+@Version: 1.3.0
 @Updated: 2026-09-26
 ================================================================================
 使用说明：
@@ -32,13 +32,13 @@
 // ⚙️ 核心开关与偏好配置（在下方直接修改 true 或 false 即可）
 // ================================================================================
 const CONFIG = {
-    // 1. 【每日阅读时长领卡】：每日 23:00 自动检查达标阅读时长与连续签到天数并领奖
+    // 1. 【阅读时长领卡】：自动检查并兑换本周达标阅读时长与连续阅读天数奖励
     ENABLE_CLAIM: true,
 
-    // 2. 【周二翻牌游戏抽奖】：每周二自动执行翻牌抽奖（非周二自动跳过，无需手动管理）
+    // 2. 【翻牌游戏抽奖】：自动执行本周翻牌抽奖（已解除星期限制，周日集中领取）
     ENABLE_FLIP: true,
 
-    // 3. 【周五限免图书入架】：每周五自动拉取官方免费图书馆好书批量入架（非周五自动跳过）
+    // 3. 【限免图书入架】：自动拉取本期限免好书入架或助力兑换（已解除星期限制）
     ENABLE_FREE: true,
 
     // 4. 【奖励偏好设置】：true = 优先书币（推荐）；false = 优先体验卡
@@ -58,7 +58,7 @@ const CONFIG = {
 // 常量与系统配置
 // ================================================================================
 const SCRIPT_NAME = "微信读书 · 全功能任务";
-const SCRIPT_VERSION = "1.2.8";
+const SCRIPT_VERSION = "1.3.0";
 const AUTH_KEY = "weread_auth_v2";
 const CACHE_FILE = "./weread_session.json";
 const API = "https://i.weread.qq.com";
@@ -536,11 +536,16 @@ async function runClaimTask(auth) {
                 pf: PF
             });
             let exRes = await post(API + "/weekly/exchange", exBody, getHeaders(auth));
-            if (exRes.status === 200) {
+            let exData = decode(exRes.body);
+            let isSucc = exRes.status === 200 && (!exData || (!exData.errcode && !exData.errCode && exData.succ !== 0));
+            if (isSucc) {
                 if (gainType === 1) result.claimedCardDays += gainNum;
                 else if (gainType === 2) result.claimedCoins += gainNum;
                 result.claimList.push(`${item._type}[${levelDesc}](+${targetName})`);
                 $.log(`[WeRead] 🎉 成功领取: ${item._type}[${levelDesc}] (+${targetName})`);
+            } else {
+                let errMsg = exData?.errmsg || exData?.errMsg || ("HTTP " + exRes.status);
+                $.log(`[WeRead] ❌ 领取 ${item._type}[${levelDesc}] 失败: ${errMsg}`);
             }
         }
     }
@@ -589,9 +594,9 @@ async function runClaimTask(auth) {
 // 4. 业务子任务二：每周二翻牌游戏自动抽奖 (Flip)
 // ============================================================
 async function runFlipTask(auth) {
-    $.log("\n▶️ --- 开始执行任务：[周二翻牌抽奖] ---");
+    $.log("\n▶️ --- 开始执行任务：[翻牌抽奖游戏] ---");
     let result = {
-        task: "周二翻牌抽奖",
+        task: "翻牌抽奖游戏",
         success: false,
         details: "",
         flippedCardDays: 0,
@@ -851,16 +856,28 @@ async function runFlipTask(auth) {
     return result;
 }
 
-// 计算当期免费图书馆的期数标识 (周四更新，格式 YYYYMMDD)
+// 计算当期免费图书馆的期数标识 (严格锁定北京时间 Asia/Shanghai UTC+8，周四更新，格式 YYYYMMDD)
 function getFreeVol() {
-    let d = new Date();
-    let day = d.getDay();
+    let utcNow = Date.now();
+    let d = new Date(utcNow + 8 * 3600 * 1000);
+    let day = d.getUTCDay();
     let diff = (day >= 4 ? day - 4 : day + 3);
-    d.setDate(d.getDate() - diff);
-    let y = d.getFullYear();
-    let m = String(d.getMonth() + 1).padStart(2, '0');
-    let dd = String(d.getDate()).padStart(2, '0');
+    d.setUTCDate(d.getUTCDate() - diff);
+    let y = d.getUTCFullYear();
+    let m = String(d.getUTCMonth() + 1).padStart(2, "0");
+    let dd = String(d.getUTCDate()).padStart(2, "0");
     return `${y}${m}${dd}`;
+}
+
+// 计算指定期数的起始时间戳 (北京时间周四 00:00:00，秒级)
+function getVolStartTime(volStr) {
+    if (volStr && /^\d{8}$/.test(volStr)) {
+        let y = parseInt(volStr.slice(0, 4), 10);
+        let m = parseInt(volStr.slice(4, 6), 10) - 1;
+        let d = parseInt(volStr.slice(6, 8), 10);
+        return Math.floor(Date.UTC(y, m, d, 0, 0, 0) / 1000) - 8 * 3600;
+    }
+    return 0;
 }
 
 // 获取限免助力小号凭证 (支持完整 Cookie 串[含 wr_rt] / JSON / vid#skey 任意格式)
@@ -966,8 +983,8 @@ async function tryWebRenewal(helperAuth) {
 // 5. 业务子任务三：每周五免费图书馆好书自动入架 (Free)
 // ============================================================
 async function runFreeTask(auth, helperAuth) {
-    $.log("\n▶️ --- 开始执行任务：[周五限免好书入架] ---");
-    let result = { task: "周五限免入架", success: false, details: "", addedBooks: [], unclaimedBooks: [], allClaimed: false };
+    $.log("\n▶️ --- 开始执行任务：[限免好书入架] ---");
+    let result = { task: "限免好书入架", success: false, details: "", addedBooks: [], unclaimedBooks: [], allClaimed: false };
 
     const getHeaders = (a) => ({
         "User-Agent": a.ua || "WeRead/8.2.6 (iPhone; iOS 26.6.2; Scale/3.00)",
@@ -1060,15 +1077,24 @@ async function runFreeTask(auth, helperAuth) {
     }
 
     // 3. 权威核验主账号本周在图书馆里真正领到的书籍 (以主账号真实资产为绝对中心)
-    // 包含：官方标记 received === 1、当前付费/限免版权库 (/book/paytime time > 0)
+    // 包含：官方标记 received === 1、本期周期开启后入库的付费/限免版权库 (/book/paytime time >= volStartTime)
     let allBookIds = books.map(b => b.bookId);
     let paidBookIds = new Set();
+    let volStartTime = getVolStartTime(currentVol);
     try {
-        let payRes = await get(API + `/book/paytime?bookIds=${encodeURIComponent(allBookIds.join(","))}`, getHeaders(auth));
+        let payUrl = API + `/book/paytime?bookIds=${encodeURIComponent(allBookIds.join(","))}`;
+        let payRes = await get(payUrl, getHeaders(auth));
+        if (payRes.status === 401 || payRes.status === 499) {
+            let refreshed = await tryRefreshLogin(auth);
+            if (refreshed) {
+                auth = refreshed;
+                payRes = await get(payUrl, getHeaders(auth));
+            }
+        }
         let payData = decode(payRes.body);
         let items = payData?.data || [];
         items.forEach(item => {
-            if (item.bookId && item.time > 0) {
+            if (item.bookId && (volStartTime > 0 ? item.time >= volStartTime : item.time > 0)) {
                 paidBookIds.add(String(item.bookId));
             }
         });
@@ -1142,6 +1168,12 @@ async function runFreeTask(auth, helperAuth) {
                     let renewed = await tryWebRenewal(helperAuth);
                     if (renewed) {
                         helperSkey = renewed.wrSkey || "";
+                        if (helperAuth.rawCookie) {
+                            helperAuth.rawCookie = helperAuth.rawCookie.replace(/wr_skey=[^;\s]+/, `wr_skey=${helperSkey}`);
+                            if (renewed.wrRt) {
+                                helperAuth.rawCookie = helperAuth.rawCookie.replace(/wr_rt=[^;\s]+/, `wr_rt=${renewed.wrRt}`);
+                            }
+                        }
                         actHeaders["Cookie"] = (helperAuth && helperAuth.rawCookie) ? helperAuth.rawCookie : `wr_vid=${helperVid}; wr_skey=${helperSkey}; wr_loggedIn=1;`;
                         actRes = await get(actUrl, actHeaders);
                     }
@@ -1150,7 +1182,10 @@ async function runFreeTask(auth, helperAuth) {
                     let refreshedHelper = await tryRefreshLogin(helperAuth);
                     if (refreshedHelper) {
                         helperSkey = refreshedHelper.wrSkey || refreshedHelper.accessToken || refreshedHelper.skey || "";
-                        actHeaders["Cookie"] = `wr_vid=${helperVid}; wr_skey=${helperSkey}; wr_loggedIn=1;`;
+                        if (helperAuth.rawCookie) {
+                            helperAuth.rawCookie = helperAuth.rawCookie.replace(/wr_skey=[^;\s]+/, `wr_skey=${helperSkey}`);
+                        }
+                        actHeaders["Cookie"] = (helperAuth && helperAuth.rawCookie) ? helperAuth.rawCookie : `wr_vid=${helperVid}; wr_skey=${helperSkey}; wr_loggedIn=1;`;
                         actRes = await get(actUrl, actHeaders);
                     }
                 } else {
@@ -1253,8 +1288,8 @@ async function main() {
     }
 
     // 2. 检查子任务开关与星期几智能调度
-    const now = new Date();
-    const dayOfWeek = now.getDay(); // 0=周日, 2=周二, 5=周五
+    const bjNow = new Date(Date.now() + 8 * 3600 * 1000);
+    const dayOfWeek = bjNow.getUTCDay(); // 0=周日, 2=周二, 5=周五
     const isTuesday = dayOfWeek === 2;
     const isFriday = dayOfWeek === 5;
     const forceRun = (typeof process !== "undefined" && process.env.FORCE_RUN !== undefined)
@@ -1264,11 +1299,12 @@ async function main() {
     // 开关由顶部 CONFIG 直接控制，兼顾环境变量覆盖
     let envTasks = typeof process !== "undefined" ? process.env.WEREAD_TASKS : null;
     const canClaim = envTasks ? envTasks.includes("claim") : CONFIG.ENABLE_CLAIM;
-    const canFlip = (envTasks ? envTasks.includes("flip") : CONFIG.ENABLE_FLIP) && (isTuesday || forceRun);
-    const canFree = (envTasks ? envTasks.includes("free") : CONFIG.ENABLE_FREE) && (isFriday || forceRun);
+    const canFlip = envTasks ? envTasks.includes("flip") : CONFIG.ENABLE_FLIP;
+    const canFree = envTasks ? envTasks.includes("free") : CONFIG.ENABLE_FREE;
 
-    $.log(`📅 当前时间: ${now.toLocaleString()} (星期${['日', '一', '二', '三', '四', '五', '六'][dayOfWeek]})`);
-    $.log(`⚙️ 任务队列: [每日领卡: ${canClaim ? '执行' : '跳过'}] [周二翻牌: ${canFlip ? '执行' : (isTuesday ? '已禁用' : '非周二跳过')}] [周五限免: ${canFree ? '执行' : (isFriday ? '已禁用' : '非周五跳过')}]`);
+    const bjTimeStr = bjNow.toISOString().replace("T", " ").slice(0, 19);
+    $.log(`📅 当前时间: ${bjTimeStr} (北京时间·星期${["日", "一", "二", "三", "四", "五", "六"][dayOfWeek]})`);
+    $.log(`⚙️ 任务队列: [阅读领卡: ${canClaim ? '执行' : '跳过'}] [翻牌抽奖: ${canFlip ? '执行' : '跳过'}] [限免入架: ${canFree ? '执行' : '跳过'}]`);
 
     const summaryReport = [];
 
@@ -1308,9 +1344,7 @@ async function main() {
             ? `本周已读: ${resClaim.readingMin}分钟(${resClaim.readingDay}天), 体验卡 ${resClaim.weekTotalCardDays}天 · 书币 ${resClaim.weekTotalCoins}个${accountText}`
             : (resClaim?.details || "暂无数据");
 
-        let flipText = canFlip
-            ? (resFlip?.details || "今日无可用翻牌次数")
-            : "非周二自动跳过";
+        let flipText = resFlip?.details || "今日无可用翻牌次数";
 
         let freeText = "";
         if (canFree && resFree) {
@@ -1328,22 +1362,22 @@ async function main() {
                 freeText = resFree.details || "本期限免图书已在书架中";
             }
         } else {
-            freeText = "非周五自动跳过";
+            freeText = "未开启限免任务";
         }
 
         let bullets = [];
         if (canClaim && resClaim) {
-            bullets.push(`• 每日阅读领卡: ${claimText}`);
+            bullets.push(`• 阅读达标领卡: ${claimText}`);
         }
 
         // 仅在周二翻牌当天 (或 forceRun 强制执行) 时才在通知中显示翻牌任务
         if (canFlip && resFlip) {
-            bullets.push(`• 周二翻牌抽奖: ${flipText}`);
+            bullets.push(`• 翻牌抽奖游戏: ${flipText}`);
         }
 
         // 仅在周五限免当天 (或 forceRun 强制执行) 时才在通知中显示限免入架任务
         if (canFree && resFree) {
-            bullets.push(`• 周五限免入架: ${freeText}`);
+            bullets.push(`• 限免好书入架: ${freeText}`);
         }
 
         if (accounts.length > 1) {
