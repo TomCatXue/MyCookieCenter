@@ -12,7 +12,7 @@
 ================================================================================
 @Name: 微信读书 · 全功能自动化任务（青龙面板专版）
 @Author: TomCatXue
-@Version: 1.2.4
+@Version: 1.2.5
 @Updated: 2026-09-26
 ================================================================================
 使用说明：
@@ -58,7 +58,7 @@ const CONFIG = {
 // 常量与系统配置
 // ================================================================================
 const SCRIPT_NAME = "微信读书 · 全功能任务";
-const SCRIPT_VERSION = "1.2.4";
+const SCRIPT_VERSION = "1.2.5";
 const AUTH_KEY = "weread_auth_v2";
 const CACHE_FILE = "./weread_session.json";
 const API = "https://i.weread.qq.com";
@@ -1001,19 +1001,7 @@ async function runFreeTask(auth, helperAuth) {
         $.log("[WeRead] checkfreequalify 请求异常: " + String(e));
     }
 
-    // 2. 预读主号当前书架全量书籍，用于双重交叉核验入架状态
-    let shelfBookIds = new Set();
-    try {
-        let sRes = await get(API + "/shelf/sync?album=1&onlyBookid=1&synckey=0", getHeaders(auth));
-        let sData = decode(sRes.body);
-        let sList = sData?.bookIds || sData?.books || [];
-        sList.forEach(item => {
-            let id = typeof item === "string" ? item : (item?.bookId || item?.id);
-            if (id) shelfBookIds.add(String(id));
-        });
-    } catch (e) { }
-
-    // 3. 拉取官方限免书库列表 (携带 vol 期数参数)
+    // 2. 拉取官方限免书库列表 (携带 vol 期数参数)
     let currentVol = getFreeVol();
     let listRes = await get(API + `/free/library/list?count=120&receiveStatus=1&type=book&v=2&vol=${currentVol}`, getHeaders(auth));
     if (listRes.status === 401 || listRes.status === 499) {
@@ -1044,7 +1032,7 @@ async function runFreeTask(auth, helperAuth) {
         return result;
     }
 
-    // 3. 提取书籍并智能核验本周已领取状态 (官方每周上限 2 本)
+    // 3. 提取全部候选书籍
     let books = [];
     rawList.forEach(b => {
         let bInfo = b.bookInfo || b.book || b;
@@ -1067,11 +1055,32 @@ async function runFreeTask(auth, helperAuth) {
         }
     });
 
-    // 优先统计已被官方标记为已领取 (received === 1) 或已实际存在于个人书架中的书籍
-    let alreadyClaimed = books.filter(b => b.received === 1 || shelfBookIds.has(String(b.bookId)));
+    // 4. 权威核验用户真实付费/限免版权库 (/book/paytime) 与书架状态
+    let allBookIds = books.map(b => b.bookId);
+    let paidBookIds = new Set();
+    try {
+        let payRes = await get(API + `/book/paytime?bookIds=${encodeURIComponent(allBookIds.join(','))}`, getHeaders(auth));
+        let payData = decode(payRes.body);
+        let items = payData?.data || [];
+        items.forEach(item => {
+            if (item.bookId && item.time > 0) {
+                paidBookIds.add(String(item.bookId));
+            }
+        });
+    } catch (e) { }
+
+    // 综合判定：只要被标记为 received === 1，或在 /book/paytime 中拥有版权 (time > 0)，即为用户已拥有的本期书籍
+    let alreadyClaimed = books.filter(b => b.received === 1 || paidBookIds.has(String(b.bookId)));
     let alreadyTitles = alreadyClaimed.map(b => `《${b.title}》`);
 
-    // 若本周 2 本名额已在书架中，直接判定领满并汇报书名，绝不重复发包或误发链接
+    // 若发现已拥有版权但不在书架上，自动调用 /shelf/syncbook 官方通道一键加回书架
+    if (alreadyClaimed.length > 0) {
+        try {
+            await post(API + "/shelf/syncbook", JSON.stringify({ bookIds: alreadyClaimed.map(b => String(b.bookId)), albumIds: [] }), getHeaders(auth));
+        } catch (e) { }
+    }
+
+    // 若本周 2 本名额已全部领取完毕，直接完成并汇报真实的已领图书名，绝不挑选其他书籍或下发链接
     if (alreadyClaimed.length >= 2) {
         result.success = true;
         result.allClaimed = true;
@@ -1083,7 +1092,7 @@ async function runFreeTask(auth, helperAuth) {
 
     // 计算当期剩余需领数量 (2 - 已领数量)
     let needCount = 2 - alreadyClaimed.length;
-    let candidates = books.filter(b => b.received !== 1 && !shelfBookIds.has(String(b.bookId)) && b.v && b.sn);
+    let candidates = books.filter(b => b.received !== 1 && !paidBookIds.has(String(b.bookId)) && b.v && b.sn);
 
     if (!candidates.length) {
         result.success = true;
