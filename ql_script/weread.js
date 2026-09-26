@@ -12,7 +12,7 @@
 ================================================================================
 @Name: 微信读书 · 全功能自动化任务（青龙面板专版）
 @Author: TomCatXue
-@Version: 1.2.1
+@Version: 1.2.2
 @Updated: 2026-09-26
 ================================================================================
 使用说明：
@@ -58,7 +58,7 @@ const CONFIG = {
 // 常量与系统配置
 // ================================================================================
 const SCRIPT_NAME = "微信读书 · 全功能任务";
-const SCRIPT_VERSION = "1.2.1";
+const SCRIPT_VERSION = "1.2.2";
 const AUTH_KEY = "weread_auth_v2";
 const CACHE_FILE = "./weread_session.json";
 const API = "https://i.weread.qq.com";
@@ -963,7 +963,7 @@ async function runFreeTask(auth, helperAuth) {
         return result;
     }
 
-    // 3. 提取书籍并筛选未领取的 (received !== 1) 以及活动专属参数 (v, sn)
+    // 3. 提取书籍并智能核验本周已领取状态 (官方每周上限 2 本)
     let books = [];
     rawList.forEach(b => {
         let bInfo = b.bookInfo || b.book || b;
@@ -986,16 +986,34 @@ async function runFreeTask(auth, helperAuth) {
         }
     });
 
-    let candidates = books.filter(b => b.received !== 1 && b.v && b.sn);
-    if (!candidates.length) {
+    // 优先统计当前书库中已被官方标记为已领取 (received === 1) 的书籍
+    let alreadyClaimed = books.filter(b => b.received === 1);
+    let alreadyTitles = alreadyClaimed.map(b => `《${b.title}》`);
+
+    // 若本周 2 本名额已全部领取完毕，直接完成并汇报书名，无需重复请求
+    if (alreadyClaimed.length >= 2) {
         result.success = true;
         result.allClaimed = true;
-        result.details = "本期限免好书已全部在书架中 (本周已领满)";
+        result.addedBooks = alreadyTitles;
+        result.details = `本周已领满入架: ${alreadyTitles.join(', ')}`;
         $.log(`[WeRead] ✅ ${result.details}`);
         return result;
     }
 
-    let targetBooks = candidates.slice(0, 2);
+    // 计算当期剩余需领数量 (2 - 已领数量)
+    let needCount = 2 - alreadyClaimed.length;
+    let candidates = books.filter(b => b.received !== 1 && b.v && b.sn);
+
+    if (!candidates.length) {
+        result.success = true;
+        result.allClaimed = true;
+        result.addedBooks = alreadyTitles;
+        result.details = alreadyTitles.length > 0 ? `本周已领: ${alreadyTitles.join(', ')}` : "本期限免书库暂无可领图书";
+        $.log(`[WeRead] ✅ ${result.details}`);
+        return result;
+    }
+
+    let targetBooks = candidates.slice(0, needCount);
 
     // 4. 路径A：小号助力点击全自动兑换 (支持静态 wrSkey / skey，亦支持脱机换票)
     let helperVid = helperAuth ? String(helperAuth.vid || helperAuth.wrVid || "") : "";
@@ -1191,17 +1209,16 @@ async function main() {
         let freeText = "";
         if (canFree && resFree) {
             if (resFree.addedBooks && resFree.addedBooks.length > 0) {
-                let succText = `成功领取: ${resFree.addedBooks.join(', ')}`;
+                let titlePrefix = resFree.allClaimed ? "已在书架" : "成功领取";
+                let succText = `${titlePrefix}: ${resFree.addedBooks.join(', ')}`;
                 if (resFree.unclaimedBooks && resFree.unclaimedBooks.length > 0) {
-                    succText += `\n• 周五限免待领 (微信内点击领取):\n` + resFree.unclaimedBooks.map((b, idx) => `  ${idx + 1}. 《${b.title}》: ${b.url}`).join('\n');
+                    succText += `\n未自动入架图书，请在微信中点击链接领取:\n` + resFree.unclaimedBooks.map((b, idx) => `  ${idx + 1}. 《${b.title}》: ${b.url}`).join('\n');
                 }
                 freeText = succText;
-            } else if (resFree.allClaimed) {
-                freeText = "本期限免好书已在书架中 (本周已领满)";
             } else if (resFree.unclaimedBooks && resFree.unclaimedBooks.length > 0) {
                 freeText = "未自动入架，请在微信中点击链接一键直达领取:\n" + resFree.unclaimedBooks.map((b, idx) => `  ${idx + 1}. 《${b.title}》: ${b.url}`).join('\n');
             } else {
-                freeText = resFree.details || "本期限免好书已在书架中";
+                freeText = resFree.details || "本期限免好书已在书架中 (本周已领满)";
             }
         } else {
             freeText = "非周五自动跳过";
