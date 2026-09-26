@@ -1,0 +1,18 @@
+#!name = 微信读书 · 优雅书架
+#!desc = 专为微信读书设计：1.全自动嗅探订阅与专栏中的下架书籍（涵盖 offshelfBooks）；2.在书架同步（/shelf/sync）中动态注入下架书，实现端内书架常驻；3.解除 /book/info 与 /book/readinfo 的 soldout 限制，并将 /book/paytime 伪装为已购时间戳，彻底放行阅读器正文。
+#!author = TomCatXue
+#!homepage = https://github.com/TomCatXue/MyCookieCenter
+#!icon = https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/35/92/e6/3592e6f4-0b0b-f2e4-7968-7033b281e1f5/AppIcon-0-1x_U007epad-0-11-0-85-220-0.png/512x512bb.jpg
+#!tag = 微信读书,下架书,优雅书架,书架注入
+#!version = 1.0.0
+#!date = 2026-09-26 16:45
+
+[Argument]
+weread_inject_books = input,"",tag=下架书籍ID列表(逗号分隔),desc=手动指定需要注入书架并解除阅读限制的下架书籍ID (留空则自动从订阅抓取并注入)
+
+[MITM]
+hostname = i.weread.qq.com, weread.qq.com
+
+[Script]
+# 拦截订阅抓取、书架同步注入、书籍详情与阅读鉴权伪装
+response if ${url} ~= /^https?:\/\/(i\.)?weread\.qq\.com\/(shelf\/(sync|syncbook|add|opus)|subscription\/books|book\/(info|infos|readinfo|paytime))/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/wxread_enhance/wxread_shelf.js?v=20260926-1645") with inject_book_ids=${weread_inject_books}, tag="微信读书·优雅书架", requires_body=true

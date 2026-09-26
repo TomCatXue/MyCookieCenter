@@ -1,23 +1,18 @@
 /*
 ------------------------------------------
-@Description: 微信读书 · 防强更去广告与下架书增强
+@Description: 微信读书 · 防强更与去广告精简净化
 @Author: TomCatXue
 @Version: 3.9.0
-@Date: 2026-09-26 16:30
+@Date: 2026-09-26 16:45
 ------------------------------------------
-核心功能：
-  1. 防强更根治：深度拦截 feature、configsets、reconf、mobileSync 等接口，清空 upgrade/notice，锁定 upgrade_query_interval=2147483647 阻断 App Store 嗅探；
-  2. 虚拟书架注入（突破下架限制）：
-     - 自动捕获：当用户访问“订阅”或作者主页（/subscription/books, /shelf/opus）时，全自动提取下架书籍元数据落盘缓存；
-     - 手动配置：支持在 Loon 插件参数或持久化配置中输入特定下架 bookId；
-     - 动态注入：在书架同步接口（/shelf/sync, /shelf/syncbook）中将下架书动态注入为书架在库书籍，从 removed 中剔除；
-     - 鉴权解除：拦截 /book/info 与 /book/readinfo，强制抹除 soldout/soldoutType 并标记 isPaid=1，放行本地阅读器；
-     - 加书架容错：拦截 /shelf/add 强制响应 succ=1，保障端内添加交互闭环；
-  3. 阅读界面极简化：去阅读统计/在读人数（readingStat）、章节评论数字（chapterReview）、读者圈子（readerEntrance）；
-  4. 发现流与个人页去广告：清空 discoverfeed 营销卡片、清空 mobileSync 底部小红点与通知、净化 profile 勋章。
+功能说明：
+  1. 彻底防强更：深度拦截 feature、configsets、reconf、mobileSync 等接口，清空 upgrade/notice，锁定 upgrade_query_interval=2147483647 阻断 App Store 嗅探；
+  2. 纯净阅读：净化阅读在读人数与好友统计（book/readingStat）、章节评论分享数字（book/chapterReview）、读者圈子入口（groups/readerEntrance）、想法点评列表（review/list）；
+  3. 界面精简：过滤发现页营销卡片与推荐流广告（discoverfeed/new, discoverfeed/get）、清空底部与发现页红点及故事流更新通知（mobileSync）、净化个人主页勋章（user/profile）；
+  4. 双模兼容：全链路兼容明文 JSON 与 Base64 编码响应，保障解析高健壮性。
 */
 
-const SCRIPT_NAME = "微信读书·防强更与下架书增强";
+const SCRIPT_NAME = "微信读书·防强更去广告";
 const SCRIPT_VERSION = "3.9.0";
 const $ = new Env(SCRIPT_NAME);
 
@@ -44,29 +39,6 @@ function b64decode(str) {
     if (typeof atob !== "undefined") return decodeURIComponent(atob(str).split("").map(c => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2)).join(""));
   } catch (e) {}
   return str;
-}
-
-function getStorage(key) {
-  if (typeof $persistentStore !== "undefined" && $persistentStore.read) {
-    return $persistentStore.read(key);
-  }
-  return null;
-}
-
-function setStorage(val, key) {
-  if (typeof $persistentStore !== "undefined" && $persistentStore.write) {
-    return $persistentStore.write(val, key);
-  }
-}
-
-function getArgumentValue(argKey) {
-  if (typeof $argument === "undefined" || !$argument) return "";
-  if (typeof $argument === "object") return $argument[argKey] || "";
-  if (typeof $argument === "string") {
-    const match = $argument.match(new RegExp("(?:^|[&,;\\s])" + argKey + "=([^&,;\\s]+)"));
-    if (match) return decodeURIComponent(match[1]);
-  }
-  return "";
 }
 
 // 递归深度全量净化函数（消除版本升级、强更弹窗、公告提示）
@@ -140,7 +112,7 @@ function deepSanitize(target) {
       } catch (e2) {}
     }
 
-    // 针对阅读器纯净页面的静态响应 Mock
+    // 针对构造纯净响应的特定只读接口
     if (/\/book\/reading[sS]tat/i.test(url)) {
       const cleanResp = {
         friendFinishReadingCount: 0,
@@ -189,33 +161,6 @@ function deepSanitize(target) {
       return;
     }
 
-    // 针对加入书架接口 /shelf/add：直接伪造成功响应，并在本地记录该 bookId
-    if (/\/shelf\/add/i.test(url)) {
-      try {
-        let reqBodyStr = (typeof $request !== "undefined" && $request.body) ? $request.body : "";
-        if (reqBodyStr) {
-          try { reqBodyStr = b64decode(reqBodyStr); } catch (e) {}
-          const reqJson = JSON.parse(reqBodyStr);
-          const addIds = reqJson.bookIds || (reqJson.bookId ? [reqJson.bookId] : []);
-          if (Array.isArray(addIds) && addIds.length > 0) {
-            let stored = {};
-            try { stored = JSON.parse(getStorage("weread_injected_books") || "{}"); } catch (e) {}
-            for (const bId of addIds) {
-              if (bId) {
-                stored[String(bId)] = stored[String(bId)] || { bookId: String(bId), title: "已加入下架书籍", soldout: 0, isPaid: 1 };
-              }
-            }
-            setStorage(JSON.stringify(stored), "weread_injected_books");
-            $.log("[" + SCRIPT_NAME + "] 从 /shelf/add 捕获新书籍加入注入库: " + addIds.join(","));
-          }
-        }
-      } catch (e) {}
-      const mockSucc = { succ: 1 };
-      const newBody = isBase64 ? b64encode(JSON.stringify(mockSucc)) : JSON.stringify(mockSucc);
-      $done({ body: newBody });
-      return;
-    }
-
     if (!data || typeof data !== "object") {
       $done({});
       return;
@@ -223,134 +168,7 @@ function deepSanitize(target) {
 
     let modified = false;
 
-    // ==========================================
-    // 模块一：下架书籍全自动捕获（订阅接口 / 专栏作品）
-    // ==========================================
-    if (/\/(subscription\/books|shelf\/opus)/i.test(url)) {
-      const booksToHarvest = [];
-      if (Array.isArray(data.books)) booksToHarvest.push(...data.books);
-      if (Array.isArray(data.items)) booksToHarvest.push(...data.items);
-      if (Array.isArray(data.opus)) booksToHarvest.push(...data.opus);
-      if (data.data && Array.isArray(data.data.books)) booksToHarvest.push(...data.data.books);
-
-      if (booksToHarvest.length > 0) {
-        let stored = {};
-        try { stored = JSON.parse(getStorage("weread_injected_books") || "{}"); } catch (e) {}
-        let newCount = 0;
-        for (const b of booksToHarvest) {
-          const bId = b.bookId || b.id;
-          if (bId) {
-            const strId = String(bId);
-            stored[strId] = {
-              bookId: strId,
-              title: b.title || b.name || "下架书籍",
-              author: b.author || "微信读书",
-              cover: b.cover || b.coverUrl || ("https://weread-1258476243.file.myqcloud.com/books/cover/" + strId + "/s_" + strId + ".jpg"),
-              format: b.format || "epub",
-              version: b.version || 1,
-              soldout: 0,
-              soldoutType: 0,
-              isPaid: 1,
-              payType: 0,
-              finish: b.finish !== undefined ? b.finish : 1,
-              type: b.type !== undefined ? b.type : 0,
-              updateTime: Math.floor(Date.now() / 1000)
-            };
-            newCount++;
-          }
-        }
-        if (newCount > 0) {
-          setStorage(JSON.stringify(stored), "weread_injected_books");
-          $.log("[" + SCRIPT_NAME + "] 从订阅接口自动捕获并落盘 " + newCount + " 本书籍！");
-        }
-      }
-    }
-
-    // ==========================================
-    // 模块二：虚拟书架注入 (/shelf/sync, /shelf/syncbook)
-    // ==========================================
-    if (/\/shelf\/(sync|syncbook)/i.test(url)) {
-      if (!Array.isArray(data.books)) {
-        data.books = [];
-      }
-
-      // 汇总需要注入的所有书籍元数据
-      let storedMap = {};
-      try { storedMap = JSON.parse(getStorage("weread_injected_books") || "{}"); } catch (e) {}
-
-      // 合并用户手动指定的 Argument 书籍 ID
-      const manualArg = getArgumentValue("inject_book_ids");
-      if (manualArg) {
-        const manualIds = manualArg.split(/[,;|]/).map(s => s.trim()).filter(Boolean);
-        for (const mId of manualIds) {
-          if (!storedMap[mId]) {
-            storedMap[mId] = {
-              bookId: mId,
-              title: "下架书籍 (" + mId + ")",
-              author: "微信读书",
-              cover: "https://weread-1258476243.file.myqcloud.com/books/cover/" + mId + "/s_" + mId + ".jpg",
-              format: "epub",
-              version: 1,
-              soldout: 0,
-              soldoutType: 0,
-              isPaid: 1,
-              payType: 0,
-              finish: 1,
-              type: 0,
-              updateTime: Math.floor(Date.now() / 1000)
-            };
-          }
-        }
-      }
-
-      const injectList = Object.values(storedMap);
-      if (injectList.length > 0) {
-        for (const targetBook of injectList) {
-          const tId = String(targetBook.bookId);
-          const existing = data.books.find(b => b && String(b.bookId) === tId);
-          if (existing) {
-            existing.soldout = 0;
-            existing.soldoutType = 0;
-            existing.isPaid = 1;
-            existing.payType = 0;
-          } else {
-            data.books.unshift(Object.assign({}, targetBook, {
-              soldout: 0,
-              soldoutType: 0,
-              isPaid: 1,
-              payType: 0
-            }));
-          }
-          // 从 removed 列表中移除该书，阻止本地删除
-          if (Array.isArray(data.removed)) {
-            data.removed = data.removed.filter(id => String(id) !== tId);
-          }
-        }
-        modified = true;
-        $.log("[" + SCRIPT_NAME + "] 成功向书架接口注入 " + injectList.length + " 本下架/订阅书籍！");
-      }
-    }
-
-    // ==========================================
-    // 模块三：书籍详情与鉴权解除 (/book/info, /book/readinfo)
-    // ==========================================
-    if (/\/book\/(info|infos|readinfo)/i.test(url)) {
-      if (data.bookId || data.title) {
-        data.soldout = 0;
-        data.soldoutType = 0;
-        data.isPaid = 1;
-        data.payType = 0;
-        data.free = 1;
-        if (data.price !== undefined) data.price = 0;
-        data.maxFreeChapter = 999999;
-        modified = true;
-        $.log("[" + SCRIPT_NAME + "] 成功解除详情页下架与付费限制: " + (data.title || data.bookId));
-      }
-    }
-
-    // ==========================================
-    // 模块四：发现页信息流精简与广告过滤 (discoverfeed)
-    // ==========================================
+    // 2. 发现页信息流精简与广告过滤 (discoverfeed)
     if (/\/discoverfeed\/new/i.test(url)) {
       if (Array.isArray(data.data)) {
         data.data = data.data.filter(item => item && item.type !== 2);
@@ -372,9 +190,7 @@ function deepSanitize(target) {
       }
     }
 
-    // ==========================================
-    // 模块五：用户个人主页净化 (user/profile) 去勋章与未读红点
-    // ==========================================
+    // 3. 用户个人主页净化 (user/profile) 去勋章与未读红点
     if (/\/user\/profile/i.test(url)) {
       data.showMedal = 0;
       data.showReview = 0;
@@ -383,9 +199,7 @@ function deepSanitize(target) {
       modified = true;
     }
 
-    // ==========================================
-    // 模块六：移动端同步接口净化 (mobileSync) 去除红点、发现页红点、通知计数
-    // ==========================================
+    // 4. 移动端同步接口净化 (mobileSync) 去除红点、发现页红点、通知计数
     if (/\/mobileSync/i.test(url)) {
       data.discover = false;
       data.discoverFeed = 0;
@@ -398,16 +212,12 @@ function deepSanitize(target) {
       modified = true;
     }
 
-    // ==========================================
-    // 模块七：递归深度全量净化（抹除升级标志、弹窗与公告）
-    // ==========================================
+    // 5. 深度遍历全量净化（抹除升级标志、弹窗与公告）
     if (deepSanitize(data)) {
       modified = true;
     }
 
-    // ==========================================
-    // 模块八：锁定 feature 和 configsets 配置（彻底阻断更新检测）
-    // ==========================================
+    // 6. 锁定 feature 和 configsets 配置（彻底阻断更新检测）
     const targetConfigs = [data.feature, data.configsets].filter(o => o && typeof o === "object");
     for (const cfg of targetConfigs) {
       cfg.VIPRightTimerSeconds = 8640000;
