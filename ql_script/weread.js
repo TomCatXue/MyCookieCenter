@@ -12,7 +12,7 @@
 ================================================================================
 @Name: 微信读书 · 全功能自动化任务（青龙面板专版）
 @Author: TomCatXue
-@Version: 1.2.2
+@Version: 1.2.3
 @Updated: 2026-09-26
 ================================================================================
 使用说明：
@@ -58,7 +58,7 @@ const CONFIG = {
 // 常量与系统配置
 // ================================================================================
 const SCRIPT_NAME = "微信读书 · 全功能任务";
-const SCRIPT_VERSION = "1.2.2";
+const SCRIPT_VERSION = "1.2.3";
 const AUTH_KEY = "weread_auth_v2";
 const CACHE_FILE = "./weread_session.json";
 const API = "https://i.weread.qq.com";
@@ -863,34 +863,103 @@ function getFreeVol() {
     return `${y}${m}${dd}`;
 }
 
-// 获取限免助力小号凭证 (支持 Cookie 串 / JSON / vid#skey 任意格式)
+// 获取限免助力小号凭证 (支持完整 Cookie 串[含 wr_rt] / JSON / vid#skey 任意格式)
 function getHelperAuth() {
     let raw = (typeof process !== "undefined" && (process.env.WEREAD_HELPER_AUTH || process.env.WEREAD_HELPER_COOKIE))
         || $.getdata("WEREAD_HELPER_AUTH")
         || CONFIG.HELPER_AUTH;
     if (typeof raw === "string") {
         raw = raw.replace(/\\([_@])/g, "$1").trim();
-        // 1. 兼容标准完整 Cookie 串 (如 wr_vid=935919483; wr_skey=aKemof5X; ...)
+        // 1. 兼容标准完整 Cookie 串 (捕获 wr_vid, wr_skey 及长效续期种子 wr_rt)
         if (raw.includes("wr_vid") || raw.includes("wr_skey")) {
             let vidM = raw.match(/wr_vid=([^;\s]+)/);
             let skeyM = raw.match(/wr_skey=([^;\s]+)/);
+            let rtM = raw.match(/wr_rt=([^;\s]+)/);
             if (vidM && skeyM) {
-                return { vid: vidM[1], wrSkey: skeyM[1], skey: skeyM[1], rawCookie: raw };
+                return {
+                    vid: vidM[1],
+                    wrSkey: skeyM[1],
+                    skey: skeyM[1],
+                    wrRt: rtM ? rtM[1] : "",
+                    rawCookie: raw
+                };
             }
         }
         // 2. 兼容 JSON 格式
         if (raw.startsWith("{")) {
-            try { return JSON.parse(raw); } catch (e) { }
+            try {
+                let obj = JSON.parse(raw);
+                if (obj.wr_rt && !obj.wrRt) obj.wrRt = obj.wr_rt;
+                return obj;
+            } catch (e) { }
         }
         // 3. 兼容 vid#skey 格式
         if (raw.includes("#")) {
             let parts = raw.split("#");
-            return { vid: parts[0].trim(), wrSkey: parts[1].trim(), skey: parts[1].trim() };
+            return { vid: parts[0].trim(), wrSkey: parts[1].trim(), skey: parts[1].trim(), wrRt: parts[2] ? parts[2].trim() : "" };
         }
     } else if (typeof raw === "object" && raw !== null) {
         return raw;
     }
     return null;
+}
+
+// 核心自愈：Web Cookie 自动续期 (参考 findmover/wxread，通过 /web/login/renewal 实现无感换票)
+async function tryWebRenewal(helperAuth) {
+    let wrRt = helperAuth?.wrRt || helperAuth?.wr_rt;
+    let wrVid = helperAuth?.vid || helperAuth?.wrVid;
+    let wrSkey = helperAuth?.wrSkey || helperAuth?.skey;
+    if (!wrRt || !wrVid) {
+        return null;
+    }
+
+    $.log("[WeRead] 正在通过 /web/login/renewal 自动续期小号 Web Cookie (wr_rt)...");
+    try {
+        let renewHeaders = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+            "Content-Type": "application/json",
+            "Accept": "application/json, text/plain, */*",
+            "Origin": "https://weread.qq.com",
+            "Referer": "https://weread.qq.com/web/book/read",
+            "Cookie": helperAuth.rawCookie || `wr_vid=${wrVid}; wr_skey=${wrSkey}; wr_rt=${wrRt};`
+        };
+
+        let res = await post(
+            "https://weread.qq.com/web/login/renewal",
+            JSON.stringify({ "rq": "%2Fweb%2Fbook%2Fread", "ql": false }),
+            renewHeaders
+        );
+
+        let resData = decode(res.body);
+        let setCookies = res.headers ? (res.headers["set-cookie"] || res.headers["Set-Cookie"]) : null;
+        let newSkey = null;
+        let newRt = null;
+
+        if (setCookies) {
+            let cookieStr = Array.isArray(setCookies) ? setCookies.join("; ") : String(setCookies);
+            let skeyMatch = cookieStr.match(/wr_skey=([^;\s]+)/);
+            if (skeyMatch) newSkey = skeyMatch[1];
+            let rtMatch = cookieStr.match(/wr_rt=([^;\s]+)/);
+            if (rtMatch) newRt = rtMatch[1];
+        }
+
+        if (res.status === 200 && (resData?.succ === 1 || newSkey)) {
+            if (newSkey) helperAuth.wrSkey = newSkey;
+            if (newRt) helperAuth.wrRt = newRt;
+            if (helperAuth.rawCookie && newSkey) {
+                helperAuth.rawCookie = helperAuth.rawCookie.replace(/wr_skey=[^;\s]+/, `wr_skey=${newSkey}`);
+                if (newRt) helperAuth.rawCookie = helperAuth.rawCookie.replace(/wr_rt=[^;\s]+/, `wr_rt=${newRt}`);
+            }
+            $.log(`[WeRead] 🎉 小号 Web Cookie 自动续期成功！最新 skey: ${helperAuth.wrSkey?.slice(0, 4)}****`);
+            return helperAuth;
+        } else {
+            $.log(`[WeRead] ⚠️ Web Cookie 自动续期响应: ${resData?.errMsg || ("HTTP " + res.status)}`);
+            return null;
+        }
+    } catch (e) {
+        $.log(`[WeRead] ⚠️ Web Cookie 自动续期网络异常: ${e.message || e}`);
+        return null;
+    }
 }
 
 // ============================================================
@@ -1041,8 +1110,16 @@ async function runFreeTask(auth, helperAuth) {
 
             let actRes = await get(actUrl, actHeaders);
             if (actRes.status === 401) {
-                if (helperAuth.refreshToken && helperAuth.deviceId) {
-                    $.log("[WeRead] 助力小号 Session 过期，尝试脱机自愈换票...");
+                // 优先尝试基于 wr_rt 的 Web Cookie 自动续期
+                if (helperAuth.wrRt || helperAuth.wr_rt) {
+                    let renewed = await tryWebRenewal(helperAuth);
+                    if (renewed) {
+                        helperSkey = renewed.wrSkey || "";
+                        actHeaders["Cookie"] = (helperAuth && helperAuth.rawCookie) ? helperAuth.rawCookie : `wr_vid=${helperVid}; wr_skey=${helperSkey}; wr_loggedIn=1;`;
+                        actRes = await get(actUrl, actHeaders);
+                    }
+                } else if (helperAuth.refreshToken && helperAuth.deviceId) {
+                    $.log("[WeRead] 助力小号 Session 过期，尝试脱机自愈换票 (/login)...");
                     let refreshedHelper = await tryRefreshLogin(helperAuth);
                     if (refreshedHelper) {
                         helperSkey = refreshedHelper.wrSkey || refreshedHelper.accessToken || refreshedHelper.skey || "";
@@ -1050,7 +1127,7 @@ async function runFreeTask(auth, helperAuth) {
                         actRes = await get(actUrl, actHeaders);
                     }
                 } else {
-                    $.log("[WeRead] ⚠️ 助力小号当前 wr_skey 已过期，且未配置 refreshToken 种子");
+                    $.log("[WeRead] ⚠️ 助力小号当前 wr_skey 已过期，缺少 wr_rt 或 refreshToken 续期种子");
                 }
             }
 
