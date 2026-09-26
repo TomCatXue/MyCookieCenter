@@ -1,18 +1,23 @@
-#!name = 微信读书 · 防强更去广告
-#!desc = 专为 8.2.6 等老版本微信读书设计：全面拦截改写 feature、config、reconf、mobileSync、book、review 等接口，彻底阻断版本强更弹窗与公告，并去除阅读页圈子、在读人数、评论小红点与发现页推广广告，打造纯净免费 AI 听书与极简阅读体验。
+#!name = 微信读书 · 防强更与下架书增强
+#!desc = 专为 8.2.6 等老版本微信读书设计：1.全面拦截改写 feature/configsets/upgrade 彻底阻断版本强更与弹窗；2.虚拟书架注入下架书籍（支持从订阅自动捕获或手动填写ID），解除书籍详情与阅读器 soldout 限制；3.精简阅读界面与去除社交推广。
 #!author = TomCatXue
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/35/92/e6/3592e6f4-0b0b-f2e4-7968-7033b281e1f5/AppIcon-0-1x_U007epad-0-11-0-85-220-0.png/512x512bb.jpg
-#!tag = 微信读书,防强更,去弹窗,去广告,AI听书
-#!version = 3.7.0
-#!date = 2026-09-25 15:40
+#!tag = 微信读书,防强更,去弹窗,下架书,AI听书
+#!version = 3.9.0
+#!date = 2026-09-26 16:30
 
 [Argument]
 weread_anti_upgrade = switch,true,tag=微信读书·防强更去广告,desc=开启后彻底屏蔽官方强更弹窗、新版本检测，并去除小红点、阅读页社交干扰与推广广告
+weread_inject_books = input,"",tag=下架书籍ID列表(逗号分隔),desc=手动指定需要注入书架并解除阅读限制的下架书籍ID (留空则自动从订阅抓取并注入)
+
+[Rule]
+# 阻断 App 向苹果商店 (itunes.apple.com/lookup) 嗅探线上新版本，彻底切断红点与更新弹窗触发源
+DOMAIN, itunes.apple.com, REJECT
 
 [MITM]
 hostname = i.weread.qq.com, weread.qq.com
 
 [Script]
-# 全面拦截改写 feature、config、reconf、mobileSync、book、review、discover 等配置响应体，彻底屏蔽新版本检测、弹窗与去广告精简
-response if ${url} ~= /^https?:\/\/(i\.)?weread\.qq\.com\/(mobileSync|feature|config|reconf|app\/upgrade|book\/(reading[sS]tat|chapterReview)|groups\/readerEntrance|review\/list|discoverfeed\/(new|get)|user\/profile)/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/wxread_enhance/wxread.js?v=20260925-1540") with enable=${weread_anti_upgrade}, tag="微信读书·防强更去广告", requires_body=true
+# 全面拦截改写 feature、config、mobileSync、shelf(sync/add/opus)、subscription/books、book(info/readingStat/chapterReview)、review 等配置响应体
+response if ${url} ~= /^https?:\/\/(i\.)?weread\.qq\.com\/(mobileSync|feature|config|reconf|app\/upgrade|shelf\/(sync|syncbook|add|opus)|subscription\/books|book\/(info|infos|readinfo|reading[sS]tat|chapterReview)|groups\/readerEntrance|review\/list|discoverfeed\/(new|get)|user\/profile)/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/wxread_enhance/wxread.js?v=20260926-1630") with enable=${weread_anti_upgrade}, inject_book_ids=${weread_inject_books}, tag="微信读书·防强更与下架书增强", requires_body=true

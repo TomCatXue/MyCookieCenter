@@ -1,24 +1,24 @@
-# 微信读书 · 防强更与去广告精简净化
+# 微信读书 · 防强更去广告与下架书增强
 
-> 专为 8.2.6 等具备无限制 VALL-E AI 大模型免费听书特性的老版本微信读书打造。全面融合防强更、版本弹窗抹平、全界面去广告、红点清理与阅读界面精简，打造极致纯净的阅读与 AI 听书体验。
+> 专为微信读书打造的全能网络层净化与增强套件：全面融合防强更根除、版本弹窗抹平、下架书籍虚拟书架注入与鉴权放行、全界面去广告、红点清理与阅读界面精简。
 
 ---
 
 ## 🎯 痛点根因与解决原理
 
-### 为什么之前过一段时间就会蹦出“发现新版本”弹窗？
-1. **拦截端点单一漏网**：微信读书检查版本更新不仅通过 `/feature`，还会通过 `/config`、`/reconf`、`/mobileSync`（移动端增量配置同步）等多路接口协同轮询；
-2. **字段名称多变**：服务端在不同接口或不同活动期，使用的字段名不仅有 `upgrade`，还有 `forceUpdate`、`has_new_version`、`updateInfo`、`notice_msg` 等；如果仅对特定固定字段置零，一旦接口返回其他升级结构，App 就会解析出更新提示；
-3. **域名覆盖不全**：部分请求会发往 `weread.qq.com` 而非 `i.weread.qq.com`。
+### 1. 为什么之前过一段时间还会蹦出“发现新版本”弹窗？
+- **苹果商店定时嗅探**：通过对 WeRead 10.2.0 脱壳 Mach-O 二进制（`0x100a9d10c - 0x100a9d118`）反汇编查明：若服务端配置的 `upgrade_query_interval <= 0`，客户端汇编执行了保底指令 `csel x22, x0, 86400, gt` 强制回退为 86400 秒（24小时），每隔 1 天必向 `https://itunes.apple.com/lookup` 嗅探新版。
+- **全网根治**：
+  1. 插件规则层新增 `DOMAIN, itunes.apple.com, REJECT`，物理切断商店嗅探请求；
+  2. 脚本层将 `upgrade_query_interval` 与 `upgrade_seconds_to_notify` 强制锁定为 `2147483647`（约 68 年），从根源杜绝触发。
 
-### 全面升级后的 6 重防御与精简机制
-- **全端点协同拦截**：全面覆盖 `/(feature|config|reconf|app/upgrade|mobileSync|book|groups|review|discoverfeed|user/profile)`；
-- **全域名 MITM 解密**：同时支持 `i.weread.qq.com` 与 `weread.qq.com`；
-- **通用正则递归深度遍历**：脚本内置 `deepSanitize` 引擎，无论是根节点还是嵌套子节点，只要命中升级、强更、版本更新、公告弹窗的字段，全自动将其强制归零、置空或剔除；
-- **特性特别锁定**：在 `feature` 节点强制注入 `VIPRightTimerSeconds = 8640000`、`disableUpgrade = 1`、`closeUpgrade = 1`，消除客户端内嵌的倒计时检查，锁定 8.2.6 免费 AI 听书；
-- **阅读页面极简无干扰**：全面净化 `book/readingStat`（清空好友读完数、在读人数与今日统计）、`book/chapterReview`（章节评论与分享数字置零）、`groups/readerEntrance`（隐藏阅读器内小圈子入口）、`review/list`（想法与点评干扰清空）；
-- **主界面与发现流去广告**：融合 `discoverfeed/new` 与 `discoverfeed/get` 广告卡片过滤，消除 `mobileSync` 中的底部与发现页红点、故事流更新与通知计数，净化 `user/profile` 勋章与兑换提示；
-- **Base64 / 明文全透明双模支持**：自动适配 `i.weread.qq.com` 的 Base64 编码机制，避免因编码格式不同抛出 SyntaxError。
+### 2. 下架书籍如何通过“虚拟书架注入”在 App 内直接看？
+- **传统入架失效根因**：历史水君脚本通过在 `/shelf/add` 中夹带未下架书籍利用批处理事务漏洞入架，腾讯微服务重构后加入了逐本版权过滤（Atomic Filter），检测到 `soldout == 1` 在落库前直接 Drop 丢弃。
+- **虚拟书架注入机制（路径 1）**：
+  1. **全自动捕获**：当你在 App 中浏览“订阅”（作者专栏 / 连载列表 `/subscription/books` 或 `/shelf/opus`）时，脚本全自动嗅探书籍元数据并存入持久化存储；
+  2. **手动参数支持**：也支持在 Loon 插件参数 `weread_inject_books` 中直接输入书籍 ID（如 `23665510`）；
+  3. **书架注入**：当客户端发起 `/shelf/sync` 同步书架时，脚本动态将下架书追加进 `books` 数组，并从 `removed` 列表中剔除；
+  4. **详情页与阅读鉴权伪装**：拦截 `/book/info` 与 `/book/readinfo`，抹去 `soldout` 并标记 `isPaid = 1`，绕过客户端 `isPaiedNormalSoldoutBook` 检查与 `renderPageViewSoldout` 阻断页，使“开始阅读”按钮正常可用！
 
 ---
 
@@ -35,3 +35,7 @@ https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/loon/WeReadEnhan
 > 1. 请先在 iOS 后台**彻底上滑退出「微信读书」App**；
 > 2. 在 Loon 中更新安装本插件并确保开关处于开启状态；
 > 3. 重新打开微信读书 App，由于请求被全面净化，旧缓存将被彻底刷掉，此后不会再弹出任何更新弹窗。
+
+### 3. 如何使用“下架书籍虚拟书架注入”？
+- **自动方式**：打开微信读书 App，进入“订阅”（或作者主页），只要该页面显示了这本下架书，脚本便会自动将其捕获并同步写入你的本地书架，下拉书架即可刷新出来直接点击阅读；
+- **手动方式**：在 Loon 插件管理中，点击【微信读书 · 防强更与下架书增强】配置参数，在【下架书籍ID列表】中填写目标书籍 ID（多个用英文逗号分隔，例如 `23665510`），返回微信读书下拉书架即可见。
