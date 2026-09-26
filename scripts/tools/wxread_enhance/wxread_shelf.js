@@ -2,8 +2,8 @@
 ------------------------------------------
 @Description: 微信读书 · 优雅书架 (下架书籍虚拟注入与全鉴权放行)
 @Author: TomCatXue
-@Version: 1.0.1
-@Date: 2026-09-26 16:55
+@Version: 1.0.2
+@Date: 2026-09-26 17:15
 ------------------------------------------
 核心特性：
   1. 订阅下架书全自动捕获（/subscription/books, /shelf/opus）：
@@ -19,7 +19,7 @@
 */
 
 const SCRIPT_NAME = "微信读书·优雅书架";
-const SCRIPT_VERSION = "1.0.1";
+const SCRIPT_VERSION = "1.0.2";
 const $ = new Env(SCRIPT_NAME);
 
 function b64encode(str) {
@@ -185,6 +185,22 @@ function getArgumentValue(argKey) {
           setStorage(JSON.stringify(stored), "weread_shelf_injected_books");
           $.log("[" + SCRIPT_NAME + "] 从订阅接口成功嗅探并落盘 " + newCount + " 本书籍（含 offshelfBooks 下架书）！");
         }
+      }
+
+      // 核心根治：将 offshelfBooks 中的下架图书全部转移至 onshelfBooks 并抹除 soldout 标记
+      // 彻底逆转客户端 WRSubscriptionsViewModel 将其判定为 offBooks (待上架/无内容) 的展示逻辑
+      if (Array.isArray(data.offshelfBooks) && data.offshelfBooks.length > 0) {
+        if (!Array.isArray(data.onshelfBooks)) data.onshelfBooks = [];
+        for (const b of data.offshelfBooks) {
+          b.soldout = 0;
+          b.soldoutType = 0;
+          b.isPaid = 1;
+          b.payType = 0;
+          data.onshelfBooks.push(b);
+        }
+        data.offshelfBooks = [];
+        modified = true;
+        $.log("[" + SCRIPT_NAME + "] 成功将订阅接口中 " + data.onshelfBooks.length + " 本下架书转为已上架并放行渲染！");
       }
     }
 
