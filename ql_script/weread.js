@@ -857,14 +857,20 @@ function getFreeVol() {
     return `${y}${m}${dd}`;
 }
 
-// 获取限免助力小号凭证 (路径A 全自动互助)
+// 获取限免助力小号凭证 (路径A 全自动互助，支持 JSON 或 极简 vid#wrSkey 格式)
 function getHelperAuth() {
     let raw = (typeof process !== "undefined" && (process.env.WEREAD_HELPER_AUTH || process.env.WEREAD_HELPER_COOKIE))
         || $.getdata("WEREAD_HELPER_AUTH")
         || CONFIG.HELPER_AUTH;
     if (typeof raw === "string") {
         raw = raw.replace(/\\([_@])/g, "$1").trim();
-        try { return JSON.parse(raw); } catch (e) { return null; }
+        if (raw.startsWith("{")) {
+            try { return JSON.parse(raw); } catch (e) { }
+        }
+        if (raw.includes("#") || raw.includes("@")) {
+            let parts = raw.split(/[#@]+/);
+            return { vid: parts[0], wrSkey: parts[1], skey: parts[1] };
+        }
     } else if (typeof raw === "object" && raw !== null) {
         return raw;
     }
@@ -972,18 +978,21 @@ async function runFreeTask(auth, helperAuth) {
 
     let targetBooks = candidates.slice(0, 2);
 
-    // 4. 路径A：小号助力点击全自动兑换 (shareOneGetOne2)
-    if (helperAuth && (helperAuth.vid || helperAuth.refreshToken)) {
-        $.log(`[WeRead] 检测到助力小号凭证，启动小号自动助力领书流程...`);
-        // 小号凭据自愈初始化
-        let helper = helperAuth;
-        if (!helper.skey || !helper.wrSkey) {
-            let refreshedHelper = await tryRefreshLogin(helper);
-            if (refreshedHelper) helper = refreshedHelper;
-        }
+    // 4. 路径A：小号助力点击全自动兑换 (支持静态 wrSkey / skey，亦支持脱机换票)
+    let helperVid = helperAuth ? String(helperAuth.vid || helperAuth.wrVid || "") : "";
+    let helperSkey = helperAuth ? (helperAuth.wrSkey || helperAuth.accessToken || helperAuth.skey || "") : "";
 
-        let helperVid = String(helper.vid || "");
-        let helperSkey = helper.wrSkey || helper.accessToken || helper.skey || "";
+    if (helperVid && (helperSkey || helperAuth.refreshToken)) {
+        let maskH = helperVid.length > 4 ? helperVid.slice(0, 4) + '****' : helperVid;
+        $.log(`[WeRead] 检测到助力小号凭证 [${maskH}]，启动小号自动助力领书流程...`);
+
+        // 仅在缺少当前可用 skey 且具备脱机种子时才尝试换票
+        if (!helperSkey && helperAuth.refreshToken && helperAuth.deviceId) {
+            let refreshedHelper = await tryRefreshLogin(helperAuth);
+            if (refreshedHelper) {
+                helperSkey = refreshedHelper.wrSkey || refreshedHelper.accessToken || refreshedHelper.skey || "";
+            }
+        }
 
         for (let b of targetBooks) {
             let actUrl = `https://weread.qq.com/book-detail/api/activities?type=1&senderVid=${auth.vid}&v=${b.v}&wtype=shareOneGetOne2&scene=freeBooks&timestamp=${freeTimestamp}&sn=${b.sn}&vol=${currentVol}&platform=ios_html`;
@@ -995,13 +1004,16 @@ async function runFreeTask(auth, helperAuth) {
 
             let actRes = await get(actUrl, actHeaders);
             if (actRes.status === 401) {
-                $.log("[WeRead] 助力小号 Session 过期，尝试脱机自愈换票...");
-                let refreshedHelper = await tryRefreshLogin(helper);
-                if (refreshedHelper) {
-                    helper = refreshedHelper;
-                    helperSkey = helper.wrSkey || helper.accessToken || helper.skey || "";
-                    actHeaders["Cookie"] = `wr_vid=${helperVid}; wr_skey=${helperSkey}; wr_loggedIn=1;`;
-                    actRes = await get(actUrl, actHeaders);
+                if (helperAuth.refreshToken && helperAuth.deviceId) {
+                    $.log("[WeRead] 助力小号 Session 过期，尝试脱机自愈换票...");
+                    let refreshedHelper = await tryRefreshLogin(helperAuth);
+                    if (refreshedHelper) {
+                        helperSkey = refreshedHelper.wrSkey || refreshedHelper.accessToken || refreshedHelper.skey || "";
+                        actHeaders["Cookie"] = `wr_vid=${helperVid}; wr_skey=${helperSkey}; wr_loggedIn=1;`;
+                        actRes = await get(actUrl, actHeaders);
+                    }
+                } else {
+                    $.log("[WeRead] ⚠️ 助力小号当前 wr_skey 已过期，且未配置 refreshToken 种子");
                 }
             }
 
@@ -1025,7 +1037,11 @@ async function runFreeTask(auth, helperAuth) {
             } catch (e) { }
         } else {
             result.success = false;
-            result.details = "小号助力未能成功兑换图书";
+            let links = targetBooks.map(b => {
+                return `• 《${b.title}》: https://weread.qq.com/book-detail?type=1&senderVid=${auth.vid}&v=${b.v}&wtype=shareOneGetOne2&scene=freeBooks&timestamp=${freeTimestamp}&sn=${b.sn}&vol=${currentVol}`;
+            });
+            result.details = "小号凭据已失效(已退出)，请在微信中直接点击专属链接一键领取:\n" + links.join("\n");
+            $.log(`[WeRead] ⚠️ ${result.details}`);
         }
     } else {
         // 未配置小号时的优雅降级：输出官方真实签名的微信一键直达卡片链接
