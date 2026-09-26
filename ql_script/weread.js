@@ -12,13 +12,19 @@
 ================================================================================
 @Name: 微信读书 · 全功能自动化任务（青龙面板专版）
 @Author: TomCatXue
-@Version: 1.2.0
-@Updated: 2026-09-23
+@Version: 1.2.1
+@Updated: 2026-09-26
 ================================================================================
 使用说明：
-- 青龙面板【只需配置 1 个环境变量】: WEREAD_AUTH (填入凭据 JSON 字符串即可)
+- 核心环境变量：
+  1. WEREAD_AUTH (必填)：主账号凭据 JSON 字符串 (包含 refreshToken 与 deviceId 实现 100% 自动脱机换票)
+  2. WEREAD_HELPER_AUTH (选填·周五限免全自动)：助力小号凭证。
+     - 支持格式 1：微信直接打开 weread.qq.com 抓取的整串 Cookie (包含 wr_vid 与 wr_skey)
+     - 支持格式 2：单行极简格式「小号VID#小号SKEY」 (如 935919483#aKemof5X)
+     - 支持格式 3：标准 JSON 凭据 (亦支持脱机换票)
+     - 小号无需在手机 App 登录或切号，一个闲置小号即可自动帮主号领满每周 2 本限免图书！
+     - 智能通知联动：领到了直接输出书名；没领到自动把官方带签名直达链接发到通知，微信点开秒领！
 - 各功能开关直接在下方的 CONFIG 对象中修改 true 或 false，无需在面板配复杂环境变量！
-- 具有 100% 脱机自愈换票能力：凭借 refreshToken + deviceId，过期自动刷新，无感续用！
 ================================================================================
 */
 
@@ -52,7 +58,7 @@ const CONFIG = {
 // 常量与系统配置
 // ================================================================================
 const SCRIPT_NAME = "微信读书 · 全功能任务";
-const SCRIPT_VERSION = "1.2.0";
+const SCRIPT_VERSION = "1.2.1";
 const AUTH_KEY = "weread_auth_v2";
 const CACHE_FILE = "./weread_session.json";
 const API = "https://i.weread.qq.com";
@@ -857,19 +863,29 @@ function getFreeVol() {
     return `${y}${m}${dd}`;
 }
 
-// 获取限免助力小号凭证 (路径A 全自动互助，支持 JSON 或 极简 vid#wrSkey 格式)
+// 获取限免助力小号凭证 (支持 Cookie 串 / JSON / vid#skey 任意格式)
 function getHelperAuth() {
     let raw = (typeof process !== "undefined" && (process.env.WEREAD_HELPER_AUTH || process.env.WEREAD_HELPER_COOKIE))
         || $.getdata("WEREAD_HELPER_AUTH")
         || CONFIG.HELPER_AUTH;
     if (typeof raw === "string") {
         raw = raw.replace(/\\([_@])/g, "$1").trim();
+        // 1. 兼容标准完整 Cookie 串 (如 wr_vid=935919483; wr_skey=aKemof5X; ...)
+        if (raw.includes("wr_vid") || raw.includes("wr_skey")) {
+            let vidM = raw.match(/wr_vid=([^;\s]+)/);
+            let skeyM = raw.match(/wr_skey=([^;\s]+)/);
+            if (vidM && skeyM) {
+                return { vid: vidM[1], wrSkey: skeyM[1], skey: skeyM[1], rawCookie: raw };
+            }
+        }
+        // 2. 兼容 JSON 格式
         if (raw.startsWith("{")) {
             try { return JSON.parse(raw); } catch (e) { }
         }
-        if (raw.includes("#") || raw.includes("@")) {
-            let parts = raw.split(/[#@]+/);
-            return { vid: parts[0], wrSkey: parts[1], skey: parts[1] };
+        // 3. 兼容 vid#skey 格式
+        if (raw.includes("#")) {
+            let parts = raw.split("#");
+            return { vid: parts[0].trim(), wrSkey: parts[1].trim(), skey: parts[1].trim() };
         }
     } else if (typeof raw === "object" && raw !== null) {
         return raw;
@@ -882,7 +898,7 @@ function getHelperAuth() {
 // ============================================================
 async function runFreeTask(auth, helperAuth) {
     $.log("\n▶️ --- 开始执行任务：[周五限免好书入架] ---");
-    let result = { task: "周五限免入架", success: false, details: "", addedBooks: [] };
+    let result = { task: "周五限免入架", success: false, details: "", addedBooks: [], unclaimedBooks: [], allClaimed: false };
 
     const getHeaders = (a) => ({
         "User-Agent": a.ua || "WeRead/8.2.6 (iPhone; iOS 26.6.2; Scale/3.00)",
@@ -907,6 +923,7 @@ async function runFreeTask(auth, helperAuth) {
         let qData = decode(qRes.body);
         if (qData && qData.reachedMax === 1) {
             result.success = true;
+            result.allClaimed = true;
             result.details = "本期免费图书馆领书配额已达上限 (已领满2本)";
             $.log(`[WeRead] ℹ️ ${result.details}`);
             return result;
@@ -940,6 +957,7 @@ async function runFreeTask(auth, helperAuth) {
 
     if (!rawList.length) {
         result.success = true;
+        result.allClaimed = true;
         result.details = "本期限免书库暂无新书";
         $.log(`[WeRead] ℹ️ ${result.details}`);
         return result;
@@ -971,7 +989,8 @@ async function runFreeTask(auth, helperAuth) {
     let candidates = books.filter(b => b.received !== 1 && b.v && b.sn);
     if (!candidates.length) {
         result.success = true;
-        result.details = "本期限免好书已全部在书架中 (均已领取)";
+        result.allClaimed = true;
+        result.details = "本期限免好书已全部在书架中 (本周已领满)";
         $.log(`[WeRead] ✅ ${result.details}`);
         return result;
     }
@@ -999,7 +1018,7 @@ async function runFreeTask(auth, helperAuth) {
             let actHeaders = {
                 "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 26_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 MicroMessenger/8.0.78(0x18004e31) NetType/WIFI Language/zh_CN",
                 "Referer": `https://weread.qq.com/book-detail?type=1&senderVid=${auth.vid}&v=${b.v}&wtype=shareOneGetOne2&scene=freeBooks&timestamp=${freeTimestamp}&sn=${b.sn}&vol=${currentVol}`,
-                "Cookie": `wr_vid=${helperVid}; wr_skey=${helperSkey}; wr_loggedIn=1;`
+                "Cookie": (helperAuth && helperAuth.rawCookie) ? helperAuth.rawCookie : `wr_vid=${helperVid}; wr_skey=${helperSkey}; wr_loggedIn=1;`
             };
 
             let actRes = await get(actUrl, actHeaders);
@@ -1018,18 +1037,22 @@ async function runFreeTask(auth, helperAuth) {
             }
 
             let actData = decode(actRes.body);
-            if (actRes.status === 200 && actData && (actData.succ === 1 || actData.errCode === 0)) {
+            if (actRes.status === 200 && actData && actData.succ === 1 && !actData.errMsg) {
                 result.addedBooks.push(`《${b.title}》`);
                 $.log(`[WeRead] 🎉 小号助力领取成功: 《${b.title}》`);
             } else {
                 let errMsg = actData?.errMsg || actData?.errmsg || ("HTTP " + actRes.status);
                 $.log(`[WeRead] ❌ 小号助力领取《${b.title}》失败: ${errMsg}`);
+                // 收集未成功的直达链接
+                let link = `https://weread.qq.com/book-detail?type=1&senderVid=${auth.vid}&v=${b.v}&wtype=shareOneGetOne2&scene=freeBooks&timestamp=${freeTimestamp}&sn=${b.sn}&vol=${currentVol}`;
+                result.unclaimedBooks.push({ title: b.title, url: link });
             }
+            await new Promise(r => setTimeout(r, 1000));
         }
 
         if (result.addedBooks.length > 0) {
             result.success = true;
-            result.details = `小号助力成功免费领取: ${result.addedBooks.join(', ')}`;
+            result.details = `成功领取: ${result.addedBooks.join(', ')}`;
             $.log(`[WeRead] ✅ ${result.details}`);
             // 触发主号书架增量同步
             try {
@@ -1037,19 +1060,16 @@ async function runFreeTask(auth, helperAuth) {
             } catch (e) { }
         } else {
             result.success = false;
-            let links = targetBooks.map(b => {
-                return `• 《${b.title}》: https://weread.qq.com/book-detail?type=1&senderVid=${auth.vid}&v=${b.v}&wtype=shareOneGetOne2&scene=freeBooks&timestamp=${freeTimestamp}&sn=${b.sn}&vol=${currentVol}`;
-            });
-            result.details = "小号凭据已失效(已退出)，请在微信中直接点击专属链接一键领取:\n" + links.join("\n");
-            $.log(`[WeRead] ⚠️ ${result.details}`);
+            result.details = "小号助力未能自动完成入架";
         }
     } else {
-        // 未配置小号时的优雅降级：输出官方真实签名的微信一键直达卡片链接
-        let links = targetBooks.map(b => {
-            return `• 《${b.title}》: https://weread.qq.com/book-detail?type=1&senderVid=${auth.vid}&v=${b.v}&wtype=shareOneGetOne2&scene=freeBooks&timestamp=${freeTimestamp}&sn=${b.sn}&vol=${currentVol}`;
+        // 未配置小号时的优雅直达：收集官方真实签名的微信一键直达卡片链接
+        targetBooks.forEach(b => {
+            let link = `https://weread.qq.com/book-detail?type=1&senderVid=${auth.vid}&v=${b.v}&wtype=shareOneGetOne2&scene=freeBooks&timestamp=${freeTimestamp}&sn=${b.sn}&vol=${currentVol}`;
+            result.unclaimedBooks.push({ title: b.title, url: link });
         });
         result.success = true;
-        result.details = "未配置 WEREAD_HELPER_AUTH 小号，请在微信中点击链接一键直达领取:\n" + links.join("\n");
+        result.details = "未配置小号凭证，已生成微信一键直达领取链接";
         $.log(`[WeRead] ℹ️ ${result.details}`);
     }
 
@@ -1168,11 +1188,24 @@ async function main() {
             ? (resFlip?.details || "今日无可用翻牌次数")
             : "非周二自动跳过";
 
-        let freeText = canFree
-            ? (resFree?.addedBooks?.length
-                ? `成功加入书架: ${resFree.addedBooks.join(', ')}`
-                : (resFree?.details || "本期限免好书已在书架中"))
-            : "非周五自动跳过";
+        let freeText = "";
+        if (canFree && resFree) {
+            if (resFree.addedBooks && resFree.addedBooks.length > 0) {
+                let succText = `成功领取: ${resFree.addedBooks.join(', ')}`;
+                if (resFree.unclaimedBooks && resFree.unclaimedBooks.length > 0) {
+                    succText += `\n• 周五限免待领 (微信内点击领取):\n` + resFree.unclaimedBooks.map((b, idx) => `  ${idx + 1}. 《${b.title}》: ${b.url}`).join('\n');
+                }
+                freeText = succText;
+            } else if (resFree.allClaimed) {
+                freeText = "本期限免好书已在书架中 (本周已领满)";
+            } else if (resFree.unclaimedBooks && resFree.unclaimedBooks.length > 0) {
+                freeText = "未自动入架，请在微信中点击链接一键直达领取:\n" + resFree.unclaimedBooks.map((b, idx) => `  ${idx + 1}. 《${b.title}》: ${b.url}`).join('\n');
+            } else {
+                freeText = resFree.details || "本期限免好书已在书架中";
+            }
+        } else {
+            freeText = "非周五自动跳过";
+        }
 
         let bullets = [];
         if (canClaim && resClaim) {
