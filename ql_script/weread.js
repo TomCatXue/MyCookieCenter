@@ -12,7 +12,7 @@
 ================================================================================
 @Name: 微信读书 · 全功能自动化任务（青龙面板专版）
 @Author: TomCatXue
-@Version: 1.2.7
+@Version: 1.2.8
 @Updated: 2026-09-26
 ================================================================================
 使用说明：
@@ -58,7 +58,7 @@ const CONFIG = {
 // 常量与系统配置
 // ================================================================================
 const SCRIPT_NAME = "微信读书 · 全功能任务";
-const SCRIPT_VERSION = "1.2.7";
+const SCRIPT_VERSION = "1.2.8";
 const AUTH_KEY = "weread_auth_v2";
 const CACHE_FILE = "./weread_session.json";
 const API = "https://i.weread.qq.com";
@@ -980,6 +980,7 @@ async function runFreeTask(auth, helperAuth) {
     });
 
     // 1. 检查领书资格与本期配额（每期最多 2 本）
+    let reachedMax = false;
     try {
         let qRes = await get(API + "/checkfreequalify?type=book&vid=" + auth.vid, getHeaders(auth));
         if (qRes.status === 401 || qRes.status === 499) {
@@ -991,40 +992,66 @@ async function runFreeTask(auth, helperAuth) {
         }
         let qData = decode(qRes.body);
         if (qData && qData.reachedMax === 1) {
-            result.success = true;
-            result.allClaimed = true;
-            result.details = "本期免费图书馆领书配额已达上限 (已领满2本)";
-            $.log(`[WeRead] ℹ️ ${result.details}`);
-            return result;
+            reachedMax = true;
         }
     } catch (e) {
         $.log("[WeRead] checkfreequalify 请求异常: " + String(e));
     }
 
-    // 2. 拉取官方限免书库列表 (携带 vol 期数参数)
+    // 2. 多通道聚合拉取官方限免书库列表
+    // 同时聚合：原生 App 18 本书单 + 扩展 50 本书单 + 特别推荐 120 本书单，确保本期全部限免好书（文学、社科等）均被准确收录
     let currentVol = getFreeVol();
-    let listRes = await get(API + `/free/library/list?count=120&receiveStatus=1&type=book&v=2&vol=${currentVol}`, getHeaders(auth));
-    if (listRes.status === 401 || listRes.status === 499) {
-        $.log("[WeRead] 限免图书接口 401/499，启动脱机换票自愈...");
-        let refreshed = await tryRefreshLogin(auth);
-        if (refreshed) {
-            auth = refreshed;
-            listRes = await get(API + `/free/library/list?count=120&receiveStatus=1&type=book&v=2&vol=${currentVol}`, getHeaders(auth));
-        }
+    let libraryUrls = [
+        API + `/free/library/list?count=18&receiveStatus=1&type=book&vol=${currentVol}`,
+        API + `/free/library/list?count=50&receiveStatus=1&type=book&vol=${currentVol}`,
+        API + `/free/library/list?count=120&receiveStatus=1&type=book&v=2&vol=${currentVol}`,
+        API + `/free/library/list?count=120&receiveStatus=1&type=book&vol=${currentVol}`
+    ];
+
+    let booksMap = new Map();
+    let freeTimestamp = Math.floor(Date.now() / 1000);
+
+    for (let u of libraryUrls) {
+        try {
+            let res = await get(u, getHeaders(auth));
+            if (res.status === 401 || res.status === 499) {
+                let refreshed = await tryRefreshLogin(auth);
+                if (refreshed) {
+                    auth = refreshed;
+                    res = await get(u, getHeaders(auth));
+                }
+            }
+            if (res.status === 200) {
+                let data = decode(res.body);
+                if (data?.vol) currentVol = data.vol;
+                if (data?.timestamp) freeTimestamp = data.timestamp;
+                let rawList = data?.books || data?.data || data?.items || [];
+                rawList.forEach(b => {
+                    let bInfo = b.bookInfo || b.book || b;
+                    let bid = String(bInfo.bookId || bInfo.id || "");
+                    let title = String(bInfo.title || bInfo.name || "图书");
+                    let received = typeof b.received !== "undefined" ? Number(b.received) : (typeof bInfo.received !== "undefined" ? Number(bInfo.received) : 0);
+                    let deepLink = bInfo.deepLink || "";
+                    let vMatch = deepLink.match(/[?&]v=([^&]+)/);
+                    let v = vMatch ? vMatch[1] : "";
+                    let sn = b.sn || "";
+                    if (bid) {
+                        if (!booksMap.has(bid)) {
+                            booksMap.set(bid, { bookId: bid, title, received, deepLink, v, sn });
+                        } else {
+                            let exist = booksMap.get(bid);
+                            if (received === 1) exist.received = 1;
+                            if (!exist.v && v) exist.v = v;
+                            if (!exist.sn && sn) exist.sn = sn;
+                        }
+                    }
+                });
+            }
+        } catch (e) { }
     }
 
-    if (listRes.status !== 200) {
-        result.details = `拉取限免书库失败 HTTP ${listRes.status}`;
-        $.log(`[WeRead] ❌ ${result.details}`);
-        return result;
-    }
-
-    let freeData = decode(listRes.body);
-    let rawList = freeData?.books || freeData?.data || freeData?.items || [];
-    let freeTimestamp = freeData?.timestamp || Math.floor(Date.now() / 1000);
-    if (freeData?.vol) currentVol = freeData.vol;
-
-    if (!rawList.length) {
+    let books = Array.from(booksMap.values());
+    if (!books.length) {
         result.success = true;
         result.allClaimed = true;
         result.details = "本期限免书库暂无新书";
@@ -1032,35 +1059,12 @@ async function runFreeTask(auth, helperAuth) {
         return result;
     }
 
-    // 3. 提取全部候选书籍
-    let books = [];
-    rawList.forEach(b => {
-        let bInfo = b.bookInfo || b.book || b;
-        let bid = bInfo.bookId || bInfo.id;
-        let title = bInfo.title || bInfo.name || "图书";
-        let received = typeof b.received !== "undefined" ? b.received : (bInfo.received || 0);
-        let deepLink = bInfo.deepLink || "";
-        let vMatch = deepLink.match(/[?&]v=([^&]+)/);
-        let v = vMatch ? vMatch[1] : "";
-        let sn = b.sn || "";
-        if (bid) {
-            books.push({
-                bookId: String(bid),
-                title: String(title),
-                received: Number(received),
-                deepLink,
-                v,
-                sn
-            });
-        }
-    });
-
-    // 4. 权威核验主账号本周在图书馆里真正领到的书籍 (以主账号真实资产为绝对中心)
-    // 包含：官方标记 received === 1、当前付费/限免版权库 (/book/paytime time > 0) 以及已入架图书
+    // 3. 权威核验主账号本周在图书馆里真正领到的书籍 (以主账号真实资产为绝对中心)
+    // 包含：官方标记 received === 1、当前付费/限免版权库 (/book/paytime time > 0)
     let allBookIds = books.map(b => b.bookId);
     let paidBookIds = new Set();
     try {
-        let payRes = await get(API + `/book/paytime?bookIds=${encodeURIComponent(allBookIds.join(','))}`, getHeaders(auth));
+        let payRes = await get(API + `/book/paytime?bookIds=${encodeURIComponent(allBookIds.join(","))}`, getHeaders(auth));
         let payData = decode(payRes.body);
         let items = payData?.data || [];
         items.forEach(item => {
@@ -1081,12 +1085,12 @@ async function runFreeTask(auth, helperAuth) {
         } catch (e) { }
     }
 
-    // 若主账号已领满本周 2 本名额，直接汇报主账号领取的真实书名，绝不调用小号发起无谓请求，绝不下发无关链接
-    if (claimedTitles.length >= 2) {
+    // 若主账号已领满本周 2 本名额（或资格接口确认已达上限），直接汇报主账号领取的真实书名，绝不调用小号发起无谓请求，绝不下发无关链接
+    if (claimedTitles.length >= 2 || (reachedMax && claimedTitles.length > 0)) {
         result.success = true;
         result.allClaimed = true;
         result.addedBooks = claimedTitles.slice(0, 2);
-        result.details = `本周已领图书: ${result.addedBooks.join(', ')}`;
+        result.details = `本周已领图书: ${result.addedBooks.join(", ")}`;
         $.log(`[WeRead] ✅ ${result.details}`);
         return result;
     }
@@ -1099,8 +1103,7 @@ async function runFreeTask(auth, helperAuth) {
     if (!candidates.length) {
         result.success = true;
         result.allClaimed = true;
-        result.addedBooks = alreadyTitles;
-        result.details = alreadyTitles.length > 0 ? `本周已领: ${alreadyTitles.join(', ')}` : "本期限免书库暂无可领图书";
+        result.details = claimedTitles.length > 0 ? `本周已领图书: ${claimedTitles.join(", ")}` : "本期限免书库暂无可领图书";
         $.log(`[WeRead] ✅ ${result.details}`);
         return result;
     }
@@ -1112,7 +1115,7 @@ async function runFreeTask(auth, helperAuth) {
     let helperSkey = helperAuth ? (helperAuth.wrSkey || helperAuth.accessToken || helperAuth.skey || "") : "";
 
     if (helperVid && (helperSkey || helperAuth.refreshToken)) {
-        let maskH = helperVid.length > 4 ? helperVid.slice(0, 4) + '****' : helperVid;
+        let maskH = helperVid.length > 4 ? helperVid.slice(0, 4) + "****" : helperVid;
         $.log(`[WeRead] 检测到助力小号凭证 [${maskH}]，启动小号自动助力领书流程...`);
 
         // 仅在缺少当前可用 skey 且具备脱机种子时才尝试换票
@@ -1123,6 +1126,7 @@ async function runFreeTask(auth, helperAuth) {
             }
         }
 
+        let newlyClaimed = [];
         for (let b of targetBooks) {
             let actUrl = `https://weread.qq.com/book-detail/api/activities?type=1&senderVid=${auth.vid}&v=${b.v}&wtype=shareOneGetOne2&scene=freeBooks&timestamp=${freeTimestamp}&sn=${b.sn}&vol=${currentVol}&platform=ios_html`;
             let actHeaders = {
@@ -1156,7 +1160,7 @@ async function runFreeTask(auth, helperAuth) {
 
             let actData = decode(actRes.body);
             if (actRes.status === 200 && actData && actData.succ === 1 && !actData.errMsg) {
-                result.addedBooks.push(`《${b.title}》`);
+                newlyClaimed.push(`《${b.title}》`);
                 $.log(`[WeRead] 🎉 小号助力领取成功: 《${b.title}》`);
             } else {
                 let errMsg = actData?.errMsg || actData?.errmsg || ("HTTP " + actRes.status);
@@ -1168,17 +1172,18 @@ async function runFreeTask(auth, helperAuth) {
             await new Promise(r => setTimeout(r, 1000));
         }
 
-        if (result.addedBooks.length > 0) {
+        if (newlyClaimed.length > 0) {
+            result.addedBooks.push(...newlyClaimed);
             result.success = true;
-            result.details = `成功领取: ${result.addedBooks.join(', ')}`;
+            result.details = `成功领取: ${result.addedBooks.join(", ")}`;
             $.log(`[WeRead] ✅ ${result.details}`);
             // 触发主号书架增量同步
             try {
                 await get(API + "/shelf/sync?album=1&onlyBookid=1", getHeaders(auth));
             } catch (e) { }
         } else {
-            result.success = false;
-            result.details = "小号助力未能自动完成入架";
+            result.success = (result.addedBooks.length > 0);
+            result.details = result.addedBooks.length > 0 ? `本周已领图书: ${result.addedBooks.join(", ")}` : "小号助力未能自动完成入架";
         }
     } else {
         // 未配置小号时的优雅直达：收集官方真实签名的微信一键直达卡片链接
@@ -1187,12 +1192,13 @@ async function runFreeTask(auth, helperAuth) {
             result.unclaimedBooks.push({ title: b.title, url: link });
         });
         result.success = true;
-        result.details = "未配置小号凭证，已生成微信一键直达领取链接";
+        result.details = claimedTitles.length > 0 ? `本周已领图书: ${claimedTitles.join(", ")}` : "未配置小号凭证，已生成微信一键直达领取链接";
         $.log(`[WeRead] ℹ️ ${result.details}`);
     }
 
     return result;
 }
+
 
 // ============================================================
 // 6. 主控调度引擎 (调度管理、开关判断、多账号循环)
