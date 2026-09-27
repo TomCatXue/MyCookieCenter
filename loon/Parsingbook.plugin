@@ -2,6 +2,7 @@
 #!desc = 用心读书2.6.3解锁全功能会员,享纯净阅读体验。
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/yxds.png
+#!author = baby
 #!system = iOS,iPadOS,macOS
 #!system_version = 15.0
 #!loon_version = 3.5.1(988)
