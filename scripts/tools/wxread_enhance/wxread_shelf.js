@@ -2,8 +2,8 @@
 ------------------------------------------
 @Description: 微信读书 · 优雅书架 (下架书籍虚拟注入与全鉴权放行)
 @Author: TomCatXue
-@Version: 1.0.4
-@Date: 2026-09-28 03:50
+@Version: 1.0.5
+@Date: 2026-09-28 04:10
 ------------------------------------------
 核心特性：
   1. 订阅下架书全自动捕获（/subscription/books, /shelf/opus）：
@@ -19,7 +19,7 @@
 */
 
 const SCRIPT_NAME = "微信读书·优雅书架";
-const SCRIPT_VERSION = "1.0.4";
+const SCRIPT_VERSION = "1.0.5";
 const $ = new Env(SCRIPT_NAME);
 
 function b64encode(str) {
@@ -194,6 +194,12 @@ function getArgumentValue(argKey) {
         for (const b of data.offshelfBooks) {
           b.soldout = 0;
           b.soldoutType = 0;
+          b.free = 1;
+          b.price = 0;
+          b.originalPrice = 0;
+          b.centPrice = 0;
+          b.cpid = 0;
+          b.ispub = 1;
           b.isPaid = 1;
           b.payType = 0;
           data.onshelfBooks.push(b);
@@ -276,9 +282,18 @@ function getArgumentValue(argKey) {
         data.soldoutType = 0;
         data.isPaid = 1;
         data.payType = 0;
+        data.payingStatus = 1;
         data.free = 1;
-        if (data.price !== undefined) data.price = 0;
+        data.price = 0;
+        data.originalPrice = 0;
+        data.centPrice = 0;
+        data.cpid = 0;
+        data.ispub = 1;
         data.maxFreeChapter = 999999;
+        if (data.maxFreeInfo && typeof data.maxFreeInfo === 'object') {
+          data.maxFreeInfo.maxfreeChapterRatio = 100;
+          data.maxFreeInfo.maxfreeChapterIdx = data.lastChapterIdx || 999999;
+        }
         modified = true;
         $.log("[" + SCRIPT_NAME + "] 成功解除书籍详情页下架与付费限制: " + (data.title || data.bookId));
 
@@ -317,6 +332,10 @@ function getArgumentValue(argKey) {
         data.bookInfo.soldoutType = 0;
         data.bookInfo.isPaid = 1;
         data.bookInfo.free = 1;
+        data.bookInfo.price = 0;
+        data.bookInfo.originalPrice = 0;
+        data.bookInfo.centPrice = 0;
+        data.bookInfo.cpid = 0;
         data.bookInfo.payType = 0;
         data.bookInfo.payingStatus = 0;
         data.bookInfo.maxFreeChapter = 999999;
@@ -357,8 +376,8 @@ function getArgumentValue(argKey) {
           book.soldOut = 0;
           if (Array.isArray(book.price)) {
             for (const p of book.price) {
-              if (p && (p.price === undefined || p.price < 0)) {
-                p.price = 0;
+              if (p) {
+                p.price = 0; // 全章节对齐公版书 0 元免费
               }
             }
           }
