@@ -27,6 +27,7 @@
 | [`GitHubPushTime.plugin`](./GitHubPushTime.plugin) | GitHub·星标推送时间 — 在 GitHub App 星标列表语言后显示最近推送时间 | 脚本型 · [`plugins/github_push_time/`](../plugins/github_push_time/) |
 | [`PixivNovelTranslate.plugin`](./PixivNovelTranslate.plugin) | Pixiv·小说翻译 — 小说阅读页一键翻译，支持 Google 免费接口 / 微软 / 百度 | 脚本型 · [`plugins/pixiv_novel_translate/`](../plugins/pixiv_novel_translate/) |
 | [`camscanner.plugin`](./camscanner.plugin) | 扫描全能王·签到 — 抓取 Cookie + 每日签到 | 脚本型 · 抓取内化 [`plugins/camscanner/`](../plugins/camscanner/) / 签到外部 |
+| [`Parsingbook.plugin`](./Parsingbook.plugin) | 用心读书·会员解锁 — 适配 07book，解锁全功能会员特权、头衔及多设备授权 | 重写型（Worker中继） |
 
 ---
 

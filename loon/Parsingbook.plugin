@@ -1,0 +1,21 @@
+#!name = 用心读书 · 会员特权解锁
+#!desc = 适配用心读书 (Parsingbook / 07book)：通过重定向 api.07book.com 鉴权网关至 Cloudflare Worker 专属 Mock 中继，解锁全功能会员特权、终身头衔 (titles) 及多设备授权 (authority)，畅享纯净阅读体验。
+#!author = TomCatXue
+#!homepage = https://github.com/TomCatXue/MyCookieCenter
+#!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/yxds.png
+#!system = iOS,iPadOS,macOS
+#!system_version = 15.0
+#!loon_version = 3.5.1(988)
+#!tag = 用心读书,会员解锁,工具
+#!version = 1.1.0
+#!date = 2026-09-27 12:45
+
+[Argument]
+parsingbook_unlock = switch,true,tag=用心读书·会员解锁,desc=开启后自动重定向鉴权网关并激活终身会员与设备授权特权
+
+[Rewrite]
+# 重定向核心鉴权接口至 Cloudflare Worker 中继
+^https:\/\/api\.07book\.com\/v2\/(member\/info|titles(?!\/)|authority\/(list|devices|verify|checking)) header https://mock.parsingbook.workers.dev/parsingbook/v2/$1
+
+[MITM]
+hostname = api.07book.com
