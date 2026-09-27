@@ -1,6 +1,5 @@
 #!name = 用心读书 · 会员特权解锁
-#!desc = 适配用心读书 (Parsingbook / 07book)：通过重定向 api.07book.com 鉴权网关至 Cloudflare Worker 专属 Mock 中继，解锁全功能会员特权、终身头衔 (titles) 及多设备授权 (authority)，畅享纯净阅读体验。
-#!author = TomCatXue
+#!desc = 用心读书2.6.3解锁全功能会员,享纯净阅读体验。
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/yxds.png
 #!system = iOS,iPadOS,macOS
