@@ -6647,10 +6647,10 @@ return CryptoJS;
 })();
 
 
-// SCRIPT_VERSION = "2026-09-27.r8"
+// SCRIPT_VERSION = "2026-09-27.r9"
 /**
  * 用心读书 · 动态毫秒级 AES-128-CBC Mock 脚本
- * 兼容 2.7.1 (v3) 与 2.6.3 (v2)，自动识别任意激活码与账户绑定，实时生成防过期时间戳
+ * 严格对齐 Swift 5 Codable 模型类型 (state: Bool, device: Int, firstTime/createTime/authTime: Int)
  */
 
 (function () {
@@ -6696,18 +6696,19 @@ return CryptoJS;
   const reqCode = getQueryOrBodyParam(reqUrl, reqBody, "code") || "VIP888888";
 
   console.log("[用心读书Mock] 拦截到请求: " + reqUrl);
-  console.log("[用心读书Mock] 解析参数: code=" + reqCode + ", uuid=" + uuid);
+  console.log("[用心读书Mock] 提取参数: code=" + reqCode + ", uuid=" + uuid);
 
   let responseData = null;
 
   if (reqUrl.indexOf("authority/verify") !== -1) {
+    // AuthorityInfoModel: uuid: SS, code: SS, device: Si, firstTime: Si, validity: Si, time: Si, titleName: SS, titleLevel: Si
     responseData = {
       code: "200",
       verifyCode: "229944",
       data: {
         uuid: uuid,
         code: reqCode,
-        device: "iPhone",
+        device: 1,
         firstTime: now,
         validity: 99999,
         time: now,
@@ -6718,12 +6719,12 @@ return CryptoJS;
       message: "SUCCESS"
     };
   } else if (reqUrl.indexOf("member/bind/code") !== -1 || reqUrl.indexOf("authority/bindtomember") !== -1) {
+    // AuthorityCheckingModel: message: SS, memberId: Si, uuid: SS, state: Sb
     responseData = {
       code: "200",
       verifyCode: "229944",
       data: {
-        state: 1,
-        status: true,
+        state: true,
         message: "success",
         uuid: uuid,
         memberId: 4823
@@ -6748,11 +6749,12 @@ return CryptoJS;
       message: "SUCCESS"
     };
   } else if (reqUrl.indexOf("authority/checking") !== -1) {
+    // AuthorityCheckingModel: state: Sb (true)
     responseData = {
       code: "200",
       verifyCode: "229944",
       data: {
-        state: 1,
+        state: true,
         message: "success",
         uuid: uuid,
         memberId: 888888
@@ -6761,6 +6763,7 @@ return CryptoJS;
       message: "SUCCESS"
     };
   } else if (reqUrl.indexOf("authority/list") !== -1) {
+    // AuthorityListModel: firstTime: Si, createTime: Si, validityDays: Si
     responseData = {
       code: "200",
       verifyCode: "229944",
@@ -6775,8 +6778,8 @@ return CryptoJS;
             validityDays: 99999,
             already: 1,
             statusInfo: "已激活",
-            firstTime: "2024-01-01 00:00:00",
-            createTime: "2024-01-01 00:00:00",
+            firstTime: now,
+            createTime: now,
             price: 9800,
             password: ""
           }
@@ -6791,6 +6794,7 @@ return CryptoJS;
       message: "SUCCESS"
     };
   } else if (reqUrl.indexOf("authority/devices") !== -1) {
+    // DevicesListModel: authTime: Si
     responseData = {
       code: "200",
       verifyCode: "229944",
@@ -6798,7 +6802,7 @@ return CryptoJS;
         hasMore: false,
         list: [
           {
-            authTime: "2024-01-01 00:00:00",
+            authTime: now,
             uuid: uuid,
             deviceUuid: deviceUuid,
             typeName: "iPhone",
@@ -6815,6 +6819,7 @@ return CryptoJS;
       message: "SUCCESS"
     };
   } else if (reqUrl.indexOf("member/info") !== -1) {
+    // UserModel: pass: Sb (true), titles: [UserTitleModel: id: Si, level: Si, type: Si, name: SS]
     responseData = {
       code: "200",
       verifyCode: "290132",
@@ -6833,21 +6838,21 @@ return CryptoJS;
         sex: 1,
         titles: [
           {
-            icon: "https://07book.oss-cn-hangzhou.aliyuncs.com/titles/1786449568172943.png",
             id: 1,
-            isShow: 1,
             level: 99,
-            name: "永久至尊会员",
-            obtainTime: 1768471216,
             type: 1,
-            typeName: "会员特权",
-            uuid: "8ede2bcacd904ab69274870b759d9b47"
+            name: "永久至尊会员"
           }
         ],
         uid: 0,
         username: "iphone1768471216486",
         usernameTime: 0,
-        uuid: "DPcOHyvN"
+        uuid: "DPcOHyvN",
+        avatar: "",
+        email: "",
+        cashAccount: "",
+        client: 1,
+        cashName: ""
       },
       time: now,
       message: "SUCCESS"
@@ -6858,15 +6863,10 @@ return CryptoJS;
       verifyCode: "665600",
       data: [
         {
-          icon: "https://07book.oss-cn-hangzhou.aliyuncs.com/titles/1786449568172943.png",
           id: 1,
-          isShow: 1,
           level: 99,
-          name: "永久至尊会员",
-          obtainTime: 1768471216,
           type: 1,
-          typeName: "会员特权",
-          uuid: "8ede2bcacd904ab69274870b759d9b47"
+          name: "永久至尊会员"
         }
       ],
       time: now,
@@ -6877,7 +6877,7 @@ return CryptoJS;
       code: "200",
       verifyCode: "290132",
       data: {
-        state: 1,
+        state: true,
         message: "success",
         uuid: uuid,
         memberId: 4823
@@ -6903,7 +6903,7 @@ return CryptoJS;
 
   if (responseData) {
     const cipherText = aesEncrypt(responseData);
-    console.log("[用心读书Mock] 构造响应成功，下发密文长度: " + cipherText.length + "，当前时间戳: " + now);
+    console.log("[用心读书Mock] 构造响应成功，下发密文长度: " + cipherText.length + "，时间戳: " + now);
     if (typeof $response !== "undefined") {
       $done({
         status: 200,
