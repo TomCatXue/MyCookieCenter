@@ -6656,10 +6656,11 @@
 
 }));
 
-// SCRIPT_VERSION = "2026-09-27.r5"
+// SCRIPT_VERSION = "2026-09-27.r6"
 /**
  * 用心读书 · 动态毫秒级 AES-128-CBC Mock 脚本
- * 解决因硬编码静态时间戳超出 300 秒导致客户端报错“数据校验失败”问题
+ * 兼容 http-request 与 http-response 双模式
+ * 彻底解决时间戳超出 300 秒导致“数据校验失败”与激活码任意输入校验失败问题
  */
 
 var CryptoJS = CryptoJS || (typeof module !== "undefined" && module.exports ? module.exports : null);
@@ -6701,7 +6702,6 @@ var CryptoJS = CryptoJS || (typeof module !== "undefined" && module.exports ? mo
   const reqUrl = (typeof $request !== "undefined" && $request.url) ? $request.url : "";
   const reqBody = (typeof $request !== "undefined" && $request.body) ? $request.body : "";
 
-  // 动态读取真实系统时间戳，确保永远在 300 秒时效验证窗口内
   const now = Math.floor(Date.now() / 1000);
   const deviceUuid = getQueryOrBodyParam(reqUrl, reqBody, "deviceUuid") || "dfd3f23fada045968c8dd45f55ffc79c";
   const uuid = getQueryOrBodyParam(reqUrl, reqBody, "uuid") || "DFD3F23F-ADA0-4596-8C8D-D45F55FFC79C";
@@ -6709,7 +6709,121 @@ var CryptoJS = CryptoJS || (typeof module !== "undefined" && module.exports ? mo
 
   let responseData = null;
 
-  if (reqUrl.indexOf("member/info") !== -1) {
+  if (reqUrl.indexOf("authority/verify") !== -1) {
+    responseData = {
+      code: "200",
+      verifyCode: "229944",
+      data: {
+        uuid: uuid,
+        code: reqCode,
+        device: "iPhone",
+        firstTime: now,
+        validity: 99999,
+        time: now,
+        titleName: "永久至尊会员",
+        titleLevel: 99
+      },
+      time: now,
+      message: "SUCCESS"
+    };
+  } else if (reqUrl.indexOf("member/bind/code") !== -1 || reqUrl.indexOf("authority/bindtomember") !== -1) {
+    responseData = {
+      code: "200",
+      verifyCode: "229944",
+      data: {
+        state: 1,
+        status: true,
+        message: "success",
+        uuid: uuid,
+        memberId: 4823
+      },
+      time: now,
+      message: "SUCCESS"
+    };
+  } else if (reqUrl.indexOf("login/authority") !== -1) {
+    responseData = {
+      code: "200",
+      verifyCode: "229944",
+      data: {
+        client: 1,
+        token: "mock_vip_token_2026",
+        expireTime: 4070908800,
+        memberId: 4823,
+        uid: 4823,
+        uuid: uuid,
+        nickname: "至尊终身VIP"
+      },
+      time: now,
+      message: "SUCCESS"
+    };
+  } else if (reqUrl.indexOf("authority/checking") !== -1) {
+    responseData = {
+      code: "200",
+      verifyCode: "229944",
+      data: {
+        state: 1,
+        message: "success",
+        uuid: uuid,
+        memberId: 888888
+      },
+      time: now,
+      message: "SUCCESS"
+    };
+  } else if (reqUrl.indexOf("authority/list") !== -1) {
+    responseData = {
+      code: "200",
+      verifyCode: "229944",
+      data: {
+        hasMore: false,
+        list: [
+          {
+            id: 1,
+            code: reqCode,
+            type: 1,
+            typeName: "永久会员",
+            validityDays: 99999,
+            already: 1,
+            statusInfo: "已激活",
+            firstTime: "2024-01-01 00:00:00",
+            createTime: "2024-01-01 00:00:00",
+            price: 9800,
+            password: ""
+          }
+        ],
+        pageNum: 1,
+        pageSize: 100,
+        pageTotal: 1,
+        size: 1,
+        total: 1
+      },
+      time: now,
+      message: "SUCCESS"
+    };
+  } else if (reqUrl.indexOf("authority/devices") !== -1) {
+    responseData = {
+      code: "200",
+      verifyCode: "229944",
+      data: {
+        hasMore: false,
+        list: [
+          {
+            authTime: "2024-01-01 00:00:00",
+            uuid: uuid,
+            deviceUuid: deviceUuid,
+            typeName: "iPhone",
+            type: 1
+          }
+        ],
+        pageNum: 1,
+        pageSize: 100,
+        pageTotal: 1,
+        size: 1,
+        total: 1
+      },
+      time: now,
+      message: "SUCCESS"
+    };
+  } else if (reqUrl.indexOf("member/info") !== -1) {
     responseData = {
       code: "200",
       verifyCode: "290132",
@@ -6780,98 +6894,6 @@ var CryptoJS = CryptoJS || (typeof module !== "undefined" && module.exports ? mo
       time: now,
       message: "SUCCESS"
     };
-  } else if (reqUrl.indexOf("authority/checking") !== -1) {
-    responseData = {
-      code: "200",
-      verifyCode: "229944",
-      data: {
-        state: 1,
-        message: "success",
-        uuid: uuid,
-        memberId: 888888
-      },
-      time: now,
-      message: "SUCCESS"
-    };
-  } else if (reqUrl.indexOf("authority/list") !== -1) {
-    responseData = {
-      code: "200",
-      verifyCode: "229944",
-      data: {
-        hasMore: false,
-        list: [
-          {
-            id: 1,
-            code: reqCode,
-            type: 1,
-            typeName: "永久会员",
-            validityDays: 99999,
-            already: 1,
-            statusInfo: "已激活",
-            firstTime: "2024-01-01 00:00:00",
-            createTime: "2024-01-01 00:00:00",
-            price: 9800,
-            password: ""
-          }
-        ],
-        pageNum: 1,
-        pageSize: 100,
-        pageTotal: 1,
-        size: 1,
-        total: 1
-      },
-      time: now,
-      message: "SUCCESS"
-    };
-  } else if (reqUrl.indexOf("authority/verify") !== -1) {
-    responseData = {
-      code: "200",
-      verifyCode: "229944",
-      data: {
-        uuid: uuid,
-        code: reqCode,
-        device: "iPhone",
-        firstTime: now,
-        validity: 99999,
-        time: now,
-        titleName: "永久至尊会员",
-        titleLevel: 99
-      },
-      time: now,
-      message: "SUCCESS"
-    };
-  } else if (reqUrl.indexOf("authority/devices") !== -1) {
-    responseData = {
-      code: "200",
-      verifyCode: "229944",
-      data: {
-        hasMore: false,
-        list: [
-          {
-            authTime: "2024-01-01 00:00:00",
-            uuid: uuid,
-            deviceUuid: deviceUuid,
-            typeName: "iPhone",
-            type: 1
-          }
-        ],
-        pageNum: 1,
-        pageSize: 100,
-        pageTotal: 1,
-        size: 1,
-        total: 1
-      },
-      time: now,
-      message: "SUCCESS"
-    };
-  } else if (reqUrl.indexOf("authority/bindtomember") !== -1) {
-    responseData = {
-      code: "200",
-      verifyCode: "229944",
-      data: { status: true },
-      time: now,
-      message: "SUCCESS"
-    };
   } else if (reqUrl.indexOf("app/get.version.ios") !== -1) {
     responseData = {
       code: "200",
@@ -6890,7 +6912,18 @@ var CryptoJS = CryptoJS || (typeof module !== "undefined" && module.exports ? mo
 
   if (responseData) {
     const cipherText = aesEncrypt(responseData);
-    if (typeof $done !== "undefined") {
+    if (typeof $response !== "undefined") {
+      // 运行于 http-response 阶段
+      $done({
+        status: 200,
+        headers: {
+          "Content-Type": "text/plain; charset=utf-8",
+          "Cache-Control": "no-store"
+        },
+        body: cipherText
+      });
+    } else if (typeof $done !== "undefined") {
+      // 运行于 http-request 阶段（直接本地返回 Mock，不发起真实网络请求）
       $done({
         response: {
           status: 200,

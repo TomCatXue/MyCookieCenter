@@ -1,5 +1,5 @@
 #!name = 用心读书 · 体验优化与特权调试
-#!desc = 适配用心读书 2.7.1 (v3) 与 2.6.3 (v2)：动态毫秒级计算时钟与 AES-128-CBC 封包，彻底消除“数据校验失败”，解锁全套会员特权。
+#!desc = 适配用心读书 2.7.1 (v3) 与 2.6.3 (v2)：本地实时 Mock，任意激活码秒级激活，动态时钟防重放，全套会员特权。
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/yxds.png
 #!author = TomCatXue
@@ -7,8 +7,8 @@
 #!system_version = 15.0
 #!loon_version = 3.5.1(988)
 #!tag = 用心读书,防强更,体验优化,工具
-#!version = 3.0.0
-#!date = 2026-09-27 17:35
+#!version = 3.1.0
+#!date = 2026-09-27 18:00
 
 [Rule]
 # 拦截友盟统计与崩溃日志上报通道
@@ -23,8 +23,8 @@ DOMAIN, aspect-upush.umeng.com, REJECT
 ^https:\/\/api\.07book\.com\/v[23]\/upload\/input\/form reject-dict
 
 [Script]
-# 动态毫秒级 Mock：解决硬编码静态密文超出 300 秒导致“数据校验失败”问题
-http-response ^https:\/\/api\.07book\.com\/v3\/(authority\/(checking|list|verify|devices|bindtomember)|member\/info|titles\/new|apple\/pay\/verify|app\/get\.version\.ios) script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/parsingbook/parsingbook_mock.js, requires-body=true, tag=用心读书·动态Mock
+# 本地直接拦截请求并回放动态 AES-128-CBC 密文：任意输入激活码即刻激活，时钟动态计算不超 300 秒，完全免疫“数据校验失败”
+http-request ^https:\/\/api\.07book\.com\/v[23]\/(authority\/(checking|list|verify|devices|bindtomember)|member\/(info|bind\/code)|titles\/new|apple\/pay\/verify|app\/get\.version\.ios|login\/authority) script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/parsingbook/parsingbook_mock.js, requires-body=true, tag=用心读书·动态Mock
 
 [MITM]
 hostname = api.07book.com
