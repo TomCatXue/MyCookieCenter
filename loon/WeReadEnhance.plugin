@@ -4,8 +4,8 @@
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/35/92/e6/3592e6f4-0b0b-f2e4-7968-7033b281e1f5/AppIcon-0-1x_U007epad-0-11-0-85-220-0.png/512x512bb.jpg
 #!tag = 微信读书,防强更,去弹窗,去广告,AI听书
-#!version = 3.9.0
-#!date = 2026-09-26 16:45
+#!version = 3.10.0
+#!date = 2026-09-27 10:30
 
 [Argument]
 weread_anti_upgrade = switch,true,tag=微信读书·防强更去广告,desc=开启后彻底屏蔽官方强更弹窗、新版本检测，并去除小红点、阅读页社交干扰与推广广告
@@ -13,10 +13,13 @@ weread_anti_upgrade = switch,true,tag=微信读书·防强更去广告,desc=开�
 [Rule]
 # 阻断 App 向苹果商店 (itunes.apple.com/lookup) 嗅探线上新版本，彻底切断红点与更新弹窗触发源
 DOMAIN, itunes.apple.com, REJECT
+# 阻断腾讯 APM 性能监控与 CLS 日志上报通道
+DOMAIN-SUFFIX, cls.tencentcs.com, REJECT
+DOMAIN, rmonitor.qq.com, REJECT
 
 [MITM]
 hostname = i.weread.qq.com, weread.qq.com
 
 [Script]
 # 全面拦截改写 feature、config、reconf、mobileSync、book、review、discover 等配置响应体，彻底屏蔽新版本检测、弹窗与去广告精简
-response if ${url} ~= /^https?:\/\/(i\.)?weread\.qq\.com\/(mobileSync|feature|config|reconf|app\/upgrade|book\/(reading[sS]tat|chapterReview)|groups\/readerEntrance|review\/list|discoverfeed\/(new|get)|user\/profile)/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/wxread_enhance/wxread.js?v=20260926-1645") with enable=${weread_anti_upgrade}, tag="微信读书·防强更去广告", requires_body=true
+response if ${url} ~= /^https?:\/\/(i\.)?weread\.qq\.com\/(mobileSync|feature|config|reconf|app\/upgrade|reader\/tips|market\/banner|book\/(reading[sS]tat|chapterReview)|groups\/readerEntrance|review\/list|discoverfeed\/(new|get)|user\/profile)/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/wxread_enhance/wxread.js?v=20260926-1645") with enable=${weread_anti_upgrade}, tag="微信读书·防强更去广告", requires_body=true
