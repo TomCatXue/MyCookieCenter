@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 ===================================================================
-📌 版本: v2.4.0 (2026-09-26 预计算密文/抗限流频控优化/细分推送版)
+📌 版本: v2.5.0 (2026-09-28 异步连接池预热/黄金发包窗口重构/容错补发加固版)
 中国电信 · 0点等级会员权益兑换（每日限量102份·高并发秒杀脚本）
 ===================================================================
 new Env('中国电信 · 0点等级权益兑换');
@@ -70,9 +70,9 @@ from concurrent.futures import ThreadPoolExecutor, wait
 # ==================== 🛠️ 脚本功能开关配置 ====================
 CONFIG = {
     "FORCE_RUN": False,         # 平日测试模式: False=仅夜间23:55~23:59准备并抢购; True=平时任何时间均可运行全链路测试
-    "INADVANCE": -150,          # 提前150毫秒首发抢购（对冲机器与网络30~50ms固有偏差）
-    "COUNT_PER_ACCOUNT": 3,     # 每个账号并发抢购数 (调低至3，避免短时连续发包触发网关频控)
-    "INTERVAL_MS": 100,         # 并发请求微间隔(毫秒，拉大至100ms错开网关滑动窗口)
+    "INADVANCE": -75,           # 提前75毫秒首发抢购（精准对冲70~80ms单向网络传输延迟，使首发包准点在00:00:00.000触达网关）
+    "COUNT_PER_ACCOUNT": 5,     # 每个账号并发抢购数 (恢复为5次，充分覆盖秒杀黄金窗口)
+    "INTERVAL_MS": 35,          # 并发请求微间隔(毫秒，35ms微间隔，5发覆盖-75ms至+65ms黄金秒杀带)
     "ENABLE_RUISHU": False,     # 瑞数安全Cookie开关
     "CLAIMED_LOG_FILE": "claimed_accounts.json",
     "ENABLE_MULTI_RIGHTS": False,   # 多权益并发领取: False=仅抢 rightsList[0] 默认权益; True=对接口返回的每个权益独立并发领取
@@ -1314,20 +1314,103 @@ async def async_staggered_burst_worker(
                     f"人数过多，继续尝试..."
                 )
 
-            elif status == 'EMPTY':
+            elif status in ('HTTP_ERROR', 'EMPTY'):
 
-                printn(
-                    f"📭【{phone}】@{request_time} "
-                    f"{rights_tag} 空响应，继续尝试..."
-                )
+                if status == 'EMPTY':
+                    printn(
+                        f"📭【{phone}】@{request_time} "
+                        f"{rights_tag} 空响应"
+                    )
+                else:
+                    printn(
+                        f"🌐【{phone}】@{request_time} "
+                        f"{rights_tag} HTTP错误 "
+                        f"(状态码{http_status}): {text[:200]}"
+                    )
 
-            elif status == 'HTTP_ERROR':
+                # 瞬态错误极速补发：若遭遇 502/空响应，且距离开抢在 2.5 秒黄金窗口内，立即就地补发一次
+                if not (
+                    rights_stop_event.is_set()
+                    or local_stop_event.is_set()
+                    or global_stop_event.is_set()
+                ):
+                    now_dt = (now_cn() - base_target_time).total_seconds()
+                    if now_dt <= 2.5:
+                        await asyncio.sleep(0.04)
+                        if not (
+                            rights_stop_event.is_set()
+                            or local_stop_event.is_set()
+                            or global_stop_event.is_set()
+                        ):
+                            retry_time = now_cn().strftime('%H:%M:%S.%f')[:-3]
+                            retry_perf = time.perf_counter()
+                            try:
+                                async with session.post(
+                                    url,
+                                    json={"para": paraV},
+                                    cookies=rs_cookies,
+                                    headers=headers
+                                ) as retry_resp:
+                                    r_http_status = retry_resp.status
+                                    r_elapsed = (time.perf_counter() - retry_perf) * 1000
+                                    r_text = await retry_resp.text(encoding='utf-8', errors='replace')
+                                    _record_stat(rights_stat, 'request_count')
+                                    rights_stat['last_http_status'] = r_http_status
+                                    rights_stat['last_latency_ms'] = round(r_elapsed, 1)
 
-                printn(
-                    f"🌐【{phone}】@{request_time} "
-                    f"{rights_tag} HTTP错误 "
-                    f"(状态码{http_status}): {text[:200]}"
-                )
+                                    r_clean = r_text.strip()
+                                    if r_clean.startswith('\ufeff'):
+                                        r_clean = r_clean[1:]
+                                    r_status = "UNKNOWN"
+                                    if "已领完" in r_clean or "活动已结束" in r_clean:
+                                        r_status = "SOLD_OUT"
+                                    elif "成功" in r_clean or "已领取过该权益" in r_clean:
+                                        r_status = "SUCCESS"
+                                    elif "操作频繁" in r_clean or "频繁" in r_clean:
+                                        r_status = "RATE_LIMIT"
+                                    elif "当前抢购人数过多" in r_clean:
+                                        r_status = "CROWD"
+                                    elif not (200 <= r_http_status < 300):
+                                        r_status = "HTTP_ERROR"
+                                    elif not r_clean:
+                                        r_status = "EMPTY"
+
+                                    printn(
+                                        f"🔄【{phone}】@{retry_time} "
+                                        f"{rights_tag}[补发] "
+                                        f"HTTP:{r_http_status} 耗时:{r_elapsed:.1f}ms "
+                                        f"状态:{r_status}"
+                                    )
+
+                                    if r_status == 'SUCCESS':
+                                        _record_stat(rights_stat, 'success_count')
+                                        printn(f"🎉【{phone}】@{retry_time} {rights_tag}[补发] 成功或已领取!")
+                                        rights_stop_event.set()
+                                        if rights_count <= 1 and not local_stop_event.is_set():
+                                            local_stop_event.set()
+                                        with result_lock:
+                                            if rights_count <= 1:
+                                                result_log[phone] = {
+                                                    'status': 'SUCCESS',
+                                                    'message': '补发抢兑成功',
+                                                    'level': level,
+                                                    'amount': amount,
+                                                }
+                                        loop = asyncio.get_running_loop()
+                                        await loop.run_in_executor(
+                                            None,
+                                            save_claimed_account,
+                                            claimed_log_file,
+                                            phone,
+                                            file_lock
+                                        )
+                                    elif r_status == 'SOLD_OUT':
+                                        _record_stat(rights_stat, 'sold_out_count')
+                                        rights_stop_event.set()
+                                        if rights_count <= 1 and not local_stop_event.is_set():
+                                            local_stop_event.set()
+                            except Exception as re_err:
+                                printn(f"⚠️【{phone}】@{retry_time} {rights_tag}[补发] 异常: {re_err}")
 
             elif status == 'JSON_ERROR':
 
@@ -1354,6 +1437,7 @@ async def async_staggered_burst_worker(
         ) * 1000
 
         _record_stat(rights_stat, 'timeout_count')
+        _record_stat(rights_stat, 'request_count')
 
         printn(
             f"⏰【{phone}】@{request_time} "
@@ -1648,14 +1732,40 @@ async def run_async_bursts(
     )
 
     timeout = aiohttp.ClientTimeout(
-        total=4,
-        connect=2
+        total=15,
+        connect=4
     )
 
     async with aiohttp.ClientSession(
         connector=connector,
         timeout=timeout
     ) as async_session:
+
+        # ---- 预热 TCP/TLS 连接池 (提前建立长连接，零点瞬间 0ms 额外握手开销) ----
+        try:
+            warm_seconds = (base_target_time - now_cn()).total_seconds()
+            if warm_seconds > 8 and not debug:
+                await asyncio.sleep(warm_seconds - 8)
+
+            warm_url = "https://wappark.189.cn/resources/dist/signInActivity.html"
+            warm_headers = {
+                "User-Agent": (
+                    "Mozilla/5.0 (Linux; Android 13; "
+                    "22081212C Build/TKQ1.220829.002) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/104.0.5112.97 Mobile Safari/537.36"
+                ),
+                "Referer": warm_url
+            }
+            async with async_session.get(
+                warm_url,
+                headers=warm_headers,
+                timeout=aiohttp.ClientTimeout(total=4)
+            ) as warm_res:
+                await warm_res.read()
+            printn(f"⚡️【{phone}】TCP/TLS 连接池预热完成，长连接已建立 (HTTP {warm_res.status})")
+        except Exception as e:
+            printn(f"⚠️【{phone}】连接池预热略过: {e}")
 
         tasks = []
         created_tasks = 0
@@ -2692,9 +2802,9 @@ def main():
 if __name__ == '__main__':
 
     # 运行时变量统一来源于 CONFIG，保持与 v2.3.0 一致的语义
-    inadvance = int(CONFIG.get("INADVANCE", -100))
+    inadvance = int(CONFIG.get("INADVANCE", -75))
     count_per_account = int(CONFIG.get("COUNT_PER_ACCOUNT", 5))
-    interval = int(CONFIG.get("INTERVAL_MS", 10))
+    interval = int(CONFIG.get("INTERVAL_MS", 35))
     enable_ruishu = bool(CONFIG.get("ENABLE_RUISHU", False))
     claimed_log_file = CONFIG.get("CLAIMED_LOG_FILE", "claimed_accounts.json")
     enable_multi_rights = bool(CONFIG.get("ENABLE_MULTI_RIGHTS", False))
