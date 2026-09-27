@@ -1,5 +1,5 @@
 #!name = 用心读书 · 体验优化与特权调试
-#!desc = 适配用心读书 2.7.1 (v3) 与 2.6.3 (v2)：本地实时 Mock，任意激活码秒级激活，动态时钟防重放，全套会员特权。
+#!desc = 适配用心读书 2.7.1 (v3) 与 2.6.3 (v2)：使用国内高速 jsDelivr CDN 加载动态 Mock 引擎，任意激活码即刻激活，彻底消除“数据校验失败”与“激活码不能为空”。
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/yxds.png
 #!author = TomCatXue
@@ -7,8 +7,8 @@
 #!system_version = 15.0
 #!loon_version = 3.5.1(988)
 #!tag = 用心读书,防强更,体验优化,工具
-#!version = 3.1.0
-#!date = 2026-09-27 18:00
+#!version = 3.2.0
+#!date = 2026-09-27 18:20
 
 [Rule]
 # 拦截友盟统计与崩溃日志上报通道
@@ -23,8 +23,8 @@ DOMAIN, aspect-upush.umeng.com, REJECT
 ^https:\/\/api\.07book\.com\/v[23]\/upload\/input\/form reject-dict
 
 [Script]
-# 本地直接拦截请求并回放动态 AES-128-CBC 密文：任意输入激活码即刻激活，时钟动态计算不超 300 秒，完全免疫“数据校验失败”
-http-request ^https:\/\/api\.07book\.com\/v[23]\/(authority\/(checking|list|verify|devices|bindtomember)|member\/(info|bind\/code)|titles\/new|apple\/pay\/verify|app\/get\.version\.ios|login\/authority) script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/parsingbook/parsingbook_mock.js, requires-body=true, tag=用心读书·动态Mock
+# 使用 jsDelivr 国内加速节点直连动态 Mock 脚本：零时延拦截请求并就地生成最新时间戳密文，支持任意激活码免网关核销
+http-request ^https:\/\/api\.07book\.com\/v[23]\/(authority\/(checking|list|verify|devices|bindtomember)|member\/(info|bind\/code)|titles\/new|apple\/pay\/verify|app\/get\.version\.ios|login\/authority) script-path=https://cdn.jsdelivr.net/gh/TomCatXue/MyCookieCenter@main/scripts/tools/parsingbook/parsingbook_mock.js, requires-body=true, tag=用心读书·动态Mock
 
 [MITM]
 hostname = api.07book.com
