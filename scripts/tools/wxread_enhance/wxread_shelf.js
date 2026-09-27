@@ -2,8 +2,8 @@
 ------------------------------------------
 @Description: 微信读书 · 优雅书架 (下架书籍虚拟注入与全鉴权放行)
 @Author: TomCatXue
-@Version: 1.0.2
-@Date: 2026-09-26 17:15
+@Version: 1.0.4
+@Date: 2026-09-28 03:50
 ------------------------------------------
 核心特性：
   1. 订阅下架书全自动捕获（/subscription/books, /shelf/opus）：
@@ -19,7 +19,7 @@
 */
 
 const SCRIPT_NAME = "微信读书·优雅书架";
-const SCRIPT_VERSION = "1.0.2";
+const SCRIPT_VERSION = "1.0.4";
 const $ = new Env(SCRIPT_NAME);
 
 function b64encode(str) {
@@ -281,6 +281,30 @@ function getArgumentValue(argKey) {
         data.maxFreeChapter = 999999;
         modified = true;
         $.log("[" + SCRIPT_NAME + "] 成功解除书籍详情页下架与付费限制: " + (data.title || data.bookId));
+
+        // 即时落盘完整图书元数据，实现单次刷新立刻在书架常驻呈现
+        const currentBookId = String(data.bookId || "");
+        if (currentBookId) {
+          let stored = {};
+          try { stored = JSON.parse(getStorage("weread_shelf_injected_books") || "{}"); } catch (e) {}
+          stored[currentBookId] = {
+            bookId: currentBookId,
+            title: data.title || ("下架书籍 (" + currentBookId + ")"),
+            author: data.author || "微信读书",
+            cover: data.cover || "",
+            format: data.format || "epub",
+            version: data.version || 1,
+            soldout: 0,
+            soldoutType: 0,
+            isPaid: 1,
+            payType: 0,
+            finish: (data.finish !== undefined) ? data.finish : 1,
+            type: 0,
+            updateTime: Math.floor(Date.now() / 1000)
+          };
+          setStorage(JSON.stringify(stored), "weread_shelf_injected_books");
+          $.log("[" + SCRIPT_NAME + "] 即时缓存完整图书元数据至书架注入库: " + currentBookId);
+        }
       }
     }
 
@@ -322,6 +346,47 @@ function getArgumentValue(argKey) {
         modified = true;
         $.log("[" + SCRIPT_NAME + "] 成功伪装 /book/paytime 已购时间戳放行阅读");
       }
+    }
+
+    // ==========================================
+    // 模块六：章节价格与免费状态解密 (/book/chapterInfos) 根除章节购买冲突
+    // ==========================================
+    if (/\/book\/chapterInfos/i.test(url)) {
+      if (Array.isArray(data.data)) {
+        for (const book of data.data) {
+          book.soldOut = 0;
+          if (Array.isArray(book.price)) {
+            for (const p of book.price) {
+              if (p && (p.price === undefined || p.price < 0)) {
+                p.price = 0;
+              }
+            }
+          }
+          if (Array.isArray(book.updated)) {
+            for (const u of book.updated) {
+              if (u) {
+                u.price = 0;
+                u.paid = 1;
+              }
+            }
+          }
+        }
+        modified = true;
+        $.log("[" + SCRIPT_NAME + "] 成功解除 /book/chapterInfos 下架与价格限制，全章节放行免费！");
+      }
+    }
+
+    // ==========================================
+    // 模块七：购买接口容错兜底 (/pay/buyChapters) 彻底杜绝 402 -2204 报错
+    // ==========================================
+    if (/\/pay\/buyChapters/i.test(url)) {
+      data = {
+        succ: 1,
+        balance: 9999,
+        purchasedChapters: []
+      };
+      modified = true;
+      $.log("[" + SCRIPT_NAME + "] 成功拦截 /pay/buyChapters 并模拟购买成功放行！");
     }
 
     if (modified) {
