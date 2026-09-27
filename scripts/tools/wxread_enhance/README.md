@@ -1,68 +1,31 @@
-# 微信读书 · 模块化增强套件
+# 微信读书 · 防强更去广告精简净化套件
 
-> 本套件全面重构解耦为两大独立插件：**防强更去广告** 与 **优雅书架（下架书籍注入）**，职责单一、互不干扰。
+> 专为微信读书 8.2.6 等老版本打造的极简去广告与防强更套件。通过 Loon 内核规则拦截与单次冷启动脚本改写，实现极致纯净与零运行开销。
 
 ---
 
-## 插件一：微信读书 · 防强更去广告 (`WeReadEnhance.plugin`)
-
+## 插件：微信读书 · 防强更去广告 (`WeReadEnhance.plugin`)
 
 ### ⚡ 终极单次触发模式（进软件只触发 1 次）
 - **Script 拦截端点极限收敛**：仅匹配 `/(feature|config|reconf|app\/upgrade)/`。只有在应用刚启动加载全局特性时触发 **1 次**，锁定 `upgrade_query_interval = 2147483647` 与 `VIPRightTimerSeconds = 8640000`；
 - **移出所有动态心跳**：完全剔除 `mobileSync`、`discoverfeed` 等周期性心跳与信息流，切前后台、切Tab **0 脚本执行**；
 - **静态广告秒拒**：`reader/tips` 与 `market/banner` 全由 `[URL Rewrite]` 的 `reject-dict` 秒回 `{}`，**0 脚本执行**；
 - **阅读全程静默**：阅读器内翻页、看书、切章 **0 脚本执行**。
-1. **Rule 拦截（0 脚本执行）**：
-   - 阻断 App Store 嗅探：`DOMAIN, itunes.apple.com, REJECT`
-   - 阻断腾讯 APM 遥测与 CLS 上报：`DOMAIN-SUFFIX, cls.tencentcs.com, REJECT`、`DOMAIN, rmonitor.qq.com, REJECT`
-2. **URL Rewrite 拦截（0 脚本执行）**：
-   - 阅读器底部特惠营销条：`^https?://(i.)?weread.qq.com/reader/tips reject-dict`
-   - 书城顶部横幅轮播图：`^https?://(i.)?weread.qq.com/market/banner reject-dict`
-   - 直接由 Loon 内核在驱动层返回空字典 `{}`，**完全不唤起 JS 引擎**！
-3. **Script 改写（冷启动仅调用 1 次）**：
-   - 仅在进入软件时拦截 `feature`、`configsets`、`reconf`，锁定 `upgrade_query_interval = 2147483647`，彻底消除强更与弹窗；
-4. **彻底释放阅读性能**：
-   - 剔除对 `readingStat`（在读人数）与 `chapterReview`（章节评论）的脚本拦截，**日常看书翻页 0 脚本执行，达到极致丝滑**！
 
-### 🎯 功能与痛点解决
-1. **彻底根治更新弹窗**：通过对 WeRead 10.2.0 脱壳 Mach-O 二进制（`0x100a9d10c - 0x100a9d118`）逆向查明，若配置的 `upgrade_query_interval <= 0`，客户端汇编会触发保底指令回退为 86400 秒（24小时）向苹果商店发起嗅探。
+### 🎯 痛点根因与解决原理
+1. **彻底根治更新弹窗**：通过对 WeRead 10.2.0 脱壳 Mach-O 二进制（`0x100a9d10c - 0x100a9d118`）及 8.2.6 二进制（`0x1009b0718 - 0x1009b0724`）反汇编查明：若配置的 `upgrade_query_interval <= 0`，客户端汇编会触发保底指令回退为 86400 秒（24小时）向苹果商店发起嗅探。
    - 规则层增加 `DOMAIN, itunes.apple.com, REJECT`，物理切断商店嗅探请求；
    - 脚本层锁定 `upgrade_query_interval = 2147483647`，彻底杜绝弹窗。
 2. **纯净阅读与去广告**：
-   - 过滤发现页营销卡片与推荐流广告（`discoverfeed`）；
-   - 清空底部与发现页红点、通知计数（`mobileSync`）；
-   - 清除个人主页勋章与未读红点（`user/profile`）；
-   - 阅读器界面极简：清空在读人数与阅读统计（`readingStat`）、章节评论数字（`chapterReview`）、读者圈子入口（`groups/readerEntrance`）、想法与点评列表（`review/list`）。
+   - 阅读器底部特惠浮层与横幅推广通过 `[URL Rewrite] reject-dict` 秒回空字典；
+   - 阻断腾讯 APM 性能监控与 CLS 遥测日志上报。
 
 ### 📱 订阅链接
 ```text
 https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/loon/WeReadEnhance.plugin
 ```
 
----
-
-## 插件二：微信读书 · 优雅书架 (`WeReadShelf.plugin`)
-
-### 🎯 真实抓包剖析与突破机理
-通过对用户最新真实抓包文件（`65_1790410674787.har`）的深度审计：
-1. **订阅下架书全自动捕获**：
-   - 实测证实服务端的订阅接口（`https://i.weread.qq.com/subscription/books?v2=1`）将所有下架书籍规整下发在 **`offshelfBooks`** 数组中；
-   - 脚本自动读取 `offshelfBooks`，提取书籍完整元数据（`bookId`, `title`, `author`, `cover`, `format`, `version` 等）落盘缓存；
-2. **虚拟书架动态注入**：
-   - 当客户端发起 `/shelf/sync` 同步书架时，自动将捕获的下架书注入进书架 `books` 数组，并从 `removed` 数组中剔除，实现下架书在 App 书架中常驻；
-3. **全链路阅读鉴权放行（解决无法点击/无法阅读）**：
-   - `/book/info`：强制改写 `soldout = 0`、`isPaid = 1`、`free = 1`、`price = 0`、`maxFreeChapter = 999999`；
-   - `/book/readinfo`：强制改写嵌套的 `bookInfo.soldout = 0`、`bookInfo.isPaid = 1`；
-   - `/book/paytime`（最关键）：抓包证实未购下架书返回 `time: 0` 会触发客户端 `isPaiedNormalSoldoutBook` 阻断。脚本拦截并将其改写为当前时间戳（`time > 0`），使客户端判定为已购买，彻底解除阅读器拦截！
-4. **加入书架容错**：
-   - 拦截 `/shelf/add` 强制响应 `{"succ": 1}`，保证点击添加交互顺畅。
-
-### 📱 订阅链接
-```text
-https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/wxread_enhance/wxread_shelf.js
-```
-*(或在 Loon 中导入插件配置：`https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/loon/WeReadShelf.plugin`)*
-
-### 💡 优雅书架使用方法
-- **全自动捕获（推荐）**：在 Loon 开启本插件后，打开微信读书 App，点进“订阅”（或作者主页），只要页面列出了这本下架书，脚本便会自动将其捕获；随后返回书架下拉刷新一次，该书便会自动常驻在书架首位，点击即可进入正文阅读；
-- **手动指定**：在 Loon 插件参数【下架书籍ID列表】中填入目标书籍 ID（多个用英文逗号分隔，如 `23665510,490081`），返回书架下拉刷新即可。
+### 💡 使用指南
+1. 在 Loon 中直接导入上述独立插件链接并开启；
+2. 在 iOS 后台彻底上滑退出「微信读书」App；
+3. 重新打开微信读书，冷启动时触发 1 次配置锁定后，日常看书翻页全程静默、0 脚本运行。
