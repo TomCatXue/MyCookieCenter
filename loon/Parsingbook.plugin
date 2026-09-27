@@ -1,5 +1,5 @@
 #!name = 用心读书 · 体验优化与特权调试
-#!desc = 适配用心读书 2.7.1 (v3) 与 2.6.3 (v2)：精准锁定 947b05e 动态引擎，输出完整调试日志，任意激活码即刻激活。
+#!desc = 适配用心读书 2.7.1 (v3) 与 2.6.3 (v2)：严格对齐 Swift 5 Codable 原生模型类型(state:Bool, device:Int)，双阶动态拦截。
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/yxds.png
 #!author = TomCatXue
@@ -7,8 +7,8 @@
 #!system_version = 15.0
 #!loon_version = 3.5.1(988)
 #!tag = 用心读书,防强更,体验优化,工具
-#!version = 3.4.1
-#!date = 2026-09-27 18:55
+#!version = 3.4.2
+#!date = 2026-09-27 19:10
 
 [Rule]
 # 拦截友盟统计与崩溃日志上报通道
@@ -24,10 +24,10 @@ DOMAIN, aspect-upush.umeng.com, REJECT
 
 [Script]
 # 请求阶段拦截：本地 0ms 截断发包并直接返回合法密文，输入任意激活码均可秒级激活
-request if ${url} ~= /^https:\/\/api\.07book\.com\/v[23]\/(authority|member|titles|apple|app\/get\.version|login)/i then script("https://cdn.jsdelivr.net/gh/TomCatXue/MyCookieCenter@947b05e/scripts/tools/parsingbook/parsingbook_mock.js") with tag="用心读书·动态Mock(Req)", requires_body=true
+request if ${url} ~= /^https:\/\/api\.07book\.com\/v[23]\/(authority|member|titles|apple|app\/get\.version|login)/i then script("https://cdn.jsdelivr.net/gh/TomCatXue/MyCookieCenter@e4c8591/scripts/tools/parsingbook/parsingbook_mock.js") with tag="用心读书·动态Mock(Req)", requires_body=true
 
 # 响应阶段兜底：若请求穿透则在响应层进行密文注入，双重拦截防止官方 400012 错误暴露
-response if ${url} ~= /^https:\/\/api\.07book\.com\/v[23]\/(authority|member|titles|apple|app\/get\.version|login)/i then script("https://cdn.jsdelivr.net/gh/TomCatXue/MyCookieCenter@947b05e/scripts/tools/parsingbook/parsingbook_mock.js") with tag="用心读书·动态Mock(Resp)", requires_body=true
+response if ${url} ~= /^https:\/\/api\.07book\.com\/v[23]\/(authority|member|titles|apple|app\/get\.version|login)/i then script("https://cdn.jsdelivr.net/gh/TomCatXue/MyCookieCenter@e4c8591/scripts/tools/parsingbook/parsingbook_mock.js") with tag="用心读书·动态Mock(Resp)", requires_body=true
 
 [MITM]
 hostname = api.07book.com
