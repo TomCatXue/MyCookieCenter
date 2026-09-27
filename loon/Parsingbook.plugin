@@ -1,4 +1,4 @@
-﻿#!name = 用心读书 · 体验优化与特权调试
+#!name = 用心读书 · 体验优化与特权调试
 #!desc = 适配用心读书 2.7.1 (v3) 与 2.6.3 (v2)：屏蔽版本强制更新阻断弹窗，拦截友盟崩溃遥测，响应层模拟已授权状态。
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/yxds.png
