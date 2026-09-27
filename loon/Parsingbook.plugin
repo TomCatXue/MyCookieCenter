@@ -1,21 +1,39 @@
-#!name = 用心读书 · 会员特权解锁
-#!desc = 用心读书2.6.3解锁全功能会员,享纯净阅读体验。
+﻿#!name = 用心读书 · 体验优化与特权调试
+#!desc = 适配用心读书 2.7.1 (v3) 与 2.6.3 (v2)：屏蔽版本强制更新阻断弹窗，拦截友盟崩溃遥测，响应层模拟已授权状态。
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/yxds.png
-#!author = baby
+#!author = TomCatXue
 #!system = iOS,iPadOS,macOS
 #!system_version = 15.0
 #!loon_version = 3.5.1(988)
-#!tag = 用心读书,会员解锁,工具
-#!version = 1.1.0
-#!date = 2026-09-27 12:45
+#!tag = 用心读书,防强更,体验优化,工具
+#!version = 2.0.0
+#!date = 2026-09-27 16:45
 
-[Argument]
-parsingbook_unlock = switch,true,tag=用心读书·会员解锁,desc=开启后自动重定向鉴权网关并激活终身会员与设备授权特权
+[Rule]
+# 拦截友盟统计与崩溃日志上报通道
+DOMAIN, errnewlog.umeng.com, REJECT
+DOMAIN, errnewlogos.umeng.com, REJECT
+DOMAIN, ucc.umeng.com, REJECT
+DOMAIN, aspect-upush.umeng.com, REJECT
+
+[URL Rewrite]
+# 过滤特权营销文案与非必要日志上传
+^https:\/\/api\.07book\.com\/v[23]\/app\/get\.vip\.tips reject-dict
+^https:\/\/api\.07book\.com\/v[23]\/upload\/input\/form reject-dict
 
 [Rewrite]
-# 重定向核心鉴权接口至 Cloudflare Worker 中继
-^https:\/\/api\.07book\.com\/v2\/(member\/info|titles(?!\/)|authority\/(list|devices|verify|checking)) header https://mock.parsingbook.workers.dev/parsingbook/v2/$1
+# 1. 屏蔽 iOS 强制更新弹窗 (v3 接口返回 forces=0, versionCode=7)
+response if ${url} ~= /^https:\/\/api\.07book\.com\/v3\/app\/get\.version\.ios/i then response.body.mock("text", "AVbUppDsnC96gp8SolftlKMWJi2eRHYXIdwgh3GNxdYcAbPIFSCMN0si1BYWzcj3KPv1jLeAmBUMMUavZUfApdsASvfoZBMrjw+V/PUgzN8D8fgF+yK4lncZWN+d3HIW", 200)
+
+# 2. 授权码首次激活接口校验 (v3 authority/verify 返回合法 AuthorityInfoModel)
+response if ${url} ~= /^https:\/\/api\.07book\.com\/v3\/authority\/verify/i then response.body.mock("text", "4DXgzwQD9CTm5TLPJJ34dIYvWAKsFvGHYGYXwnyYwtUMC81sj6dwnW90eZB8nl8ZfWz5ZL51IY6liPCPAB0U4QyznIl9N4rvnR4UnSgyhq4Xe5+cxGz+O4gWWPIwoTbxUiuLNWuY5CZ26Rxn0Arw+mozQLlubsOtyobroYzp6c3BJB+iOXro+Js06sk2NSvqverKlSzySDIiYtIumBbmlQ==", 200)
+
+# 3. 周期性权限保活检测 (v3 authority/checking 返回 state=1 的 AuthorityCheckingModel)
+response if ${url} ~= /^https:\/\/api\.07book\.com\/v3\/authority\/checking/i then response.body.mock("text", "sHrrBt0Jw7sIsx2RZ0AG9lHpbbIlUv3harbeUJGD52Md5FkzxXpdrQoFnxqISCG+MwA98BDNw/z1FyDr9NbBeaasncoIrY7TOB3o5I79F7A=", 200)
+
+# 4. 兼容 2.6.3 旧版 v2 接口
+response if ${url} ~= /^https:\/\/api\.07book\.com\/v2\/authority\/checking/i then response.body.mock("text", "cxASdYoqg3ZsSzrtjmMFJZPnyQkxkzA+jAqAbI8Y1OHP90XvWKRhenGQZr/Nx9dEL4L0UDYsN8KZdsN5slY0v1ZwAkpCdhgCiUgJL7g9nc0=", 200)
 
 [MITM]
 hostname = api.07book.com
