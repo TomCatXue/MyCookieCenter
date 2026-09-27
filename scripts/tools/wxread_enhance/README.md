@@ -7,7 +7,11 @@
 ## 插件一：微信读书 · 防强更去广告 (`WeReadEnhance.plugin`)
 
 
-### ⚡ 为什么能做到“进软件只调用一次脚本”？（可莉式分层架构）
+### ⚡ 终极单次触发模式（进软件只触发 1 次）
+- **Script 拦截端点极限收敛**：仅匹配 `/(feature|config|reconf|app\/upgrade)/`。只有在应用刚启动加载全局特性时触发 **1 次**，锁定 `upgrade_query_interval = 2147483647` 与 `VIPRightTimerSeconds = 8640000`；
+- **移出所有动态心跳**：完全剔除 `mobileSync`、`discoverfeed` 等周期性心跳与信息流，切前后台、切Tab **0 脚本执行**；
+- **静态广告秒拒**：`reader/tips` 与 `market/banner` 全由 `[URL Rewrite]` 的 `reject-dict` 秒回 `{}`，**0 脚本执行**；
+- **阅读全程静默**：阅读器内翻页、看书、切章 **0 脚本执行**。
 1. **Rule 拦截（0 脚本执行）**：
    - 阻断 App Store 嗅探：`DOMAIN, itunes.apple.com, REJECT`
    - 阻断腾讯 APM 遥测与 CLS 上报：`DOMAIN-SUFFIX, cls.tencentcs.com, REJECT`、`DOMAIN, rmonitor.qq.com, REJECT`
