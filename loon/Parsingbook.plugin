@@ -1,5 +1,5 @@
 #!name = 用心读书 · 体验优化与特权调试
-#!desc = 适配用心读书 2.7.1 (v3) 与 2.6.3 (v2)：真实密文重放，屏蔽版本强更弹窗，恢复全套会员特权与设备授权。
+#!desc = 适配用心读书 2.7.1 (v3) 与 2.6.3 (v2)：解密回放全套会员档案(member/info)、防强更与设备授权。
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/yxds.png
 #!author = TomCatXue
@@ -7,8 +7,8 @@
 #!system_version = 15.0
 #!loon_version = 3.5.1(988)
 #!tag = 用心读书,防强更,体验优化,工具
-#!version = 2.1.0
-#!date = 2026-09-27 17:00
+#!version = 2.2.0
+#!date = 2026-09-27 17:15
 
 [Rule]
 # 拦截友盟统计与崩溃日志上报通道
@@ -26,22 +26,31 @@ DOMAIN, aspect-upush.umeng.com, REJECT
 # 1. 屏蔽 iOS 强制更新弹窗 (v3 接口返回 forces=0, versionCode=7)
 response if ${url} ~= /^https:\/\/api\.07book\.com\/v3\/app\/get\.version\.ios/i then response.body.mock("text", "S2L3pr50xgK0s9WBAAUUqwxRDo8JPlABUZiLf/9vFWmFz4A3nnLmUWc3xMwYAdWxGBtD74n8hv3nE8F5tIwrKDU8itYzK9Knd6DyX9JvnXBqTYZdhKc3gEdF8zOHmlHnbZcGDit404Nlpnis/RzObJ/fEd8yjZxMQtOwIR7MEcYJtIeFXmVSCAegJshzpeXQf6NQXzU2CjZ98QBc68xEZUMJ4AUgNc7LY552PXC4yLA=", 200)
 
-# 2. 周期性权限保活检测 (v3 authority/checking 返回 state=1)
+# 2. 会员用户档案核心接口 (v3 member/info 返回 pass=true 及永久至尊会员头衔)
+response if ${url} ~= /^https:\/\/api\.07book\.com\/v3\/member\/info/i then response.body.mock("text", "S2L3pr50xgK0s9WBAAUUq0mV1CzeD7HrDGFYjEtkn7/X30IjOhiRYXN0MooQw8OlXBDg3cZA6p7CAvp6LfijuA/2V8BprpkpIs1q7cgATeuxaTifuI6H9ILtcKBAXvFggjnAJM4tkLelHk9huAvGtFjcZHX4mAjcHl4eqmjsmujcR8hgV1H37zNIJukALYRH6yC5KCf6KZzPLmkIY3Zjp9O2eLMkEHBWOVg3TlFFgdiFw+ElyY27OThv+9tXSX3E2UrQiI/C2hgizNJaK9UWZftkQzrorBxsuOc0FYvKHrA3aXGBWZEGI+R6r0NT/hG8+2J9qRBBia9AKdw/zNp719CyJLDbMiITppHHUsGuZ94m6SDgSHar8InD3hBsNono7YOtiAtYpJPZmcIpdt0CwfHVrEp3cJkwXIxT/wzBOp/RcmDv7pjdzMCNIY1gj/3FS9MnKkSYugn2wjWEteoLEADqLASsV0Y+GUWRT76pnZQ/WDg8WyMq78TVR2jBtzEYyxwJA5K7OfFaKyAbge1po5lwFPdQ9lbPmNj7UdojM7Qs2eLNNiX0QclJSaGFotNQEPEaaBAh47HVrmmf4RSmVKim+pddIW4f2fxzIiJOIdLHcTy7/RPULyBv6GXIKZhbS+DBpXwHjTCeFC+pU2sEQtvM5Mpt/n1Un662c2ahlLojaLZgo3SRdsZkZRvbUVQKcAQoGmJEivqoyYJ0lwHeutGYwFlg5TZjh2D1kJ4QHL1w2yxMhXM65Ug0ab5JLqf0v9dJ/FTyLM0HYQZ2LgOPceHn1a4rVsWiZBo+c2k1+gM7QMOuLsfGOYmabrx9nEwONjnahsgjUF2jFy1qHASUdQ==", 200)
+
+# 3. 苹果 IAP 恢复购买校验 (v3 apple/pay/verify 返回已激活状态)
+response if ${url} ~= /^https:\/\/api\.07book\.com\/v3\/apple\/pay\/verify/i then response.body.mock("text", "S2L3pr50xgK0s9WBAAUUq0mV1CzeD7HrDGFYjEtkn7/4XKS7HITrYrzxZzlDl8MVg7QcPBsvSCzeXjjXOk4GABkHUIqsgGCpUrEM/kuzZrq4fwKgn6OqIJoHYibjDv7+N8QU9MZNlixFHbpyZjmmHhBOredvSXNnxlnqaxnHWfKodPzE9vh+5jCP5jaJ6VQajP6ZoXSrJW4VwOBNJxpMvs+UMidS64PyAoGx78Ht1pQ=", 200)
+
+# 4. 会员头衔同步 (v3 titles/new)
+response if ${url} ~= /^https:\/\/api\.07book\.com\/v3\/titles\/new/i then response.body.mock("text", "S2L3pr50xgK0s9WBAAUUq4WJASibCVE7sVOb03Lnq5DRrRXhYTxngv0Jl5XWobXKs2m8hqAHirfbbzO//ulTIVNatJ5CUG075JQ3lZ2NFNoS1Vtdioe/OckumASt+SU0UGTMJddu/qwQz72W4aMPy2TrH9GywXFLpACnpX3CZYho/KbX6HLqrCUr8Dh7NScUqhtVR3jax5HTojfDQC8a//o1U3fm+wXLkY8dr0JaG4kuq1kljnpSTd3D+j0vEPf+ha4leY4yCuh+CyYPWZXM5MMEL/OpND09gpAWFCnO6yJEINAIP/mI+8myqxojKJS8AU0TpLLI7fZ0CUnu6gTBOL6dhrM0oUkok2q9DEPIXuQ+z8azcgIjxk9a1/Ur95/2ALcuIM2yknTxdjh6i4t0Tz2FyzEe7VjRgHleOPF1OUEb7A4kIx/dVxm0IwknFXlO", 200)
+
+# 5. 周期性权限保活检测 (v3 authority/checking 返回 state=1)
 response if ${url} ~= /^https:\/\/api\.07book\.com\/v3\/authority\/checking/i then response.body.mock("text", "S2L3pr50xgK0s9WBAAUUqwxRDo8JPlABUZiLf/9vFWkzvmwMYIJFDc/leGOhEKMY90eSX4HYhZ3Y2qwb9ZuvOPejJmK2aniuj6ta6Sx6n9dG9P3/dt3WfxavcB73wnb/9z6SbQVZpt+QqLWPNNrD+iECnvp3L0qm0YAF3iFB9IxexerwKELdl9f2T8ZTFXOqeTBnRUF13py51B3NOiLLCxVDCiXOT52NvP1/1NPiRRsuDCe5jh0IYhV/wQTllyvR", 200)
 
-# 3. 授权许可证列表 (v3 authority/list 返回永久会员卡片)
+# 6. 授权许可证列表 (v3 authority/list 返回永久会员卡片)
 response if ${url} ~= /^https:\/\/api\.07book\.com\/v3\/authority\/list/i then response.body.mock("text", "S2L3pr50xgK0s9WBAAUUqwxRDo8JPlABUZiLf/9vFWmeb1C4dJvgt3yz/Hbt3XhjY9cwHr0NESZzFKBZm0fHF75zrseYuqRFQ8shjAC2h5gcSjhD27Djclq7HVi+F/R/uLi3DmEV808CNfDBM/dCFseLzQgACtSDqwRzHnN1g29b5xGf2o9OLkV2XcXpZ6yODlf3WDLMaYxH1X5Vn4NRovtnjaGnh1EJCbahQR7NeP4i2WZAxo8CMyBCjTQ5szt68ogQg9zq4Q4lSArC3QIPKe3zw8TvtZzbxoNsHpTBZJpyfRosa+TXv27RsfS/uIAZ50I1uqdzPhHaJ2/sSXqzigqHwHYfdnE0krfOYrc8/cSZ1jSdhfc1h4eWNo5cJPq5SKkWKZ9KwHLAbJ2VoMODbWcxMDbHV3poIXKrRBX4ZTLq0cuRduDnVt934FxvySB9G0icBEWYXu+vDCsYJ8tk94xqCy0Z22syyAtoCkYt+VemLqfSOk0kozhVmlH65DOCvGCma3H3FS8Qhy8Bft0Xfw==", 200)
 
-# 4. 授权码激活核销接口 (v3 authority/verify 返回合法激活信息)
+# 7. 授权码激活核销接口 (v3 authority/verify 返回合法激活信息)
 response if ${url} ~= /^https:\/\/api\.07book\.com\/v3\/authority\/verify/i then response.body.mock("text", "S2L3pr50xgK0s9WBAAUUqwxRDo8JPlABUZiLf/9vFWmELsm20Fy45rl4B+AIifPXi76oiBixVMud/mCacJbB7kfpbRfYJanDTMEwc5ZoYpBKo6sh0rTrRLwHqmoleIb6nGcIFr9NWq+3/8j4darkI3GYME0AOmFi75yUmCGdr7v57OeI3+B6w4c0Q9/Toh+Cl6r/v2+nMbb2ix/jLIFb2P6hev+Zgz4ky0ROvRTUMYvJ05lBGnKoxvt6fB3+fqVGUMAOowwLPX+Gd8n+6D6TeexKJt24bUjNSAa8BRawFyLroOc6ovcBoVztILqOIIEz+ZV23sM3Os4LhO6fFYFMlRFbFPuTJnhtK84D3UG6dNkt5cjYUgJ5pv68w1cA9U3r", 200)
 
-# 5. 设备列表查询 (v3 authority/devices)
+# 8. 设备列表查询 (v3 authority/devices)
 response if ${url} ~= /^https:\/\/api\.07book\.com\/v3\/authority\/devices/i then response.body.mock("text", "S2L3pr50xgK0s9WBAAUUqwxRDo8JPlABUZiLf/9vFWmeb1C4dJvgt3yz/Hbt3XhjY9cwHr0NESZzFKBZm0fHFyzl5Ep0WiZBnSgc7D4qVbPI1svvv1mqOZZifJTnaDxl3Eun0Yotav7tQR5Q/OB4339yUH47nEf6tHo3HFUASddy1FHmKhlF1oDuXr1YMpjYuaGjpn9Ix98YOti7eWBTM9KAR/kWqlZPPkt7+RtC7u5fUpnM5FS/VGS3YlZRgYPOuKfzjlboVwuanxC+oAUR3Nd4ZZWYOQ2RKW5x9BziIxmICCn0zThQ0JqDK6++G02jsSXtvErMmZRMSOIxFQxWDnglDAZBTw09gWW2lwp7Oaz/DOd595hVteBOg0mt8RK+NRo9NWduwndxOIFH7NIzwH/snLggv3hIdoJUPtV7QllGIgcTukelRDputm8IJnrI", 200)
 
-# 6. 会员账号绑定 (v3 authority/bindtomember)
+# 9. 会员账号绑定 (v3 authority/bindtomember)
 response if ${url} ~= /^https:\/\/api\.07book\.com\/v3\/authority\/bindtomember/i then response.body.mock("text", "S2L3pr50xgK0s9WBAAUUqwxRDo8JPlABUZiLf/9vFWkzvmwMYIJFDc/leGOhEKMYkkv6PF9IgavDT8L6fwQJ+dtLdOcSyhf0V5ZjkA4cg4P3FrD/FlM3z3KODpiPkXXlGviiVkPdkwBQrrjFJVSPUA==", 200)
 
-# 7. 兼容 2.6.3 旧版 v2 接口
+# 10. 兼容 2.6.3 旧版 v2 接口
 response if ${url} ~= /^https:\/\/api\.07book\.com\/v2\/authority\/checking/i then response.body.mock("text", "cxASdYoqg3ZsSzrtjmMFJZPnyQkxkzA+jAqAbI8Y1OHP90XvWKRhenGQZr/Nx9dEL4L0UDYsN8KZdsN5slY0v1ZwAkpCdhgCiUgJL7g9nc0=", 200)
 
 [MITM]
