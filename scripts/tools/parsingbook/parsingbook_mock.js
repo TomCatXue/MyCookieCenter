@@ -6647,10 +6647,10 @@ return CryptoJS;
 })();
 
 
-// SCRIPT_VERSION = "2026-09-27.r7"
+// SCRIPT_VERSION = "2026-09-27.r8"
 /**
  * 用心读书 · 动态毫秒级 AES-128-CBC Mock 脚本
- * 兼容 Loon / Surge / Quantumult X 的 JS 运行时（解决 this=undefined 导致的 CryptoJS 为空异常）
+ * 兼容 2.7.1 (v3) 与 2.6.3 (v2)，自动识别任意激活码与账户绑定，实时生成防过期时间戳
  */
 
 (function () {
@@ -6694,6 +6694,9 @@ return CryptoJS;
   const deviceUuid = getQueryOrBodyParam(reqUrl, reqBody, "deviceUuid") || "dfd3f23fada045968c8dd45f55ffc79c";
   const uuid = getQueryOrBodyParam(reqUrl, reqBody, "uuid") || "DFD3F23F-ADA0-4596-8C8D-D45F55FFC79C";
   const reqCode = getQueryOrBodyParam(reqUrl, reqBody, "code") || "VIP888888";
+
+  console.log("[用心读书Mock] 拦截到请求: " + reqUrl);
+  console.log("[用心读书Mock] 解析参数: code=" + reqCode + ", uuid=" + uuid);
 
   let responseData = null;
 
@@ -6849,7 +6852,7 @@ return CryptoJS;
       time: now,
       message: "SUCCESS"
     };
-  } else if (reqUrl.indexOf("titles/new") !== -1) {
+  } else if (reqUrl.indexOf("titles") !== -1) {
     responseData = {
       code: "200",
       verifyCode: "665600",
@@ -6900,8 +6903,8 @@ return CryptoJS;
 
   if (responseData) {
     const cipherText = aesEncrypt(responseData);
+    console.log("[用心读书Mock] 构造响应成功，下发密文长度: " + cipherText.length + "，当前时间戳: " + now);
     if (typeof $response !== "undefined") {
-      // 运行于 http-response 阶段
       $done({
         status: 200,
         headers: {
@@ -6911,7 +6914,6 @@ return CryptoJS;
         body: cipherText
       });
     } else if (typeof $done !== "undefined") {
-      // 运行于 http-request 阶段（直接本地返回 Mock，不发起真实网络请求）
       $done({
         response: {
           status: 200,
@@ -6924,6 +6926,7 @@ return CryptoJS;
       });
     }
   } else {
+    console.log("[用心读书Mock] 未匹配到对应端点，直接放行: " + reqUrl);
     if (typeof $done !== "undefined") {
       $done({});
     }
