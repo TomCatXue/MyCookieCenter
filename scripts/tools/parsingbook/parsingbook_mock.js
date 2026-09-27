@@ -1,17 +1,5 @@
-;(function (root, factory) {
-	if (typeof exports === "object") {
-		// CommonJS
-		module.exports = exports = factory();
-	}
-	else if (typeof define === "function" && define.amd) {
-		// AMD
-		define([], factory);
-	}
-	else {
-		// Global (browser)
-		root.CryptoJS = factory();
-	}
-}(this, function () {
+var CryptoJS = (function () {
+
 
 	/*globals window, global, require*/
 
@@ -6654,16 +6642,16 @@
 
 	return CryptoJS;
 
-}));
 
-// SCRIPT_VERSION = "2026-09-27.r6"
+return CryptoJS;
+})();
+
+
+// SCRIPT_VERSION = "2026-09-27.r7"
 /**
  * 用心读书 · 动态毫秒级 AES-128-CBC Mock 脚本
- * 兼容 http-request 与 http-response 双模式
- * 彻底解决时间戳超出 300 秒导致“数据校验失败”与激活码任意输入校验失败问题
+ * 兼容 Loon / Surge / Quantumult X 的 JS 运行时（解决 this=undefined 导致的 CryptoJS 为空异常）
  */
-
-var CryptoJS = CryptoJS || (typeof module !== "undefined" && module.exports ? module.exports : null);
 
 (function () {
   const KEY_STR = "SQ#ma8tVEs5Eiu1.";
