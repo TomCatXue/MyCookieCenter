@@ -368,11 +368,26 @@ function extractBooks(data) {
     if (!data) return list;
     let rawList = data.books || data.data || data.items || data.freeBooks || (Array.isArray(data) ? data : []);
     rawList.forEach(b => {
-        let bid = b.bookId || b.id || b.bookInfo?.bookId || b.book?.bookId;
-        let title = b.title || b.bookInfo?.title || b.book?.title || "";
-        let received = typeof b.received !== "undefined" ? b.received : 0;
+        let bInfo = b.bookInfo || b.book || b;
+        let bid = bInfo.bookId || bInfo.id || b.bookId || b.id;
+        let title = bInfo.title || bInfo.name || b.title || "";
+        let received = typeof b.received !== "undefined" ? Number(b.received) : (typeof bInfo.received !== "undefined" ? Number(bInfo.received) : 0);
+        let rawPrice = Number(bInfo.originalPrice || bInfo.price || bInfo.centPrice || bInfo.priceInfo?.price || 0);
+        let price = rawPrice > 100 ? (rawPrice / 100) : rawPrice;
+        let newRating = Number(bInfo.newRating || bInfo.star || (bInfo.rating ? bInfo.rating * 100 : 0) || 0);
+        let newRatingCount = Number(bInfo.newRatingCount || bInfo.ratingCount || bInfo.commentCount || 0);
+        let ratingTitle = String(bInfo.newRatingDetail?.title || bInfo.ratingTips || bInfo.starText || "");
+
         if (bid) {
-            list.push({ bookId: String(bid), title: String(title), received: received });
+            list.push({
+                bookId: String(bid),
+                title: String(title),
+                received: received,
+                price: price,
+                newRating: newRating,
+                newRatingCount: newRatingCount,
+                ratingTitle: ratingTitle
+            });
         }
     });
     return list;
@@ -503,9 +518,62 @@ async function runFreeBooks() {
         return;
     }
 
-    // 3. 优先挑选未领取过的书籍 (received === 0)
-    let unreceived = books.filter(b => b.received !== 1);
-    let candidates = unreceived.length > 0 ? unreceived : books;
+    // 3. 规避主号已在架图书与历史已购资产
+    let shelfBookIds = new Set();
+    try {
+        let shelfRes = await get(API + "/shelf/sync?synckey=0&onlyBookid=1", getHeaders(auth));
+        let shelfData = decode(shelfRes.body);
+        let sItems = shelfData?.books || shelfData?.bookIds || [];
+        sItems.forEach(item => {
+            let bid = typeof item === "object" ? (item.bookId || item.id) : item;
+            if (bid) shelfBookIds.add(String(bid));
+        });
+    } catch (e) { }
+
+    let allBookIds = books.map(b => b.bookId);
+    let paidBookIds = new Set();
+    for (let i = 0; i < allBookIds.length; i += 30) {
+        let chunk = allBookIds.slice(i, i + 30);
+        try {
+            let payRes = await get(API + `/book/paytime?bookIds=${encodeURIComponent(chunk.join(","))}`, getHeaders(auth));
+            let payData = decode(payRes.body);
+            let items = payData?.data || [];
+            items.forEach(item => {
+                if (item.bookId && item.time > 0) paidBookIds.add(String(item.bookId));
+            });
+        } catch (e) { }
+    }
+
+    // 过滤排除：已领图书、在架图书、历史购买过的图书
+    let candidates = books.filter(b => b.received !== 1 && !shelfBookIds.has(String(b.bookId)) && !paidBookIds.has(String(b.bookId)));
+    if (candidates.length === 0) candidates = books.filter(b => b.received !== 1);
+
+    // 智能权重打分：好评如潮 > 特别好评 > 高书币售价 > 评价基数
+    function calculateBookPriorityScore(b) {
+        let isOverwhelming = b.ratingTitle.includes("好评如潮") || b.newRating >= 900;
+        let isVeryGood = b.ratingTitle.includes("特别好评") || b.newRating >= 850;
+        let isGood = b.newRating >= 750;
+
+        let ratingScore = 0;
+        if (isOverwhelming) ratingScore = 1000000;
+        else if (isVeryGood) ratingScore = 500000;
+        else if (isGood) ratingScore = b.newRating * 100;
+        else ratingScore = b.newRating * 10;
+
+        let priceScore = (b.price || 0) * 1000;
+        let countBonus = Math.min(b.newRatingCount || 0, 500);
+        return ratingScore + priceScore + countBonus;
+    }
+
+    candidates.sort((a, b) => calculateBookPriorityScore(b) - calculateBookPriorityScore(a));
+
+    if (candidates.length > 0) {
+        $.log("[WeRead] 📚 智能优选候选（好评如潮+高书币价值优先）：");
+        candidates.slice(0, 3).forEach((c, idx) => {
+            let tag = c.ratingTitle || (c.newRating >= 900 ? "好评如潮" : (c.newRating >= 850 ? "特别好评" : "高分推荐"));
+            $.log(`  ${idx + 1}. 《${c.title}》 [${tag}·${(c.newRating/10).toFixed(1)}%好评] 售价: ${c.price.toFixed(1)}书币 (得分: ${calculateBookPriorityScore(c)})`);
+        });
+    }
 
     // 每期领 2 本，挑出前 2 本入架
     let targetBooks = candidates.slice(0, 2);

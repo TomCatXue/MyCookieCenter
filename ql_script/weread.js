@@ -12,7 +12,7 @@
 ================================================================================
 @Name: 微信读书 · 全功能自动化任务（青龙面板专版）
 @Author: TomCatXue
-@Version: 1.3.0
+@Version: 1.3.1
 @Updated: 2026-09-26
 ================================================================================
 使用说明：
@@ -58,7 +58,7 @@ const CONFIG = {
 // 常量与系统配置
 // ================================================================================
 const SCRIPT_NAME = "微信读书 · 全功能任务";
-const SCRIPT_VERSION = "1.3.0";
+const SCRIPT_VERSION = "1.3.1";
 const AUTH_KEY = "weread_auth_v2";
 const CACHE_FILE = "./weread_session.json";
 const API = "https://i.weread.qq.com";
@@ -996,6 +996,21 @@ async function runFreeTask(auth, helperAuth) {
         "skey": a.skey || ""
     });
 
+    let currentVol = getFreeVol();
+    let cacheKey = `weread_free_${auth.vid}_${currentVol}`;
+
+    // 0. 本地周度缓存锁定检测 (避免整周重复执行时书名漂移或发起冗余网络请求)
+    try {
+        let rawCache = $.getdata(cacheKey);
+        if (rawCache) {
+            let cachedInfo = JSON.parse(rawCache);
+            if (cachedInfo && cachedInfo.vol === currentVol && cachedInfo.allClaimed && cachedInfo.addedBooks && cachedInfo.addedBooks.length >= 2) {
+                $.log(`[WeRead] ℹ️ 本周(期数 ${currentVol})已成功领取固定图书(周度锁定): ${cachedInfo.addedBooks.join(", ")}`);
+                return cachedInfo;
+            }
+        }
+    } catch (e) { }
+
     // 1. 检查领书资格与本期配额（每期最多 2 本）
     let reachedMax = false;
     try {
@@ -1015,9 +1030,27 @@ async function runFreeTask(auth, helperAuth) {
         $.log("[WeRead] checkfreequalify 请求异常: " + String(e));
     }
 
-    // 2. 多通道聚合拉取官方限免书库列表
-    // 同时聚合：原生 App 18 本书单 + 扩展 50 本书单 + 特别推荐 120 本书单，确保本期全部限免好书（文学、社科等）均被准确收录
-    let currentVol = getFreeVol();
+    // 2. 检查主号书架现有图书 (/shelf/sync)，确保绝对规避已在架/已拥有书籍
+    let shelfBookIds = new Set();
+    try {
+        let shelfRes = await get(API + "/shelf/sync?synckey=0&onlyBookid=1", getHeaders(auth));
+        if (shelfRes.status === 401 || shelfRes.status === 499) {
+            let refreshed = await tryRefreshLogin(auth);
+            if (refreshed) {
+                auth = refreshed;
+                shelfRes = await get(API + "/shelf/sync?synckey=0&onlyBookid=1", getHeaders(auth));
+            }
+        }
+        let sData = decode(shelfRes.body);
+        let sItems = sData?.books || sData?.bookIds || [];
+        sItems.forEach(item => {
+            let bid = typeof item === "object" ? (item.bookId || item.id) : item;
+            if (bid) shelfBookIds.add(String(bid));
+        });
+    } catch (e) { }
+
+    // 3. 多通道聚合拉取官方限免书库列表
+    // 同时聚合：原生 App 18 本书单 + 扩展 50 本书单 + 特别推荐 120 本书单
     let libraryUrls = [
         API + `/free/library/list?count=18&receiveStatus=1&type=book&vol=${currentVol}`,
         API + `/free/library/list?count=50&receiveStatus=1&type=book&vol=${currentVol}`,
@@ -1052,14 +1085,37 @@ async function runFreeTask(auth, helperAuth) {
                     let vMatch = deepLink.match(/[?&]v=([^&]+)/);
                     let v = vMatch ? vMatch[1] : "";
                     let sn = b.sn || "";
+
+                    // 深度提取价格与评价元数据 (针对微信读书官方 WRCGIParser 规范)
+                    let rawPrice = Number(bInfo.originalPrice || bInfo.price || bInfo.centPrice || bInfo.priceInfo?.price || 0);
+                    let priceInCoins = rawPrice > 100 ? (rawPrice / 100) : rawPrice; // 分转书币
+                    let newRating = Number(bInfo.newRating || bInfo.star || (bInfo.rating ? bInfo.rating * 100 : 0) || 0);
+                    let newRatingCount = Number(bInfo.newRatingCount || bInfo.ratingCount || bInfo.commentCount || 0);
+                    let ratingTitle = String(bInfo.newRatingDetail?.title || bInfo.ratingTips || bInfo.starText || "");
+
                     if (bid) {
                         if (!booksMap.has(bid)) {
-                            booksMap.set(bid, { bookId: bid, title, received, deepLink, v, sn });
+                            booksMap.set(bid, {
+                                bookId: bid,
+                                title,
+                                received,
+                                deepLink,
+                                v,
+                                sn,
+                                price: priceInCoins,
+                                newRating,
+                                newRatingCount,
+                                ratingTitle
+                            });
                         } else {
                             let exist = booksMap.get(bid);
                             if (received === 1) exist.received = 1;
                             if (!exist.v && v) exist.v = v;
                             if (!exist.sn && sn) exist.sn = sn;
+                            if (priceInCoins > exist.price) exist.price = priceInCoins;
+                            if (newRating > exist.newRating) exist.newRating = newRating;
+                            if (newRatingCount > exist.newRatingCount) exist.newRatingCount = newRatingCount;
+                            if (ratingTitle && !exist.ratingTitle) exist.ratingTitle = ratingTitle;
                         }
                     }
                 });
@@ -1076,32 +1132,39 @@ async function runFreeTask(auth, helperAuth) {
         return result;
     }
 
-    // 3. 权威核验主账号本周在图书馆里真正领到的书籍 (以主账号真实资产为绝对中心)
-    // 包含：官方标记 received === 1、本期周期开启后入库的付费/限免版权库 (/book/paytime time >= volStartTime)
+    // 4. 分批查验主号购买资产历史 (/book/paytime)，防止单次 Query 超长截断
     let allBookIds = books.map(b => b.bookId);
-    let paidBookIds = new Set();
+    let allTimePaidBookIds = new Set();
+    let thisWeekPaidBookIds = new Set();
     let volStartTime = getVolStartTime(currentVol);
-    try {
-        let payUrl = API + `/book/paytime?bookIds=${encodeURIComponent(allBookIds.join(","))}`;
-        let payRes = await get(payUrl, getHeaders(auth));
-        if (payRes.status === 401 || payRes.status === 499) {
-            let refreshed = await tryRefreshLogin(auth);
-            if (refreshed) {
-                auth = refreshed;
-                payRes = await get(payUrl, getHeaders(auth));
-            }
-        }
-        let payData = decode(payRes.body);
-        let items = payData?.data || [];
-        items.forEach(item => {
-            if (item.bookId && (volStartTime > 0 ? item.time >= volStartTime : item.time > 0)) {
-                paidBookIds.add(String(item.bookId));
-            }
-        });
-    } catch (e) { }
 
-    // 筛选出主账号本周已成功领取的免费图书馆好书
-    let claimedBooks = books.filter(b => b.received === 1 || paidBookIds.has(String(b.bookId)));
+    for (let i = 0; i < allBookIds.length; i += 30) {
+        let chunk = allBookIds.slice(i, i + 30);
+        try {
+            let payUrl = API + `/book/paytime?bookIds=${encodeURIComponent(chunk.join(","))}`;
+            let payRes = await get(payUrl, getHeaders(auth));
+            if (payRes.status === 401 || payRes.status === 499) {
+                let refreshed = await tryRefreshLogin(auth);
+                if (refreshed) {
+                    auth = refreshed;
+                    payRes = await get(payUrl, getHeaders(auth));
+                }
+            }
+            let payData = decode(payRes.body);
+            let items = payData?.data || [];
+            items.forEach(item => {
+                if (item.bookId && item.time > 0) {
+                    allTimePaidBookIds.add(String(item.bookId));
+                    if (volStartTime > 0 && item.time >= volStartTime) {
+                        thisWeekPaidBookIds.add(String(item.bookId));
+                    }
+                }
+            });
+        } catch (e) { }
+    }
+
+    // 5. 核验主账号本周在免费图书馆真正已拥有的书籍 (received === 1 或本期周期内 paytime 生效)
+    let claimedBooks = books.filter(b => b.received === 1 || thisWeekPaidBookIds.has(String(b.bookId)));
     let claimedTitles = claimedBooks.map(b => `《${b.title}》`);
 
     // 自动将已拥有的限免图书同步回写至个人书架
@@ -1111,32 +1174,79 @@ async function runFreeTask(auth, helperAuth) {
         } catch (e) { }
     }
 
-    // 若主账号已领满本周 2 本名额（或资格接口确认已达上限），直接汇报主账号领取的真实书名，绝不调用小号发起无谓请求，绝不下发无关链接
+    // 若主账号已领满本周 2 本名额（或资格接口明确确认已达上限），直接锁定并汇报
     if (claimedTitles.length >= 2 || (reachedMax && claimedTitles.length > 0)) {
         result.success = true;
         result.allClaimed = true;
         result.addedBooks = claimedTitles.slice(0, 2);
         result.details = `本周已领图书: ${result.addedBooks.join(", ")}`;
         $.log(`[WeRead] ✅ ${result.details}`);
+        // 写入周度缓存锁定
+        $.setdata(JSON.stringify({ vol: currentVol, allClaimed: true, addedBooks: result.addedBooks, details: result.details }), cacheKey);
         return result;
     }
 
-    // 若当前只识别到 1 本，常驻存入已领书名
+    // 6. 核心智能打分机制：严格规避已购/在架，优先「好评如潮」，次优「高书币售价」
     result.addedBooks = [...claimedTitles];
     let needCount = 2 - claimedTitles.length;
-    let candidates = books.filter(b => b.received !== 1 && !paidBookIds.has(String(b.bookId)) && b.v && b.sn);
+
+    // 候选池严密过滤：
+    // - 规避官方已领图书 (b.received !== 1)
+    // - 严格规避主账号历史已付费购买图书 (!allTimePaidBookIds.has)
+    // - 严格规避主账号书架现有图书 (!shelfBookIds.has)
+    // - 必须携带有效分享鉴权参数 (b.v && b.sn)
+    let candidates = books.filter(b =>
+        b.received !== 1 &&
+        !allTimePaidBookIds.has(String(b.bookId)) &&
+        !shelfBookIds.has(String(b.bookId)) &&
+        b.v && b.sn
+    );
 
     if (!candidates.length) {
         result.success = true;
         result.allClaimed = true;
-        result.details = claimedTitles.length > 0 ? `本周已领图书: ${claimedTitles.join(", ")}` : "本期限免书库暂无可领图书";
+        result.details = claimedTitles.length > 0 ? `本周已领图书: ${claimedTitles.join(", ")}` : "本期限免书库暂无可领新书";
         $.log(`[WeRead] ✅ ${result.details}`);
         return result;
     }
 
+    // 智能权重计算函数 (权重体系：好评如潮 > 特别好评 > 高书币价格 > 评分人数)
+    function calculateBookPriorityScore(b) {
+        let isOverwhelming = b.ratingTitle.includes("好评如潮") || b.newRating >= 900;
+        let isVeryGood = b.ratingTitle.includes("特别好评") || b.newRating >= 850;
+        let isGood = b.newRating >= 750;
+
+        let ratingScore = 0;
+        if (isOverwhelming) {
+            ratingScore = 1000000; // 第一梯队：好评如潮 (100万分)
+        } else if (isVeryGood) {
+            ratingScore = 500000;  // 第二梯队：特别好评 (50万分)
+        } else if (isGood) {
+            ratingScore = b.newRating * 100;
+        } else {
+            ratingScore = b.newRating * 10;
+        }
+
+        // 价格得分：每 1 书币赋 1000 分，确保在同一评分梯队内，售价越贵的图书绝对优先
+        let priceScore = (b.price || 0) * 1000;
+
+        // 评价人数加成 (置信度微调，最高 500 分)
+        let countBonus = Math.min(b.newRatingCount || 0, 500);
+
+        return ratingScore + priceScore + countBonus;
+    }
+
+    candidates.sort((a, b) => calculateBookPriorityScore(b) - calculateBookPriorityScore(a));
+
+    $.log(`[WeRead] 📚 智能优选候选池（已排除已购/在架，按「好评如潮+高书币价值」排序前 3 本）：`);
+    candidates.slice(0, 3).forEach((c, idx) => {
+        let tag = c.ratingTitle || (c.newRating >= 900 ? "好评如潮" : (c.newRating >= 850 ? "特别好评" : "高分推荐"));
+        $.log(`  ${idx + 1}. 《${c.title}》 [${tag} · ${(c.newRating / 10).toFixed(1)}%好评] 官方售价: ${c.price.toFixed(1)}书币 (得分: ${calculateBookPriorityScore(c)})`);
+    });
+
     let targetBooks = candidates.slice(0, needCount);
 
-    // 4. 路径A：小号助力点击全自动兑换 (支持静态 wrSkey / skey，亦支持脱机换票)
+    // 7. 路径A：小号助力点击全自动兑换 (支持静态 wrSkey / skey，亦支持脱机换票)
     let helperVid = helperAuth ? String(helperAuth.vid || helperAuth.wrVid || "") : "";
     let helperSkey = helperAuth ? (helperAuth.wrSkey || helperAuth.accessToken || helperAuth.skey || "") : "";
 
@@ -1144,7 +1254,6 @@ async function runFreeTask(auth, helperAuth) {
         let maskH = helperVid.length > 4 ? helperVid.slice(0, 4) + "****" : helperVid;
         $.log(`[WeRead] 检测到助力小号凭证 [${maskH}]，启动小号自动助力领书流程...`);
 
-        // 仅在缺少当前可用 skey 且具备脱机种子时才尝试换票
         if (!helperSkey && helperAuth.refreshToken && helperAuth.deviceId) {
             let refreshedHelper = await tryRefreshLogin(helperAuth);
             if (refreshedHelper) {
@@ -1163,7 +1272,6 @@ async function runFreeTask(auth, helperAuth) {
 
             let actRes = await get(actUrl, actHeaders);
             if (actRes.status === 401) {
-                // 优先尝试基于 wr_rt 的 Web Cookie 自动续期
                 if (helperAuth.wrRt || helperAuth.wr_rt) {
                     let renewed = await tryWebRenewal(helperAuth);
                     if (renewed) {
@@ -1196,10 +1304,24 @@ async function runFreeTask(auth, helperAuth) {
             let actData = decode(actRes.body);
             if (actRes.status === 200 && actData && actData.succ === 1 && !actData.errMsg) {
                 newlyClaimed.push(`《${b.title}》`);
-                $.log(`[WeRead] 🎉 小号助力领取成功: 《${b.title}》`);
+                $.log(`[WeRead] 🎉 小号助力领取成功: 《${b.title}》 (售价: ${b.price.toFixed(1)}书币)`);
             } else {
                 let errMsg = actData?.errMsg || actData?.errmsg || ("HTTP " + actRes.status);
                 $.log(`[WeRead] ❌ 小号助力领取《${b.title}》失败: ${errMsg}`);
+
+                // 核心安全熔断：若官方返回 -2057，表明主账号本周领书次数已达上限
+                if (String(errMsg) === "-2057" || (actData && actData.errCode === -2057)) {
+                    $.log("[WeRead] ℹ️ 触发官方配额保护：主账号本周免费好书已达领取上限(2本)，停止后续助力请求并锁定结果");
+                    result.allClaimed = true;
+                    result.unclaimedBooks = [];
+                    // 立即将主号已领的书持久化，防止产生无谓重试
+                    if (result.addedBooks.length > 0) {
+                        result.details = `本周已领图书: ${result.addedBooks.join(", ")}`;
+                        $.setdata(JSON.stringify({ vol: currentVol, allClaimed: true, addedBooks: result.addedBooks, details: result.details }), cacheKey);
+                    }
+                    break;
+                }
+
                 // 收集未成功的直达链接
                 let link = `https://weread.qq.com/book-detail?type=1&senderVid=${auth.vid}&v=${b.v}&wtype=shareOneGetOne2&scene=freeBooks&timestamp=${freeTimestamp}&sn=${b.sn}&vol=${currentVol}`;
                 result.unclaimedBooks.push({ title: b.title, url: link });
@@ -1212,6 +1334,8 @@ async function runFreeTask(auth, helperAuth) {
             result.success = true;
             result.details = `成功领取: ${result.addedBooks.join(", ")}`;
             $.log(`[WeRead] ✅ ${result.details}`);
+            // 写入周度缓存锁定
+            $.setdata(JSON.stringify({ vol: currentVol, allClaimed: true, addedBooks: result.addedBooks, details: result.details }), cacheKey);
             // 触发主号书架增量同步
             try {
                 await get(API + "/shelf/sync?album=1&onlyBookid=1", getHeaders(auth));
@@ -1233,8 +1357,6 @@ async function runFreeTask(auth, helperAuth) {
 
     return result;
 }
-
-
 // ============================================================
 // 6. 主控调度引擎 (调度管理、开关判断、多账号循环)
 // ============================================================
