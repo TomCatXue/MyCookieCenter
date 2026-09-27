@@ -6,6 +6,20 @@
 
 ## 插件一：微信读书 · 防强更去广告 (`WeReadEnhance.plugin`)
 
+
+### ⚡ 为什么能做到“进软件只调用一次脚本”？（可莉式分层架构）
+1. **Rule 拦截（0 脚本执行）**：
+   - 阻断 App Store 嗅探：`DOMAIN, itunes.apple.com, REJECT`
+   - 阻断腾讯 APM 遥测与 CLS 上报：`DOMAIN-SUFFIX, cls.tencentcs.com, REJECT`、`DOMAIN, rmonitor.qq.com, REJECT`
+2. **URL Rewrite 拦截（0 脚本执行）**：
+   - 阅读器底部特惠营销条：`^https?://(i.)?weread.qq.com/reader/tips reject-dict`
+   - 书城顶部横幅轮播图：`^https?://(i.)?weread.qq.com/market/banner reject-dict`
+   - 直接由 Loon 内核在驱动层返回空字典 `{}`，**完全不唤起 JS 引擎**！
+3. **Script 改写（冷启动仅调用 1 次）**：
+   - 仅在进入软件时拦截 `feature`、`configsets`、`reconf`，锁定 `upgrade_query_interval = 2147483647`，彻底消除强更与弹窗；
+4. **彻底释放阅读性能**：
+   - 剔除对 `readingStat`（在读人数）与 `chapterReview`（章节评论）的脚本拦截，**日常看书翻页 0 脚本执行，达到极致丝滑**！
+
 ### 🎯 功能与痛点解决
 1. **彻底根治更新弹窗**：通过对 WeRead 10.2.0 脱壳 Mach-O 二进制（`0x100a9d10c - 0x100a9d118`）逆向查明，若配置的 `upgrade_query_interval <= 0`，客户端汇编会触发保底指令回退为 86400 秒（24小时）向苹果商店发起嗅探。
    - 规则层增加 `DOMAIN, itunes.apple.com, REJECT`，物理切断商店嗅探请求；

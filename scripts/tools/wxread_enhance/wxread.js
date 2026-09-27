@@ -1,29 +1,29 @@
 /*
 ------------------------------------------
-@Description: 微信读书 · 防强更与去广告精简净化
+@Description: 微信读书 · 防强更与去广告精简净化 
 @Author: TomCatXue
-@Version: 3.9.0
-@Date: 2026-09-26 16:45
+@Version: 4.0.0
+@Date: 2026-09-27 11:00
 ------------------------------------------
-功能说明：
-  1. 彻底防强更：深度拦截 feature、configsets、reconf、mobileSync 等接口，清空 upgrade/notice，锁定 upgrade_query_interval=2147483647 阻断 App Store 嗅探；
-  2. 纯净阅读：净化阅读在读人数与好友统计（book/readingStat）、章节评论分享数字（book/chapterReview）、读者圈子入口（groups/readerEntrance）、想法点评列表（review/list）；
-  3. 界面精简：过滤发现页营销卡片与推荐流广告（discoverfeed/new, discoverfeed/get）、清空底部与发现页红点及故事流更新通知（mobileSync）、净化个人主页勋章（user/profile）；
-  4. 双模兼容：全链路兼容明文 JSON 与 Base64 编码响应，保障解析高健壮性。
+架构特色：
+  1. 动静彻底解耦：静态广告（reader/tips, market/banner）全部移交 Loon 内核 [URL Rewrite] reject-dict 处理，0 脚本执行；
+  2. 极简执行时机：仅在冷启动时拦截 feature/configsets/reconf 1 次，锁定 upgrade_query_interval=2147483647 阻断 App Store 嗅探；
+  3. 彻底释放阅读性能：完全剔除 readingStat、chapterReview、review/list 等高频翻页交互，日常阅读 0 脚本执行，达到极致丝滑；
+  4. 发现页与个人页净化：按需过滤 discoverfeed 营销卡片、清空 mobileSync 底部小红点、净化 profile 勋章。
 */
 
 const SCRIPT_NAME = "微信读书·防强更去广告";
-const SCRIPT_VERSION = "3.9.0";
+const SCRIPT_VERSION = "4.0.0";
 const $ = new Env(SCRIPT_NAME);
 
 function b64encode(str) {
   if (typeof $base64 !== "undefined" && $base64.encode) return $base64.encode(str);
   try {
     if (typeof Buffer !== "undefined") return Buffer.from(str).toString("base64");
-  } catch (e) {}
+  } catch (e) { }
   try {
     if (typeof btoa !== "undefined") return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, (match, p1) => String.fromCharCode("0x" + p1)));
-  } catch (e) {}
+  } catch (e) { }
   return str;
 }
 
@@ -31,13 +31,13 @@ function b64decode(str) {
   if (!str) return str;
   try {
     if (typeof $base64 !== "undefined" && $base64.decode) return $base64.decode(str);
-  } catch (e) {}
+  } catch (e) { }
   try {
     if (typeof Buffer !== "undefined") return Buffer.from(str, "base64").toString("utf-8");
-  } catch (e) {}
+  } catch (e) { }
   try {
     if (typeof atob !== "undefined") return decodeURIComponent(atob(str).split("").map(c => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2)).join(""));
-  } catch (e) {}
+  } catch (e) { }
   return str;
 }
 
@@ -101,7 +101,7 @@ function deepSanitize(target) {
     let data = null;
     let isBase64 = false;
 
-    // 1. 尝试解析为 JSON (支持明文与 Base64)
+    // 尝试解析为 JSON (支持明文与 Base64)
     try {
       data = JSON.parse(rawBody);
     } catch (e) {
@@ -109,56 +109,7 @@ function deepSanitize(target) {
         const decoded = b64decode(rawBody);
         data = JSON.parse(decoded);
         isBase64 = true;
-      } catch (e2) {}
-    }
-
-    // 针对构造纯净响应的特定只读接口
-    if (/\/book\/reading[sS]tat/i.test(url)) {
-      const cleanResp = {
-        friendFinishReadingCount: 0,
-        mixReadingUsers: [],
-        friendReadingCount: 0,
-        friendNotFollowingCount: 0,
-        readingUsers: [],
-        recommendUsers: [],
-        isReading: 0,
-        readingCount: 0,
-        finishReadingCount: 0,
-        todayReadingCount: 0,
-        markedStatus: 1
-      };
-      const newBody = isBase64 ? b64encode(JSON.stringify(cleanResp)) : JSON.stringify(cleanResp);
-      $done({ body: newBody });
-      return;
-    }
-
-    if (/\/book\/chapterReview/i.test(url)) {
-      const cleanResp = { synckey: 0, shareCount: 0 };
-      const newBody = isBase64 ? b64encode(JSON.stringify(cleanResp)) : JSON.stringify(cleanResp);
-      $done({ body: newBody });
-      return;
-    }
-
-    if (/\/groups\/readerEntrance/i.test(url)) {
-      const cleanResp = { synckey: Math.floor(Date.now() / 1000), hasGroup: 0 };
-      const newBody = isBase64 ? b64encode(JSON.stringify(cleanResp)) : JSON.stringify(cleanResp);
-      $done({ body: newBody });
-      return;
-    }
-
-    if (/\/review\/list/i.test(url)) {
-      const cleanResp = {
-        refUsers: [],
-        hasMore: 0,
-        totalCount: 0,
-        removed: [],
-        columns: [],
-        atUsers: [],
-        reviews: []
-      };
-      const newBody = isBase64 ? b64encode(JSON.stringify(cleanResp)) : JSON.stringify(cleanResp);
-      $done({ body: newBody });
-      return;
+      } catch (e2) { }
     }
 
     if (!data || typeof data !== "object") {
@@ -168,7 +119,7 @@ function deepSanitize(target) {
 
     let modified = false;
 
-    // 2. 发现页信息流精简与广告过滤 (discoverfeed)
+    // 1. 发现页信息流精简与广告过滤 (仅在浏览发现页时触发)
     if (/\/discoverfeed\/new/i.test(url)) {
       if (Array.isArray(data.data)) {
         data.data = data.data.filter(item => item && item.type !== 2);
@@ -190,7 +141,7 @@ function deepSanitize(target) {
       }
     }
 
-    // 3. 用户个人主页净化 (user/profile) 去勋章与未读红点
+    // 2. 用户个人主页净化 (user/profile) 去勋章与未读红点 (仅在进入个人页时触发)
     if (/\/user\/profile/i.test(url)) {
       data.showMedal = 0;
       data.showReview = 0;
@@ -199,7 +150,7 @@ function deepSanitize(target) {
       modified = true;
     }
 
-    // 4. 移动端同步接口净化 (mobileSync) 去除红点、发现页红点、通知计数
+    // 3. 移动端增量心跳净化 (mobileSync) 去除红点、发现页红点、通知计数
     if (/\/mobileSync/i.test(url)) {
       data.discover = false;
       data.discoverFeed = 0;
@@ -212,12 +163,12 @@ function deepSanitize(target) {
       modified = true;
     }
 
-    // 5. 深度遍历全量净化（抹除升级标志、弹窗与公告）
+    // 4. 深度遍历全量净化（抹除升级标志、弹窗与公告）
     if (deepSanitize(data)) {
       modified = true;
     }
 
-    // 6. 锁定 feature 和 configsets 配置（彻底阻断更新检测）
+    // 5. 核心锁定：feature 和 configsets 配置（冷启动仅调用 1 次，彻底阻断更新检测）
     const targetConfigs = [data.feature, data.configsets].filter(o => o && typeof o === "object");
     for (const cfg of targetConfigs) {
       cfg.VIPRightTimerSeconds = 8640000;
@@ -253,5 +204,5 @@ function deepSanitize(target) {
 
 function Env(name) {
   this.name = name;
-  this.log = function() { console.log.apply(console, arguments); };
+  this.log = function () { console.log.apply(console, arguments); };
 }
