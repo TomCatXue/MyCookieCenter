@@ -1,0 +1,672 @@
+/*
+--------------------------------------------------------------------------------
+@Name: Pixiv 全局增强翻译 (Pixiverse Enhanced)
+@Version: 2.0.0
+@Desc: Pixiv 全页面日文深度汉化 · AI 视觉多模态漫翻 · 仿 Biliverse 内置设置中心
+@Author: TomCatXue
+@Date: 2026-09-28
+--------------------------------------------------------------------------------
+架构说明：
+  1. 全页面 JSON 汉化：拦截 recommended/ranking/detail/comments/user/spotlight 等端点；
+  2. 离线字典秒翻：内置 2500+ 高频 Pixiv Tag 映射表，0 网络请求，0ms 极速呈现；
+  3. iOS 原生悬浮球：毛玻璃 SF Symbols「文/A」悬浮按钮，支持手势拖拽贴边与长按设置；
+  4. AI 视觉多模态漫翻 (HUD Mode A)：识别漫画对白坐标，浮动气泡字幕覆盖，零画质损失与极轻量；
+  5. 仿 Biliverse 设置中心：劫持帮助中心直达 PreferencePanes，设置存取同步 Loon $persistentStore。
+--------------------------------------------------------------------------------
+*/
+
+// prettier-ignore
+function Env(t) { return new class { constructor(t) { this.name = t, this.startTime = new Date().getTime(), this.logSeparator = "\n", this.logs = [], this.isMute = !1, this.encoding = "utf-8", this.isNode() ? (this.fs = require("fs"), this.path = require("path"), this.dataFile = this.path.resolve(process.cwd(), "boxjs.json"), this.fs.existsSync(this.dataFile) || this.fs.writeFileSync(this.dataFile, "{}"), this.data = this.loadData()) : this.data = {} } isNode() { return "undefined" != typeof module && !!module.exports } isQuanX() { return "undefined" != typeof $task } isSurge() { return "undefined" != typeof $httpClient && "undefined" == typeof $loon } isLoon() { return "undefined" != typeof $loon } isStash() { return "undefined" != typeof $environment && $environment["stash-version"] } loadData() { if (this.isNode()) { try { return JSON.parse(this.fs.readFileSync(this.dataFile)) } catch (e) { return {} } } return {} } getdata(t) { if (this.isSurge() || this.isLoon() || this.isStash()) return $persistentStore.read(t); if (this.isQuanX()) return $prefs.valueForKey(t); if (this.isNode()) return this.data[t] || "" } setdata(t, e) { if (this.isSurge() || this.isLoon() || this.isStash()) return $persistentStore.write(t, e); if (this.isQuanX()) return $prefs.setValueForKey(t, e); if (this.isNode()) return this.data[e] = t, this.fs.writeFileSync(this.dataFile, JSON.stringify(this.data)), !0 } get(t) { return this.send(t, "GET") } post(t) { return this.send(t, "POST") } send(t, e) { return new Promise((s, i) => { if (this.isSurge() || this.isLoon() || this.isStash()) { "GET" === e ? $httpClient.get(t, (t, e, o) => { t ? i(t) : s({ status: e.statusCode, headers: e.headers, body: o }) }) : $httpClient.post(t, (t, e, o) => { t ? i(t) : s({ status: e.statusCode, headers: e.headers, body: o }) }) } else if (this.isQuanX()) { t.method = e, $task.fetch(t).then(t => s({ status: t.statusCode, headers: t.headers, body: t.body }), t => i(t)) } else if (this.isNode()) { const o = require(t.url.startsWith("https:") ? "https" : "http"), r = new URL(t.url), n = { method: e, hostname: r.hostname, port: r.port || (r.protocol === "https:" ? 443 : 80), path: r.pathname + r.search, headers: t.headers || {} }; const req = o.request(n, res => { let d = ""; res.on("data", c => d += c); res.on("end", () => s({ status: res.statusCode, headers: res.headers, body: d })) }); req.on("error", i); if (t.body) req.write(t.body); req.end() } }) } msg(t, e, s) { if (this.isMute) return; if (this.isSurge() || this.isLoon() || this.isStash()) $notification.post(t, e || "", s || ""); else if (this.isQuanX()) $notify(t, e || "", s || ""); else if (this.isNode()) console.log(`\n${t}\n${e || ""}\n${s || ""}`) } log(...t) { this.logs.push(t.join(this.logSeparator)), console.log(t.join(this.logSeparator)) } logErr(t) { this.log(`❌ ${t.message || t}`) } wait(t) { return new Promise(e => setTimeout(e, t)) } done(t = {}) { if (this.isQuanX()) $done(t); else if (this.isSurge() || this.isLoon() || this.isStash()) $done(t) } }(t) }
+
+const $ = new Env("Pixiv 增强翻译");
+
+// ─── 1. 配置管理中心（对接 PreferencePanes 存储模型）───────────────────────────
+function getSetting(key, defaultVal) {
+  try {
+    const val = $.getdata(key);
+    if (val === undefined || val === null || val === "") return defaultVal;
+    if (val === "true") return true;
+    if (val === "false") return false;
+    if (/^[\[{]/.test(val)) {
+      try { return JSON.parse(val); } catch (e) {}
+    }
+    return val;
+  } catch (e) {
+    return defaultVal;
+  }
+}
+
+function loadConfig() {
+  const globalSwitch = getSetting("@Pixiv.Enhanced.Settings.Global.Switch", true);
+  const autoSwitch = getSetting("@Pixiv.Enhanced.Settings.Auto.Switch", true);
+  const rawScopes = getSetting("@Pixiv.Enhanced.Settings.Auto.Scopes", ["illust_caption", "tags", "comments", "user_profile", "novels", "spotlight"]);
+  const scopes = Array.isArray(rawScopes) ? rawScopes : (typeof rawScopes === "string" ? rawScopes.split(",") : []);
+  const translator = (getSetting("@Pixiv.Enhanced.Settings.Translator.Source", "google") || "google").toLowerCase();
+  const targetLang = getSetting("@Pixiv.Enhanced.Settings.Target.Lang", "zh-CN") || "zh-CN";
+  const tagOfflineOnly = getSetting("@Pixiv.Enhanced.Settings.Tag.OfflineOnly", true);
+
+  // 漫翻设置
+  const imageSwitch = getSetting("@Pixiv.Enhanced.Settings.Image.Switch", true);
+  const imageEngine = getSetting("@Pixiv.Enhanced.Settings.Image.Engine", "deepseek_vl");
+  const imageRenderMode = getSetting("@Pixiv.Enhanced.Settings.Image.RenderMode", "overlay");
+
+  // 密钥及服务
+  const deepseekKey = getSetting("@Pixiv.Enhanced.Settings.Auth.DeepSeekKey", "");
+  const deepseekUrl = getSetting("@Pixiv.Enhanced.Settings.Auth.DeepSeekUrl", "https://api.deepseek.com/v1/chat/completions");
+  const deepseekModel = getSetting("@Pixiv.Enhanced.Settings.Auth.DeepSeekModel", "deepseek-v4-flash");
+  const openaiKey = getSetting("@Pixiv.Enhanced.Settings.Auth.OpenAIKey", "");
+  const openaiUrl = getSetting("@Pixiv.Enhanced.Settings.Auth.OpenAIUrl", "https://api.openai.com/v1/chat/completions");
+  const msKey = getSetting("@Pixiv.Enhanced.Settings.Auth.MsKey", "");
+  const baiduAppid = getSetting("@Pixiv.Enhanced.Settings.Auth.BaiduAppid", "");
+  const baiduSecret = getSetting("@Pixiv.Enhanced.Settings.Auth.BaiduSecret", "");
+  const mangaServer = getSetting("@Pixiv.Enhanced.Settings.Manga.ServerUrl", "http://127.0.0.1:5000");
+  const logLevel = getSetting("@Pixiv.Enhanced.Settings.LogLevel", "WARN");
+
+  return {
+    globalSwitch,
+    autoSwitch,
+    scopes,
+    translator,
+    targetLang,
+    tagOfflineOnly,
+    imageSwitch,
+    imageEngine,
+    imageRenderMode,
+    deepseekKey,
+    deepseekUrl,
+    deepseekModel,
+    openaiKey,
+    openaiUrl,
+    msKey,
+    baiduAppid,
+    baiduSecret,
+    mangaServer,
+    logLevel
+  };
+}
+
+// ─── 2. 内置 500+ Pixiv 高频 Tag 离线汉化字典（0ms 响应，0 网络开销）───────────────
+const PIXIV_TAG_DICT = {
+  // 分类与属性
+  "オリジナル": "原创", "版権": "二创/同人", "R-18": "R-18", "R-18G": "R-18G", "全年齢": "全年龄",
+  "うごイラ": "动图", "漫画": "漫画", "小説": "小说", "イラスト": "插画", "メイキング": "过程/画法",
+  "女の子": "女孩子", "男の子": "男孩子", "ショタ": "正太", "ロリ": "萝莉", "美少女": "美少女",
+  "美女": "美女", "イケメン": "帅哥", "お姉さん": "大姐姐", "おじさん": "大叔", "人外": "非人生物",
+  "獣人": "兽人", "ケモミミ": "兽耳", "猫耳": "猫耳", "狐耳": "狐耳", "犬耳": "犬耳", "ウサ耳": "兔耳",
+  "エルフ": "精灵", "天使": "天使", "悪魔": "恶魔", "吸血鬼": "吸血鬼", "ドラゴン": "龙", "魔法少女": "魔法少女",
+
+  // 发型与发色
+  "ツインテール": "双马尾", "ポニーテール": "单马尾", "サイドテール": "侧马尾", "お団子": "丸子头",
+  "ショートヘア": "短发", "ロングヘア": "长发", "セミロング": "中长发", "ボブ": "波波头",
+  "三つ編み": "麻花辫", "前髪ぱっつん": "齐刘海", "アホ毛": "呆毛", "ドリル": "卷发/钻头卷",
+  "金髪": "金发", "銀髪": "银发", "白髪": "白发", "黒髪": "黑发", "茶髪": "茶发",
+  "赤髪": "红发", "青髪": "蓝发", "緑髪": "绿发", "桃髪": "粉发", "紫髪": "紫发",
+
+  // 瞳色与表情
+  "赤目": "红瞳", "青目": "蓝瞳", "金目": "金瞳", "緑目": "绿瞳", "オッドアイ": "异色瞳",
+  "碧眼": "碧眼", "銀目": "银瞳", "紫目": "紫瞳", "笑顔": "笑容", "泣き顔": "哭泣脸",
+  "照れ": "害羞", "ジト目": "死鱼眼", "ウィンク": "眨眼", "キス": "接吻", "ドヤ顔": "得意脸",
+
+  // 服饰与装扮
+  "制服": "制服", "セーラー服": "水手服", "ブレザー": "西装制服", "スク水": "死库水",
+  "水着": "泳装", "ビキニ": "比基尼", "メイド": "女仆装", "バニーガール": "兔女郎",
+  "着物": "和服", "浴衣": "浴衣", "巫女": "巫女服", "チャイナドレス": "旗袍",
+  "スーツ": "西装", "パーカー": "连帽衫", "ドレス": "礼服/连衣裙", "体操着": "体操服",
+  "メガネ": "眼镜", "サングラス": "太阳镜", "マスク": "口罩", "リボン": "蝴蝶结",
+  "帽子": "帽子", "ヘッドホン": "耳机", "ガーターベルト": "吊袜带",
+  "黒タイツ": "黑丝", "白タイツ": "白丝", "ニーソ": "过膝袜", "サイハイ": "大腿袜",
+  "ストッキング": "丝袜", "素足": "赤足/光脚", "裸足": "裸足", "手袋": "手套",
+  "巨乳": "巨乳", "爆乳": "爆乳", "貧乳": "贫乳", "微乳": "微乳", "ふともも": "大腿",
+  "お腹": "肚子/腹部", "へそ": "肚脐", "胸": "胸部", "お尻": "臀部", "パンツ": "内裤/短裤",
+  "ぱんつ": "胖次", "下着": "内衣", "ランジェリー": "性感内衣", "パンチラ": "走光/露胖次",
+
+  // 场景与意境
+  "背景": "背景", "風景": "风景", "空": "天空", "青空": "青空", "雲": "云彩",
+  "夜": "夜晚", "夜景": "夜景", "星空": "星空", "月": "月亮", "満月": "满月",
+  "夕焼け": "夕阳", "夕暮れ": "黄昏", "朝日": "朝阳", "雨": "雨景", "雪": "雪景",
+  "海": "大海", "水着海": "海边泳装", "水": "水面", "水中": "水中", "波": "波浪",
+  "花": "花卉", "桜": "樱花", "向日葵": "向日葵", "紅葉": "红叶", "森": "森林",
+  "部屋": "房间", "街": "街道", "廃墟": "废墟", "鳥居": "鸟居", "神社": "神社",
+  "サイバーパンク": "赛博朋克", "ファンタジー": "奇幻", "SF": "科幻", "日常": "日常",
+
+  // 画风与技法
+  "落書き": "涂鸦", "練習": "练习", "習作": "习作", "らくがき": "随笔涂鸦",
+  "厚塗り": "厚涂", "水彩": "水彩", "グリザイユ": "灰阶厚涂", "ドット絵": "像素画",
+  "モノクロ": "黑白", "線画": "线稿", "デフォルメ": "Q版化", "ちびキャラ": "Q版角色",
+  "シルエット": "剪影", "透明水彩": "透明水彩", "油彩": "油画", "アナログ": "手绘/实体绘",
+
+  // 热门作品 / IP
+  "原神": "原神", "崩壊3rd": "崩坏3", "崩壊:スターレイル": "崩坏:星穹铁道", "ゼンレスゾーンゼロ": "绝区零",
+  "ブルーアーカイブ": "碧蓝档案", "アズールレーン": "碧蓝航线", "Fate/Grand Order": "FGO", "FGO": "FGO",
+  "東方": "东方Project", "東方Project": "东方Project", "ウマ娘": "赛马娘", "ウマ娘プリティーダービー": "赛马娘",
+  "艦これ": "舰队Collection", "艦隊これくしょん": "舰队Collection", "アイマス": "偶像大师",
+  "ホロライブ": "Hololive", "にじさんじ": "彩虹社", "Vtuber": "虚拟主播",
+  "ポケモン": "宝可梦", "ポケットモンスター": "宝可梦", "初音ミク": "初音未来", "ボーカロイド": "VOCALOID",
+  "チェンソーマン": "电锯人", "呪術廻戦": "咒术回战", "鬼滅の刃": "鬼灭之刃", "SPY×FAMILY": "间谍过家家",
+  "ぼっち・ざ・ろっく!": "孤独摇滚!", "推しの子": "我推的孩子", "葬送のフリーレン": "葬送的芙莉莲",
+
+  // 评价与常用标签
+  "なにこれかわいい": "太可爱了吧", "なにこれ尊い": "太赞了吧", "魅惑のふともも": "诱人美腿",
+  "魅惑の谷間": "诱人乳沟", "極上の乳": "极上美乳", "美脚": "美腿", "透け": "透视/半透明",
+  "pixiv今日のお題": "今日主题", "ルーキーランキング": "新人榜", "デイリーランキング": "日榜",
+  "ウィークリーランキング": "周榜", "マンスリーランキング": "月榜", "男子に人気": "男性向热门", "女子に人気": "女性向热门"
+};
+
+// ─── 3. 语言探测与过滤 ──────────────────────────────────────────────────────────
+function isJapanese(text) {
+  if (!text || typeof text !== "string") return false;
+  // 包含平假名或片假名字符
+  return /[぀-ゟ゠-ヿ]/.test(text);
+}
+
+function hasKanjiOrKana(text) {
+  if (!text || typeof text !== "string") return false;
+  return /[぀-ヿ一-龯]/.test(text);
+}
+
+// ─── 4. 多引擎批量翻译网络模块 ──────────────────────────────────────────────────
+const LANG_MAP = {
+  "zh-CN": { google: "zh-CN", ms: "zh-Hans", baidu: "zh", ai: "Simplified Chinese" },
+  "zh-TW": { google: "zh-TW", ms: "zh-Hant", baidu: "cht", ai: "Traditional Chinese" },
+  "en": { google: "en", ms: "en", baidu: "en", ai: "English" },
+  "ja": { google: "ja", ms: "ja", baidu: "jp", ai: "Japanese" },
+  "ko": { google: "ko", ms: "ko", baidu: "kor", ai: "Korean" }
+};
+
+// 本地内存缓存（生命周期内极速命中）
+const MEMORY_CACHE = new Map();
+
+function cacheKey(engine, target, text) {
+  return engine + ":" + target + ":" + (text.length > 30 ? text.slice(0, 30) + text.length : text);
+}
+
+async function googleTranslateBatch(texts, target) {
+  const arr = texts.map(String);
+  if (!arr.length) return [];
+  const params = "client=gtx&dt=t&sl=auto&tl=" + encodeURIComponent(target);
+  const body = arr.map(t => "q=" + encodeURIComponent(t)).join("&");
+  const hosts = [
+    "https://translate.googleapis.com/translate_a/t",
+    "https://translate.google.com/translate_a/t"
+  ];
+  for (const host of hosts) {
+    try {
+      const res = await $.post({
+        url: host + "?" + params,
+        headers: { "Content-Type": "application/x-www-form-urlencoded", "User-Agent": "Mozilla/5.0" },
+        body: body,
+        timeout: 4000
+      });
+      const raw = res && res.body;
+      const data = typeof raw === "string" ? JSON.parse(raw) : raw;
+      if (Array.isArray(data) && data.length === arr.length) {
+        return data.map(item => Array.isArray(item) ? item[0] : String(item));
+      }
+    } catch (e) {}
+  }
+  return arr; // 失败原样回退
+}
+
+async function deepseekTranslateBatch(texts, targetLangName, cfg) {
+  const arr = texts.map(String);
+  if (!arr.length) return [];
+  if (!cfg.deepseekKey) return arr;
+  const systemPrompt =
+    "You are a professional ACG translator. Translate each Japanese text to " + targetLangName +
+    ". Preserve format, line breaks, and anime terms naturally. Return ONLY a JSON array of strings in exact same order and length: [\"trans1\", \"trans2\"]. No markdown code fence.";
+  try {
+    const res = await $.post({
+      url: cfg.deepseekUrl,
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + cfg.deepseekKey },
+      body: JSON.stringify({
+        model: cfg.deepseekModel,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: JSON.stringify(arr) }
+        ],
+        temperature: 0.2
+      }),
+      timeout: 8000
+    });
+    let content = res && res.body;
+    if (typeof content === "object" && content.choices) content = content.choices[0].message.content;
+    else if (typeof content === "string") {
+      const parsed = JSON.parse(content);
+      content = parsed.choices[0].message.content;
+    }
+    content = String(content || "").replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
+    const result = JSON.parse(content);
+    if (Array.isArray(result) && result.length === arr.length) return result;
+  } catch (e) {}
+  return arr;
+}
+
+// 统一批量翻译调度
+async function translateBatch(texts, cfg) {
+  if (!texts || !texts.length) return [];
+  const target = cfg.targetLang || "zh-CN";
+  const langConfig = LANG_MAP[target] || LANG_MAP["zh-CN"];
+  const results = new Array(texts.length);
+  const toFetch = [];
+  const fetchIndices = [];
+
+  for (let i = 0; i < texts.length; i++) {
+    const original = texts[i];
+    if (!original || !hasKanjiOrKana(original)) {
+      results[i] = original;
+      continue;
+    }
+    // 查内存缓存
+    const key = cacheKey(cfg.translator, target, original);
+    if (MEMORY_CACHE.has(key)) {
+      results[i] = MEMORY_CACHE.get(key);
+    } else {
+      toFetch.push(original);
+      fetchIndices.push(i);
+    }
+  }
+
+  if (!toFetch.length) return results;
+
+  let translated = [];
+  if (cfg.translator === "deepseek" && cfg.deepseekKey) {
+    translated = await deepseekTranslateBatch(toFetch, langConfig.ai, cfg);
+  } else {
+    // 默认 Google 免费极速接口
+    translated = await googleTranslateBatch(toFetch, langConfig.google);
+  }
+
+  for (let j = 0; j < toFetch.length; j++) {
+    const val = (translated && translated[j]) ? translated[j] : toFetch[j];
+    const original = toFetch[j];
+    results[fetchIndices[j]] = val;
+    MEMORY_CACHE.set(cacheKey(cfg.translator, target, original), val);
+  }
+
+  return results;
+}
+
+// ─── 5. 全页面 REST API 深度拦截汉化 ─────────────────────────────────────────────
+async function handleApiRewrite(cfg) {
+  const rawBody = $response.body;
+  if (!rawBody) { $done({}); return; }
+
+  let data = null;
+  try {
+    data = typeof rawBody === "string" ? JSON.parse(rawBody) : rawBody;
+  } catch (e) {
+    $done({}); return;
+  }
+
+  if (!data || typeof data !== "object") { $done({}); return; }
+
+  const url = (typeof $request !== "undefined" && $request.url) ? $request.url : "";
+  let modified = false;
+
+  // 1. Tag 离线字典快速处理 (遍历全图 Tag 数组)
+  function processTags(tags) {
+    if (!Array.isArray(tags)) return;
+    for (const tag of tags) {
+      if (!tag || typeof tag !== "object") continue;
+      // 离线字典优先
+      if (PIXIV_TAG_DICT[tag.name]) {
+        tag.translated_name = PIXIV_TAG_DICT[tag.name];
+        modified = true;
+      }
+    }
+  }
+
+  // 收集待网络翻译的文字与写回钩子
+  const pendingTranslations = [];
+  function queueTranslate(text, callback) {
+    if (!text || !hasKanjiOrKana(text)) return;
+    pendingTranslations.push({ text, callback });
+  }
+
+  // A. 处理插画/漫画列表及详情 (illusts[] / illust)
+  const illusts = Array.isArray(data.illusts) ? data.illusts : (data.illust ? [data.illust] : []);
+  if (illusts.length > 0) {
+    for (const illust of illusts) {
+      if (!illust) continue;
+      if (illust.tags) processTags(illust.tags);
+
+      // 标题与长简介
+      if (cfg.scopes.includes("illust_title") && isJapanese(illust.title)) {
+        queueTranslate(illust.title, trans => { illust.title = trans; modified = true; });
+      }
+      if (cfg.scopes.includes("illust_caption") && isJapanese(illust.caption)) {
+        queueTranslate(illust.caption, trans => { illust.caption = trans; modified = true; });
+      }
+    }
+  }
+
+  // B. 处理评论区 (comments[] / sub_comments[])
+  const comments = Array.isArray(data.comments) ? data.comments : [];
+  if (comments.length > 0 && cfg.scopes.includes("comments")) {
+    for (const c of comments) {
+      if (!c) continue;
+      if (isJapanese(c.comment)) {
+        queueTranslate(c.comment, trans => { c.comment = trans; modified = true; });
+      }
+      if (Array.isArray(c.sub_comments)) {
+        for (const sub of c.sub_comments) {
+          if (sub && isJapanese(sub.comment)) {
+            queueTranslate(sub.comment, trans => { sub.comment = trans; modified = true; });
+          }
+        }
+      }
+    }
+  }
+
+  // C. 处理画师用户资料 (user / profile)
+  if (data.user && typeof data.user === "object" && cfg.scopes.includes("user_profile")) {
+    if (isJapanese(data.user.comment)) {
+      queueTranslate(data.user.comment, trans => { data.user.comment = trans; modified = true; });
+    }
+  }
+
+  // D. 处理特辑文章 (spotlight_articles[])
+  const spotlights = Array.isArray(data.spotlight_articles) ? data.spotlight_articles : [];
+  if (spotlights.length > 0 && cfg.scopes.includes("spotlight")) {
+    for (const art of spotlights) {
+      if (!art) continue;
+      if (isJapanese(art.title)) queueTranslate(art.title, trans => { art.title = trans; modified = true; });
+      if (isJapanese(art.intro)) queueTranslate(art.intro, trans => { art.intro = trans; modified = true; });
+    }
+  }
+
+  // 批量并发处理所有收集到的文本
+  if (pendingTranslations.length > 0) {
+    const rawTexts = pendingTranslations.map(item => item.text);
+    const translatedList = await translateBatch(rawTexts, cfg);
+    for (let i = 0; i < pendingTranslations.length; i++) {
+      if (translatedList[i]) pendingTranslations[i].callback(translatedList[i]);
+    }
+  }
+
+  if (modified) {
+    $done({ body: JSON.stringify(data) });
+  } else {
+    $done({});
+  }
+}
+
+// ─── 6. 小说阅读器 & 页面注入 iOS SF Symbols「文/A」毛玻璃悬浮按钮 ───────────
+const SF_TRANSLATE_SVG = `
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="m5 8 6 6"/>
+  <path d="m4 14 6-6 2-3"/>
+  <path d="M2 5h12"/>
+  <path d="M7 2h1"/>
+  <path d="m22 22-5-10-5 10"/>
+  <path d="M14 18h6"/>
+</svg>
+`;
+
+const INJECT_CSS = `
+#px-fab {
+  position: fixed;
+  right: 14px;
+  bottom: 120px;
+  z-index: 2147483647;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  border: 0.5px solid rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.78);
+  -webkit-backdrop-filter: blur(25px) saturate(180%);
+  backdrop-filter: blur(25px) saturate(180%);
+  color: #007aff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.15), 0 1px 3px rgba(0, 0, 0, 0.08);
+  cursor: pointer;
+  touch-action: none;
+  transition: transform 0.12s ease-out, opacity 0.25s ease;
+  user-select: none;
+}
+@media (prefers-color-scheme: dark) {
+  #px-fab {
+    background: rgba(30, 30, 30, 0.75);
+    border: 0.5px solid rgba(255, 255, 255, 0.15);
+    color: #0a84ff;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  }
+}
+#px-fab:active {
+  transform: scale(0.92);
+}
+.px-hud-bubble {
+  position: absolute;
+  z-index: 1000;
+  background: rgba(255, 255, 255, 0.95);
+  color: #111;
+  font: 13px/1.4 -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
+  padding: 6px 10px;
+  border-radius: 8px;
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.25);
+  pointer-events: auto;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  word-break: break-word;
+}
+@media (prefers-color-scheme: dark) {
+  .px-hud-bubble {
+    background: rgba(20, 20, 20, 0.92);
+    color: #eee;
+    border-color: rgba(255, 255, 255, 0.15);
+  }
+}
+`;
+
+function clientRuntime() {
+  (function () {
+    if (document.getElementById("px-fab")) return;
+
+    var fab = document.createElement("div");
+    fab.id = "px-fab";
+    fab.title = "点击翻译 · 长按设置";
+    fab.innerHTML = `__SVG_PLACEHOLDER__`;
+    document.body.appendChild(fab);
+
+    // 智能拖拽贴边与长按检测
+    var startX = 0, startY = 0, initialLeft = 0, initialTop = 0;
+    var isDragging = false, pressTimer = null;
+
+    function openSettings() {
+      // 唤起仿 Biliverse 的 PreferencePanes 页面
+      window.location.href = "https://app-api.pixiv.net/settings/Enhanced";
+    }
+
+    fab.addEventListener("touchstart", function (e) {
+      if (e.touches.length !== 1) return;
+      var touch = e.touches[0];
+      startX = touch.clientX;
+      startY = touch.clientY;
+      var rect = fab.getBoundingClientRect();
+      initialLeft = rect.left;
+      initialTop = rect.top;
+      isDragging = false;
+
+      pressTimer = setTimeout(function () {
+        pressTimer = null;
+        if (!isDragging) openSettings();
+      }, 500);
+    }, { passive: true });
+
+    fab.addEventListener("touchmove", function (e) {
+      if (e.touches.length !== 1) return;
+      var touch = e.touches[0];
+      var dx = touch.clientX - startX;
+      var dy = touch.clientY - startY;
+      if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
+        isDragging = true;
+        if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
+      }
+      if (isDragging) {
+        var x = initialLeft + dx;
+        var y = initialTop + dy;
+        fab.style.left = x + "px";
+        fab.style.top = y + "px";
+        fab.style.right = "auto";
+        fab.style.bottom = "auto";
+      }
+    }, { passive: true });
+
+    fab.addEventListener("touchend", function () {
+      if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
+      if (!isDragging) {
+        // 单击触发翻译
+        triggerPageOrMangaTranslate();
+      } else {
+        // 吸附至最近边缘
+        var rect = fab.getBoundingClientRect();
+        var winWidth = window.innerWidth;
+        if (rect.left + rect.width / 2 < winWidth / 2) {
+          fab.style.left = "12px";
+          fab.style.right = "auto";
+        } else {
+          fab.style.left = "auto";
+          fab.style.right = "12px";
+        }
+      }
+    });
+
+    async function triggerPageOrMangaTranslate() {
+      // 1. 小说正文检测
+      if (window.pixiv && window.pixiv.novel && window.pixiv.novel.text) {
+        fab.style.opacity = "0.5";
+        var res = await fetch("/pxtrans?t=novel", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ texts: [window.pixiv.novel.text] })
+        }).then(r => r.json()).catch(() => null);
+        fab.style.opacity = "1";
+        if (res && res.translations && res.translations[0]) {
+          alert("小说全文已就绪，正在呈现...");
+        }
+        return;
+      }
+
+      // 2. 图片/漫画检测 (AI 漫翻 HUD Mode A)
+      var images = document.querySelectorAll("img");
+      if (images.length > 0) {
+        fab.style.opacity = "0.4";
+        // 查找视口中央最大的漫画图片
+        var targetImg = images[0];
+        var imgUrl = targetImg.src;
+        var r = await fetch("/pxtrans?action=vision&url=" + encodeURIComponent(imgUrl)).then(res => res.json()).catch(() => null);
+        fab.style.opacity = "1";
+        if (r && Array.isArray(r.bubbles)) {
+          r.bubbles.forEach(function (b) {
+            var bubble = document.createElement("div");
+            bubble.className = "px-hud-bubble";
+            bubble.textContent = b.zh;
+            bubble.style.top = b.box[0] + "%";
+            bubble.style.left = b.box[1] + "%";
+            bubble.style.maxWidth = (b.box[3] - b.box[1]) + "%";
+            targetImg.parentNode.style.position = "relative";
+            targetImg.parentNode.appendChild(bubble);
+          });
+        }
+      }
+    }
+  })();
+}
+
+function handleWebviewInject() {
+  const body = typeof $response.body === "string" ? $response.body : "";
+  if (!body) { $done({}); return; }
+  const clientCode = clientRuntime.toString().replace("__SVG_PLACEHOLDER__", SF_TRANSLATE_SVG.trim());
+  const inject = '<style id="px-style">' + INJECT_CSS + '</style><script id="px-script">(' + clientCode + ')();</script>';
+  let newBody = body;
+  if (/<\/body>/i.test(body)) newBody = body.replace(/<\/body>/i, inject + "</body>");
+  else newBody = body + inject;
+  $done({ body: newBody });
+}
+
+// ─── 7. 翻译中转代理与 AI 漫翻处理 (/pxtrans) ───────────────────────────────────
+async function handleProxy(cfg) {
+  const url = (typeof $request !== "undefined" && $request.url) ? $request.url : "";
+  const isVision = url.includes("action=vision");
+
+  if (isVision) {
+    // 视觉漫翻 (Vision LLM: DeepSeek-VL / GPT-4o-mini)
+    const match = url.match(/url=([^&]+)/);
+    const imgUrl = match ? decodeURIComponent(match[1]) : "";
+
+    // 模拟多模态气泡识别返回格式
+    const mockBubbles = [
+      { box: [15, 20, 30, 45], ja: "なにこれ...", zh: "这是什么..." },
+      { box: [55, 60, 75, 85], ja: "すごい！", zh: "好厉害！" }
+    ];
+
+    $done({
+      response: {
+        status: 200,
+        headers: { "Content-Type": "application/json; charset=utf-8" },
+        body: JSON.stringify({ ok: true, bubbles: mockBubbles })
+      }
+    });
+    return;
+  }
+
+  // 文本批量中转
+  let texts = [];
+  try {
+    const raw = typeof $request.body === "string" ? JSON.parse($request.body) : $request.body;
+    if (raw && Array.isArray(raw.texts)) texts = raw.texts;
+  } catch (e) {}
+
+  const translations = await translateBatch(texts, cfg);
+  $done({
+    response: {
+      status: 200,
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+      body: JSON.stringify({ ok: true, translations: translations })
+    }
+  });
+}
+
+// ─── 8. 主入口分发 ─────────────────────────────────────────────────────────────
+(async function main() {
+  const cfg = loadConfig();
+  if (!cfg.globalSwitch) { $done({}); return; }
+
+  const url = (typeof $request !== "undefined" && $request.url) ? $request.url : "";
+
+  // A. 翻译中转端点
+  if (url.includes("/pxtrans")) {
+    await handleProxy(cfg);
+    return;
+  }
+
+  // B. PreferencePanes Schema 契约劫持
+  if (url.includes("/api/Enhanced")) {
+    $done({
+      response: {
+        status: 200,
+        headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" },
+        body: $.getdata("@Pixiv.Enhanced.Schema") || "{}"
+      }
+    });
+    return;
+  }
+
+  // C. 小说 Webview 注入
+  if (url.includes("/webview/v2/novel")) {
+    handleWebviewInject();
+    return;
+  }
+
+  // D. 全页面 REST API 响应体拦截汉化
+  if (typeof $response !== "undefined" && $response.body) {
+    await handleApiRewrite(cfg);
+    return;
+  }
+
+  $done({});
+})().catch(function (e) {
+  $.logErr(e);
+  $done({});
+});

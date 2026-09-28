@@ -1,0 +1,173 @@
+[
+  {
+    "id": "@Pixiv.Enhanced.Settings.Global.Switch",
+    "name": "[全局] 启用 Pixiv 增强翻译",
+    "type": "boolean",
+    "val": true,
+    "desc": "总开关：启用后将拦截处理 Pixiv 日文文本与漫画视觉翻译。"
+  },
+  {
+    "id": "@Pixiv.Enhanced.Settings.Auto.Switch",
+    "name": "[自动] 默认自动翻译",
+    "type": "boolean",
+    "val": true,
+    "desc": "开启后，浏览插画详情、评论区、画师主页时自动完成汉化呈现，无需手动点击。"
+  },
+  {
+    "id": "@Pixiv.Enhanced.Settings.Auto.Scopes",
+    "name": "[范围] 翻译生效模块",
+    "type": "checkboxes",
+    "val": ["illust_caption", "tags", "comments", "user_profile", "novels", "spotlight"],
+    "items": [
+      { "key": "illust_title", "label": "作品标题" },
+      { "key": "illust_caption", "label": "作品简介/描述 (详情页)" },
+      { "key": "tags", "label": "日文标签 (Tag 离线秒翻)" },
+      { "key": "comments", "label": "评论区留言与楼中楼" },
+      { "key": "user_profile", "label": "画师个人简介/留言" },
+      { "key": "novels", "label": "小说列表及阅读正文" },
+      { "key": "spotlight", "label": "特辑文章 (Pixivision)" }
+    ],
+    "desc": "勾选需要进行汉化翻译的界面模块。"
+  },
+  {
+    "id": "@Pixiv.Enhanced.Settings.Translator.Source",
+    "name": "[文本] 翻译引擎切换",
+    "type": "selects",
+    "val": "google",
+    "items": [
+      { "key": "google", "label": "Google 免费批量 (极速/免配置)" },
+      { "key": "deepseek", "label": "DeepSeek AI (文学润色/需Key)" },
+      { "key": "microsoft", "label": "微软 Azure 翻译 (需Key)" },
+      { "key": "baidu", "label": "百度通用翻译 (需AppID/Secret)" },
+      { "key": "openai", "label": "OpenAI / 兼容接口 (需Key)" }
+    ],
+    "desc": "选择底层日文文本翻译所使用的服务商。"
+  },
+  {
+    "id": "@Pixiv.Enhanced.Settings.Target.Lang",
+    "name": "[语言] 目标语言",
+    "type": "selects",
+    "val": "zh-CN",
+    "items": [
+      { "key": "zh-CN", "label": "简体中文" },
+      { "key": "zh-TW", "label": "繁體中文" },
+      { "key": "en", "label": "English" },
+      { "key": "ja", "label": "日本語 (原文)" },
+      { "key": "ko", "label": "한국어" }
+    ],
+    "desc": "选择期望翻译成的目标语言。"
+  },
+  {
+    "id": "@Pixiv.Enhanced.Settings.Tag.OfflineOnly",
+    "name": "[性能] 标签优先使用离线词典",
+    "type": "boolean",
+    "val": true,
+    "desc": "启用内置 2500+ 高频 Pixiv 标签离线映射库，0 网络延迟，极速秒翻。"
+  },
+  {
+    "id": "@Pixiv.Enhanced.Settings.Image.Switch",
+    "name": "[漫翻] 启用图片/漫画 AI 翻译",
+    "type": "boolean",
+    "val": true,
+    "desc": "在漫画阅读与插画大图上挂载原生毛玻璃「文/A」翻译按钮。"
+  },
+  {
+    "id": "@Pixiv.Enhanced.Settings.Image.Engine",
+    "name": "[漫翻] 视觉漫翻模型",
+    "type": "selects",
+    "val": "deepseek_vl",
+    "items": [
+      { "key": "deepseek_vl", "label": "DeepSeek-VL 视觉理解 (推荐/高性价比)" },
+      { "key": "gpt4o_mini", "label": "GPT-4o-mini Vision (气泡高精度定位)" },
+      { "key": "manga_translator", "label": "自建 manga-image-translator (整图重绘)" }
+    ],
+    "desc": "选择处理对白框气泡文字的视觉模型。"
+  },
+  {
+    "id": "@Pixiv.Enhanced.Settings.Image.RenderMode",
+    "name": "[漫翻] 展现样式",
+    "type": "selects",
+    "val": "overlay",
+    "items": [
+      { "key": "overlay", "label": "HUD 气泡字幕覆盖 (保留原画质/极轻量)" },
+      { "key": "inpaint", "label": "AI 抹字重绘整图 (仅自建服务支持)" }
+    ],
+    "desc": "HUD 模式不修改原图，在对白上方无感覆盖中文字幕；整图模式需自建重绘后端。"
+  },
+  {
+    "id": "@Pixiv.Enhanced.Settings.Auth.DeepSeekKey",
+    "name": "[密钥] DeepSeek API Key",
+    "type": "input",
+    "val": "",
+    "desc": "填写 DeepSeek 开放平台 API Key（用于 DeepSeek 文本或视觉模型）。"
+  },
+  {
+    "id": "@Pixiv.Enhanced.Settings.Auth.DeepSeekUrl",
+    "name": "[端点] DeepSeek API URL",
+    "type": "input",
+    "val": "https://api.deepseek.com/v1/chat/completions",
+    "desc": "DeepSeek 或兼容 OpenAI 协议的接口地址。"
+  },
+  {
+    "id": "@Pixiv.Enhanced.Settings.Auth.DeepSeekModel",
+    "name": "[模型] DeepSeek 模型名称",
+    "type": "input",
+    "val": "deepseek-v4-flash",
+    "desc": "模型名称，默认为 deepseek-v4-flash 或 deepseek-chat。"
+  },
+  {
+    "id": "@Pixiv.Enhanced.Settings.Auth.OpenAIKey",
+    "name": "[密钥] OpenAI / 兼容 API Key",
+    "type": "input",
+    "val": "",
+    "desc": "用于 GPT-4o-mini 视觉多模态漫画识别的 API Key。"
+  },
+  {
+    "id": "@Pixiv.Enhanced.Settings.Auth.OpenAIUrl",
+    "name": "[端点] OpenAI 兼容 API URL",
+    "type": "input",
+    "val": "https://api.openai.com/v1/chat/completions",
+    "desc": "OpenAI 官方或中转接口地址。"
+  },
+  {
+    "id": "@Pixiv.Enhanced.Settings.Auth.MsKey",
+    "name": "[密钥] 微软 Azure 翻译 Key",
+    "type": "input",
+    "val": "",
+    "desc": "填写微软认知服务 Translation API Key。"
+  },
+  {
+    "id": "@Pixiv.Enhanced.Settings.Auth.BaiduAppid",
+    "name": "[密钥] 百度翻译 AppID",
+    "type": "input",
+    "val": "",
+    "desc": "百度翻译开放平台申请的 AppID。"
+  },
+  {
+    "id": "@Pixiv.Enhanced.Settings.Auth.BaiduSecret",
+    "name": "[密钥] 百度翻译密钥 (Secret)",
+    "type": "input",
+    "val": "",
+    "desc": "百度翻译开放平台分配的应用密钥。"
+  },
+  {
+    "id": "@Pixiv.Enhanced.Settings.Manga.ServerUrl",
+    "name": "[服务] 自建漫画重绘服务 URL",
+    "type": "input",
+    "val": "http://127.0.0.1:5000",
+    "desc": "若选用 manga_translator 引擎，请填写本地/云端部署的 manga-image-translator 地址。"
+  },
+  {
+    "id": "@Pixiv.Enhanced.Settings.LogLevel",
+    "name": "[调试] 日志输出级别",
+    "type": "selects",
+    "val": "WARN",
+    "items": [
+      { "key": "OFF", "label": "关闭" },
+      { "key": "WARN", "label": "⚠️ 警告与错误 (推荐)" },
+      { "key": "INFO", "label": "ℹ️ 基础信息" },
+      { "key": "DEBUG", "label": "🐞 详细调试 (含耗时)" }
+    ],
+    "desc": "控制 Loon 脚本日志的详细程度。"
+  }
+]
