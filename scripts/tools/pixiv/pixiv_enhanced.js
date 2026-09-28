@@ -478,19 +478,95 @@ async function handleApiRewrite(cfg) {
   }
 }
 
-// ─── 6. 小说阅读器 & 页面注入 iOS SF Symbols「文/A」毛玻璃悬浮按钮 ───────────
-const SF_TRANSLATE_SVG = `
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-  <path d="m5 8 6 6"/>
-  <path d="m4 14 6-6 2-3"/>
-  <path d="M2 5h12"/>
-  <path d="M7 2h1"/>
-  <path d="m22 22-5-10-5 10"/>
-  <path d="M14 18h6"/>
+// ─── 6. 小说阅读器 & 页面注入 X (Twitter) 风格翻译组件与 AI 漫翻 ─────────────
+const X_GLOBE_SVG = `
+<svg class="x-trans-icon" viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+</svg>
+`;
+
+const X_GEAR_SVG = `
+<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <circle cx="12" cy="12" r="3"/>
+  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
 </svg>
 `;
 
 const INJECT_CSS = `
+/* 像素级对标 X (Twitter) 翻译栏 */
+.x-trans-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 12px 18px 14px;
+  padding: 4px 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.4;
+  user-select: none;
+}
+.x-trans-icon {
+  display: inline-flex;
+  align-items: center;
+  color: #1d9bf0;
+}
+.x-trans-lang {
+  color: #71767b;
+}
+@media (prefers-color-scheme: light) {
+  .x-trans-lang { color: #536471; }
+}
+.x-trans-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  color: #1d9bf0;
+  font-size: 14px;
+  font-family: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+}
+.x-trans-btn:hover, .x-trans-btn:active {
+  text-decoration: underline;
+}
+.x-trans-gear {
+  background: none;
+  border: none;
+  padding: 0 2px;
+  margin: 0 0 0 4px;
+  color: #71767b;
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  opacity: 0.65;
+  transition: opacity 0.15s ease;
+}
+.x-trans-gear:hover, .x-trans-gear:active {
+  opacity: 1;
+  color: #1d9bf0;
+}
+/* 纯净小说排版 (不含任何多余置灰原文) */
+.pxtc-reader {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 0 18px 140px;
+  background: transparent;
+  color: inherit;
+}
+.pxtc-para {
+  margin: 18px 0;
+  color: inherit;
+  line-height: 1.95;
+  font-size: 17px;
+  text-align: justify;
+  text-indent: 2em;
+  word-break: break-word;
+  letter-spacing: 0.5px;
+}
 #px-fab {
   position: fixed;
   right: 14px;
@@ -510,7 +586,6 @@ const INJECT_CSS = `
   box-shadow: 0 4px 18px rgba(0, 0, 0, 0.18), 0 1px 3px rgba(0, 0, 0, 0.08);
   cursor: pointer;
   touch-action: none;
-  transition: transform 0.12s ease-out, background 0.3s ease, opacity 0.25s ease;
   user-select: none;
 }
 @media (prefers-color-scheme: dark) {
@@ -520,52 +595,6 @@ const INJECT_CSS = `
     color: #0a84ff;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
   }
-}
-#px-fab:active { transform: scale(0.92); }
-#px-fab.px-busy { opacity: 0.5; pointer-events: none; }
-#px-fab.px-done { background: #34c759 !important; color: #fff !important; }
-.pxtc-reader { max-width: 720px; margin: 0 auto; padding: 18px 20px 140px; background: transparent; color: inherit; }
-.px-x-banner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px 14px;
-  margin-bottom: 24px;
-  border-radius: 12px;
-  background: rgba(127, 127, 127, 0.12);
-  -webkit-backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
-  font: 13px/1.4 -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
-  color: inherit;
-  opacity: 0.9;
-}
-.px-x-banner button {
-  background: transparent;
-  border: 0;
-  color: #007aff;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  padding: 0;
-}
-@media (prefers-color-scheme: dark) {
-  .px-x-banner button { color: #0a84ff; }
-}
-.pxtc-para {
-  margin: 18px 0;
-  color: inherit;
-  line-height: 1.95;
-  font-size: 17px;
-  text-align: justify;
-  text-indent: 2em;
-  word-break: break-word;
-  letter-spacing: 0.5px;
-}
-.pxtc-loading {
-  text-align: center;
-  padding: 40px 0;
-  color: #888;
-  font-size: 14px;
 }
 .px-hud-bubble {
   position: absolute;
@@ -591,78 +620,19 @@ const INJECT_CSS = `
 
 function clientRuntime() {
   (function () {
-    if (document.getElementById("px-fab")) return;
+    var CFG = "__CONFIG_PLACEHOLDER__";
+    var autoSwitch = CFG && typeof CFG === "object" ? !!CFG.autoSwitch : true;
 
-    var fab = document.createElement("div");
-    fab.id = "px-fab";
-    fab.title = "点击翻译 · 长按设置";
-    fab.innerHTML = `__SVG_PLACEHOLDER__`;
-    document.body.appendChild(fab);
+    var GLOBE_SVG = "__GLOBE_SVG__";
+    var GEAR_SVG = "__GEAR_SVG__";
 
-    // 智能拖拽贴边与长按检测
-    var startX = 0, startY = 0, initialLeft = 0, initialTop = 0;
-    var isDragging = false, pressTimer = null;
-
-    function openSettings() {
-      // 唤起仿 Biliverse 的 PreferencePanes 页面
-      window.location.href = "https://app-api.pixiv.net/settings/Enhanced";
-    }
-
-    fab.addEventListener("touchstart", function (e) {
-      if (e.touches.length !== 1) return;
-      var touch = e.touches[0];
-      startX = touch.clientX;
-      startY = touch.clientY;
-      var rect = fab.getBoundingClientRect();
-      initialLeft = rect.left;
-      initialTop = rect.top;
-      isDragging = false;
-
-      pressTimer = setTimeout(function () {
-        pressTimer = null;
-        if (!isDragging) openSettings();
-      }, 500);
-    }, { passive: true });
-
-    fab.addEventListener("touchmove", function (e) {
-      if (e.touches.length !== 1) return;
-      var touch = e.touches[0];
-      var dx = touch.clientX - startX;
-      var dy = touch.clientY - startY;
-      if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
-        isDragging = true;
-        if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
-      }
-      if (isDragging) {
-        fab.style.left = (initialLeft + dx) + "px";
-        fab.style.top = (initialTop + dy) + "px";
-        fab.style.right = "auto";
-        fab.style.bottom = "auto";
-      }
-    }, { passive: true });
-
-    fab.addEventListener("touchend", function () {
-      if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
-      if (!isDragging) {
-        handleClick();
-      } else {
-        // 吸附至最近边缘
-        var rect = fab.getBoundingClientRect();
-        if (rect.left + rect.width / 2 < window.innerWidth / 2) {
-          fab.style.left = "12px";
-          fab.style.right = "auto";
-        } else {
-          fab.style.left = "auto";
-          fab.style.right = "12px";
-        }
-      }
-    });
-
-    // ─── 小说双语分段阅读器引擎 ───
     var root = null;
     var reader = null;
+    var barContainer = null;
     var originalDisplay = "";
-    var isTranslated = false;
+    var currentMode = "ja"; // "ja" or "zh"
+    var isTranslating = false;
+    var cachedChineseHtml = null;
 
     function esc(s) {
       return String(s || "").replace(/[&<>"']/g, function (c) {
@@ -670,13 +640,13 @@ function clientRuntime() {
       });
     }
 
-    function renderParagraphs(text) {
-      var paras = String(text || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n").split(/\n{2,}/);
-      var html = "";
-      for (var i = 0; i < paras.length; i++) {
-        html += "<p>" + esc(paras[i]).replace(/\n/g, "<br>") + "</p>";
-      }
-      return html;
+    function hasJapanese(text) {
+      if (!text || typeof text !== "string") return false;
+      return /[぀-ゟ゠-ヿ]/.test(text);
+    }
+
+    function openSettings() {
+      window.location.href = "https://app-api.pixiv.net/settings/Enhanced";
     }
 
     function splitParagraphs(text) {
@@ -729,15 +699,41 @@ function clientRuntime() {
       return batches;
     }
 
-    // ─── 小说纯净单语浸入式排版引擎 (像 X 网页一样默认直接翻译) ───
-    var root = null;
-    var reader = null;
-    var originalDisplay = "";
-    var currentMode = "zh"; // "zh" 或 "ja"
-    var isTranslating = false;
-    var cachedChineseHtml = null;
+    function renderBar(state) {
+      if (!barContainer) return;
+      if (state === "loading") {
+        barContainer.innerHTML = '<span class="x-trans-icon">' + GLOBE_SVG + '</span><span class="x-trans-lang">正在翻译…</span><button type="button" class="x-trans-gear" id="px-gear">' + GEAR_SVG + '</button>';
+      } else if (state === "zh") {
+        // 对标 X 网页截图 2：翻译自 日语 显示原文 ⚙️
+        barContainer.innerHTML = '<span class="x-trans-icon">' + GLOBE_SVG + '</span><span class="x-trans-lang">翻译自 日语</span><button type="button" class="x-trans-btn" id="px-show-orig">显示原文</button><button type="button" class="x-trans-gear" id="px-gear">' + GEAR_SVG + '</button>';
+        var btnOrig = document.getElementById("px-show-orig");
+        if (btnOrig) btnOrig.addEventListener("click", showOriginal);
+      } else {
+        // 对标 X 网页截图 1：显示翻译 ⚙️
+        barContainer.innerHTML = '<span class="x-trans-icon">' + GLOBE_SVG + '</span><button type="button" class="x-trans-btn" id="px-show-trans">显示翻译</button><button type="button" class="x-trans-gear" id="px-gear">' + GEAR_SVG + '</button>';
+        var btnTrans = document.getElementById("px-show-trans");
+        if (btnTrans) btnTrans.addEventListener("click", startTranslate);
+      }
+      var gear = document.getElementById("px-gear");
+      if (gear) gear.addEventListener("click", openSettings);
+    }
+
+    function showOriginal() {
+      if (reader) reader.style.display = "none";
+      if (root) root.style.display = originalDisplay;
+      currentMode = "ja";
+      renderBar("ja");
+    }
+
+    function showTranslated() {
+      if (root) root.style.display = "none";
+      if (reader) reader.style.display = "block";
+      currentMode = "zh";
+      renderBar("zh");
+    }
 
     function buildReader() {
+      if (reader) return true;
       root = document.getElementById("root");
       if (!root) return false;
       originalDisplay = root.style.display || "";
@@ -753,49 +749,23 @@ function clientRuntime() {
       }
       reader.style.color = rootStyle.color;
       root.parentNode.insertBefore(reader, root.nextSibling);
+      reader.style.display = "none";
       return true;
     }
 
-    function showOriginal() {
-      if (reader) reader.style.display = "none";
-      if (root) root.style.display = originalDisplay;
-      currentMode = "ja";
-      fab.classList.remove("px-done");
-    }
-
-    function showTranslated() {
-      if (root) root.style.display = "none";
-      if (reader) reader.style.display = "block";
-      currentMode = "zh";
-      fab.classList.add("px-done");
-    }
-
-    function toggleNovelMode() {
+    async function startTranslate() {
       if (isTranslating) return;
-      if (!cachedChineseHtml) {
-        startNovelAutoTranslate();
+      if (cachedChineseHtml) {
+        showTranslated();
         return;
       }
-      if (currentMode === "zh") {
-        showOriginal();
-      } else {
-        showTranslated();
-      }
-    }
-
-    async function startNovelAutoTranslate() {
-      if (isTranslating) return;
       var text = "";
       try { text = window.pixiv && window.pixiv.novel ? window.pixiv.novel.text : ""; } catch (e) {}
       if (!text) return;
       if (!buildReader()) return;
 
       isTranslating = true;
-      fab.classList.add("px-busy");
-
-      root.style.display = "none";
-      reader.style.display = "block";
-      reader.innerHTML = '<div class="px-x-banner"><span>🌐 已开启自动翻译，正在加载中文…</span></div><div class="pxtc-loading">正在汉化排版中…</div>';
+      renderBar("loading");
 
       var paragraphs = splitParagraphs(text);
       var batches = buildBatches(paragraphs);
@@ -828,87 +798,77 @@ function clientRuntime() {
       for (var w = 0; w < concurrency; w++) workers.push(worker());
       await Promise.all(workers);
 
-      // 聚合所有翻译段落，生成纯净中文正文 (像 X 网页一样默认直接展示译文)
-      var finalHtml = '<div class="px-x-banner"><span>🌐 已自动翻译为中文</span><button type="button" id="px-show-orig">显示日文原文</button></div>';
+      // 生成纯净单语中文正文
+      var html = "";
       for (var i = 0; i < allTranslations.length; i++) {
         var group = allTranslations[i] || batches[i];
         for (var j = 0; j < group.length; j++) {
           var p = String(group[j] || "").trim();
           if (p) {
-            finalHtml += '<p class="pxtc-para">' + esc(p).replace(/\n/g, "<br>") + "</p>";
+            html += '<p class="pxtc-para">' + esc(p).replace(/\n/g, "<br>") + "</p>";
           }
         }
       }
 
-      cachedChineseHtml = finalHtml;
-      reader.innerHTML = finalHtml;
-
-      var toggleBtn = document.getElementById("px-show-orig");
-      if (toggleBtn) {
-        toggleBtn.addEventListener("click", showOriginal);
-      }
-
+      cachedChineseHtml = html;
+      reader.innerHTML = html;
       isTranslating = false;
-      fab.classList.remove("px-busy");
-      fab.classList.add("px-done");
-      currentMode = "zh";
+      showTranslated();
     }
 
-    // ─── 漫画 AI 视觉 HUD 漫翻 ───
-    async function doMangaTranslate() {
-      var images = document.querySelectorAll("img");
-      if (!images.length) return;
-      fab.classList.add("px-busy");
-      var targetImg = images[0];
-      var imgUrl = targetImg.src;
-      try {
-        var r = await fetch("/pxtrans?action=vision&url=" + encodeURIComponent(imgUrl)).then(function (res) { return res.json(); });
-        if (r && Array.isArray(r.bubbles)) {
-          r.bubbles.forEach(function (b) {
-            var bubble = document.createElement("div");
-            bubble.className = "px-hud-bubble";
-            bubble.textContent = b.zh;
-            bubble.style.top = b.box[0] + "%";
-            bubble.style.left = b.box[1] + "%";
-            bubble.style.maxWidth = (b.box[3] - b.box[1]) + "%";
-            targetImg.parentNode.style.position = "relative";
-            targetImg.parentNode.appendChild(bubble);
-          });
-        }
-      } catch (e) {}
-      fab.classList.remove("px-busy");
-    }
+    function initNovel(rawText) {
+      // 1. 如果本身就是中文或目标语言，完全不显示翻译栏，零打扰纯净享受
+      if (!hasJapanese(rawText)) {
+        return;
+      }
 
-    function handleClick() {
-      if (window.pixiv && window.pixiv.novel && window.pixiv.novel.text) {
-        toggleNovelMode();
+      root = document.getElementById("root");
+      if (!root) return;
+
+      // 创建并插入 X 风格翻译栏
+      barContainer = document.createElement("div");
+      barContainer.className = "x-trans-bar";
+      root.parentNode.insertBefore(barContainer, root);
+
+      if (autoSwitch) {
+        // 如果开启了默认自动翻译，进去默认触发翻译
+        renderBar("loading");
+        startTranslate();
       } else {
-        doMangaTranslate();
+        // 未开启默认自动翻译，展示「显示翻译 ⚙️」
+        renderBar("ja");
       }
     }
 
-    // 默认自动翻译启动探测 (无需人工点击，进入小说阅读页 300ms 自动开启翻译)
-    function autoBoot() {
-      var tries = 0;
-      var timer = setInterval(function () {
-        tries++;
-        if (window.pixiv && window.pixiv.novel && window.pixiv.novel.text) {
-          clearInterval(timer);
-          startNovelAutoTranslate();
-        } else if (tries >= 40) {
-          clearInterval(timer);
-        }
-      }, 250);
-    }
-
-    autoBoot();
+    // 探测小说加载完成
+    var tries = 0;
+    var timer = setInterval(function () {
+      tries++;
+      var rawText = "";
+      try { rawText = window.pixiv && window.pixiv.novel ? window.pixiv.novel.text : ""; } catch (e) {}
+      if (rawText) {
+        clearInterval(timer);
+        initNovel(rawText);
+      } else if (tries >= 40) {
+        clearInterval(timer);
+      }
+    }, 250);
   })();
 }
 
-function handleWebviewInject() {
+function handleWebviewInject(cfg) {
   const body = typeof $response.body === "string" ? $response.body : "";
   if (!body) { $done({}); return; }
-  const clientCode = clientRuntime.toString().replace("__SVG_PLACEHOLDER__", SF_TRANSLATE_SVG.trim());
+  const clientConfig = {
+    autoSwitch: cfg ? !!cfg.autoSwitch : true,
+    targetLang: cfg ? cfg.targetLang : "zh-CN"
+  };
+  const globeSvg = X_GLOBE_SVG.trim().replace(/\s+/g, " ");
+  const gearSvg = X_GEAR_SVG.trim().replace(/\s+/g, " ");
+  const clientCode = clientRuntime.toString()
+    .replace('"__CONFIG_PLACEHOLDER__"', JSON.stringify(clientConfig))
+    .replace('"__GLOBE_SVG__"', JSON.stringify(globeSvg))
+    .replace('"__GEAR_SVG__"', JSON.stringify(gearSvg));
   const inject = '<style id="px-style">' + INJECT_CSS + '</style><script id="px-script">(' + clientCode + ')();</script>';
   let newBody = body;
   if (/<\/body>/i.test(body)) newBody = body.replace(/<\/body>/i, inject + "</body>");
@@ -986,7 +946,7 @@ async function handleProxy(cfg) {
 
   // C. 小说 Webview 注入
   if (url.includes("/webview/v2/novel")) {
-    handleWebviewInject();
+    handleWebviewInject(cfg);
     return;
   }
 
