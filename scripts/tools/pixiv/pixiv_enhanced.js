@@ -192,15 +192,33 @@ const LANG_MAP = {
   "ko": { google: "ko", ms: "ko", baidu: "kor", ai: "Korean" }
 };
 
-// 本地内存缓存（生命周期内极速命中）
+// 本地内存与持久化缓存（生命周期内与跨会话极速命中）
 const MEMORY_CACHE = new Map();
 
 function cacheKey(engine, target, text) {
   return engine + ":" + target + ":" + (text.length > 30 ? text.slice(0, 30) + text.length : text);
 }
 
-async function googleTranslateBatch(texts, target) {
-  const arr = texts.map(String);
+function cacheRead(key) {
+  if (MEMORY_CACHE.has(key)) return MEMORY_CACHE.get(key);
+  try {
+    const val = $.getdata("pxtc_" + key);
+    if (val) {
+      MEMORY_CACHE.set(key, val);
+      return val;
+    }
+  } catch (e) {}
+  return undefined;
+}
+
+function cacheWrite(key, val) {
+  MEMORY_CACHE.set(key, val);
+  try {
+    if (key.length < 80) $.setdata(val, "pxtc_" + key);
+  } catch (e) {}
+}
+
+async function googleTranslateChunk(arr, target) {
   if (!arr.length) return [];
   const params = "client=gtx&dt=t&sl=auto&tl=" + encodeURIComponent(target);
   const body = arr.map(t => "q=" + encodeURIComponent(t)).join("&");
@@ -214,7 +232,7 @@ async function googleTranslateBatch(texts, target) {
         url: host + "?" + params,
         headers: { "Content-Type": "application/x-www-form-urlencoded", "User-Agent": "Mozilla/5.0" },
         body: body,
-        timeout: 4000
+        timeout: 8000
       });
       const raw = res && res.body;
       const data = typeof raw === "string" ? JSON.parse(raw) : raw;
@@ -223,7 +241,22 @@ async function googleTranslateBatch(texts, target) {
       }
     } catch (e) {}
   }
-  return arr; // 失败原样回退
+  return arr;
+}
+
+async function googleTranslateBatch(texts, target) {
+  const arr = texts.map(String);
+  if (!arr.length) return [];
+  // 限制每片 20 条，并发打给 Google，大幅降低单次延迟并彻底避免超时回退
+  const CHUNK_SIZE = 20;
+  const chunks = [];
+  for (let i = 0; i < arr.length; i += CHUNK_SIZE) {
+    chunks.push(arr.slice(i, i + CHUNK_SIZE));
+  }
+  const chunkResults = await Promise.all(chunks.map(chunk => googleTranslateChunk(chunk, target)));
+  const results = [];
+  for (const r of chunkResults) results.push(...r);
+  return results;
 }
 
 async function deepseekTranslateBatch(texts, targetLangName, cfg) {
@@ -275,10 +308,11 @@ async function translateBatch(texts, cfg) {
       results[i] = original;
       continue;
     }
-    // 查内存缓存
+    // 查本地持久化与内存缓存 (0ms 命中，滑屏不掉帧)
     const key = cacheKey(cfg.translator, target, original);
-    if (MEMORY_CACHE.has(key)) {
-      results[i] = MEMORY_CACHE.get(key);
+    const cached = cacheRead(key);
+    if (cached !== undefined) {
+      results[i] = cached;
     } else {
       toFetch.push(original);
       fetchIndices.push(i);
@@ -291,7 +325,7 @@ async function translateBatch(texts, cfg) {
   if (cfg.translator === "deepseek" && cfg.deepseekKey) {
     translated = await deepseekTranslateBatch(toFetch, langConfig.ai, cfg);
   } else {
-    // 默认 Google 免费极速接口
+    // 默认 Google 切片并发极速接口
     translated = await googleTranslateBatch(toFetch, langConfig.google);
   }
 
@@ -299,7 +333,7 @@ async function translateBatch(texts, cfg) {
     const val = (translated && translated[j]) ? translated[j] : toFetch[j];
     const original = toFetch[j];
     results[fetchIndices[j]] = val;
-    MEMORY_CACHE.set(cacheKey(cfg.translator, target, original), val);
+    cacheWrite(cacheKey(cfg.translator, target, original), val);
   }
 
   return results;
@@ -362,6 +396,7 @@ async function handleApiRewrite(cfg) {
   if (Array.isArray(data.ranking_illusts)) workList.push(...data.ranking_illusts);
   if (data.illust && typeof data.illust === "object") workList.push(data.illust);
   if (Array.isArray(data.novels)) workList.push(...data.novels);
+  if (Array.isArray(data.ranking_novels)) workList.push(...data.ranking_novels);
   if (data.novel && typeof data.novel === "object") workList.push(data.novel);
   if (Array.isArray(data.popular_preview)) workList.push(...data.popular_preview);
   if (Array.isArray(data.popular_permanent)) workList.push(...data.popular_permanent);
