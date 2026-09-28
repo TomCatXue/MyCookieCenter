@@ -5,8 +5,8 @@
 #!icon = https://is1-ssl.mzstatic.com/image/thumb/Purple126/v4/bf/16/e0/bf16e00b-68ea-e490-449e-ff9bba3eb1f9/AppIcon-0-0-1x_U007epad-0-0-0-85-220.png/512x512bb.jpg
 #!tag = Pixiv,翻译,AI漫翻,去广告,增强
 #!system = iOS,iPadOS,macOS
-#!date = 2026-09-28 21:50
-#!version = 2.7.0
+#!date = 2026-09-28 22:10
+#!version = 2.8.0
 
 [Rewrite]
 # 1. 劫持 Pixiv App 内「帮助中心」与「服务条款」，一键直达 PreferencePanes 设置面板

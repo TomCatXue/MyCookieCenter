@@ -602,19 +602,19 @@ const SF_TRANSLATE_SVG = `
 const INJECT_CSS = `
 #px-fab {
   position: fixed;
-  right: 10px;
-  bottom: 150px;
+  right: 16px;
+  bottom: calc(env(safe-area-inset-bottom, 20px) + 80px);
   z-index: 2147483647;
-  width: 48px;
-  height: 48px;
+  width: 52px;
+  height: 52px;
   border-radius: 50%;
-  border: 0;
+  border: 0.5px solid rgba(255, 255, 255, 0.35);
   background: #0096fa;
   color: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
   cursor: pointer;
   user-select: none;
   transition: opacity 0.2s ease, background 0.3s ease;
@@ -633,20 +633,6 @@ const INJECT_CSS = `
   font-family: inherit;
   font-size: inherit;
   line-height: 1.8;
-}
-.pxtc-title {
-  font-size: 1.25em;
-  font-weight: 700;
-  margin: 0 0 16px 0;
-  color: inherit;
-  font-family: inherit;
-  line-height: 1.4;
-}
-.pxtc-meta {
-  font-size: 0.9em;
-  opacity: 0.75;
-  margin-bottom: 12px;
-  color: inherit;
 }
 .pxtc-para {
   margin: 6px 0;
@@ -872,15 +858,7 @@ function clientRuntime() {
       fab.classList.add("px-busy");
 
       var paragraphs = splitParagraphs(text);
-      var toTranslateTexts = [];
-      if (title && hasJapanese(title)) toTranslateTexts.push(title);
-
       var batches = buildBatches(paragraphs);
-      var metaCount = toTranslateTexts.length;
-      if (metaCount > 0) {
-        batches.unshift(toTranslateTexts);
-      }
-
       var allTranslations = new Array(batches.length);
       var next = 0;
       async function worker() {
@@ -909,22 +887,9 @@ function clientRuntime() {
       for (var w = 0; w < concurrency; w++) workers.push(worker());
       await Promise.all(workers);
 
-      // 解析标题译文 (不注入冗长作者声明简介，纯净阅读小说正文)
-      var transTitle = title;
-      var startBatchIdx = 0;
-      if (metaCount > 0) {
-        var metaTrans = allTranslations[0] || toTranslateTexts;
-        if (title && hasJapanese(title)) transTitle = metaTrans[0] || title;
-        startBatchIdx = 1;
-      }
-
-      // 生成带有顶部中文标题的纯净小说排版 (零多余规约杂物，专注小说正文)
+      // 生成纯净小说正文 (无多余生硬标题，专注小说沉浸式阅读)
       var html = "";
-      if (transTitle) {
-        html += '<h1 class="pxtc-title">' + esc(transTitle) + '</h1>';
-      }
-
-      for (var i = startBatchIdx; i < allTranslations.length; i++) {
+      for (var i = 0; i < allTranslations.length; i++) {
         var group = allTranslations[i] || batches[i];
         for (var j = 0; j < group.length; j++) {
           var p = String(group[j] || "").trim();
