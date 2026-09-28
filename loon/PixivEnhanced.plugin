@@ -5,26 +5,26 @@
 #!icon = https://is1-ssl.mzstatic.com/image/thumb/Purple126/v4/bf/16/e0/bf16e00b-68ea-e490-449e-ff9bba3eb1f9/AppIcon-0-0-1x_U007epad-0-0-0-85-220.png/512x512bb.jpg
 #!tag = Pixiv,翻译,AI漫翻,去广告,增强
 #!system = iOS,iPadOS,macOS
-#!date = 2026-09-28 19:30
-#!version = 2.0.1
+#!date = 2026-09-28 19:50
+#!version = 2.1.0
 
 [Rewrite]
 # 1. 劫持 Pixiv App 内「帮助中心」与「服务条款」，一键直达 PreferencePanes 设置面板
-^https?:\/\/app\.pixiv\.help\/hc(?:\/.*)?$ 302 https://app-api.pixiv.net/settings/Enhanced
-^https?:\/\/policies\.pixiv\.net\/index\.html(?:\?.*)?$ 302 https://app-api.pixiv.net/settings/Enhanced
+^https?:\/\/app\.pixiv\.help(?:\/.*)?$ 302 https://app-api.pixiv.net/settings/Enhanced
+^https?:\/\/policies\.pixiv\.net(?:\/.*)?$ 302 https://app-api.pixiv.net/settings/Enhanced
 
 # 2. PreferencePanes 资源重写 (仿 Biliverse 架构)
 response if ${url} ~= /^https:\/\/app-api\.pixiv\.net\/settings\/Enhanced(?:\?[^#]*)?$/i then response.body.mock_file("html", "https://github.com/NSNanoCat/PreferencePanes/releases/latest/download/index.html", 200) | response.header.add("Cache-Control", "no-store")
 response if ${url} ~= /^https:\/\/app-api\.pixiv\.net\/settings\/assets\/index\.mjs(?:\?[^#]*)?$/i then response.body.mock_file("javascript", "https://github.com/NSNanoCat/PreferencePanes/releases/latest/download/index.mjs", 200) | response.header.add("Cache-Control", "no-store")
 response if ${url} ~= /^https:\/\/app-api\.pixiv\.net\/settings\/assets\/navigation\.mjs(?:\?[^#]*)?$/i then response.body.mock_file("javascript", "https://github.com/NSNanoCat/PreferencePanes/releases/latest/download/navigation.mjs", 200) | response.header.add("Cache-Control", "no-store")
-response if ${url} ~= /^https:\/\/app-api\.pixiv\.net\/api\/Enhanced(?:\?.*)?$/i then response.body.mock_file("json", "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/pixiv/Pixiv.Enhanced.PreferencePanes.json", 200) | response.header.add(["X-PreferencePanes-Version", "Cache-Control"], ["2.0.0", "no-store"])
+response if ${url} ~= /^https:\/\/app-api\.pixiv\.net\/api\/Enhanced(?:\?.*)?$/i then response.body.mock_file("json", "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/pixiv/Pixiv.Enhanced.PreferencePanes.json", 200) | response.header.add(["X-PreferencePanes-Version", "Cache-Control"], ["2.1.0", "no-store"])
 
 [Script]
 # PreferencePanes API 存取拦截器（同步数据至 Loon $persistentStore）
 http-request ^https:\/\/app-api\.pixiv\.net\/api\/(?:get|set|delete)(?:\?.*)?$ requires-body=1, script-path=https://github.com/NSNanoCat/PreferencePanes/releases/latest/download/api.js, tag=Pixiv.Enhanced.PreferencePanes.API
 
-# 全页面 REST API 响应体汉化拦截器（推荐/榜单/详情/评论/画师主页/特辑）
-http-response ^https:\/\/app-api\.pixiv\.net\/v[12]\/(illust\/(recommended|ranking|detail|series)|illust\/comments|novel\/(recommended|ranking|detail|comments)|user\/(detail|bookmarks|browsing-history)|search\/illust|trending-tags\/illust|spotlight\/articles) requires-body=1, script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/pixiv/pixiv_enhanced.js, tag=Pixiv.Enhanced.ApiTranslate
+# 全页面 REST API 响应体汉化拦截器（全覆盖推荐/榜单/详情/评论v3/画师主页/特辑/漫画/小说）
+http-response ^https:\/\/app-api\.pixiv\.net\/v[1-3]\/(illust|manga|novel|user|search|trending-tags|spotlight) requires-body=1, script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/pixiv/pixiv_enhanced.js, tag=Pixiv.Enhanced.ApiTranslate
 
 # 小说阅读器 & 页面注入 iOS SF Symbols「文/A」毛玻璃悬浮球
 http-response ^https:\/\/app-api\.pixiv\.net\/webview\/v2\/novel requires-body=1, script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/pixiv/pixiv_enhanced.js, tag=Pixiv.Enhanced.WebviewInject

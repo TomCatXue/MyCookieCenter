@@ -17,7 +17,7 @@
     "id": "@Pixiv.Enhanced.Settings.Auto.Scopes",
     "name": "[范围] 翻译生效模块",
     "type": "checkboxes",
-    "val": ["illust_caption", "tags", "comments", "user_profile", "novels", "spotlight"],
+    "val": ["illust_title", "illust_caption", "tags", "comments", "user_profile", "novels", "spotlight"],
     "items": [
       { "key": "illust_title", "label": "作品标题" },
       { "key": "illust_caption", "label": "作品简介/描述 (详情页)" },

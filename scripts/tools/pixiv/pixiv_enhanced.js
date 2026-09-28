@@ -39,8 +39,9 @@ function getSetting(key, defaultVal) {
 function loadConfig() {
   const globalSwitch = getSetting("@Pixiv.Enhanced.Settings.Global.Switch", true);
   const autoSwitch = getSetting("@Pixiv.Enhanced.Settings.Auto.Switch", true);
-  const rawScopes = getSetting("@Pixiv.Enhanced.Settings.Auto.Scopes", ["illust_caption", "tags", "comments", "user_profile", "novels", "spotlight"]);
+  const rawScopes = getSetting("@Pixiv.Enhanced.Settings.Auto.Scopes", ["illust_title", "illust_caption", "tags", "comments", "user_profile", "novels", "spotlight"]);
   const scopes = Array.isArray(rawScopes) ? rawScopes : (typeof rawScopes === "string" ? rawScopes.split(",") : []);
+  if (!scopes.includes("illust_title")) scopes.push("illust_title");
   const translator = (getSetting("@Pixiv.Enhanced.Settings.Translator.Source", "google") || "google").toLowerCase();
   const targetLang = getSetting("@Pixiv.Enhanced.Settings.Target.Lang", "zh-CN") || "zh-CN";
   const tagOfflineOnly = getSetting("@Pixiv.Enhanced.Settings.Tag.OfflineOnly", true);
@@ -149,7 +150,25 @@ const PIXIV_TAG_DICT = {
   "なにこれかわいい": "太可爱了吧", "なにこれ尊い": "太赞了吧", "魅惑のふともも": "诱人美腿",
   "魅惑の谷間": "诱人乳沟", "極上の乳": "极上美乳", "美脚": "美腿", "透け": "透视/半透明",
   "pixiv今日のお題": "今日主题", "ルーキーランキング": "新人榜", "デイリーランキング": "日榜",
-  "ウィークリーランキング": "周榜", "マンスリーランキング": "月榜", "男子に人気": "男性向热门", "女子に人気": "女性向热门"
+  "ウィークリーランキング": "周榜", "マンスリーランキング": "月榜", "男子に人気": "男性向热门", "女子に人気": "女性向热门",
+
+  // 补充高频角色、题材与作品
+  "新選組": "新选组", "藤堂平助": "藤堂平助", "早川アキ": "早川秋", "よその子": "自创角色/他人家孩子",
+  "HQ!!": "排球少年!!", "ハイキュー!!": "排球少年!!", "819プラス": "排球梦向/HQ+", "HQプラス": "排球梦向/HQ+",
+  "赤葦京治": "赤苇京治", "五条悟": "五条悟", "夏油傑": "夏油杰", "虎杖悠仁": "虎杖悠仁", "伏黒恵": "伏黑惠",
+  "デンジ": "电次", "マキマ": "玛奇玛", "パワー": "帕瓦", "早川家": "早川家",
+  "オリジナル漫画": "原创漫画", "創作男女": "创作男女", "創作BL": "原创BL", "創作百合": "原创百合",
+  "百合": "百合", "BL": "BL", "GL": "GL", "NL": "正常向/BG", "夢向け": "梦向",
+  "女主人公": "女主角", "男主人公": "男主角", "現代": "现代", "学園": "学园/校园",
+  "高校生": "高中生", "中学生": "初中生", "大学生": "大学生", "社会人": "上班族/社会人",
+  "同棲": "同居", "幼馴染": "青梅竹马", "両片思い": "双向暗恋",
+  "ハッピーエンド": "HE/圆满结局", "バッドエンド": "BE/悲剧结局", "ほのぼの": "温馨/治愈",
+  "シリアス": "正剧/严肃", "ギャグ": "搞笑", "ヤンデレ": "病娇", "ツンデレ": "傲娇",
+  "メンヘラ": "地雷系/精神敏感", "地雷系": "地雷系", "量産型": "量产型", "純愛": "纯爱",
+  "溺愛": "溺爱", "独占欲": "独占欲", "執着": "执念", "嫉妬": "吃醋/嫉妒",
+  "女装": "女装", "男装": "男装", "TS": "性转", "性転換": "性转换", "ふたなり": "扶她",
+  "ショタコン": "正太控", "ロリコン": "萝莉控", "おねショタ": "大姐姐与正太",
+  "年上": "年上", "年下": "年下", "年齢操作": "年龄操作", "パロディ": "同人恶搞/Paro"
 };
 
 // ─── 3. 语言探测与过滤 ──────────────────────────────────────────────────────────
@@ -303,40 +322,77 @@ async function handleApiRewrite(cfg) {
   const url = (typeof $request !== "undefined" && $request.url) ? $request.url : "";
   let modified = false;
 
-  // 1. Tag 离线字典快速处理 (遍历全图 Tag 数组)
+  const isDetailPage = url.includes("/detail") || url.includes("/show");
+  const isCommentPage = url.includes("/comments");
+
+  // 1. Tag 离线字典快速处理 (主名称与副翻译双重汉化，确保卡片与详情 100% 呈现中文)
   function processTags(tags) {
     if (!Array.isArray(tags)) return;
     for (const tag of tags) {
       if (!tag || typeof tag !== "object") continue;
-      // 离线字典优先
-      if (PIXIV_TAG_DICT[tag.name]) {
-        tag.translated_name = PIXIV_TAG_DICT[tag.name];
+      const dictVal = PIXIV_TAG_DICT[tag.name];
+      if (dictVal) {
+        tag.name = dictVal;
+        tag.translated_name = dictVal;
+        modified = true;
+      } else if (tag.translated_name && isJapanese(tag.name)) {
+        tag.name = tag.translated_name;
         modified = true;
       }
     }
   }
 
-  // 收集待网络翻译的文字与写回钩子
-  const pendingTranslations = [];
+  // 收集待网络翻译的文字与写回钩子 (去重与轻量化映射)
+  const textCallbackMap = new Map();
   function queueTranslate(text, callback) {
-    if (!text || !hasKanjiOrKana(text)) return;
-    pendingTranslations.push({ text, callback });
+    if (!text || typeof text !== "string") return;
+    if (!hasKanjiOrKana(text)) return;
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    if (!textCallbackMap.has(trimmed)) {
+      textCallbackMap.set(trimmed, []);
+    }
+    textCallbackMap.get(trimmed).push(callback);
   }
 
-  // A. 处理插画/漫画列表及详情 (illusts[] / illust)
-  const illusts = Array.isArray(data.illusts) ? data.illusts : (data.illust ? [data.illust] : []);
-  if (illusts.length > 0) {
-    for (const illust of illusts) {
-      if (!illust) continue;
-      if (illust.tags) processTags(illust.tags);
+  // A. 汇总所有作品列表 (插画 illusts/illust、小说 novels/novel、画师推荐 user_previews)
+  const workList = [];
+  if (Array.isArray(data.illusts)) workList.push(...data.illusts);
+  if (data.illust && typeof data.illust === "object") workList.push(data.illust);
+  if (Array.isArray(data.novels)) workList.push(...data.novels);
+  if (data.novel && typeof data.novel === "object") workList.push(data.novel);
 
-      // 标题与长简介
-      if (cfg.scopes.includes("illust_title") && isJapanese(illust.title)) {
-        queueTranslate(illust.title, trans => { illust.title = trans; modified = true; });
+  // 支持推荐画师中的作品与作者简介
+  if (Array.isArray(data.user_previews)) {
+    for (const up of data.user_previews) {
+      if (!up) continue;
+      if (Array.isArray(up.illusts)) workList.push(...up.illusts);
+      if (Array.isArray(up.novels)) workList.push(...up.novels);
+      if (up.user && hasKanjiOrKana(up.user.comment)) {
+        queueTranslate(up.user.comment, trans => { up.user.comment = trans; modified = true; });
       }
-      if (cfg.scopes.includes("illust_caption") && isJapanese(illust.caption)) {
-        queueTranslate(illust.caption, trans => { illust.caption = trans; modified = true; });
+    }
+  }
+
+  for (const item of workList) {
+    if (!item || typeof item !== "object") continue;
+    if (item.tags) processTags(item.tags);
+
+    // 标题翻译 (核心展示，卡片和榜单主视觉)
+    if (cfg.scopes.includes("illust_title") && hasKanjiOrKana(item.title)) {
+      queueTranslate(item.title, trans => { item.title = trans; modified = true; });
+    }
+
+    // 简介翻译 (详情页深度翻译；列表流仅翻短简介，长简介留到详情页消除延迟)
+    if (cfg.scopes.includes("illust_caption") && item.caption && hasKanjiOrKana(item.caption)) {
+      if (isDetailPage || item.caption.length < 80) {
+        queueTranslate(item.caption, trans => { item.caption = trans; modified = true; });
       }
+    }
+
+    // 小说系列标题
+    if (item.series && hasKanjiOrKana(item.series.title)) {
+      queueTranslate(item.series.title, trans => { item.series.title = trans; modified = true; });
     }
   }
 
@@ -345,12 +401,12 @@ async function handleApiRewrite(cfg) {
   if (comments.length > 0 && cfg.scopes.includes("comments")) {
     for (const c of comments) {
       if (!c) continue;
-      if (isJapanese(c.comment)) {
+      if (hasKanjiOrKana(c.comment)) {
         queueTranslate(c.comment, trans => { c.comment = trans; modified = true; });
       }
       if (Array.isArray(c.sub_comments)) {
         for (const sub of c.sub_comments) {
-          if (sub && isJapanese(sub.comment)) {
+          if (sub && hasKanjiOrKana(sub.comment)) {
             queueTranslate(sub.comment, trans => { sub.comment = trans; modified = true; });
           }
         }
@@ -358,9 +414,9 @@ async function handleApiRewrite(cfg) {
     }
   }
 
-  // C. 处理画师用户资料 (user / profile)
+  // C. 处理画师用户主页资料 (user / profile)
   if (data.user && typeof data.user === "object" && cfg.scopes.includes("user_profile")) {
-    if (isJapanese(data.user.comment)) {
+    if (hasKanjiOrKana(data.user.comment)) {
       queueTranslate(data.user.comment, trans => { data.user.comment = trans; modified = true; });
     }
   }
@@ -370,17 +426,22 @@ async function handleApiRewrite(cfg) {
   if (spotlights.length > 0 && cfg.scopes.includes("spotlight")) {
     for (const art of spotlights) {
       if (!art) continue;
-      if (isJapanese(art.title)) queueTranslate(art.title, trans => { art.title = trans; modified = true; });
-      if (isJapanese(art.intro)) queueTranslate(art.intro, trans => { art.intro = trans; modified = true; });
+      if (hasKanjiOrKana(art.title)) queueTranslate(art.title, trans => { art.title = trans; modified = true; });
+      if (hasKanjiOrKana(art.intro)) queueTranslate(art.intro, trans => { art.intro = trans; modified = true; });
+      if (hasKanjiOrKana(art.sub_title)) queueTranslate(art.sub_title, trans => { art.sub_title = trans; modified = true; });
     }
   }
 
-  // 批量并发处理所有收集到的文本
-  if (pendingTranslations.length > 0) {
-    const rawTexts = pendingTranslations.map(item => item.text);
+  // 批量并发处理所有收集到的去重文本
+  if (textCallbackMap.size > 0) {
+    const rawTexts = Array.from(textCallbackMap.keys());
     const translatedList = await translateBatch(rawTexts, cfg);
-    for (let i = 0; i < pendingTranslations.length; i++) {
-      if (translatedList[i]) pendingTranslations[i].callback(translatedList[i]);
+    for (let i = 0; i < rawTexts.length; i++) {
+      const trans = translatedList[i];
+      if (trans && trans !== rawTexts[i]) {
+        const callbacks = textCallbackMap.get(rawTexts[i]) || [];
+        for (const cb of callbacks) cb(trans);
+      }
     }
   }
 
