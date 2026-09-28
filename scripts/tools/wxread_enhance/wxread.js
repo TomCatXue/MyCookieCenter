@@ -1,19 +1,20 @@
 /*
 ------------------------------------------
-@Description: 微信读书 · 防强更与极简初始化 (进软件仅调用 1 次)
+@Description: 微信读书 · 防强更与去广告净化 (可莉风格极简纯净版)
 @Author: TomCatXue
-@Version: 4.1.0
-@Date: 2026-09-27 12:00
+@Version: 4.2.0
+@Date: 2026-09-28 18:30
 ------------------------------------------
-核心设计（单次触发模式）：
-  1. 进软件仅触发 1 次：仅拦截冷启动初始化接口 (feature, config, reconf, app/upgrade)，日常阅读/翻页/切后台 0 脚本执行；
-  2. 彻底防强更：锁定 upgrade_query_interval=2147483647 阻断 App Store 嗅探，清除全部升级弹窗与公告；
-  3. 释放试听倒计时：锁定 VIPRightTimerSeconds=8640000 消除潜在试听限时；
-  4. 静态去广告全交由 Loon [Rule] 与 [URL Rewrite] reject-dict 内核处理，零 JS 开销。
+核心功能清单：
+  1. 屏蔽发现流「新福利场」：过滤发现页年卡营销、特惠促销等商业推广卡片；
+  2. 彻底阻断版本强更：屏蔽 App Store 嗅探更新，消除所有升级弹窗与系统公告；
+  3. 释放试听时长限制：锁定 VIPRightTimerSeconds=8640000 消除试听倒计时；
+  4. 静态秒拒零开销：阅读器底部浮层 (Tips)、书城横幅 (Banner) 由 Loon 内核直接秒拒；
+  5. 阻断隐私与性能监控：拦截腾讯 APM 性能监控与 CLS 日志上报通道。
 */
 
-const SCRIPT_NAME = "微信读书·极简初始化";
-const SCRIPT_VERSION = "4.1.0";
+const SCRIPT_NAME = "微信读书·极简去广告";
+const SCRIPT_VERSION = "4.2.0";
 const $ = new Env(SCRIPT_NAME);
 
 function b64encode(str) {
@@ -83,6 +84,32 @@ function deepSanitize(target) {
 
     if (deepSanitize(data)) {
       modified = true;
+    }
+
+    // 净化发现流卡片列表 (如 /discoverfeed/new 中 type: 13 的「新福利场」年卡营销)
+    const cardList = Array.isArray(data.data) ? data.data : (Array.isArray(data.items) ? data.items : null);
+    if (cardList) {
+      const originalLen = cardList.length;
+      const filtered = cardList.filter(item => {
+        if (!item || typeof item !== "object") return true;
+        // 过滤福利场卡片 (type: 13 或 名称包含福利场/福利)
+        if (item.type === 13) return false;
+        if (typeof item.name === "string" && (item.name.includes("福利场") || item.name.includes("福利"))) return false;
+        // 过滤年卡等商业推广项 (如 annual_card)
+        if (item.content && item.content.items && Array.isArray(item.content.items)) {
+          const isPromo = item.content.items.some(subGroup =>
+            subGroup && Array.isArray(subGroup.items) && subGroup.items.some(sub => sub && sub.type === "annual_card")
+          );
+          if (isPromo) return false;
+        }
+        return true;
+      });
+
+      if (filtered.length !== originalLen) {
+        if (Array.isArray(data.data)) data.data = filtered;
+        if (Array.isArray(data.items)) data.items = filtered;
+        modified = true;
+      }
     }
 
     // 核心锁定：feature, configsets, reconf 全局初始化节点
