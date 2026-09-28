@@ -355,14 +355,39 @@ async function handleApiRewrite(cfg) {
     textCallbackMap.get(trimmed).push(callback);
   }
 
-  // A. 汇总所有作品列表 (插画 illusts/illust、小说 novels/novel、画师推荐 user_previews)
+  // A. 汇总所有作品列表 (插画 illusts/illust、首页榜单 ranking_illusts、小说 novels/novel、热门预览 popular_preview)
   const workList = [];
   if (Array.isArray(data.illusts)) workList.push(...data.illusts);
+  if (Array.isArray(data.ranking_illusts)) workList.push(...data.ranking_illusts);
   if (data.illust && typeof data.illust === "object") workList.push(data.illust);
   if (Array.isArray(data.novels)) workList.push(...data.novels);
   if (data.novel && typeof data.novel === "object") workList.push(data.novel);
+  if (Array.isArray(data.popular_preview)) workList.push(...data.popular_preview);
+  if (Array.isArray(data.popular_permanent)) workList.push(...data.popular_permanent);
 
-  // 支持推荐画师中的作品与作者简介
+  // B. 发现页核心数据：处理趋势热门标签与插画 (trend_tags)
+  if (Array.isArray(data.trend_tags)) {
+    for (const item of data.trend_tags) {
+      if (!item) continue;
+      // 1. 汉化标签词
+      if (item.tag) {
+        const dictVal = PIXIV_TAG_DICT[item.tag];
+        if (dictVal) {
+          item.tag = dictVal;
+          item.translated_name = dictVal;
+          modified = true;
+        } else if (hasKanjiOrKana(item.tag)) {
+          queueTranslate(item.tag, trans => { item.tag = trans; item.translated_name = trans; modified = true; });
+        }
+      }
+      // 2. 汉化附带的封面插画作品
+      if (item.illust && typeof item.illust === "object") {
+        workList.push(item.illust);
+      }
+    }
+  }
+
+  // C. 支持推荐画师中的作品与作者简介 (user_previews)
   if (Array.isArray(data.user_previews)) {
     for (const up of data.user_previews) {
       if (!up) continue;
@@ -470,8 +495,8 @@ const INJECT_CSS = `
   right: 14px;
   bottom: 120px;
   z-index: 2147483647;
-  width: 46px;
-  height: 46px;
+  width: 48px;
+  height: 48px;
   border-radius: 50%;
   border: 0.5px solid rgba(255, 255, 255, 0.4);
   background: rgba(255, 255, 255, 0.78);
@@ -481,10 +506,10 @@ const INJECT_CSS = `
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.15), 0 1px 3px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.18), 0 1px 3px rgba(0, 0, 0, 0.08);
   cursor: pointer;
   touch-action: none;
-  transition: transform 0.12s ease-out, opacity 0.25s ease;
+  transition: transform 0.12s ease-out, background 0.3s ease, opacity 0.25s ease;
   user-select: none;
 }
 @media (prefers-color-scheme: dark) {
@@ -495,9 +520,14 @@ const INJECT_CSS = `
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
   }
 }
-#px-fab:active {
-  transform: scale(0.92);
-}
+#px-fab:active { transform: scale(0.92); }
+#px-fab.px-busy { opacity: 0.5; pointer-events: none; }
+#px-fab.px-done { background: #34c759 !important; color: #fff !important; }
+.pxtc-reader { max-width: 720px; margin: 0 auto; padding: 20px 16px 120px; background: transparent; color: inherit; }
+.pxtc-chunk { margin-bottom: 22px; padding-bottom: 16px; border-bottom: 1px solid rgba(127, 127, 127, 0.25); }
+.pxtc-orig p { margin: 4px 0; color: inherit; opacity: 0.5; line-height: 1.8; font-size: 14px; }
+.pxtc-trans p { margin: 6px 0; color: inherit; line-height: 1.85; font-size: 16px; font-weight: 400; }
+.pxtc-error { margin-top: 6px; color: #ff3b30; font-size: 13px; word-break: break-all; }
 .px-hud-bubble {
   position: absolute;
   z-index: 1000;
@@ -565,10 +595,8 @@ function clientRuntime() {
         if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
       }
       if (isDragging) {
-        var x = initialLeft + dx;
-        var y = initialTop + dy;
-        fab.style.left = x + "px";
-        fab.style.top = y + "px";
+        fab.style.left = (initialLeft + dx) + "px";
+        fab.style.top = (initialTop + dy) + "px";
         fab.style.right = "auto";
         fab.style.bottom = "auto";
       }
@@ -577,13 +605,11 @@ function clientRuntime() {
     fab.addEventListener("touchend", function () {
       if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
       if (!isDragging) {
-        // 单击触发翻译
-        triggerPageOrMangaTranslate();
+        handleClick();
       } else {
         // 吸附至最近边缘
         var rect = fab.getBoundingClientRect();
-        var winWidth = window.innerWidth;
-        if (rect.left + rect.width / 2 < winWidth / 2) {
+        if (rect.left + rect.width / 2 < window.innerWidth / 2) {
           fab.style.left = "12px";
           fab.style.right = "auto";
         } else {
@@ -593,31 +619,169 @@ function clientRuntime() {
       }
     });
 
-    async function triggerPageOrMangaTranslate() {
-      // 1. 小说正文检测
-      if (window.pixiv && window.pixiv.novel && window.pixiv.novel.text) {
-        fab.style.opacity = "0.5";
-        var res = await fetch("/pxtrans?t=novel", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ texts: [window.pixiv.novel.text] })
-        }).then(r => r.json()).catch(() => null);
-        fab.style.opacity = "1";
-        if (res && res.translations && res.translations[0]) {
-          alert("小说全文已就绪，正在呈现...");
+    // ─── 小说双语分段阅读器引擎 ───
+    var root = null;
+    var reader = null;
+    var originalDisplay = "";
+    var isTranslated = false;
+
+    function esc(s) {
+      return String(s || "").replace(/[&<>"']/g, function (c) {
+        return c === "&" ? "&amp;" : c === "<" ? "&lt;" : c === ">" ? "&gt;" : c === '"' ? "&quot;" : "&#39;";
+      });
+    }
+
+    function renderParagraphs(text) {
+      var paras = String(text || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n").split(/\n{2,}/);
+      var html = "";
+      for (var i = 0; i < paras.length; i++) {
+        html += "<p>" + esc(paras[i]).replace(/\n/g, "<br>") + "</p>";
+      }
+      return html;
+    }
+
+    function splitParagraphs(text) {
+      var t = String(text || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n").replace(/^\n+|\n+$/g, "");
+      return t ? t.split(/\n{2,}/) : [];
+    }
+
+    function splitLong(p, max) {
+      var lines = p.split("\n");
+      var out = [];
+      var buf = "";
+      for (var i = 0; i < lines.length; i++) {
+        var l = lines[i];
+        if (l.length > max) {
+          if (buf) { out.push(buf); buf = ""; }
+          while (l.length > max) { out.push(l.substring(0, max)); l = l.substring(max); }
+          if (l) out.push(l);
+        } else {
+          var n = buf ? buf + "\n" + l : l;
+          if (n.length > max && buf) { out.push(buf); buf = l; } else { buf = n; }
         }
+      }
+      if (buf) out.push(buf);
+      return out;
+    }
+
+    function buildBatches(paragraphs) {
+      var batches = [];
+      var cur = [];
+      var curLen = 0;
+      for (var i = 0; i < paragraphs.length; i++) {
+        var p = paragraphs[i];
+        if (p.length > 2500) {
+          if (cur.length) { batches.push(cur); cur = []; curLen = 0; }
+          var pieces = splitLong(p, 2500);
+          for (var j = 0; j < pieces.length; j++) {
+            if (cur.length && (cur.length >= 20 || curLen + pieces[j].length > 2500)) {
+              batches.push(cur); cur = []; curLen = 0;
+            }
+            cur.push(pieces[j]); curLen += pieces[j].length;
+          }
+        } else {
+          if (cur.length && (cur.length >= 20 || curLen + p.length > 2500)) {
+            batches.push(cur); cur = []; curLen = 0;
+          }
+          cur.push(p); curLen += p.length;
+        }
+      }
+      if (cur.length) batches.push(cur);
+      return batches;
+    }
+
+    function buildReader() {
+      root = document.getElementById("root");
+      if (!root) return false;
+      originalDisplay = root.style.display || "";
+      reader = document.createElement("div");
+      reader.className = "pxtc-reader";
+      var rootStyle = window.getComputedStyle(root);
+      var pageBg = rootStyle.backgroundColor;
+      if (!pageBg || pageBg === "transparent" || pageBg.indexOf("rgba(0, 0, 0, 0)") === 0) {
+        pageBg = window.getComputedStyle(document.body).backgroundColor;
+      }
+      if (pageBg && pageBg !== "transparent" && pageBg.indexOf("rgba(0, 0, 0, 0)") !== 0) {
+        reader.style.background = pageBg;
+      }
+      reader.style.color = rootStyle.color;
+      root.parentNode.insertBefore(reader, root.nextSibling);
+      root.style.display = "none";
+      return true;
+    }
+
+    function restore() {
+      if (reader && reader.parentNode) reader.parentNode.removeChild(reader);
+      reader = null;
+      if (root) root.style.display = originalDisplay;
+      isTranslated = false;
+      fab.classList.remove("px-done");
+    }
+
+    async function doNovelTranslate() {
+      if (isTranslated) {
+        restore();
         return;
       }
+      var text = "";
+      try { text = window.pixiv && window.pixiv.novel ? window.pixiv.novel.text : ""; } catch (e) {}
+      if (!text) return;
+      if (!buildReader()) return;
 
-      // 2. 图片/漫画检测 (AI 漫翻 HUD Mode A)
+      fab.classList.add("px-busy");
+
+      var paragraphs = splitParagraphs(text);
+      var batches = buildBatches(paragraphs);
+      var sections = [];
+
+      for (var i = 0; i < batches.length; i++) {
+        var sec = document.createElement("section");
+        sec.className = "pxtc-chunk";
+        sec.innerHTML = '<div class="pxtc-orig">' + renderParagraphs(batches[i].join("\n\n")) + "</div>";
+        reader.appendChild(sec);
+        sections.push(sec);
+      }
+
+      var next = 0;
+      async function worker() {
+        while (next < batches.length) {
+          var idx = next++;
+          try {
+            var texts = batches[idx];
+            var res = await fetch("/pxtrans?t=novel", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ texts: texts })
+            }).then(function (r) { return r.json(); });
+            if (res && Array.isArray(res.translations)) {
+              sections[idx].innerHTML = '<div class="pxtc-orig">' + renderParagraphs(texts.join("\n\n")) +
+                '</div><div class="pxtc-trans">' + renderParagraphs(res.translations.join("\n\n")) + "</div>";
+            }
+          } catch (e) {
+            sections[idx].innerHTML += '<div class="pxtc-error">翻译失败：' + esc((e && e.message) || e) + '</div>';
+          }
+        }
+      }
+
+      var workers = [];
+      var concurrency = Math.min(3, batches.length);
+      for (var w = 0; w < concurrency; w++) workers.push(worker());
+      await Promise.all(workers);
+
+      fab.classList.remove("px-busy");
+      fab.classList.add("px-done");
+      isTranslated = true;
+    }
+
+    // ─── 漫画 AI 视觉 HUD 漫翻 ───
+    async function doMangaTranslate() {
       var images = document.querySelectorAll("img");
-      if (images.length > 0) {
-        fab.style.opacity = "0.4";
-        // 查找视口中央最大的漫画图片
-        var targetImg = images[0];
-        var imgUrl = targetImg.src;
-        var r = await fetch("/pxtrans?action=vision&url=" + encodeURIComponent(imgUrl)).then(res => res.json()).catch(() => null);
-        fab.style.opacity = "1";
+      if (!images.length) return;
+      fab.classList.add("px-busy");
+      var targetImg = images[0];
+      var imgUrl = targetImg.src;
+      try {
+        var r = await fetch("/pxtrans?action=vision&url=" + encodeURIComponent(imgUrl)).then(function (res) { return res.json(); });
         if (r && Array.isArray(r.bubbles)) {
           r.bubbles.forEach(function (b) {
             var bubble = document.createElement("div");
@@ -630,6 +794,15 @@ function clientRuntime() {
             targetImg.parentNode.appendChild(bubble);
           });
         }
+      } catch (e) {}
+      fab.classList.remove("px-busy");
+    }
+
+    function handleClick() {
+      if (window.pixiv && window.pixiv.novel && window.pixiv.novel.text) {
+        doNovelTranslate();
+      } else {
+        doMangaTranslate();
       }
     }
   })();
