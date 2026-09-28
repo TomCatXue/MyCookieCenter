@@ -455,20 +455,34 @@ async function handleApiRewrite(cfg) {
   if (Array.isArray(data.contents)) {
     for (const c of data.contents) {
       if (!c) continue;
-      if (c.pickup && typeof c.pickup === "object" && hasKanjiOrKana(c.pickup.title)) {
-        queueTranslate(c.pickup.title, trans => { c.pickup.title = trans; modified = true; });
+      if (c.pickup && typeof c.pickup === "object") {
+        if (hasKanjiOrKana(c.pickup.title)) queueTranslate(c.pickup.title, trans => { c.pickup.title = trans; modified = true; });
+        if (c.pickup.comment && needsTranslation(c.pickup.comment)) queueTranslate(c.pickup.comment, trans => { c.pickup.comment = trans; modified = true; });
       }
       if (Array.isArray(c.thumbnails)) {
         for (const t of c.thumbnails) {
           if (!t) continue;
-          if (cfg.scopes.includes("illust_title") && hasKanjiOrKana(t.title)) {
+          if (hasKanjiOrKana(t.title)) {
             queueTranslate(t.title, trans => { t.title = trans; modified = true; });
           }
-          if (cfg.scopes.includes("illust_caption") && t.description && isJapanese(t.description)) {
+          if (t.description && isJapanese(t.description)) {
             queueTranslate(t.description, trans => {
               t.description = trans.replace(/<\s*br\s*\/?>/gi, "<br />");
               modified = true;
             });
+          }
+          // 关键：Pixiv 客户端底层实际读取并渲染的是 t.app_model
+          if (t.app_model && typeof t.app_model === "object") {
+            if (hasKanjiOrKana(t.app_model.title)) {
+              queueTranslate(t.app_model.title, trans => { t.app_model.title = trans; modified = true; });
+            }
+            if (t.app_model.caption && isJapanese(t.app_model.caption)) {
+              queueTranslate(t.app_model.caption, trans => {
+                t.app_model.caption = trans.replace(/<\s*br\s*\/?>/gi, "<br />");
+                modified = true;
+              });
+            }
+            if (t.app_model.tags) processTags(t.app_model.tags);
           }
           if (Array.isArray(t.tags)) {
             for (let ti = 0; ti < t.tags.length; ti++) {
@@ -588,14 +602,14 @@ const SF_TRANSLATE_SVG = `
 const INJECT_CSS = `
 #px-fab {
   position: fixed;
-  right: 14px;
-  bottom: 120px;
+  right: 16px;
+  bottom: calc(env(safe-area-inset-bottom, 20px) + 86px);
   z-index: 2147483647;
-  width: 48px;
-  height: 48px;
+  width: 52px;
+  height: 52px;
   border-radius: 50%;
   border: 0.5px solid rgba(255, 255, 255, 0.4);
-  background: rgba(255, 255, 255, 0.82);
+  background: rgba(255, 255, 255, 0.85);
   -webkit-backdrop-filter: blur(25px) saturate(180%);
   backdrop-filter: blur(25px) saturate(180%);
   color: #007aff;
@@ -610,21 +624,22 @@ const INJECT_CSS = `
 }
 @media (prefers-color-scheme: dark) {
   #px-fab {
-    background: rgba(30, 30, 30, 0.78);
+    background: rgba(30, 30, 30, 0.82);
     border: 0.5px solid rgba(255, 255, 255, 0.15);
     color: #0a84ff;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.45);
   }
 }
 #px-fab:active { transform: scale(0.92); }
-#px-fab.px-busy { opacity: 0.5; pointer-events: none; }
+#px-fab.px-busy { opacity: 0.55; pointer-events: none; }
 #px-fab.px-done { background: #34c759 !important; color: #fff !important; }
-/* 纯净小说排版 (100% 忠实还原 Pixiv 原版字体大小与格式) */
+
+/* 纯净小说排版 (100% 严格继承 Pixiv 原版字号、字体与颜色) */
 .pxtc-reader {
   max-width: 720px;
   margin: 0 auto;
   padding-top: calc(60px + 16px);
-  padding-bottom: calc(50px + 120px);
+  padding-bottom: calc(50px + 140px);
   padding-left: 16px;
   padding-right: 16px;
   background: transparent;
@@ -633,8 +648,48 @@ const INJECT_CSS = `
   font-size: inherit;
   line-height: inherit;
 }
+.pxtc-header {
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid rgba(127, 127, 127, 0.2);
+}
+.pxtc-title {
+  font-size: 1.35em;
+  font-weight: 700;
+  margin: 0 0 10px 0;
+  line-height: 1.35;
+  color: inherit;
+  font-family: inherit;
+}
+.pxtc-meta {
+  font-size: 0.9em;
+  opacity: 0.75;
+  margin-bottom: 10px;
+  color: inherit;
+}
+.pxtc-caption {
+  font-size: 0.9em;
+  line-height: 1.7;
+  opacity: 0.85;
+  margin: 10px 0;
+  color: inherit;
+  font-family: inherit;
+}
+.pxtc-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+.pxtc-tag-pill {
+  font-size: 0.85em;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(127, 127, 127, 0.15);
+  color: inherit;
+}
 .pxtc-para {
-  margin: 0.8em 0;
+  margin: 0.85em 0;
   color: inherit;
   font-family: inherit;
   font-size: inherit;
@@ -816,15 +871,16 @@ function clientRuntime() {
       originalDisplay = root.style.display || "";
       reader = document.createElement("div");
       reader.className = "pxtc-reader";
+      var bodyStyle = window.getComputedStyle(document.body);
       var rootStyle = window.getComputedStyle(root);
-      var pageBg = rootStyle.backgroundColor;
-      if (!pageBg || pageBg === "transparent" || pageBg.indexOf("rgba(0, 0, 0, 0)") === 0) {
-        pageBg = window.getComputedStyle(document.body).backgroundColor;
-      }
+      var pageBg = bodyStyle.backgroundColor || rootStyle.backgroundColor;
       if (pageBg && pageBg !== "transparent" && pageBg.indexOf("rgba(0, 0, 0, 0)") !== 0) {
         reader.style.background = pageBg;
       }
-      reader.style.color = rootStyle.color;
+      var textColor = bodyStyle.color || rootStyle.color;
+      if (textColor && textColor !== "transparent") {
+        reader.style.color = textColor;
+      }
       root.parentNode.insertBefore(reader, root.nextSibling);
       reader.style.display = "none";
       return true;
@@ -860,7 +916,21 @@ function clientRuntime() {
     async function startNovelTranslate() {
       if (isTranslating) return;
       var text = "";
-      try { text = window.pixiv && window.pixiv.novel ? window.pixiv.novel.text : ""; } catch (e) {}
+      var title = "";
+      var caption = "";
+      var tags = [];
+      var userName = "";
+
+      try {
+        if (window.pixiv && window.pixiv.novel) {
+          text = window.pixiv.novel.text || "";
+          title = window.pixiv.novel.title || "";
+          caption = window.pixiv.novel.caption || "";
+          tags = window.pixiv.novel.tags || [];
+          userName = window.pixiv.novel.userName || "";
+        }
+      } catch (e) {}
+
       if (!text) return;
       if (!buildReader()) return;
 
@@ -868,24 +938,32 @@ function clientRuntime() {
       fab.classList.add("px-busy");
 
       var paragraphs = splitParagraphs(text);
-      var batches = buildBatches(paragraphs);
-      var allTranslations = new Array(batches.length);
+      var toTranslateTexts = [];
+      if (title && hasJapanese(title)) toTranslateTexts.push(title);
+      if (caption && hasJapanese(caption)) toTranslateTexts.push(caption);
 
+      var batches = buildBatches(paragraphs);
+      var metaCount = toTranslateTexts.length;
+      if (metaCount > 0) {
+        batches.unshift(toTranslateTexts);
+      }
+
+      var allTranslations = new Array(batches.length);
       var next = 0;
       async function worker() {
         while (next < batches.length) {
           var idx = next++;
           try {
-            var texts = batches[idx];
+            var bTexts = batches[idx];
             var res = await fetch("/pxtrans?t=novel", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ texts: texts })
+              body: JSON.stringify({ texts: bTexts })
             }).then(function (r) { return r.json(); });
             if (res && Array.isArray(res.translations)) {
               allTranslations[idx] = res.translations;
             } else {
-              allTranslations[idx] = texts;
+              allTranslations[idx] = bTexts;
             }
           } catch (e) {
             allTranslations[idx] = batches[idx];
@@ -898,14 +976,44 @@ function clientRuntime() {
       for (var w = 0; w < concurrency; w++) workers.push(worker());
       await Promise.all(workers);
 
-      // 生成纯净单语中文正文
-      var html = "";
-      for (var i = 0; i < allTranslations.length; i++) {
+      // 解析标题与简介译文
+      var transTitle = title;
+      var transCaption = caption;
+      var startBatchIdx = 0;
+      if (metaCount > 0) {
+        var metaTrans = allTranslations[0] || toTranslateTexts;
+        var mIdx = 0;
+        if (title && hasJapanese(title)) transTitle = metaTrans[mIdx++] || title;
+        if (caption && hasJapanese(caption)) transCaption = metaTrans[mIdx++] || caption;
+        startBatchIdx = 1;
+      }
+
+      // 组装汉化后的标签
+      var tagsHtml = "";
+      if (Array.isArray(tags)) {
+        for (var ti = 0; ti < tags.length; ti++) {
+          var tagObj = tags[ti];
+          var tagName = (tagObj && tagObj.name) || String(tagObj || "");
+          var dictTag = PIXIV_TAG_DICT ? PIXIV_TAG_DICT[tagName] : null;
+          var displayTag = dictTag || (tagObj && tagObj.translated_name) || tagName;
+          tagsHtml += '<span class="pxtc-tag-pill">#' + esc(displayTag) + '</span>';
+        }
+      }
+
+      // 生成带有顶部中文标题、作者、简介、标签的完整小说排版
+      var html = '<div class="pxtc-header">';
+      if (transTitle) html += '<h1 class="pxtc-title">' + esc(transTitle) + '</h1>';
+      if (userName) html += '<div class="pxtc-meta">' + esc(userName) + '</div>';
+      if (transCaption) html += '<div class="pxtc-caption">' + esc(transCaption).replace(/\n/g, "<br>") + '</div>';
+      if (tagsHtml) html += '<div class="pxtc-tags">' + tagsHtml + '</div>';
+      html += '</div>';
+
+      for (var i = startBatchIdx; i < allTranslations.length; i++) {
         var group = allTranslations[i] || batches[i];
         for (var j = 0; j < group.length; j++) {
           var p = String(group[j] || "").trim();
           if (p) {
-            html += '<p class="pxtc-para">' + esc(p).replace(/\n/g, "<br>") + "</p>";
+            html += '<p class="pxtc-para">' + esc(p).replace(/\n/g, "<br>") + '</p>';
           }
         }
       }
