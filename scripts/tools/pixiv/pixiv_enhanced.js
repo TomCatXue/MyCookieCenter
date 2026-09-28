@@ -171,7 +171,7 @@ const PIXIV_TAG_DICT = {
   "年上": "年上", "年下": "年下", "年齢操作": "年龄操作", "パロディ": "同人恶搞/Paro"
 };
 
-// ─── 3. 语言探测与过滤 ──────────────────────────────────────────────────────────
+// ─── 3. 语言探测与多语言过滤 ──────────────────────────────────────────────────
 function isJapanese(text) {
   if (!text || typeof text !== "string") return false;
   // 包含平假名或片假名字符
@@ -181,6 +181,22 @@ function isJapanese(text) {
 function hasKanjiOrKana(text) {
   if (!text || typeof text !== "string") return false;
   return /[぀-ヿ一-龯]/.test(text);
+}
+
+// 智能多语言检测（支持日语、韩语、英语等各种外语自动翻译）
+function needsTranslation(text) {
+  if (!text || typeof text !== "string") return false;
+  const trimmed = text.trim();
+  if (!trimmed) return false;
+  // 1. 包含日文假名
+  if (/[぀-ゟ゠-ヿ]/.test(trimmed)) return true;
+  // 2. 包含韩文 Hangul
+  if (/[가-힯]/.test(trimmed)) return true;
+  // 3. 包含纯英文/西文字符串（不含中文汉字）
+  if (/[a-zA-Z]{3,}/.test(trimmed) && !/[一-鿿]/.test(trimmed)) return true;
+  // 4. 包含汉字
+  if (/[一-龯]/.test(trimmed)) return true;
+  return false;
 }
 
 // ─── 4. 多引擎批量翻译网络模块 ──────────────────────────────────────────────────
@@ -381,7 +397,7 @@ async function handleApiRewrite(cfg) {
   const textCallbackMap = new Map();
   function queueTranslate(text, callback) {
     if (!text || typeof text !== "string") return;
-    if (!hasKanjiOrKana(text)) return;
+    if (!needsTranslation(text)) return;
     const trimmed = text.trim();
     if (!trimmed) return;
     if (!textCallbackMap.has(trimmed)) {
@@ -435,6 +451,48 @@ async function handleApiRewrite(cfg) {
     }
   }
 
+  // D. 核心首页全景流 (v1/home/all 的 data.contents 结构，彻底解决首页不汉化)
+  if (Array.isArray(data.contents)) {
+    for (const c of data.contents) {
+      if (!c) continue;
+      if (c.pickup && typeof c.pickup === "object" && hasKanjiOrKana(c.pickup.title)) {
+        queueTranslate(c.pickup.title, trans => { c.pickup.title = trans; modified = true; });
+      }
+      if (Array.isArray(c.thumbnails)) {
+        for (const t of c.thumbnails) {
+          if (!t) continue;
+          if (cfg.scopes.includes("illust_title") && hasKanjiOrKana(t.title)) {
+            queueTranslate(t.title, trans => { t.title = trans; modified = true; });
+          }
+          if (cfg.scopes.includes("illust_caption") && t.description && isJapanese(t.description)) {
+            queueTranslate(t.description, trans => {
+              t.description = trans.replace(/<\s*br\s*\/?>/gi, "<br />");
+              modified = true;
+            });
+          }
+          if (Array.isArray(t.tags)) {
+            for (let ti = 0; ti < t.tags.length; ti++) {
+              const tagStr = t.tags[ti];
+              if (PIXIV_TAG_DICT[tagStr]) {
+                t.tags[ti] = PIXIV_TAG_DICT[tagStr];
+                modified = true;
+              }
+            }
+          }
+          if (Array.isArray(t.show_tags)) {
+            for (let si = 0; si < t.show_tags.length; si++) {
+              const tagStr = t.show_tags[si];
+              if (PIXIV_TAG_DICT[tagStr]) {
+                t.show_tags[si] = PIXIV_TAG_DICT[tagStr];
+                modified = true;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
   for (const item of workList) {
     if (!item || typeof item !== "object") continue;
     if (item.tags) processTags(item.tags);
@@ -459,17 +517,17 @@ async function handleApiRewrite(cfg) {
     }
   }
 
-  // B. 处理评论区 (comments[] / sub_comments[])
+  // E. 处理评论区 (comments[] / sub_comments[]，支持日语及全球外语自动汉化)
   const comments = Array.isArray(data.comments) ? data.comments : [];
   if (comments.length > 0 && cfg.scopes.includes("comments")) {
     for (const c of comments) {
       if (!c) continue;
-      if (hasKanjiOrKana(c.comment)) {
+      if (needsTranslation(c.comment)) {
         queueTranslate(c.comment, trans => { c.comment = trans; modified = true; });
       }
       if (Array.isArray(c.sub_comments)) {
         for (const sub of c.sub_comments) {
-          if (sub && hasKanjiOrKana(sub.comment)) {
+          if (sub && needsTranslation(sub.comment)) {
             queueTranslate(sub.comment, trans => { sub.comment = trans; modified = true; });
           }
         }
@@ -559,27 +617,29 @@ const INJECT_CSS = `
   }
 }
 #px-fab:active { transform: scale(0.92); }
-#px-fab.px-busy { opacity: 0.6; pointer-events: none; }
-#px-fab.px-busy svg { animation: px-spin 1.2s linear infinite; }
-@keyframes px-spin { 100% { transform: rotate(360deg); } }
+#px-fab.px-busy { opacity: 0.5; pointer-events: none; }
 #px-fab.px-done { background: #34c759 !important; color: #fff !important; }
-/* 纯净小说排版 (不含任何多余置灰原文) */
+/* 纯净小说排版 (100% 忠实还原 Pixiv 原版字体大小与格式) */
 .pxtc-reader {
   max-width: 720px;
   margin: 0 auto;
-  padding: 16px 18px 140px;
+  padding-top: calc(60px + 16px);
+  padding-bottom: calc(50px + 120px);
+  padding-left: 16px;
+  padding-right: 16px;
   background: transparent;
   color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
 }
 .pxtc-para {
-  margin: 18px 0;
+  margin: 0.8em 0;
   color: inherit;
-  line-height: 1.95;
-  font-size: 17px;
-  text-align: justify;
-  text-indent: 2em;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
   word-break: break-word;
-  letter-spacing: 0.5px;
 }
 .px-hud-bubble {
   position: absolute;
