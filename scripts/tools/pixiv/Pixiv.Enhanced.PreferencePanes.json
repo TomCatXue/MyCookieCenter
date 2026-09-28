@@ -97,63 +97,63 @@
   {
     "id": "@Pixiv.Enhanced.Settings.Auth.DeepSeekKey",
     "name": "[密钥] DeepSeek API Key",
-    "type": "input",
+    "type": "text",
     "val": "",
     "desc": "填写 DeepSeek 开放平台 API Key（用于 DeepSeek 文本或视觉模型）。"
   },
   {
     "id": "@Pixiv.Enhanced.Settings.Auth.DeepSeekUrl",
     "name": "[端点] DeepSeek API URL",
-    "type": "input",
+    "type": "text",
     "val": "https://api.deepseek.com/v1/chat/completions",
     "desc": "DeepSeek 或兼容 OpenAI 协议的接口地址。"
   },
   {
     "id": "@Pixiv.Enhanced.Settings.Auth.DeepSeekModel",
     "name": "[模型] DeepSeek 模型名称",
-    "type": "input",
+    "type": "text",
     "val": "deepseek-v4-flash",
     "desc": "模型名称，默认为 deepseek-v4-flash 或 deepseek-chat。"
   },
   {
     "id": "@Pixiv.Enhanced.Settings.Auth.OpenAIKey",
     "name": "[密钥] OpenAI / 兼容 API Key",
-    "type": "input",
+    "type": "text",
     "val": "",
     "desc": "用于 GPT-4o-mini 视觉多模态漫画识别的 API Key。"
   },
   {
     "id": "@Pixiv.Enhanced.Settings.Auth.OpenAIUrl",
     "name": "[端点] OpenAI 兼容 API URL",
-    "type": "input",
+    "type": "text",
     "val": "https://api.openai.com/v1/chat/completions",
     "desc": "OpenAI 官方或中转接口地址。"
   },
   {
     "id": "@Pixiv.Enhanced.Settings.Auth.MsKey",
     "name": "[密钥] 微软 Azure 翻译 Key",
-    "type": "input",
+    "type": "text",
     "val": "",
     "desc": "填写微软认知服务 Translation API Key。"
   },
   {
     "id": "@Pixiv.Enhanced.Settings.Auth.BaiduAppid",
     "name": "[密钥] 百度翻译 AppID",
-    "type": "input",
+    "type": "text",
     "val": "",
     "desc": "百度翻译开放平台申请的 AppID。"
   },
   {
     "id": "@Pixiv.Enhanced.Settings.Auth.BaiduSecret",
     "name": "[密钥] 百度翻译密钥 (Secret)",
-    "type": "input",
+    "type": "text",
     "val": "",
     "desc": "百度翻译开放平台分配的应用密钥。"
   },
   {
     "id": "@Pixiv.Enhanced.Settings.Manga.ServerUrl",
     "name": "[服务] 自建漫画重绘服务 URL",
-    "type": "input",
+    "type": "text",
     "val": "http://127.0.0.1:5000",
     "desc": "若选用 manga_translator 引擎，请填写本地/云端部署的 manga-image-translator 地址。"
   },
