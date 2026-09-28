@@ -602,98 +602,58 @@ const SF_TRANSLATE_SVG = `
 const INJECT_CSS = `
 #px-fab {
   position: fixed;
-  right: 16px;
-  bottom: calc(env(safe-area-inset-bottom, 20px) + 86px);
+  right: 10px;
+  bottom: 150px;
   z-index: 2147483647;
-  width: 52px;
-  height: 52px;
+  width: 48px;
+  height: 48px;
   border-radius: 50%;
-  border: 0.5px solid rgba(255, 255, 255, 0.4);
-  background: rgba(255, 255, 255, 0.85);
-  -webkit-backdrop-filter: blur(25px) saturate(180%);
-  backdrop-filter: blur(25px) saturate(180%);
-  color: #007aff;
+  border: 0;
+  background: #0096fa;
+  color: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.18), 0 1px 3px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
   cursor: pointer;
-  touch-action: none;
-  transition: transform 0.12s ease-out, background 0.3s ease, opacity 0.25s ease;
   user-select: none;
-}
-@media (prefers-color-scheme: dark) {
-  #px-fab {
-    background: rgba(30, 30, 30, 0.82);
-    border: 0.5px solid rgba(255, 255, 255, 0.15);
-    color: #0a84ff;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.45);
-  }
+  transition: opacity 0.2s ease, background 0.3s ease;
 }
 #px-fab:active { transform: scale(0.92); }
-#px-fab.px-busy { opacity: 0.55; pointer-events: none; }
-#px-fab.px-done { background: #34c759 !important; color: #fff !important; }
+#px-fab.px-busy { opacity: 0.55; }
+#px-fab.px-done { background: #34c759 !important; }
 
 /* 纯净小说排版 (100% 严格继承 Pixiv 原版字号、字体与颜色) */
 .pxtc-reader {
   max-width: 720px;
   margin: 0 auto;
-  padding-top: calc(60px + 16px);
-  padding-bottom: calc(50px + 140px);
-  padding-left: 16px;
-  padding-right: 16px;
+  padding: 20px 16px 110px;
   background: transparent;
   color: inherit;
   font-family: inherit;
   font-size: inherit;
-  line-height: inherit;
-}
-.pxtc-header {
-  margin-bottom: 24px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid rgba(127, 127, 127, 0.2);
+  line-height: 1.8;
 }
 .pxtc-title {
-  font-size: 1.35em;
+  font-size: 1.25em;
   font-weight: 700;
-  margin: 0 0 10px 0;
-  line-height: 1.35;
+  margin: 0 0 16px 0;
   color: inherit;
   font-family: inherit;
+  line-height: 1.4;
 }
 .pxtc-meta {
   font-size: 0.9em;
   opacity: 0.75;
-  margin-bottom: 10px;
-  color: inherit;
-}
-.pxtc-caption {
-  font-size: 0.9em;
-  line-height: 1.7;
-  opacity: 0.85;
-  margin: 10px 0;
-  color: inherit;
-  font-family: inherit;
-}
-.pxtc-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 10px;
-}
-.pxtc-tag-pill {
-  font-size: 0.85em;
-  padding: 2px 8px;
-  border-radius: 4px;
-  background: rgba(127, 127, 127, 0.15);
+  margin-bottom: 12px;
   color: inherit;
 }
 .pxtc-para {
-  margin: 0.85em 0;
+  margin: 6px 0;
   color: inherit;
   font-family: inherit;
   font-size: inherit;
-  line-height: inherit;
+  line-height: 1.8;
   word-break: break-word;
 }
 .px-hud-bubble {
@@ -760,59 +720,33 @@ function clientRuntime() {
     fab.innerHTML = `__SVG_PLACEHOLDER__`;
     document.body.appendChild(fab);
 
-    // 智能拖拽贴边与长按检测
-    var startX = 0, startY = 0, initialLeft = 0, initialTop = 0;
-    var isDragging = false, pressTimer = null;
-
-    fab.addEventListener("touchstart", function (e) {
-      if (e.touches.length !== 1) return;
-      var touch = e.touches[0];
-      startX = touch.clientX;
-      startY = touch.clientY;
-      var rect = fab.getBoundingClientRect();
-      initialLeft = rect.left;
-      initialTop = rect.top;
-      isDragging = false;
-
+    // 单击 → 触发翻译/还原；长按 500ms → 打开设置中心
+    var pressTimer = null;
+    function startPress(e) {
       pressTimer = setTimeout(function () {
         pressTimer = null;
-        if (!isDragging) openSettings();
+        openSettings();
       }, 500);
-    }, { passive: true });
-
-    fab.addEventListener("touchmove", function (e) {
-      if (e.touches.length !== 1) return;
-      var touch = e.touches[0];
-      var dx = touch.clientX - startX;
-      var dy = touch.clientY - startY;
-      if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
-        isDragging = true;
-        if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
-      }
-      if (isDragging) {
-        fab.style.left = (initialLeft + dx) + "px";
-        fab.style.top = (initialTop + dy) + "px";
-        fab.style.right = "auto";
-        fab.style.bottom = "auto";
-      }
-    }, { passive: true });
-
-    fab.addEventListener("touchend", function () {
-      if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
-      if (!isDragging) {
+    }
+    function endPress(e) {
+      if (pressTimer) {
+        clearTimeout(pressTimer);
+        pressTimer = null;
         handleClick();
-      } else {
-        // 吸附至最近边缘
-        var rect = fab.getBoundingClientRect();
-        if (rect.left + rect.width / 2 < window.innerWidth / 2) {
-          fab.style.left = "12px";
-          fab.style.right = "auto";
-        } else {
-          fab.style.left = "auto";
-          fab.style.right = "12px";
-        }
       }
-    });
+    }
+    function cancelPress(e) {
+      if (pressTimer) {
+        clearTimeout(pressTimer);
+        pressTimer = null;
+      }
+    }
+    fab.addEventListener("mousedown", startPress);
+    fab.addEventListener("mouseup", endPress);
+    fab.addEventListener("mouseleave", cancelPress);
+    fab.addEventListener("touchstart", startPress, { passive: true });
+    fab.addEventListener("touchend", endPress);
+    fab.addEventListener("touchcancel", cancelPress);
 
     function splitParagraphs(text) {
       var t = String(text || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n").replace(/^\n+|\n+$/g, "");
@@ -940,7 +874,6 @@ function clientRuntime() {
       var paragraphs = splitParagraphs(text);
       var toTranslateTexts = [];
       if (title && hasJapanese(title)) toTranslateTexts.push(title);
-      if (caption && hasJapanese(caption)) toTranslateTexts.push(caption);
 
       var batches = buildBatches(paragraphs);
       var metaCount = toTranslateTexts.length;
@@ -976,37 +909,20 @@ function clientRuntime() {
       for (var w = 0; w < concurrency; w++) workers.push(worker());
       await Promise.all(workers);
 
-      // 解析标题与简介译文
+      // 解析标题译文 (不注入冗长作者声明简介，纯净阅读小说正文)
       var transTitle = title;
-      var transCaption = caption;
       var startBatchIdx = 0;
       if (metaCount > 0) {
         var metaTrans = allTranslations[0] || toTranslateTexts;
-        var mIdx = 0;
-        if (title && hasJapanese(title)) transTitle = metaTrans[mIdx++] || title;
-        if (caption && hasJapanese(caption)) transCaption = metaTrans[mIdx++] || caption;
+        if (title && hasJapanese(title)) transTitle = metaTrans[0] || title;
         startBatchIdx = 1;
       }
 
-      // 组装汉化后的标签
-      var tagsHtml = "";
-      if (Array.isArray(tags)) {
-        for (var ti = 0; ti < tags.length; ti++) {
-          var tagObj = tags[ti];
-          var tagName = (tagObj && tagObj.name) || String(tagObj || "");
-          var dictTag = PIXIV_TAG_DICT ? PIXIV_TAG_DICT[tagName] : null;
-          var displayTag = dictTag || (tagObj && tagObj.translated_name) || tagName;
-          tagsHtml += '<span class="pxtc-tag-pill">#' + esc(displayTag) + '</span>';
-        }
+      // 生成带有顶部中文标题的纯净小说排版 (零多余规约杂物，专注小说正文)
+      var html = "";
+      if (transTitle) {
+        html += '<h1 class="pxtc-title">' + esc(transTitle) + '</h1>';
       }
-
-      // 生成带有顶部中文标题、作者、简介、标签的完整小说排版
-      var html = '<div class="pxtc-header">';
-      if (transTitle) html += '<h1 class="pxtc-title">' + esc(transTitle) + '</h1>';
-      if (userName) html += '<div class="pxtc-meta">' + esc(userName) + '</div>';
-      if (transCaption) html += '<div class="pxtc-caption">' + esc(transCaption).replace(/\n/g, "<br>") + '</div>';
-      if (tagsHtml) html += '<div class="pxtc-tags">' + tagsHtml + '</div>';
-      html += '</div>';
 
       for (var i = startBatchIdx; i < allTranslations.length; i++) {
         var group = allTranslations[i] || batches[i];
