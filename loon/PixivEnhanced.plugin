@@ -5,8 +5,8 @@
 #!icon = https://is1-ssl.mzstatic.com/image/thumb/Purple126/v4/bf/16/e0/bf16e00b-68ea-e490-449e-ff9bba3eb1f9/AppIcon-0-0-1x_U007epad-0-0-0-85-220.png/512x512bb.jpg
 #!tag = Pixiv,翻译,AI漫翻,去广告,增强
 #!system = iOS,iPadOS,macOS
-#!date = 2026-09-29 14:30
-#!version = 4.0.0
+#!date = 2026-09-29 16:30
+#!version = 4.1.1
 
 [Rewrite]
 # 1. 劫持 Pixiv App 内「帮助中心」与「服务条款」，一键直达增强设置中心
@@ -14,20 +14,20 @@
 ^https?:\/\/policies\.pixiv\.net(?:\/.*)?$ 302 https://app-api.pixiv.net/settings/Enhanced
 
 # 2. 原生级增强设置中心 (0ms 离线瞬时秒开，对标 Pix-Scripting 与 iOS 原生视觉规范)
-response if ${url} ~= /^https:\/\/app-api\.pixiv\.net\/settings\/Enhanced(?:\?[^#]*)?$/i then response.body.mock_file("html", "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/pixiv/settings.html", 200) | response.header.add("Cache-Control", "no-store")
+response if ${url} ~= /^https:\/\/app-api\.pixiv\.net\/settings\/Enhanced(?:\?[^#]*)?$/i then response.body.mock_file("html", "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/pixiv/settings.html?v=202609291630", 200) | response.header.add("Cache-Control", "no-store")
 
 [Script]
 # 设置中心与 API 交互 (配置读取、保存、实时测速、清空缓存，全脱机 0 网络依赖)
-http-request ^https:\/\/app-api\.pixiv\.net\/(settings\/Enhanced|api\/(?:get|set|delete|test_ai|clear_cache)) requires-body=1, script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/pixiv/pixiv_enhanced.js, tag=Pixiv.Enhanced.SettingsAPI
+http-request ^https:\/\/app-api\.pixiv\.net\/(settings\/Enhanced|api\/(?:get|set|delete|test_ai|clear_cache|cache_stats)) requires-body=1, script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/pixiv/pixiv_enhanced.js?v=202609291630, tag=Pixiv.Enhanced.SettingsAPI
 
 # 全页面 REST API 响应体汉化拦截器（全覆盖首页home/推荐/榜单/详情/评论v3/画师主页/特辑/漫画/小说）
-http-response ^https:\/\/app-api\.pixiv\.net\/v[1-3]\/(illust|manga|novel|user|search|trending-tags|spotlight|home) requires-body=1, script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/pixiv/pixiv_enhanced.js, tag=Pixiv.Enhanced.ApiTranslate
+http-response ^https:\/\/app-api\.pixiv\.net\/v[1-3]\/(illust|manga|novel|user|search|trending-tags|spotlight|home) requires-body=1, script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/pixiv/pixiv_enhanced.js?v=202609291630, tag=Pixiv.Enhanced.ApiTranslate
 
 # 小说阅读器 & 页面注入 iOS SF Symbols「文/A」悬浮按钮与排版引擎
-http-response ^https:\/\/app-api\.pixiv\.net\/webview\/v2\/novel requires-body=1, script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/pixiv/pixiv_enhanced.js, tag=Pixiv.Enhanced.WebviewInject
+http-response ^https:\/\/app-api\.pixiv\.net\/webview\/v2\/novel requires-body=1, script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/pixiv/pixiv_enhanced.js?v=202609291630, tag=Pixiv.Enhanced.WebviewInject
 
 # 翻译中转网关与 AI 视觉漫翻端点
-http-request ^https:\/\/app-api\.pixiv\.net\/pxtrans requires-body=1, script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/pixiv/pixiv_enhanced.js, tag=Pixiv.Enhanced.Proxy
+http-request ^https:\/\/app-api\.pixiv\.net\/pxtrans requires-body=1, script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/pixiv/pixiv_enhanced.js?v=202609291630, tag=Pixiv.Enhanced.Proxy
 
 [MITM]
 hostname = app-api.pixiv.net, app.pixiv.help, policies.pixiv.net

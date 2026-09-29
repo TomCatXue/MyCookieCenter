@@ -17,15 +17,44 @@
     "id": "@Pixiv.Enhanced.Settings.Auto.Scopes",
     "name": "[范围] 翻译生效模块",
     "type": "checkboxes",
-    "val": ["illust_title", "illust_caption", "tags", "comments", "user_profile", "novels", "spotlight"],
+    "val": [
+      "illust_title",
+      "illust_caption",
+      "tags",
+      "comments",
+      "user_profile",
+      "novels",
+      "spotlight"
+    ],
     "items": [
-      { "key": "illust_title", "label": "作品标题 (首页/列表/详情)" },
-      { "key": "illust_caption", "label": "作品简介/描述 (就地汉化无弹窗)" },
-      { "key": "tags", "label": "日文标签 (Tag 离线秒翻)" },
-      { "key": "comments", "label": "评论区留言与楼中楼 (全语种)" },
-      { "key": "user_profile", "label": "画师个人简介/留言" },
-      { "key": "novels", "label": "小说列表及阅读正文" },
-      { "key": "spotlight", "label": "特辑文章 (Pixivision)" }
+      {
+        "key": "illust_title",
+        "label": "作品标题 (首页/列表/详情)"
+      },
+      {
+        "key": "illust_caption",
+        "label": "作品简介/描述 (就地汉化无弹窗)"
+      },
+      {
+        "key": "tags",
+        "label": "日文标签 (Tag 离线秒翻)"
+      },
+      {
+        "key": "comments",
+        "label": "评论区留言与楼中楼 (全语种)"
+      },
+      {
+        "key": "user_profile",
+        "label": "画师个人简介/留言"
+      },
+      {
+        "key": "novels",
+        "label": "小说列表及阅读正文"
+      },
+      {
+        "key": "spotlight",
+        "label": "特辑文章 (Pixivision)"
+      }
     ],
     "desc": "勾选需要进行汉化翻译的界面模块。"
   },
@@ -42,10 +71,22 @@
     "type": "selects",
     "val": "system",
     "items": [
-      { "key": "system", "label": "系统默认 (苹方 PingFang)" },
-      { "key": "songti", "label": "经典宋体 (纸书质感 / 严肃文学)" },
-      { "key": "kaiti", "label": "优美楷体 (古雅风格 / 同人)" },
-      { "key": "yuanti", "label": "柔和圆体 (轻松温和 / 亲和)" }
+      {
+        "key": "system",
+        "label": "系统默认 (苹方 PingFang)"
+      },
+      {
+        "key": "songti",
+        "label": "经典宋体 (纸书质感 / 严肃文学)"
+      },
+      {
+        "key": "kaiti",
+        "label": "优美楷体 (古雅风格 / 同人)"
+      },
+      {
+        "key": "yuanti",
+        "label": "柔和圆体 (轻松温和 / 亲和)"
+      }
     ],
     "desc": "对标 Pix-Scripting 高级小说排版规范，选择汉化正文的字体风格。"
   },
@@ -57,16 +98,37 @@
     "desc": "自动过滤日文小说正文中的商用规约、无断转载禁止、台词使用声明等杂乱文本，呈现纯粹小说正文。"
   },
   {
+    "id": "@Pixiv.Enhanced.Settings.Novel.ShowOriginal",
+    "name": "[小说] 双语阅读显示原文",
+    "type": "boolean",
+    "val": true,
+    "desc": "开启后按原文在上、译文在下的段落对显示；关闭后仅显示译文。"
+  },
+  {
+    "id": "@Pixiv.Enhanced.Settings.Floating.Switch",
+    "name": "[小说] 显示悬浮按钮",
+    "type": "boolean",
+    "val": true,
+    "desc": "关闭后不注入悬浮按钮或相关事件；开启后自动避开页面控件。"
+  },
+  {
     "id": "@Pixiv.Enhanced.Settings.Translator.Source",
     "name": "[文本] 翻译引擎切换",
     "type": "selects",
     "val": "google",
     "items": [
-      { "key": "google", "label": "Google 免费切片并发 (极速/免配置)" },
-      { "key": "deepseek", "label": "DeepSeek AI (文学润色/需Key)" },
-      { "key": "microsoft", "label": "微软 Azure 翻译 (需Key)" },
-      { "key": "baidu", "label": "百度通用翻译 (需AppID/Secret)" },
-      { "key": "openai", "label": "OpenAI / 兼容接口 (需Key)" }
+      {
+        "key": "google",
+        "label": "Google 免费切片并发 (极速/免配置)"
+      },
+      {
+        "key": "deepseek",
+        "label": "DeepSeek AI (文学润色/需Key)"
+      },
+      {
+        "key": "openai",
+        "label": "OpenAI / 兼容接口 (需Key)"
+      }
     ],
     "desc": "选择底层日文文本翻译所使用的服务商。"
   },
@@ -76,11 +138,26 @@
     "type": "selects",
     "val": "zh-CN",
     "items": [
-      { "key": "zh-CN", "label": "简体中文" },
-      { "key": "zh-TW", "label": "繁體中文" },
-      { "key": "en", "label": "English" },
-      { "key": "ja", "label": "日本語 (原文)" },
-      { "key": "ko", "label": "한국어" }
+      {
+        "key": "zh-CN",
+        "label": "简体中文"
+      },
+      {
+        "key": "zh-TW",
+        "label": "繁體中文"
+      },
+      {
+        "key": "en",
+        "label": "English"
+      },
+      {
+        "key": "ja",
+        "label": "日本語 (原文)"
+      },
+      {
+        "key": "ko",
+        "label": "한국어"
+      }
     ],
     "desc": "选择期望翻译成的目标语言。"
   },
@@ -104,9 +181,18 @@
     "type": "selects",
     "val": "deepseek_vl",
     "items": [
-      { "key": "deepseek_vl", "label": "DeepSeek-VL 视觉理解 (推荐/高性价比)" },
-      { "key": "gpt4o_mini", "label": "GPT-4o-mini Vision (气泡高精度定位)" },
-      { "key": "manga_translator", "label": "自建 manga-image-translator (整图重绘)" }
+      {
+        "key": "deepseek_vl",
+        "label": "DeepSeek-VL 视觉理解 (推荐/高性价比)"
+      },
+      {
+        "key": "gpt4o_mini",
+        "label": "GPT-4o-mini Vision (气泡高精度定位)"
+      },
+      {
+        "key": "manga_translator",
+        "label": "自建 manga-image-translator (整图重绘)"
+      }
     ],
     "desc": "选择处理对白框气泡文字的视觉模型。"
   },
@@ -116,8 +202,14 @@
     "type": "selects",
     "val": "overlay",
     "items": [
-      { "key": "overlay", "label": "HUD 气泡字幕覆盖 (保留原画质/极轻量)" },
-      { "key": "inpaint", "label": "AI 抹字重绘整图 (仅自建服务支持)" }
+      {
+        "key": "overlay",
+        "label": "HUD 气泡字幕覆盖 (保留原画质/极轻量)"
+      },
+      {
+        "key": "inpaint",
+        "label": "AI 抹字重绘整图 (仅自建服务支持)"
+      }
     ],
     "desc": "HUD 模式不修改原图，在对白上方无感覆盖中文字幕；整图模式需自建重绘后端。"
   },
@@ -157,27 +249,6 @@
     "desc": "OpenAI 官方或中转接口地址。"
   },
   {
-    "id": "@Pixiv.Enhanced.Settings.Auth.MsKey",
-    "name": "[密钥] 微软 Azure 翻译 Key",
-    "type": "text",
-    "val": "",
-    "desc": "填写微软认知服务 Translation API Key。"
-  },
-  {
-    "id": "@Pixiv.Enhanced.Settings.Auth.BaiduAppid",
-    "name": "[密钥] 百度翻译 AppID",
-    "type": "text",
-    "val": "",
-    "desc": "百度翻译开放平台申请的 AppID。"
-  },
-  {
-    "id": "@Pixiv.Enhanced.Settings.Auth.BaiduSecret",
-    "name": "[密钥] 百度翻译密钥 (Secret)",
-    "type": "text",
-    "val": "",
-    "desc": "百度翻译开放平台分配的应用密钥。"
-  },
-  {
     "id": "@Pixiv.Enhanced.Settings.Manga.ServerUrl",
     "name": "[服务] 自建漫画重绘服务 URL",
     "type": "text",
@@ -190,10 +261,22 @@
     "type": "selects",
     "val": "WARN",
     "items": [
-      { "key": "OFF", "label": "关闭" },
-      { "key": "WARN", "label": "⚠️ 警告与错误 (推荐)" },
-      { "key": "INFO", "label": "ℹ️ 基础信息" },
-      { "key": "DEBUG", "label": "🐞 详细调试 (含耗时)" }
+      {
+        "key": "OFF",
+        "label": "关闭"
+      },
+      {
+        "key": "WARN",
+        "label": "⚠️ 警告与错误 (推荐)"
+      },
+      {
+        "key": "INFO",
+        "label": "ℹ️ 基础信息"
+      },
+      {
+        "key": "DEBUG",
+        "label": "🐞 详细调试 (含耗时)"
+      }
     ],
     "desc": "控制 Loon 脚本日志的详细程度。"
   }
