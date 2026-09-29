@@ -42,6 +42,9 @@ function loadConfig() {
   const rawScopes = getSetting("@Pixiv.Enhanced.Settings.Auto.Scopes", ["illust_title", "illust_caption", "tags", "comments", "user_profile", "novels", "spotlight"]);
   const scopes = Array.isArray(rawScopes) ? rawScopes : (typeof rawScopes === "string" ? rawScopes.split(",") : []);
   if (!scopes.includes("illust_title")) scopes.push("illust_title");
+  const skipChinese = getSetting("@Pixiv.Enhanced.Settings.Filter.SkipChinese", true);
+  const novelFont = getSetting("@Pixiv.Enhanced.Settings.Novel.Font", "system");
+  const novelCleanDisclaimer = getSetting("@Pixiv.Enhanced.Settings.Novel.CleanDisclaimer", true);
   const translator = (getSetting("@Pixiv.Enhanced.Settings.Translator.Source", "google") || "google").toLowerCase();
   const targetLang = getSetting("@Pixiv.Enhanced.Settings.Target.Lang", "zh-CN") || "zh-CN";
   const tagOfflineOnly = getSetting("@Pixiv.Enhanced.Settings.Tag.OfflineOnly", true);
@@ -67,6 +70,9 @@ function loadConfig() {
     globalSwitch,
     autoSwitch,
     scopes,
+    skipChinese,
+    novelFont,
+    novelCleanDisclaimer,
     translator,
     targetLang,
     tagOfflineOnly,
@@ -321,6 +327,11 @@ async function translateBatch(texts, cfg) {
   for (let i = 0; i < texts.length; i++) {
     const original = texts[i];
     if (!original || !hasKanjiOrKana(original)) {
+      results[i] = original;
+      continue;
+    }
+    // 智能豁免纯中文：若开启豁免，且内容不含任何日文假名与韩文，且不是日文高频Tag，直接作为中文跳过
+    if (cfg.skipChinese && !isJapanese(original) && !/[가-힯]/.test(original) && !PIXIV_TAG_DICT[original]) {
       results[i] = original;
       continue;
     }
@@ -623,7 +634,7 @@ const INJECT_CSS = `
 #px-fab.px-busy { opacity: 0.55; }
 #px-fab.px-done { background: #34c759 !important; }
 
-/* 纯净小说排版 (100% 严格继承 Pixiv 原版字号、字体与颜色) */
+/* 纯净小说排版 (100% 严格继承 Pixiv 原版字号、字体与颜色，并支持自定义字体) */
 .pxtc-reader {
   max-width: 720px;
   margin: 0 auto;
@@ -633,6 +644,15 @@ const INJECT_CSS = `
   font-family: inherit;
   font-size: inherit;
   line-height: 1.8;
+}
+.pxtc-reader.font-songti, .pxtc-reader.font-songti .pxtc-para {
+  font-family: "Songti SC", "STSong", "SimSun", "Noto Serif CJK SC", serif !important;
+}
+.pxtc-reader.font-kaiti, .pxtc-reader.font-kaiti .pxtc-para {
+  font-family: "Kaiti SC", "STKaiti", "KaiTi", "DFKai-SB", serif !important;
+}
+.pxtc-reader.font-yuanti, .pxtc-reader.font-yuanti .pxtc-para {
+  font-family: "Yuanti SC", "STYuanti", "PingFang SC", sans-serif !important;
 }
 .pxtc-para {
   margin: 6px 0;
@@ -668,6 +688,7 @@ function clientRuntime() {
   (function () {
     var CFG = "__CONFIG_PLACEHOLDER__";
     var autoSwitch = CFG && typeof CFG === "object" ? !!CFG.autoSwitch : true;
+    var cleanDisclaimer = CFG && typeof CFG === "object" ? !!CFG.novelCleanDisclaimer : true;
 
     var root = null;
     var reader = null;
@@ -790,7 +811,8 @@ function clientRuntime() {
       if (!root) return false;
       originalDisplay = root.style.display || "";
       reader = document.createElement("div");
-      reader.className = "pxtc-reader";
+      var fontCls = (CFG && CFG.novelFont && CFG.novelFont !== "system") ? " font-" + CFG.novelFont : "";
+      reader.className = "pxtc-reader" + fontCls;
       var bodyStyle = window.getComputedStyle(document.body);
       var rootStyle = window.getComputedStyle(root);
       var pageBg = bodyStyle.backgroundColor || rootStyle.backgroundColor;
@@ -887,13 +909,29 @@ function clientRuntime() {
       for (var w = 0; w < concurrency; w++) workers.push(worker());
       await Promise.all(workers);
 
-      // 生成纯净小说正文 (无多余生硬标题，专注小说沉浸式阅读)
+      // 规约/免责/授权声明智能识别过滤函数
+      function isDisclaimer(str) {
+        if (!str || typeof str !== "string") return false;
+        var s = str.trim();
+        if (/^[・※*#\-—_~～\s]{2,}$/.test(s)) return true;
+        if (/^(?:https?:\/\/|\b(?:fanbox|booth|twitter|x\.com)\b)/i.test(s)) return true;
+        if (/^[・※*]/.test(s) && (s.includes("脚本") || s.includes("台本") || s.includes("商用") || s.includes("转载") || s.includes("责任") || s.includes("作者") || s.includes("URL") || s.includes("DM") || s.includes("费用") || s.includes("更改") || s.includes("改编"))) {
+          return true;
+        }
+        if (/(?:免费脚本|免费台本|商用利用|商业用途|未经许可不得转载|禁止转载|无断转载|自作发言|自作発言|不承担任何责任|责任自负|请注明作者|情景语音|台本使用|使用规约|使用規約|使用规则|不收取任何费用|自由更改|更改对话)/i.test(s)) {
+          return true;
+        }
+        return false;
+      }
+
+      // 生成纯净小说正文 (无多余生硬标题，自动净化规约，专注沉浸式阅读)
       var html = "";
       for (var i = 0; i < allTranslations.length; i++) {
         var group = allTranslations[i] || batches[i];
         for (var j = 0; j < group.length; j++) {
           var p = String(group[j] || "").trim();
           if (p) {
+            if (cleanDisclaimer && isDisclaimer(p)) continue;
             html += '<p class="pxtc-para">' + esc(p).replace(/\n/g, "<br>") + '</p>';
           }
         }
@@ -962,7 +1000,9 @@ function handleWebviewInject(cfg) {
   if (!body) { $done({}); return; }
   const clientConfig = {
     autoSwitch: cfg ? !!cfg.autoSwitch : true,
-    targetLang: cfg ? cfg.targetLang : "zh-CN"
+    targetLang: cfg ? cfg.targetLang : "zh-CN",
+    novelFont: cfg ? (cfg.novelFont || "system") : "system",
+    novelCleanDisclaimer: cfg ? !!cfg.novelCleanDisclaimer : true
   };
   const clientCode = clientRuntime.toString()
     .replace('"__CONFIG_PLACEHOLDER__"', JSON.stringify(clientConfig))

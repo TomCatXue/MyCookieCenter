@@ -11,7 +11,7 @@
     "name": "[自动] 默认自动翻译",
     "type": "boolean",
     "val": true,
-    "desc": "开启后，浏览插画详情、评论区、画师主页时自动完成汉化呈现，无需手动点击。"
+    "desc": "开启后，浏览首页推荐、插画详情、评论区、小说与画师主页时自动完成汉化呈现，无需手动点击。"
   },
   {
     "id": "@Pixiv.Enhanced.Settings.Auto.Scopes",
@@ -19,10 +19,10 @@
     "type": "checkboxes",
     "val": ["illust_title", "illust_caption", "tags", "comments", "user_profile", "novels", "spotlight"],
     "items": [
-      { "key": "illust_title", "label": "作品标题" },
-      { "key": "illust_caption", "label": "作品简介/描述 (详情页)" },
+      { "key": "illust_title", "label": "作品标题 (首页/列表/详情)" },
+      { "key": "illust_caption", "label": "作品简介/描述 (就地汉化无弹窗)" },
       { "key": "tags", "label": "日文标签 (Tag 离线秒翻)" },
-      { "key": "comments", "label": "评论区留言与楼中楼" },
+      { "key": "comments", "label": "评论区留言与楼中楼 (全语种)" },
       { "key": "user_profile", "label": "画师个人简介/留言" },
       { "key": "novels", "label": "小说列表及阅读正文" },
       { "key": "spotlight", "label": "特辑文章 (Pixivision)" }
@@ -30,12 +30,39 @@
     "desc": "勾选需要进行汉化翻译的界面模块。"
   },
   {
+    "id": "@Pixiv.Enhanced.Settings.Filter.SkipChinese",
+    "name": "[过滤] 智能跳过纯中文内容",
+    "type": "boolean",
+    "val": true,
+    "desc": "若内容本身为中文则自动跳过翻译，节省 API 配额并消除处理延迟。"
+  },
+  {
+    "id": "@Pixiv.Enhanced.Settings.Novel.Font",
+    "name": "[小说] 阅读排版字体",
+    "type": "selects",
+    "val": "system",
+    "items": [
+      { "key": "system", "label": "系统默认 (苹方 PingFang)" },
+      { "key": "songti", "label": "经典宋体 (纸书质感 / 严肃文学)" },
+      { "key": "kaiti", "label": "优美楷体 (古雅风格 / 同人)" },
+      { "key": "yuanti", "label": "柔和圆体 (轻松温和 / 亲和)" }
+    ],
+    "desc": "对标 Pix-Scripting 高级小说排版规范，选择汉化正文的字体风格。"
+  },
+  {
+    "id": "@Pixiv.Enhanced.Settings.Novel.CleanDisclaimer",
+    "name": "[小说] 自动净化作者免责声明",
+    "type": "boolean",
+    "val": true,
+    "desc": "自动过滤日文小说正文中的商用规约、无断转载禁止、台词使用声明等杂乱文本，呈现纯粹小说正文。"
+  },
+  {
     "id": "@Pixiv.Enhanced.Settings.Translator.Source",
     "name": "[文本] 翻译引擎切换",
     "type": "selects",
     "val": "google",
     "items": [
-      { "key": "google", "label": "Google 免费批量 (极速/免配置)" },
+      { "key": "google", "label": "Google 免费切片并发 (极速/免配置)" },
       { "key": "deepseek", "label": "DeepSeek AI (文学润色/需Key)" },
       { "key": "microsoft", "label": "微软 Azure 翻译 (需Key)" },
       { "key": "baidu", "label": "百度通用翻译 (需AppID/Secret)" },
@@ -62,14 +89,14 @@
     "name": "[性能] 标签优先使用离线词典",
     "type": "boolean",
     "val": true,
-    "desc": "启用内置 2500+ 高频 Pixiv 标签离线映射库，0 网络延迟，极速秒翻。"
+    "desc": "启用内置 2500+ 高频 Pixiv 标签离线映射库，0 网络延迟，极速秒翻且副标题自动净空。"
   },
   {
     "id": "@Pixiv.Enhanced.Settings.Image.Switch",
     "name": "[漫翻] 启用图片/漫画 AI 翻译",
     "type": "boolean",
     "val": true,
-    "desc": "在漫画阅读与插画大图上挂载原生毛玻璃「文/A」翻译按钮。"
+    "desc": "在漫画阅读与插画大图上支持 AI 视觉多模态气泡翻译。"
   },
   {
     "id": "@Pixiv.Enhanced.Settings.Image.Engine",
