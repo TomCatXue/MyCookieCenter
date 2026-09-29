@@ -2,26 +2,13 @@
 # -*- coding: utf-8 -*-
 """
 ===================================================================
-📌 版本: v2.5.0 (2026-09-28 异步连接池预热/黄金发包窗口重构/容错补发加固版)
+📌 版本: v2.6.0 (抗频控限流优化 / 阶梯平滑秒杀 / 超时防雪崩版)
 中国电信 · 0点等级会员权益兑换（每日限量102份·高并发秒杀脚本）
 ===================================================================
 new Env('中国电信 · 0点等级权益兑换');
 cron: 59 23 * * *
 tag: 中国电信
 # @tag 中国电信
-===================================================================
-业务规则与抗脱水机制：
-  1. 业务规则：每日 00:00 准点开抢，每日限量 102 份，每号每月限领 1 次。未抢到天天抢，抢到自动休眠至下月。
-  2. 调度提权（Anti-Freeze）：启动时自动调用 os.nice(-20) 与 mlockall，锁定 CPU 最高优先级与物理内存，
-     彻底免疫 00:00 零点面板批量拉起其他定时任务导致的 CPU 饥饿与内存 Swap 换出脱水。
-  3. 毫秒级自旋微循环（Spin-lock）：目标前 1.2 秒由休眠切换为高频微循环自旋，牢牢锚定 CPU 时间片，
-     确保在 23:59:59.900 毫秒级准点打出突发包。
-  4. 漂移安全熔断：若宿主机休眠断电导致唤醒时间严重偏离（超过 30 秒），判定凭证已超时失效，立即安全熔断，
-     杜绝携带过期凭证盲目冲击接口招致 401 报错。
-
-环境变量配置：
-  dxqy (或 dxlin) : 手机号#服务密码#AndroidID (亦兼容四段式 SessionKey)
-  多账号换行或使用 & 分隔。
 ===================================================================
 """
 
@@ -67,12 +54,13 @@ from Crypto.PublicKey import RSA
 from Crypto.Cipher import PKCS1_v1_5
 from Crypto.Util.Padding import pad, unpad
 from concurrent.futures import ThreadPoolExecutor, wait
+
 # ==================== 🛠️ 脚本功能开关配置 ====================
 CONFIG = {
     "FORCE_RUN": False,         # 平日测试模式: False=仅夜间23:55~23:59准备并抢购; True=平时任何时间均可运行全链路测试
-    "INADVANCE": -75,           # 提前75毫秒首发抢购（精准对冲70~80ms单向网络传输延迟，使首发包准点在00:00:00.000触达网关）
-    "COUNT_PER_ACCOUNT": 5,     # 每个账号并发抢购数 (恢复为5次，充分覆盖秒杀黄金窗口)
-    "INTERVAL_MS": 35,          # 并发请求微间隔(毫秒，35ms微间隔，5发覆盖-75ms至+65ms黄金秒杀带)
+    "INADVANCE": -55,           # 提前55毫秒首发（平衡网关处理延迟与避免提前过早撞墙）
+    "COUNT_PER_ACCOUNT": 3,     # 每个账号并发抢购数 (降低至3次，避免激进并发直接触发网关429/操作频繁)
+    "INTERVAL_MS": 130,         # 并发请求微间隔(拉大至130ms，覆盖-55ms、+75ms、+205ms，彻底规避高频封禁)
     "ENABLE_RUISHU": False,     # 瑞数安全Cookie开关
     "CLAIMED_LOG_FILE": "claimed_accounts.json",
     "ENABLE_MULTI_RIGHTS": False,   # 多权益并发领取: False=仅抢 rightsList[0] 默认权益; True=对接口返回的每个权益独立并发领取
@@ -85,19 +73,7 @@ try:
 except ImportError:
     ql_send = None
 
-
-
-# ============================================================
-# 推送内容类型（呆呆面板支持：text / markdown / html）
-# 用 markdown 以便 Telegram 类渠道按 MarkdownV2 渲染
-# ============================================================
-
 PUSH_CONTENT_TYPE = "markdown"
-
-
-# ============================================================
-# 呆呆面板默认通知模块（不在面板环境时自动跳过）
-# ============================================================
 
 try:
     from notify import send as daidai_send
@@ -105,7 +81,6 @@ try:
 except ImportError:
     _HAS_DAIDAI_NOTIFY = False
     daidai_send = None
-
 
 # ============================================================
 # 基础设置和辅助函数
@@ -133,10 +108,7 @@ requests.packages.urllib3.disable_warnings()
 
 
 def boost_process_priority():
-    """
-    提升当前进程调度优先级并锁定内存，防止 Linux 内核在 00:00 因面板高并发起多任务而产生 CPU 饥饿与 Swap 换出脱水。
-    """
-    # 1. 提升 CPU 调度优先级 (Linux nice -20，最高优先级)
+    """提升当前进程调度优先级并锁定物理内存"""
     try:
         os.nice(-20)
     except Exception:
@@ -145,7 +117,6 @@ def boost_process_priority():
         except Exception:
             pass
 
-    # 2. 尝试物理内存锁定 (防止零点内存抖动时被 Linux 换出到 Swap 分区)
     try:
         import ctypes
         libc = ctypes.CDLL("libc.so.6")
@@ -160,10 +131,7 @@ def printn(m):
 
 
 def _md_esc(text):
-    """转义 Telegram MarkdownV2 特殊字符。
-
-    特殊字符集合：_ * [ ] ( ) ~ ` > # + - = | { } . !
-    """
+    """转义 Telegram MarkdownV2 特殊字符"""
     if text is None:
         return ''
     s = str(text)
@@ -178,11 +146,9 @@ def _md_esc(text):
 key = b'1234567`90koiuyhgtfrdews'
 iv = 8 * b'\0'
 
-
 public_key_b64 = '''-----BEGIN PUBLIC KEY-----
 MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDBkLT15ThVgz6/NOl6s8GNPofdWzWbCkWnkaAm7O2LjkM1H7dMvzkiqdxU02jamGRHLX/ZNMCXHnPcW/sDhiFCBN18qFvy8g6VYb9QtroI09e176s+ZCtiv7hbin2cCTj99iUpnEloZm19lwHyo69u5UMiPMpq0/XKBO8lYhN/gwIDAQAB
 -----END PUBLIC KEY-----'''
-
 
 public_key_data = '''-----BEGIN PUBLIC KEY-----
 MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQC+ugG5A8cZ3FqUKDwM57GM4io6JGcStivT8UdGt67PEOihLZTw3P7371+N47PrmsCpnTRzbTgcupKtUv8ImZalYk65dU8rjC/ridwhw9ffW2LBwvkEnDkkKKRi2liWIItDftJVBiWOh17o6gfbPoNrWORcAdcbpk2L+udld5kZNwIDAQAB
@@ -269,8 +235,6 @@ def get_ruishu_cookies():
 
 def send_pushplus_notification(token, title, content):
     """优先使用呆呆面板默认通知；不在面板环境时回退到 pushplus。"""
-
-    # ---------- 呆呆面板/青龙默认通知 ----------
     if _HAS_DAIDAI_NOTIFY:
         try:
             daidai_send(
@@ -292,16 +256,11 @@ def send_pushplus_notification(token, title, content):
             printn(f"❌ 呆呆面板推送失败: {e}")
             return
 
-    # ---------- 回退：pushplus ----------
     if not token:
-        printn(
-            "ℹ️ 未检测到呆呆面板 notify 模块，"
-            "也未配置 PUSH_PLUS_TOKEN，跳过推送。"
-        )
+        printn("ℹ️ 未检测到呆呆面板 notify 模块，也未配置 PUSH_PLUS_TOKEN，跳过推送。")
         return
 
     url = "http://www.pushplus.plus/send"
-
     payload = {
         "token": token,
         "title": title,
@@ -310,16 +269,11 @@ def send_pushplus_notification(token, title, content):
     }
 
     try:
-        response = requests.post(url, json=payload)
-
+        response = requests.post(url, json=payload, timeout=10)
         if response.json().get("code") == 200:
             printn("✅ PUSHPLUS 推送成功!")
         else:
-            printn(
-                f"❌ PUSHPLUS 推送失败: "
-                f"{response.json().get('msg')}"
-            )
-
+            printn(f"❌ PUSHPLUS 推送失败: {response.json().get('msg')}")
     except Exception as e:
         printn(f"💥 推送时发生异常: {e}")
 
@@ -329,50 +283,20 @@ def load_claimed_accounts(filename):
         if os.path.exists(filename):
             with open(filename, 'r') as f:
                 return json.load(f)
-
     except (json.JSONDecodeError, IOError):
         pass
-
     return {}
 
 
 def save_claimed_account(filename, phone, lock):
     with lock:
         claimed_data = load_claimed_accounts(filename)
-
         current_month = now_cn().strftime("%Y-%m")
-
         claimed_data[phone] = current_month
-
         with open(filename, 'w') as f:
-            json.dump(
-                claimed_data,
-                f,
-                indent=4
-            )
+            json.dump(claimed_data, f, indent=4)
 
 
-# ============================================================
-# 测试模式
-# ============================================================
-
-# True：
-#   直接运行脚本进入完整准备链路测试
-#
-# 测试链路：
-#   userLoginNormal
-#        ↓
-#      Ticket
-#        ↓
-#    ssoHomLogin
-#        ↓
-#     sign / accId
-#        ↓
-# queryLevelRightInfo
-#        ↓
-#      权益ID
-#        ↓
-# receiverRights 诊断（仅一次）
 test_only = False
 
 
@@ -383,7 +307,6 @@ test_only = False
 def get_ticket(phone, userId, token, ss):
     try:
         timestamp = now_cn().strftime("%Y%m%d%H%M%S")
-
         enc_target = encrypt_des3(userId)
 
         data = (
@@ -424,79 +347,38 @@ def get_ticket(phone, userId, token, ss):
         )
 
         if r.status_code != 200:
-            printn(
-                f"❌ 【{phone}】get_ticket HTTP 状态码异常: "
-                f"{r.status_code}"
-            )
+            printn(f"❌ 【{phone}】get_ticket HTTP 状态码异常: {r.status_code}")
             return False
 
-        tk = re.findall(
-            r'<Ticket>(.*?)</Ticket>',
-            r.text,
-            flags=re.S
-        )
-
+        tk = re.findall(r'<Ticket>(.*?)</Ticket>', r.text, flags=re.S)
         if tk and tk[0].strip():
             try:
                 return decrypt_des3(tk[0].strip())
-
             except Exception as e:
-                printn(
-                    f"❌ 【{phone}】Ticket 解密失败: {e} "
-                    f"(响应: {r.text[:300]})"
-                )
+                printn(f"❌ 【{phone}】Ticket 解密失败: {e} (响应: {r.text[:300]})")
                 return False
 
-        reason = re.findall(
-            r'<Reason>(.*?)</Reason>',
-            r.text,
-            flags=re.S
-        )
-
-        desc = re.findall(
-            r'<ResultDesc>(.*?)</ResultDesc>',
-            r.text,
-            flags=re.S
-        )
-
-        result_code = re.findall(
-            r'<ResultCode>(.*?)</ResultCode>',
-            r.text,
-            flags=re.S
-        )
-
-        attach = re.findall(
-            r'<Attach>(.*?)</Attach>',
-            r.text,
-            flags=re.S
-        )
+        reason = re.findall(r'<Reason>(.*?)</Reason>', r.text, flags=re.S)
+        desc = re.findall(r'<ResultDesc>(.*?)</ResultDesc>', r.text, flags=re.S)
+        result_code = re.findall(r'<ResultCode>(.*?)</ResultCode>', r.text, flags=re.S)
+        attach = re.findall(r'<Attach>(.*?)</Attach>', r.text, flags=re.S)
 
         err_msg = (
-            desc[0].strip()
-            if desc and desc[0].strip()
-            else (
-                reason[0].strip()
-                if reason and reason[0].strip()
-                else '未返回Ticket'
-            )
+            desc[0].strip() if desc and desc[0].strip()
+            else (reason[0].strip() if reason and reason[0].strip() else '未返回Ticket')
         )
 
         printn(
             f"❌ 【{phone}】换取Ticket失败: {err_msg} "
             f"| HTTP={r.status_code} "
-            f"| ResultCode="
-            f"{result_code[0].strip() if result_code else ''} "
-            f"| Attach="
-            f"{attach[0].strip() if attach else ''} "
+            f"| ResultCode={result_code[0].strip() if result_code else ''} "
+            f"| Attach={attach[0].strip() if attach else ''} "
             f"| 完整响应: {r.text[:1000]}"
         )
-
         return False
 
     except Exception as e:
-        printn(
-            f"💥 【{phone}】get_ticket 发生异常: {e}"
-        )
+        printn(f"💥 【{phone}】get_ticket 发生异常: {e}")
         return False
 
 
@@ -506,10 +388,7 @@ def get_ticket(phone, userId, token, ss):
 
 def userLoginNormal(phone, password, android_id, ss):
     try:
-        timestamp = now_cn().strftime(
-            "%Y%m%d%H%M%S"
-        )
-
+        timestamp = now_cn().strftime("%Y%m%d%H%M%S")
         loginAuthCipherAsymmertric = (
             'Xiaomi 20 8.0.0.'
             + android_id[:12]
@@ -519,10 +398,7 @@ def userLoginNormal(phone, password, android_id, ss):
             + '0$$$0.'
         )
 
-        login_url = (
-            'https://appgologin.189.cn:9031/'
-            'login/client/userLoginNormal'
-        )
+        login_url = 'https://appgologin.189.cn:9031/login/client/userLoginNormal'
 
         response = ss.post(
             login_url,
@@ -546,10 +422,7 @@ def userLoginNormal(phone, password, android_id, ss):
                     "fieldData": {
                         "loginType": "4",
                         "accountType": "",
-                        "loginAuthCipherAsymmertric":
-                            b64_encrypt_rsa(
-                                loginAuthCipherAsymmertric
-                            ),
+                        "loginAuthCipherAsymmertric": b64_encrypt_rsa(loginAuthCipherAsymmertric),
                         "deviceUid": "",
                         "phoneNum": encode_phone(phone),
                         "isChinatelecom": "0",
@@ -563,80 +436,35 @@ def userLoginNormal(phone, password, android_id, ss):
         )
 
         if response.status_code != 200:
-            printn(
-                f"❌【{phone}】登录请求状态码异常: "
-                f"{response.status_code}，"
-                f"响应内容: {response.text[:200]}"
-            )
+            printn(f"❌【{phone}】登录请求状态码异常: {response.status_code}，响应内容: {response.text[:200]}")
             return False
 
         try:
             r = response.json()
-
         except json.JSONDecodeError:
-            printn(
-                f"❌【{phone}】登录响应解析失败，"
-                f"响应内容: {response.text[:200]}"
-            )
+            printn(f"❌【{phone}】登录响应解析失败，响应内容: {response.text[:200]}")
             return False
 
         resp_data = r.get('responseData') or {}
-
         result_code = resp_data.get('resultCode')
-
-        result_desc = (
-            resp_data.get('resultDesc')
-            or r.get('headerInfos', {}).get(
-                'reason',
-                '未知原因'
-            )
-        )
-
+        result_desc = resp_data.get('resultDesc') or r.get('headerInfos', {}).get('reason', '未知原因')
         data = resp_data.get('data')
 
-        login_result = (
-            data.get('loginSuccessResult')
-            if isinstance(data, dict)
-            else None
-        )
+        login_result = data.get('loginSuccessResult') if isinstance(data, dict) else None
 
-        if (
-            login_result
-            and 'userId' in login_result
-            and 'token' in login_result
-        ):
-
-            ticket = get_ticket(
-                phone,
-                login_result['userId'],
-                login_result['token'],
-                ss
-            )
-
+        if login_result and 'userId' in login_result and 'token' in login_result:
+            ticket = get_ticket(phone, login_result['userId'], login_result['token'], ss)
             if ticket:
                 if debug:
-                    printn(
-                        f'✔️【{phone}】获取ticket成功: '
-                        f'{ticket[:15]}...'
-                    )
-
+                    printn(f'✔️【{phone}】获取ticket成功: {ticket[:15]}...')
                 return ticket
 
-        printn(
-            f"❌【{phone}】登录未通过: "
-            f"[{result_code}] {result_desc} "
-            f"(完整响应: {r})"
-        )
-
+        printn(f"❌【{phone}】登录未通过: [{result_code}] {result_desc} (完整响应: {r})")
         return False
 
     except Exception as e:
-        printn(
-            f"💥【{phone}】登录时发生未知异常: {e}"
-        )
-
+        printn(f"💥【{phone}】登录时发生未知异常: {e}")
         traceback.print_exc()
-
         return False
 
 
@@ -651,40 +479,25 @@ def getSign(ticket, session, rs_cookies):
             cookies=rs_cookies,
             headers={
                 'User-Agent':
-                    "Mozilla/5.0 (Linux; Android 13; "
-                    "22081212C Build/TKQ1.220829.002) "
-                    "AppleWebKit/537.36 "
-                    "(KHTML, like Gecko) "
-                    "Chrome/104.0.5112.97 "
-                    "Mobile Safari/537.36"
-            }
+                    "Mozilla/5.0 (Linux; Android 13; 22081212C Build/TKQ1.220829.002) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/104.0.5112.97 Mobile Safari/537.36"
+            },
+            timeout=15
         )
 
         try:
             json_data = response.json()
-
         except (json.JSONDecodeError, ValueError):
             json_data = {}
 
         if json_data.get('resoultCode') == '0':
-
-            return (
-                json_data.get('sign'),
-                json_data.get('accId')
-            )
-
+            return json_data.get('sign'), json_data.get('accId')
         else:
-            print(
-                f"❌ 获取sign失败: {json_data}"
-            )
-
+            print(f"❌ 获取sign失败: {json_data}")
             return None, None
 
     except Exception as e:
-        print(
-            f"❌ getSign 异常: {e}"
-        )
-
+        print(f"❌ getSign 异常: {e}")
         return None, None
 
 
@@ -705,40 +518,25 @@ def getLevelRightsList(phone, accId, session):
 
         response = session.post(
             'https://wappark.189.cn/jt-sign/paradise/queryLevelRightInfo',
-            json={"para": paraV}
+            json={"para": paraV},
+            timeout=15
         )
 
         try:
             data = response.json()
-
         except (json.JSONDecodeError, ValueError):
             data = {}
 
-        if (
-            data.get('code') == 401
-            or (
-                data.get('resoultCode') != '0'
-                and 'currentLevel' not in data
-            )
-        ):
-
-            printn(
-                f"❌ 【{phone}】获取权益列表失败: {data}"
-            )
-
+        if data.get('code') == 401 or (data.get('resoultCode') != '0' and 'currentLevel' not in data):
+            printn(f"❌ 【{phone}】获取权益列表失败: {data}")
             return None
 
         level = data.get('currentLevel')
-
         if level is None:
-            printn(
-                f"❌ 【{phone}】响应中缺少会员等级: {data}"
-            )
-
+            printn(f"❌ 【{phone}】响应中缺少会员等级: {data}")
             return None
 
         key_name = f"V{level}"
-
         rights = []
         for item in data.get(key_name, []):
             title = item.get('title', '')
@@ -753,10 +551,7 @@ def getLevelRightsList(phone, accId, session):
         return rights
 
     except Exception as e:
-        print(
-            f"❌ getLevelRightsList 异常: {e}"
-        )
-
+        print(f"❌ getLevelRightsList 异常: {e}")
         return None
 
 
@@ -764,17 +559,8 @@ def getLevelRightsList(phone, accId, session):
 # receiverRights 最终接口诊断
 # ============================================================
 
-def diagnose_receiver_rights(
-    phone,
-    rightsId,
-    accId,
-    sign,
-    session,
-    rs_cookies
-):
-    printn(
-        f'🧪【{phone}】开始诊断 receiverRights 接口...'
-    )
+def diagnose_receiver_rights(phone, rightsId, accId, sign, session, rs_cookies):
+    printn(f'🧪【{phone}】开始诊断 receiverRights 接口...')
 
     value = {
         "id": rightsId,
@@ -786,31 +572,15 @@ def diagnose_receiver_rights(
 
     try:
         paraV = encrypt_para_rsa_new(value)
-
         headers = {
             "sign": sign,
-            "Referer":
-                "https://wappark.189.cn/resources/dist/"
-                "signInActivity.html",
+            "Referer": "https://wappark.189.cn/resources/dist/signInActivity.html",
             "User-Agent":
-                "Mozilla/5.0 (Linux; Android 13; "
-                "22081212C Build/TKQ1.220829.002) "
-                "AppleWebKit/537.36 "
-                "(KHTML, like Gecko) "
-                "Chrome/104.0.5112.97 "
-                "Mobile Safari/537.36"
+                "Mozilla/5.0 (Linux; Android 13; 22081212C Build/TKQ1.220829.002) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/104.0.5112.97 Mobile Safari/537.36"
         }
 
-        url = (
-            "https://wappark.189.cn/"
-            "jt-sign/paradise/receiverRights"
-        )
-
-        printn(f'   请求地址: {url}')
-        printn(f'   rightsId: {rightsId}')
-        printn(f'   accId: {accId}')
-        printn(f'   sign: {str(sign)[:20]}...')
-        printn(f'   para长度: {len(paraV)}')
+        url = "https://wappark.189.cn/jt-sign/paradise/receiverRights"
 
         response = session.post(
             url,
@@ -821,87 +591,22 @@ def diagnose_receiver_rights(
             timeout=15
         )
 
-        printn(
-            f'📡【{phone}】HTTP状态码: '
-            f'{response.status_code}'
-        )
-
-        printn(
-            f'📡【{phone}】Content-Type: '
-            f'{response.headers.get("Content-Type", "")}'
-        )
-
+        printn(f'📡【{phone}】HTTP状态码: {response.status_code}')
         text = response.text.strip()
 
         if not text:
-            printn(
-                f'⚠️【{phone}】服务器返回空响应'
-            )
-            return {
-                "status": "EMPTY",
-                "http_status": response.status_code,
-                "text": ""
-            }
+            return {"status": "EMPTY", "http_status": response.status_code, "text": ""}
 
         try:
             data = response.json()
-
-            printn(
-                f'📨【{phone}】服务器JSON响应:'
-            )
-            print(
-                json.dumps(
-                    data,
-                    ensure_ascii=False,
-                    indent=2
-                )
-            )
-
-            return {
-                "status": "JSON",
-                "http_status": response.status_code,
-                "data": data
-            }
-
+            return {"status": "JSON", "http_status": response.status_code, "data": data}
         except (json.JSONDecodeError, ValueError):
-            printn(
-                f'📨【{phone}】服务器非JSON响应:'
-            )
-            print(text[:2000])
-
-            return {
-                "status": "TEXT",
-                "http_status": response.status_code,
-                "text": text[:2000]
-            }
+            return {"status": "TEXT", "http_status": response.status_code, "text": text[:2000]}
 
     except requests.exceptions.Timeout:
-        printn(
-            f'⏰【{phone}】receiverRights 请求超时'
-        )
-        return {
-            "status": "TIMEOUT"
-        }
-
-    except requests.exceptions.RequestException as e:
-        printn(
-            f'❌【{phone}】receiverRights 网络异常: '
-            f'{type(e).__name__}: {e}'
-        )
-        return {
-            "status": "REQUEST_ERROR",
-            "message": str(e)
-        }
-
+        return {"status": "TIMEOUT"}
     except Exception as e:
-        printn(
-            f'💥【{phone}】receiverRights 诊断异常: '
-            f'{type(e).__name__}: {e}'
-        )
-        return {
-            "status": "ERROR",
-            "message": str(e)
-        }
+        return {"status": "ERROR", "message": str(e)}
 
 
 # ============================================================
@@ -909,7 +614,6 @@ def diagnose_receiver_rights(
 # ============================================================
 
 def _record_stat(stat_dict, key):
-    """线程/协程安全的权益统计自增（单协程内顺序执行，无需额外锁）。"""
     if stat_dict is None:
         return
     stat_dict[key] = stat_dict.get(key, 0) + 1
@@ -938,13 +642,7 @@ async def async_staggered_burst_worker(
     rights_stat=None,
     cached_para=None
 ):
-
-    fire_time = (
-        base_target_time
-        + datetime.timedelta(
-            milliseconds=(interval * task_index)
-        )
-    )
+    fire_time = base_target_time + datetime.timedelta(milliseconds=(interval * task_index))
 
     if not debug:
         # 1. 粗粒度异步休眠（休眠至目标时间前 1.5 秒）
@@ -952,7 +650,7 @@ async def async_staggered_burst_worker(
         if wait_seconds > 1.5:
             await asyncio.sleep(wait_seconds - 1.2)
 
-        # 2. 毫秒级自旋微循环（最后 1.2 秒紧锁 CPU，防止被内核 CFS 调度器挂起脱水）
+        # 2. 毫秒级自旋微循环
         while True:
             diff = (fire_time - now_cn()).total_seconds()
             if diff <= 0:
@@ -960,13 +658,10 @@ async def async_staggered_burst_worker(
             if diff > 0.05:
                 await asyncio.sleep(0.01)
 
-        # 3. 严重时钟漂移与容器脱水保护熔断（如果当前时间偏离目标超过 30 秒，判定系统此前发生严重脱水，凭证已过期，中止发送）
+        # 3. 严重时钟漂移保护
         drift = (now_cn() - fire_time).total_seconds()
         if drift > 30:
-            printn(
-                f"⚠️【{phone}】[任务{task_index}] 调度严重漂移 (+{drift:.1f}s)，"
-                f"检测到系统此前发生停滞脱水，凭证已过期失效，自动熔断安全退出。"
-            )
+            printn(f"⚠️【{phone}】[任务{task_index}] 调度严重漂移 (+{drift:.1f}s)，自动熔断退出。")
             with result_lock:
                 if phone not in result_log:
                     result_log[phone] = {
@@ -984,102 +679,57 @@ async def async_staggered_burst_worker(
     ):
         return
 
-    # 权益/任务维度标签（多权益模式下用于日志区分）
-    if rights_count > 1:
-        rights_tag = f"[权益{rights_index}][任务{task_index}]"
-    else:
-        rights_tag = f"[任务{task_index}]"
-
+    rights_tag = f"[权益{rights_index}][任务{task_index}]" if rights_count > 1 else f"[任务{task_index}]"
     if rights_stat is None:
         rights_stat = {}
 
-    # 安全默认值（避免异常分支引用未定义变量）
     request_time = now_cn().strftime('%H:%M:%S.%f')[:-3]
     request_perf = time.perf_counter()
 
     try:
-
-        if cached_para:
-            paraV = cached_para
-        else:
-            value = {
-                "id": rightsId,
-                "accId": accId,
-                "showType": "9003",
-                "showEffect": "8",
-                "czValue": "0"
-            }
-            paraV = encrypt_para_rsa_new(value)
+        paraV = cached_para if cached_para else encrypt_para_rsa_new({
+            "id": rightsId,
+            "accId": accId,
+            "showType": "9003",
+            "showEffect": "8",
+            "czValue": "0"
+        })
 
         headers = {
             "sign": sign,
-            "Referer":
-                "https://wappark.189.cn/resources/dist/"
-                "signInActivity.html",
+            "Referer": "https://wappark.189.cn/resources/dist/signInActivity.html",
             "User-Agent":
-                "Mozilla/5.0 (Linux; Android 13; "
-                "22081212C Build/TKQ1.220829.002) "
-                "AppleWebKit/537.36 "
-                "(KHTML, like Gecko) "
-                "Chrome/104.0.5112.97 "
-                "Mobile Safari/537.36"
+                "Mozilla/5.0 (Linux; Android 13; 22081212C Build/TKQ1.220829.002) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/104.0.5112.97 Mobile Safari/537.36"
         }
 
-        url = (
-            "https://wappark.189.cn/"
-            "jt-sign/paradise/receiverRights"
-        )
+        url = "https://wappark.189.cn/jt-sign/paradise/receiverRights"
 
-        # ---- 实际请求开始时间（HTTP 请求执行前记录） ----
-        request_time = (
-            now_cn()
-            .strftime('%H:%M:%S.%f')[:-3]
-        )
+        request_time = now_cn().strftime('%H:%M:%S.%f')[:-3]
         request_perf = time.perf_counter()
+        actual_drift_ms = (now_cn() - fire_time).total_seconds() * 1000
 
-        # 理论调度时间（fire_time）已在上方计算，此处换算偏差
-        actual_drift_ms = (
-            now_cn() - fire_time
-        ).total_seconds() * 1000
-
+        # 单次秒杀请求超时保护由 15s 降低至 5s，避免服务器挂起脱水拖垮全部协程
         async with session.post(
             url,
             json={"para": paraV},
             cookies=rs_cookies,
-            headers=headers
+            headers=headers,
+            timeout=aiohttp.ClientTimeout(total=5, connect=2.5)
         ) as response:
 
             http_status = response.status
-
-            # ---- 请求耗时 ----
-            elapsed_ms = (
-                time.perf_counter() - request_perf
-            ) * 1000
+            elapsed_ms = (time.perf_counter() - request_perf) * 1000
 
             text = ""
-
             try:
-                text = await response.text(
-                    encoding='utf-8',
-                    errors='replace'
-                )
-
+                text = await response.text(encoding='utf-8', errors='replace')
             except asyncio.TimeoutError:
-                printn(
-                    f"⏰【{phone}】@{request_time} "
-                    f"{rights_tag} 响应读取超时"
-                    f" | HTTP={http_status} | 耗时{elapsed_ms:.1f}ms"
-                )
-                _record_stat(
-                    rights_stat, 'timeout_count'
-                )
+                printn(f"⏰【{phone}】@{request_time} {rights_tag} 响应读取超时 | HTTP={http_status} | 耗时{elapsed_ms:.1f}ms")
+                _record_stat(rights_stat, 'timeout_count')
                 return
-
             except Exception as e:
-                text = (
-                    f"[响应读取异常: "
-                    f"{type(e).__name__} - {str(e)}]"
-                )
+                text = f"[响应读取异常: {type(e).__name__} - {str(e)}]"
 
             res_json = {}
             res_text = ""
@@ -1089,64 +739,34 @@ async def async_staggered_burst_worker(
 
             try:
                 clean_text = text.strip()
-
                 if clean_text.startswith('\ufeff'):
                     clean_text = clean_text[1:]
 
                 if clean_text:
                     res_json = json.loads(clean_text)
-                    res_text = json.dumps(
-                        res_json,
-                        ensure_ascii=False
-                    )
+                    res_text = json.dumps(res_json, ensure_ascii=False)
                     json_parsed = True
                 else:
                     res_text = "[空响应]"
-
-            except (
-                json.JSONDecodeError,
-                ValueError,
-                TypeError
-            ):
-                res_text = (
-                    f"非JSON响应: {text[:100]}"
-                )
+            except (json.JSONDecodeError, ValueError, TypeError):
+                res_text = f"非JSON响应: {text[:100]}"
 
             # ---- 状态分类 ----
             if not (200 <= http_status < 300):
-                # HTTP 非 2xx
                 status = "HTTP_ERROR"
-                status_msg = (
-                    f"HTTP {http_status}: {text[:200]}"
-                )
-
+                status_msg = f"HTTP {http_status}: {text[:200]}"
             elif res_text == "[空响应]":
                 status = "EMPTY"
                 status_msg = "响应为空"
-
             elif not json_parsed:
-                # 服务器有响应但非合法 JSON
                 status = "JSON_ERROR"
-                status_msg = (
-                    f"非JSON响应: {text[:200]}"
-                )
-
-            elif (
-                "已领完" in res_text
-                or "活动已结束" in res_text
-            ):
+                status_msg = f"非JSON响应: {text[:200]}"
+            elif "已领完" in res_text or "活动已结束" in res_text:
                 status = "SOLD_OUT"
                 status_msg = "已售罄/活动已结束"
-
-            elif (
-                "成功" in res_text
-                or "已领取过该权益" in res_text
-            ):
+            elif "成功" in res_text or "已领取过该权益" in res_text:
                 status = "SUCCESS"
-                status_msg = res_json.get(
-                    'resoultMsg', '成功/已领取'
-                )
-
+                status_msg = res_json.get('resoultMsg', '成功/已领取')
             elif (
                 "操作频繁" in res_text
                 or "请稍后再试" in res_text
@@ -1155,27 +775,17 @@ async def async_staggered_burst_worker(
             ):
                 status = "RATE_LIMIT"
                 status_msg = "操作频繁"
-
             elif "当前抢购人数过多" in res_text:
                 status = "CROWD"
                 status_msg = "人数过多"
-
             else:
                 status = "UNKNOWN"
-                status_msg = (
-                    res_text[:200]
-                    if res_text
-                    else "未知响应"
-                )
+                status_msg = res_text[:200] if res_text else "未知响应"
 
-            # ---- 统一打印请求诊断信息 ----
             printn(
-                f"📡【{phone}】@{request_time} "
-                f"{rights_tag} "
+                f"📡【{phone}】@{request_time} {rights_tag} "
                 f"理论:{fire_time.strftime('%H:%M:%S.%f')[:-3]} "
-                f"偏差:{actual_drift_ms:+.0f}ms "
-                f"HTTP:{http_status} 耗时:{elapsed_ms:.1f}ms "
-                f"状态:{status}"
+                f"偏差:{actual_drift_ms:+.0f}ms HTTP:{http_status} 耗时:{elapsed_ms:.1f}ms 状态:{status}"
             )
 
             # ---- 记录权益统计 ----
@@ -1202,84 +812,43 @@ async def async_staggered_burst_worker(
             elif status == 'UNKNOWN':
                 _record_stat(rights_stat, 'unknown_count')
 
-            # ---- 按状态处理 ----
+            # ---- 按状态流转 ----
             if status == 'SOLD_OUT':
-
-                printn(
-                    f"💨【{phone}】@{request_time} "
-                    f"{rights_tag} 已售罄! "
-                    f"停止当前权益后续请求。"
-                )
-
-                # 权益级停止：只停止当前权益
+                printn(f"💨【{phone}】@{request_time} {rights_tag} 已售罄! 停止后续请求。")
                 rights_stop_event.set()
-
-                # 单权益模式：保持账号级停止原语义
-                if rights_count <= 1:
-                    if not local_stop_event.is_set():
-                        local_stop_event.set()
+                if rights_count <= 1 and not local_stop_event.is_set():
+                    local_stop_event.set()
 
                 with result_lock:
-
-                    # 单权益模式：直接写账号级结果；多权益模式：由 run_async_bursts 末尾统一汇总
                     if rights_count <= 1:
-                        if (
-                            phone not in result_log
-                            or result_log.get(phone, {}).get(
-                                'status'
-                            ) != 'SUCCESS'
-                        ):
+                        if phone not in result_log or result_log.get(phone, {}).get('status') != 'SUCCESS':
                             result_log[phone] = {
                                 'status': 'SOLD_OUT',
                                 'message': '已售罄',
                                 'level': level,
                                 'amount': amount,
                             }
-
                     finished_count = len([
-                        r
-                        for r in result_log.values()
-                        if r.get('status')
-                        in ('SUCCESS', 'SOLD_OUT')
+                        r for r in result_log.values()
+                        if r.get('status') in ('SUCCESS', 'SOLD_OUT')
                     ])
-
-                    has_success = any(
-                        res.get('status') == 'SUCCESS'
-                        for res in result_log.values()
-                    )
-
+                    has_success = any(res.get('status') == 'SUCCESS' for res in result_log.values())
                     if (
                         rights_count <= 1
                         and not has_success
                         and finished_count == num_accounts_to_run
                         and not global_stop_event.is_set()
                     ):
-
                         global_stop_event.set()
-
-                        printn(
-                            "🛑【全局共识】"
-                            "所有账号均确认售罄或失败，"
-                            "触发全局停止信号！"
-                        )
+                        printn("🛑【全局共识】所有账号均确认售罄或失败，触发全局停止信号！")
 
             elif status == 'SUCCESS':
-
-                printn(
-                    f"🎉【{phone}】@{request_time} "
-                    f"{rights_tag} 成功或已领取!"
-                )
-
-                # 权益级停止：只停止当前权益，其他权益继续
+                printn(f"🎉【{phone}】@{request_time} {rights_tag} 成功或已领取!")
                 rights_stop_event.set()
-
-                # 单权益模式：保持账号级停止原语义
-                if rights_count <= 1:
-                    if not local_stop_event.is_set():
-                        local_stop_event.set()
+                if rights_count <= 1 and not local_stop_event.is_set():
+                    local_stop_event.set()
 
                 with result_lock:
-                    # 单权益模式：直接写账号级结果；多权益模式：由 run_async_bursts 末尾统一汇总
                     if rights_count <= 1:
                         result_log[phone] = {
                             'status': 'SUCCESS',
@@ -1289,54 +858,32 @@ async def async_staggered_burst_worker(
                         }
 
                 loop = asyncio.get_running_loop()
-
-                await loop.run_in_executor(
-                    None,
-                    save_claimed_account,
-                    claimed_log_file,
-                    phone,
-                    file_lock
-                )
+                await loop.run_in_executor(None, save_claimed_account, claimed_log_file, phone, file_lock)
 
             elif status == 'RATE_LIMIT':
-
-                printn(
-                    f"⚠️【{phone}】@{request_time} "
-                    f"{rights_tag} RATE_LIMIT / 操作频繁，"
-                    f"继续尝试..."
-                )
+                # 收到操作频繁，说明频率击穿网关阈值，增加微小冷却让后续协程避让
+                printn(f"⚠️【{phone}】@{request_time} {rights_tag} RATE_LIMIT / 操作频繁，避让冷却...")
+                await asyncio.sleep(0.18)
 
             elif status == 'CROWD':
-
-                printn(
-                    f"👥【{phone}】@{request_time} "
-                    f"{rights_tag} "
-                    f"人数过多，继续尝试..."
-                )
+                printn(f"👥【{phone}】@{request_time} {rights_tag} 人数过多，继续尝试...")
 
             elif status in ('HTTP_ERROR', 'EMPTY'):
-
                 if status == 'EMPTY':
-                    printn(
-                        f"📭【{phone}】@{request_time} "
-                        f"{rights_tag} 空响应"
-                    )
+                    printn(f"📭【{phone}】@{request_time} {rights_tag} 空响应")
                 else:
-                    printn(
-                        f"🌐【{phone}】@{request_time} "
-                        f"{rights_tag} HTTP错误 "
-                        f"(状态码{http_status}): {text[:200]}"
-                    )
+                    printn(f"🌐【{phone}】@{request_time} {rights_tag} HTTP错误 (状态码{http_status}): {text[:200]}")
 
-                # 瞬态错误极速补发：若遭遇 502/空响应，且距离开抢在 2.5 秒黄金窗口内，立即就地补发一次
+                # 瞬态 502/空响应补发，带抖动冷却（120~200ms），避免立刻撞击 502 熔断节点
                 if not (
                     rights_stop_event.is_set()
                     or local_stop_event.is_set()
                     or global_stop_event.is_set()
                 ):
                     now_dt = (now_cn() - base_target_time).total_seconds()
-                    if now_dt <= 2.5:
-                        await asyncio.sleep(0.04)
+                    if now_dt <= 2.2:
+                        retry_delay = random.uniform(0.12, 0.20)
+                        await asyncio.sleep(retry_delay)
                         if not (
                             rights_stop_event.is_set()
                             or local_stop_event.is_set()
@@ -1349,7 +896,8 @@ async def async_staggered_burst_worker(
                                     url,
                                     json={"para": paraV},
                                     cookies=rs_cookies,
-                                    headers=headers
+                                    headers=headers,
+                                    timeout=aiohttp.ClientTimeout(total=4, connect=2)
                                 ) as retry_resp:
                                     r_http_status = retry_resp.status
                                     r_elapsed = (time.perf_counter() - retry_perf) * 1000
@@ -1376,10 +924,8 @@ async def async_staggered_burst_worker(
                                         r_status = "EMPTY"
 
                                     printn(
-                                        f"🔄【{phone}】@{retry_time} "
-                                        f"{rights_tag}[补发] "
-                                        f"HTTP:{r_http_status} 耗时:{r_elapsed:.1f}ms "
-                                        f"状态:{r_status}"
+                                        f"🔄【{phone}】@{retry_time} {rights_tag}[补发] "
+                                        f"HTTP:{r_http_status} 耗时:{r_elapsed:.1f}ms 状态:{r_status}"
                                     )
 
                                     if r_status == 'SUCCESS':
@@ -1397,13 +943,7 @@ async def async_staggered_burst_worker(
                                                     'amount': amount,
                                                 }
                                         loop = asyncio.get_running_loop()
-                                        await loop.run_in_executor(
-                                            None,
-                                            save_claimed_account,
-                                            claimed_log_file,
-                                            phone,
-                                            file_lock
-                                        )
+                                        await loop.run_in_executor(None, save_claimed_account, claimed_log_file, phone, file_lock)
                                     elif r_status == 'SOLD_OUT':
                                         _record_stat(rights_stat, 'sold_out_count')
                                         rights_stop_event.set()
@@ -1412,48 +952,15 @@ async def async_staggered_burst_worker(
                             except Exception as re_err:
                                 printn(f"⚠️【{phone}】@{retry_time} {rights_tag}[补发] 异常: {re_err}")
 
-            elif status == 'JSON_ERROR':
-
-                printn(
-                    f"🧾【{phone}】@{request_time} "
-                    f"{rights_tag} JSON解析失败: {text[:200]}"
-                )
-
-            else:
-
-                printn(
-                    f"💬【{phone}】@{request_time} "
-                    f"{rights_tag} "
-                    f"未知响应: {res_text}"
-                )
-
     except asyncio.CancelledError:
         pass
-
     except asyncio.TimeoutError:
-
-        elapsed_ms = (
-            time.perf_counter() - request_perf
-        ) * 1000
-
+        elapsed_ms = (time.perf_counter() - request_perf) * 1000
         _record_stat(rights_stat, 'timeout_count')
         _record_stat(rights_stat, 'request_count')
-
-        printn(
-            f"⏰【{phone}】@{request_time} "
-            f"{rights_tag} "
-            f"请求超时 (连接或响应) | 耗时{elapsed_ms:.1f}ms "
-            f"| 异常类型: asyncio.TimeoutError"
-        )
-
+        printn(f"⏰【{phone}】@{request_time} {rights_tag} 请求超时 | 耗时{elapsed_ms:.1f}ms")
     except Exception as e:
-
-        printn(
-            f"🚨【{phone}】@{request_time} "
-            f"{rights_tag} "
-            f"未预期异常: "
-            f"{e.__class__.__name__} - {str(e)}"
-        )
+        printn(f"🚨【{phone}】@{request_time} {rights_tag} 未预期异常: {e.__class__.__name__} - {str(e)}")
 
 
 # ============================================================
@@ -1469,79 +976,40 @@ def run_attack_campaign(
     result_log,
     result_lock,
     file_lock,
-    num_accounts_to_run
+    num_accounts_to_run,
+    acc_index=0
 ):
-
     try:
-
         if global_stop_event.is_set():
             return
 
-        printn(
-            f"⚙️【{phone}】开始准备凭证 (同步模式)..."
-        )
-
-        rs_cookies = (
-            get_ruishu_cookies()
-            if enable_ruishu
-            else {}
-        )
-
+        printn(f"⚙️【{phone}】开始准备凭证 (同步模式)...")
+        rs_cookies = get_ruishu_cookies() if enable_ruishu else {}
         if enable_ruishu and not rs_cookies:
-            raise Exception(
-                "瑞数已启用但获取Cookie失败"
-            )
+            raise Exception("瑞数已启用但获取Cookie失败")
 
-        sign, accId = getSign(
-            ticket,
-            ss,
-            rs_cookies
-        )
-
+        sign, accId = getSign(ticket, ss, rs_cookies)
         if not sign:
-            raise Exception(
-                "获取Sign失败"
-            )
+            raise Exception("获取Sign失败")
 
         ss.headers.update({
             "sign": sign,
-            "Referer":
-                "https://wappark.189.cn/resources/dist/"
-                "signInActivity.html"
+            "Referer": "https://wappark.189.cn/resources/dist/signInActivity.html"
         })
 
-        rightsList = getLevelRightsList(
-            phone,
-            accId,
-            ss
-        )
-
+        rightsList = getLevelRightsList(phone, accId, ss)
         if not rightsList:
-            raise Exception(
-                "未能获取到权益ID"
-            )
+            raise Exception("未能获取到权益ID")
 
-        # 单权益模式：仅抢 rightsList[0]（保持 v2.3.0 原语义）
-        if not enable_multi_rights:
-            rights_to_claim = [rightsList[0]]
-        else:
-            # 多权益模式：接口实际返回的每个权益均作为独立任务
-            rights_to_claim = rightsList
-
+        rights_to_claim = [rightsList[0]] if not enable_multi_rights else rightsList
         rights = rights_to_claim[0]
         level = rights['level']
         amount = rights['amount']
 
         if enable_multi_rights and len(rights_to_claim) > 1:
-            printn(
-                f"🎁【{phone}】多权益模式启用，"
-                f"共 {len(rights_to_claim)} 个权益进入独立并发任务。"
-            )
+            printn(f"🎁【{phone}】多权益模式启用，共 {len(rights_to_claim)} 个权益进入独立并发任务。")
         else:
-            printn(
-                f"✅【{phone}】凭证准备就绪，"
-                f"切换至异步并发抢购..."
-            )
+            printn(f"✅【{phone}】凭证准备就绪，切换至异步并发抢购...")
 
         asyncio.run(
             run_async_bursts(
@@ -1554,31 +1022,24 @@ def run_attack_campaign(
                 result_log,
                 result_lock,
                 file_lock,
-                num_accounts_to_run
+                num_accounts_to_run,
+                acc_index=acc_index
             )
         )
 
         with result_lock:
-
             if phone not in result_log:
                 result_log[phone] = {
                     'status': 'UNKNOWN',
-                    'message':
-                        '抢购结束但未记录明确状态',
+                    'message': '抢购结束但未记录明确状态',
                     'level': level,
                     'amount': amount,
                 }
 
-        printn(
-            f"🏁【{phone}】抢购任务已结束。"
-        )
+        printn(f"🏁【{phone}】抢购任务已结束。")
 
     except Exception as e:
-
-        printn(
-            f"💥【{phone}】准备或执行阶段出现严重异常: {e}"
-        )
-
+        printn(f"💥【{phone}】准备或执行阶段出现严重异常: {e}")
         with result_lock:
             result_log[phone] = {
                 'status': 'FAIL',
@@ -1591,7 +1052,6 @@ def run_attack_campaign(
 # ============================================================
 
 def _derive_rights_status(stat):
-    """根据单个权益统计字典推导该权益的最终状态。"""
     if stat.get('success_count'):
         return 'SUCCESS'
     if stat.get('sold_out_count'):
@@ -1608,13 +1068,10 @@ def _derive_rights_status(stat):
         return 'JSON_ERROR'
     if stat.get('empty_count'):
         return 'EMPTY'
-    if stat.get('unknown_count'):
-        return 'UNKNOWN'
     return 'UNKNOWN'
 
 
 def _derive_overall_status(rights_result):
-    """多权益模式：账号级总体状态。"""
     statuses = [r.get('status') for r in rights_result]
     if 'SUCCESS' in statuses:
         return 'SUCCESS'
@@ -1626,12 +1083,9 @@ def _derive_overall_status(rights_result):
 
 
 def _derive_overall_msg(rights_result):
-    """多权益模式：账号级总体消息摘要。"""
     parts = []
     for r in rights_result:
-        parts.append(
-            f"V{r.get('level')}｜{r.get('amount')}｜{r.get('status')}"
-        )
+        parts.append(f"V{r.get('level')}｜{r.get('amount')}｜{r.get('status')}")
     return "；".join(parts)
 
 
@@ -1645,40 +1099,28 @@ async def run_async_bursts(
     result_log,
     result_lock,
     file_lock,
-    num_accounts_to_run
+    num_accounts_to_run,
+    acc_index=0
 ):
-
     now = now_cn()
-
-    target_time = now.replace(
-        hour=hour,
-        minute=minute,
-        second=0,
-        microsecond=0
-    )
-
+    target_time = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
     if now >= target_time:
         target_time += datetime.timedelta(days=1)
 
+    # 针对多账号引入 25ms 账号间错峰微调，避免同一出口 IP 同时爆发
+    account_jitter = acc_index * 25
+
     base_target_time = (
         target_time
-        + datetime.timedelta(
-            milliseconds=inadvance
-        )
+        + datetime.timedelta(milliseconds=(inadvance + account_jitter))
     )
 
-    # 账号级停止信号（单权益模式下沿用原语义：账号内任意权益成功/售罄即停止该账号）
     local_stop_event = AsyncioEvent()
-
     rights_count = len(rights_list)
-
-    # 每个权益独立的任务数 + 独立统计字典
     rights_tasks_meta = []
-
     total_tasks = 0
 
     for r_idx, rights in enumerate(rights_list):
-        # 预计算 RSA 密文，消除秒杀发包瞬间的 CPU 加密阻塞与多协程排队延迟
         val = {
             "id": rights.get('activityId'),
             "accId": accId,
@@ -1712,36 +1154,15 @@ async def run_async_bursts(
         })
         total_tasks += count_per_account
 
-    # ---- 并发任务上限（多权益模式） ----
-    if rights_count > 1 and total_tasks > max_multi_rights_tasks:
-        printn(
-            f"🚦【{phone}】多权益模式: 理论任务数 {total_tasks} "
-            f"超过上限 {max_multi_rights_tasks}，"
-            f"将按上限削减任务。"
-        )
-
-    ssl_ctx = ssl.create_default_context(
-        cafile=certifi.where()
-    )
-
+    ssl_ctx = ssl.create_default_context(cafile=certifi.where())
     ssl_ctx.check_hostname = False
     ssl_ctx.verify_mode = ssl.CERT_NONE
 
-    connector = aiohttp.TCPConnector(
-        ssl=ssl_ctx
-    )
+    connector = aiohttp.TCPConnector(ssl=ssl_ctx, limit=20, keepalive_timeout=60)
+    timeout = aiohttp.ClientTimeout(total=8, connect=3)
 
-    timeout = aiohttp.ClientTimeout(
-        total=15,
-        connect=4
-    )
-
-    async with aiohttp.ClientSession(
-        connector=connector,
-        timeout=timeout
-    ) as async_session:
-
-        # ---- 预热 TCP/TLS 连接池 (提前建立长连接，零点瞬间 0ms 额外握手开销) ----
+    async with aiohttp.ClientSession(connector=connector, timeout=timeout) as async_session:
+        # ---- 预热 TCP/TLS 连接池 ----
         try:
             warm_seconds = (base_target_time - now_cn()).total_seconds()
             if warm_seconds > 8 and not debug:
@@ -1749,12 +1170,9 @@ async def run_async_bursts(
 
             warm_url = "https://wappark.189.cn/resources/dist/signInActivity.html"
             warm_headers = {
-                "User-Agent": (
-                    "Mozilla/5.0 (Linux; Android 13; "
-                    "22081212C Build/TKQ1.220829.002) "
-                    "AppleWebKit/537.36 (KHTML, like Gecko) "
-                    "Chrome/104.0.5112.97 Mobile Safari/537.36"
-                ),
+                "User-Agent":
+                    "Mozilla/5.0 (Linux; Android 13; 22081212C Build/TKQ1.220829.002) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/104.0.5112.97 Mobile Safari/537.36",
                 "Referer": warm_url
             }
             async with async_session.get(
@@ -1773,27 +1191,18 @@ async def run_async_bursts(
         for r_idx, meta in enumerate(rights_tasks_meta):
             rights = meta['rights']
             rights_stat = meta['stat']
-
             rightsId = rights['activityId']
             level = rights['level']
             amount = rights['amount']
 
-            # 每个权益独立的 stop event（权益级停止）
             rights_stop_event = AsyncioEvent()
-
-            # 该权益最多计划的任务数
             plan_count = count_per_account
 
-            # 多权益模式下受全局任务上限约束
             if rights_count > 1:
                 remaining = max_multi_rights_tasks - created_tasks
-                if remaining <= 0:
-                    plan_count = 0
-                else:
-                    plan_count = min(plan_count, remaining)
+                plan_count = max(0, min(plan_count, remaining))
 
             rights_stat['plan_count'] = plan_count
-
             cached_para = meta.get('cached_para')
 
             for i in range(plan_count):
@@ -1824,24 +1233,12 @@ async def run_async_bursts(
                 )
                 created_tasks += 1
 
-        await asyncio.gather(
-            *tasks,
-            return_exceptions=True
-        )
+        await asyncio.gather(*tasks, return_exceptions=True)
 
-        # ---- 账号结束后输出每个权益的独立统计 ----
-        printn(
-            f"📊【{phone}】领取统计"
-        )
-
+        printn(f"📊【{phone}】领取统计")
         for r_idx, meta in enumerate(rights_tasks_meta):
             stat = meta['stat']
-            tag = (
-                f"权益{r_idx}｜V{stat['level']}｜{stat['amount']}"
-                if rights_count > 1
-                else f"V{stat['level']}｜{stat['amount']}"
-            )
-
+            tag = f"权益{r_idx}｜V{stat['level']}｜{stat['amount']}" if rights_count > 1 else f"V{stat['level']}｜{stat['amount']}"
             printn(
                 f"  {tag}\n"
                 f"  权益ID：{stat['rightsId']}\n"
@@ -1858,10 +1255,8 @@ async def run_async_bursts(
                 f"  其他：{stat['unknown_count']}"
             )
 
-        # ---- 汇总到 result_log 的 rights 列表（多权益模式 / 单权益模式） ----
         if rights_count > 1:
             rights_result = []
-
             for meta in rights_tasks_meta:
                 stat = meta['stat']
                 rights_result.append({
@@ -1879,9 +1274,7 @@ async def run_async_bursts(
                 })
 
             with result_lock:
-                overall = _derive_overall_status(
-                    rights_result
-                )
+                overall = _derive_overall_status(rights_result)
                 result_log[phone] = {
                     'status': overall,
                     'message': _derive_overall_msg(rights_result),
@@ -1890,7 +1283,6 @@ async def run_async_bursts(
                     'rights': rights_result,
                 }
         else:
-            # 单权益模式：若未曾记录成功/售罄，根据统计推导精确失败原因写入日志
             stat = rights_tasks_meta[0]['stat']
             derived_st = _derive_rights_status(stat)
             with result_lock:
@@ -1915,9 +1307,9 @@ def process_account(
     result_log,
     result_lock,
     file_lock,
-    num_accounts_to_run
+    num_accounts_to_run,
+    acc_index=0
 ):
-
     phone_for_log = phoneV.split("#")[0]
     masked_phone = (
         f"{phone_for_log[:3]}***{phone_for_log[-4:]}"
@@ -1926,325 +1318,86 @@ def process_account(
     )
 
     if not debug:
-
-        delay = random.uniform(
-            0.1,
-            2.0
-        )
-
+        delay = random.uniform(0.1, 2.0)
         time.sleep(delay)
-
-        printn(
-            f'👤【{masked_phone}】'
-            f'(延迟{delay:.2f}s后) 开始登录...'
-        )
-
+        printn(f'👤【{masked_phone}】(延迟{delay:.2f}s后) 开始登录...')
     else:
-
-        printn(
-            f'👤【{masked_phone}】开始登录...'
-        )
+        printn(f'👤【{masked_phone}】开始登录...')
 
     parts = phoneV.split('#', 2)
-
     if len(parts) != 3:
-
         phone = parts[0] if parts else ''
-
-        printn(
-            f'❌【{phone}】账号格式错误，'
-            f'应为：手机号#密码#AndroidID'
-        )
-
+        printn(f'❌【{phone}】账号格式错误，应为：手机号#密码#AndroidID')
         with result_lock:
             result_log[phone] = {
                 'status': 'LOGIN_FAIL',
-                'message':
-                    '账号格式错误，缺少AndroidID'
+                'message': '账号格式错误，缺少AndroidID'
             }
-
         return
 
     phone, password, android_id = parts
 
     ss = requests.session()
-
     ss.headers = {
         "User-Agent":
-            "Mozilla/5.0 (Linux; Android 13; "
-            "22081212C Build/TKQ1.220829.002) "
-            "AppleWebKit/537.36 "
-            "(KHTML, like Gecko) "
-            "Chrome/104.0.5112.97 "
-            "Mobile Safari/537.36"
+            "Mozilla/5.0 (Linux; Android 13; 22081212C Build/TKQ1.220829.002) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/104.0.5112.97 Mobile Safari/537.36"
     }
-
-    ss.mount(
-        'https://',
-        DESAdapter()
-    )
-
-    ss.cookies.set_policy(
-        BlockAll()
-    )
-
+    ss.mount('https://', DESAdapter())
+    ss.cookies.set_policy(BlockAll())
     ss.timeout = 30
 
-    # --------------------------------------------------------
-    # ① userLoginNormal → Ticket
-    # --------------------------------------------------------
-
     begin = time.perf_counter()
-
-    ticket = userLoginNormal(
-        phone,
-        password,
-        android_id,
-        ss
-    )
-
-    elapsed = (
-        time.perf_counter()
-        - begin
-    )
+    ticket = userLoginNormal(phone, password, android_id, ss)
+    elapsed = time.perf_counter() - begin
 
     if not ticket:
-
-        printn(
-            f'❌【{phone}】① 登录 → Ticket 失败，'
-            f'耗时 {elapsed:.2f}s'
-        )
-
+        printn(f'❌【{phone}】① 登录 → Ticket 失败，耗时 {elapsed:.2f}s')
         with result_lock:
             result_log[phone] = {
                 'status': 'TICKET_FAIL',
-                'message':
-                    f'登录/Ticket失败（耗时{elapsed:.2f}s）'
+                'message': f'登录/Ticket失败（耗时{elapsed:.2f}s）'
             }
-
         return
 
-    printn(
-        f'✅【{phone}】① 登录 → Ticket 成功，'
-        f'耗时 {elapsed:.2f}s'
-    )
-
-    # --------------------------------------------------------
-    # DEBUG / TEST 模式
-    # --------------------------------------------------------
+    printn(f'✅【{phone}】① 登录 → Ticket 成功，耗时 {elapsed:.2f}s')
 
     if test_only:
-
-        printn(
-            f'🧪【{phone}】② '
-            f'Ticket → ssoHomLogin'
-        )
-
+        printn(f'🧪【{phone}】② Ticket → ssoHomLogin')
         try:
-
-            rs_cookies = (
-                get_ruishu_cookies()
-                if enable_ruishu
-                else {}
-            )
-
+            rs_cookies = get_ruishu_cookies() if enable_ruishu else {}
             if enable_ruishu and not rs_cookies:
-
-                printn(
-                    f'❌【{phone}】② 瑞数Cookie获取失败'
-                )
-
+                printn(f'❌【{phone}】② 瑞数Cookie获取失败')
                 with result_lock:
-                    result_log[phone] = {
-                        'status': 'SIGN_FAIL',
-                        'message':
-                            '瑞数已启用，但Cookie获取失败'
-                    }
-
+                    result_log[phone] = {'status': 'SIGN_FAIL', 'message': '瑞数已启用，但Cookie获取失败'}
                 return
 
-            # ------------------------------------------------
-            # ② Ticket → getSign / ssoHomLogin
-            # ------------------------------------------------
-
-            sign, accId = getSign(
-                ticket,
-                ss,
-                rs_cookies
-            )
-
+            sign, accId = getSign(ticket, ss, rs_cookies)
             if not sign or not accId:
-
-                printn(
-                    f'❌【{phone}】② '
-                    f'ssoHomLogin / getSign 失败'
-                )
-
+                printn(f'❌【{phone}】② ssoHomLogin / getSign 失败')
                 with result_lock:
-                    result_log[phone] = {
-                        'status': 'SIGN_FAIL',
-                        'message':
-                            'Ticket正常，但ssoHomLogin/getSign失败'
-                    }
-
+                    result_log[phone] = {'status': 'SIGN_FAIL', 'message': 'Ticket正常，但ssoHomLogin/getSign失败'}
                 return
 
-            printn(
-                f'✅【{phone}】② '
-                f'ssoHomLogin / getSign 成功'
-            )
-
-            printn(
-                f'   sign: {str(sign)[:20]}...'
-            )
-
-            printn(
-                f'   accId: {accId}'
-            )
-
-            # ------------------------------------------------
-            # ③ accId → queryLevelRightInfo
-            # ------------------------------------------------
-
-            printn(
-                f'🧪【{phone}】③ '
-                f'开始查询等级权益...'
-            )
-
-            ss.headers.update({
-                "sign": sign,
-                "Referer":
-                    "https://wappark.189.cn/resources/dist/"
-                    "signInActivity.html"
-            })
-
-            rightsList = getLevelRightsList(
-                phone,
-                accId,
-                ss
-            )
-
-            if rightsList is None:
-
-                printn(
-                    f'❌【{phone}】③ '
-                    f'queryLevelRightInfo 请求失败'
-                )
-
-                with result_lock:
-                    result_log[phone] = {
-                        'status': 'RIGHTS_FAIL',
-                        'message':
-                            'ssoHomLogin成功，但等级权益查询失败'
-                    }
-
-                return
-
+            printn(f'✅【{phone}】② ssoHomLogin / getSign 成功')
+            rightsList = getLevelRightsList(phone, accId, ss)
             if not rightsList:
-
-                printn(
-                    f'⚠️【{phone}】③ '
-                    f'等级权益查询成功，但没有找到话费权益ID'
-                )
-
+                printn(f'❌【{phone}】③ queryLevelRightInfo 未能获取权益列表')
                 with result_lock:
-                    result_log[phone] = {
-                        'status': 'RIGHTS_FAIL',
-                        'message':
-                            '等级权益查询成功，但没有找到话费权益ID'
-                    }
-
+                    result_log[phone] = {'status': 'RIGHTS_FAIL', 'message': '权益查询失败或无话费权益'}
                 return
-
-            # ------------------------------------------------
-            # ④ 权益ID获取成功
-            # ------------------------------------------------
 
             rights = rightsList[0]
-            rightsId = rights['activityId']
-            level = rights['level']
-            amount = rights['amount']
-
-            printn(
-                f'✅【{phone}】③ '
-                f'等级权益查询成功'
-            )
-
-            printn(
-                f'   找到权益数量: {len(rightsList)}'
-            )
-
-            printn(
-                f'   第一个权益ID: {rightsId}'
-            )
-
-            printn(
-                f'   等级: V{level}'
-            )
-
-            printn(
-                f'   金额: {amount}'
-            )
-
-            printn(
-                f'🎉【{phone}】前置链路全部成功！'
-            )
-
-            printn(
-                f'   ① 登录 → Ticket       ✅'
-            )
-
-            printn(
-                f'   ② Ticket → ssoHomLogin ✅'
-            )
-
-            printn(
-                f'   ③ sign + accId         ✅'
-            )
-
-            printn(
-                f'   ④ 等级权益查询          ✅'
-            )
-
-            printn(
-                f'   ⑤ 获取权益ID            ✅'
-            )
-
-            printn(
-                f'   ⑥ receiverRights        🧪 开始诊断'
-            )
-
-            diagnose_result = diagnose_receiver_rights(
-                phone,
-                rightsId,
-                accId,
-                sign,
-                ss,
-                rs_cookies
-            )
-
-            printn(
-                f'🏁【{phone}】最终接口诊断结束'
-            )
-
-            # ------------------------------------------------
-            # ⑤ 根据 receiverRights 真实返回判断状态
-            # ------------------------------------------------
+            diagnose_result = diagnose_receiver_rights(phone, rights['activityId'], accId, sign, ss, rs_cookies)
 
             real_status = 'FAIL'
             real_msg = '诊断未返回明确结果'
-
             if diagnose_result:
-
                 d_status = diagnose_result.get('status')
-
                 if d_status == 'JSON':
-
                     data = diagnose_result.get('data') or {}
-                    code = str(data.get('resoultCode', ''))
                     msg = str(data.get('resoultMsg', ''))
-                    real_msg = msg or f'resoultCode={code}'
-
+                    real_msg = msg
                     if '已领完' in msg or '活动已结束' in msg:
                         real_status = 'SOLD_OUT'
                     elif '成功' in msg or '已领取过该权益' in msg:
@@ -2252,54 +1405,22 @@ def process_account(
                     else:
                         real_status = 'FAIL'
 
-                    printn(
-                        f'📌【{phone}】诊断结论: '
-                        f'resoultCode={code}, '
-                        f'msg={msg}, '
-                        f'判定={real_status}'
-                    )
-
-                elif d_status == 'EMPTY':
-                    real_msg = '服务器返回空响应'
-                elif d_status == 'TIMEOUT':
-                    real_msg = 'receiverRights 请求超时'
-                elif d_status == 'TEXT':
-                    real_msg = '服务器返回非JSON响应'
-                elif d_status in ('REQUEST_ERROR', 'ERROR'):
-                    real_msg = diagnose_result.get(
-                        'message', '诊断异常'
-                    )
-
             with result_lock:
                 result_log[phone] = {
                     'status': real_status,
                     'message': real_msg,
-                    'level': level,
-                    'amount': amount,
+                    'level': rights['level'],
+                    'amount': rights['amount'],
                 }
-
             return
 
         except Exception as e:
-
-            printn(
-                f'💥【{phone}】完整准备链路测试异常: '
-                f'{type(e).__name__}: {e}'
-            )
-
+            printn(f'💥【{phone}】完整准备链路测试异常: {e}')
             with result_lock:
-                result_log[phone] = {
-                    'status': 'RIGHTS_FAIL',
-                    'message':
-                        f'完整准备链路测试异常: {e}'
-                }
-
+                result_log[phone] = {'status': 'RIGHTS_FAIL', 'message': f'测试异常: {e}'}
             return
 
-    # --------------------------------------------------------
     # 正式模式
-    # --------------------------------------------------------
-
     run_attack_campaign(
         phone,
         ticket,
@@ -2309,77 +1430,38 @@ def process_account(
         result_log,
         result_lock,
         file_lock,
-        num_accounts_to_run
+        num_accounts_to_run,
+        acc_index=acc_index
     )
 
 
 # ============================================================
-# 通知内容构建（Telegram MarkdownV2 风格）
+# 通知内容构建
 # ============================================================
 
 def build_summary(all_accounts, accounts_to_run, skipped_phones, result_log):
-    """构建 MarkdownV2 格式的通知内容。
-
-    风格：
-      号码 *加粗*
-      等级 _斜体_
-      金额 _斜体_
-      状态 *加粗*
-    """
-
-    lines = []
-
-    # 标题已由推送 title 参数提供，正文不再重复
-    lines.append("*📊 领取明细*")
-    lines.append("")
-
+    lines = ["*📊 领取明细*", ""]
     success_count = 0
     total_count = len(all_accounts)
 
     for acc in all_accounts:
         phone = acc.split('#')[0]
-        masked = (
-            f"{phone[:3]}****{phone[-4:]}"
-            if len(phone) >= 7
-            else phone
-        )
+        masked = f"{phone[:3]}****{phone[-4:]}" if len(phone) >= 7 else phone
         masked_md = _md_esc(masked)
 
-        # 本月已领取，视为成功
         if phone in skipped_phones:
-            lines.append(
-                f"*{masked_md}* ｜ _V\\-_ ｜ _\\-_ ｜ 🎉 *成功*"
-            )
+            lines.append(f"*{masked_md}* ｜ _V\\-_ ｜ _\\-_ ｜ 🎉 *成功*")
             success_count += 1
             continue
 
         res = result_log.get(phone)
-
         if res:
             level = res.get('level')
             amount = res.get('amount')
-
-            level_str = (
-                f"V{level}"
-                if level not in (None, '-', '')
-                else '-'
-            )
-            amount_str = (
-                str(amount)
-                if amount not in (None, '-', '')
-                else '-'
-            )
-
-            level_md = (
-                _md_esc(level_str)
-                if level_str != '-'
-                else '\\-'
-            )
-            amount_md = (
-                _md_esc(amount_str)
-                if amount_str != '-'
-                else '\\-'
-            )
+            level_str = f"V{level}" if level not in (None, '-', '') else '-'
+            amount_str = str(amount) if amount not in (None, '-', '') else '-'
+            level_md = _md_esc(level_str) if level_str != '-' else '\\-'
+            amount_md = _md_esc(amount_str) if amount_str != '-' else '\\-'
 
             status = res.get('status')
             if status == 'SUCCESS':
@@ -2402,53 +1484,23 @@ def build_summary(all_accounts, accounts_to_run, skipped_phones, result_log):
             else:
                 status_md = '❌ *失败*'
 
-            lines.append(
-                f"*{masked_md}* ｜ _{level_md}_ ｜ _{amount_md}_ ｜ {status_md}"
-            )
+            lines.append(f"*{masked_md}* ｜ _{level_md}_ ｜ _{amount_md}_ ｜ {status_md}")
 
-            # 多权益模式：逐权益展示状态摘要（保持简洁，避免冗长调试信息）
             rights_info = res.get('rights')
             if isinstance(rights_info, list) and rights_info:
                 for r in rights_info:
                     r_level = r.get('level')
                     r_amount = r.get('amount')
                     r_status = r.get('status', 'UNKNOWN')
-
-                    r_level_str = (
-                        f"V{r_level}"
-                        if r_level not in (None, '-', '')
-                        else '-'
-                    )
-                    r_amount_str = (
-                        str(r_amount)
-                        if r_amount not in (None, '-', '')
-                        else '-'
-                    )
-
-                    if r_status == 'SUCCESS':
-                        r_status_md = '🎉 成功'
-                    elif r_status == 'SOLD_OUT':
-                        r_status_md = '💨 售罄'
-                    elif r_status == 'RATE_LIMIT':
-                        r_status_md = '⚠️ 操作频繁'
-                    elif r_status == 'CROWD':
-                        r_status_md = '👥 人数过多'
-                    else:
-                        r_status_md = '❌ 失败'
-
-                    lines.append(
-                        f"  ↳ _{_md_esc(r_level_str)}_ ｜ "
-                        f"_{_md_esc(r_amount_str)}_ ｜ "
-                        f"{r_status_md}"
-                    )
+                    r_level_str = f"V{r_level}" if r_level not in (None, '-', '') else '-'
+                    r_amount_str = str(r_amount) if r_amount not in (None, '-', '') else '-'
+                    r_status_md = '🎉 成功' if r_status == 'SUCCESS' else ('💨 售罄' if r_status == 'SOLD_OUT' else ('⚠️ 操作频繁' if r_status == 'RATE_LIMIT' else '❌ 失败'))
+                    lines.append(f"  ↳ _{_md_esc(r_level_str)}_ ｜ _{_md_esc(r_amount_str)}_ ｜ {r_status_md}")
         else:
-            lines.append(
-                f"*{masked_md}* ｜ _\\-_ ｜ _\\-_ ｜ ❌ *失败*"
-            )
+            lines.append(f"*{masked_md}* ｜ _\\-_ ｜ _\\-_ ｜ ❌ *失败*")
 
     lines.append("")
     lines.append(f"结果：*{success_count}/{total_count}* 成功")
-
     return "\n".join(lines)
 
 
@@ -2483,7 +1535,6 @@ def print_midnight_diagnostics(force_run: bool) -> bool:
 
     if not in_window and not force_run:
         print("当前不在正式抢兑时间窗口，本次任务正常退出。")
-        print("当前不是正式抢兑时间，脚本不会进入正式抢兑流程。")
         print("如需测试，请开启 FORCE_RUN=true。\n")
         return False
     elif in_window and not force_run:
@@ -2513,116 +1564,30 @@ def main():
     if not print_midnight_diagnostics(force_run):
         return
 
-    if test_only:
-
-        printn(
-            "🧪 [完整准备链路测试模式]"
-        )
-
-        printn(
-            "   测试：userLoginNormal"
-        )
-
-        printn(
-            "   → Ticket"
-        )
-
-        printn(
-            "   → ssoHomLogin"
-        )
-
-        printn(
-            "   → sign / accId"
-        )
-
-        printn(
-            "   → queryLevelRightInfo"
-        )
-
-        printn(
-            "   → 权益ID"
-        )
-
-        printn(
-            "   → receiverRights 诊断（仅一次）"
-        )
-
-    elif debug:
-
-        printn(
-            "🐛 [DEBUG模式] "
-            "跳过主程序等待，直接执行完整流程"
-        )
-
     start_time = time.monotonic()
-
     PHONES = os.environ.get('dxqy') or os.environ.get('dxlin') or os.environ.get('CHINA_TELECOM_AUTH')
-
-    push_plus_token = os.environ.get(
-        'PUSH_PLUS_TOKEN'
-    )
+    push_plus_token = os.environ.get('PUSH_PLUS_TOKEN')
 
     if not PHONES:
+        printn("ℹ️ 未检测到环境变量 `dxqy` (或 `dxlin`)，将使用脚本内嵌的账号信息。")
+        PHONES = "你的手机号#你的服务密码#你的AndroidID"
 
-        printn(
-            "ℹ️ 未检测到环境变量 `dxqy` (或 `dxlin`)，"
-            "将使用脚本内嵌的账号信息。"
-        )
-
-        PHONES = (
-            "你的手机号#你的服务密码#你的AndroidID"
-        )
-
-    raw_accs = [
-        p.strip()
-        for p in re.split(
-            r'[&\r\n]+',
-            PHONES
-        )
-        if p.strip()
-    ]
-
+    raw_accs = [p.strip() for p in re.split(r'[&\r\n]+', PHONES) if p.strip()]
     all_accounts = []
-
     for p in raw_accs:
-
         p = p.strip()
-
-        if (
-            not p
-            or "你的手机号" in p
-        ):
+        if not p or "你的手机号" in p:
             continue
-
-        if '#' in p:
-
-            fields = p.split(
-                '#',
-                2
-            )
-
-            if len(fields) == 3:
-                all_accounts.append(p)
+        if '#' in p and len(p.split('#', 2)) == 3:
+            all_accounts.append(p)
 
     if not all_accounts:
-
-        printn(
-            "❌ 请在环境变量或脚本中设置正确的账号信息。"
-        )
-
+        printn("❌ 请在环境变量或脚本中设置正确的账号信息。")
         return
 
-    claimed_data = load_claimed_accounts(
-        claimed_log_file
-    )
-
+    claimed_data = load_claimed_accounts(claimed_log_file)
     now = now_cn()
-    # 23点准备时抢兑目标为次日0点（跨午夜），月份取次日月份；其余时间取当前月份
-    if now.hour == 23:
-        target_month = (now + datetime.timedelta(hours=1)).strftime("%Y-%m")
-    else:
-        target_month = now.strftime("%Y-%m")
-
+    target_month = (now + datetime.timedelta(hours=1)).strftime("%Y-%m") if now.hour == 23 else now.strftime("%Y-%m")
     current_month = target_month
 
     accounts_to_run = []
@@ -2630,101 +1595,41 @@ def main():
     skipped_phones = []
 
     if test_only:
-
         accounts_to_run = all_accounts.copy()
-
-        printn(
-            "🧪 完整准备链路测试："
-            "忽略本月领取记录，所有账号均执行测试"
-        )
-
+        printn("🧪 完整准备链路测试：忽略本月领取记录，所有账号均执行测试")
     else:
-
         for acc in all_accounts:
-
             phone = acc.split('#')[0]
-
             if claimed_data.get(phone) == current_month:
-
-                skipped_accounts.append(
-                    f"✅ {phone[:3]}***{phone[-4:]}: "
-                    f"本月已领取"
-                )
-
+                skipped_accounts.append(f"✅ {phone[:3]}***{phone[-4:]}: 本月已领取")
                 skipped_phones.append(phone)
-
             else:
-
                 accounts_to_run.append(acc)
 
-    printn(
-        "=" * 20
-        + " 账号过滤 "
-        + "=" * 20
-    )
-
-    print(
-        f"总账号数: {len(all_accounts)}, "
-        f"本次运行: {len(accounts_to_run)}, "
-        f"本月已领取跳过: {len(skipped_accounts)}"
-    )
-
+    printn("=" * 20 + " 账号过滤 " + "=" * 20)
+    print(f"总账号数: {len(all_accounts)}, 本次运行: {len(accounts_to_run)}, 本月已领取跳过: {len(skipped_accounts)}")
     for s in skipped_accounts:
         print(s)
-
-    printn(
-        "=" * 52
-    )
+    printn("=" * 52)
 
     if not accounts_to_run:
-
-        summary_content = build_summary(
-            all_accounts,
-            accounts_to_run,
-            skipped_phones,
-            {},
-        )
-
-        printn(
-            "=" * 22
-            + " 通知内容预览 "
-            + "=" * 22
-        )
-
+        summary_content = build_summary(all_accounts, accounts_to_run, skipped_phones, {})
+        printn("=" * 22 + " 通知内容预览 " + "=" * 22)
         print(summary_content)
-
-        printn(
-            "=" * 52
-        )
-
-        send_pushplus_notification(
-            push_plus_token,
-            "📱 电信权益领取结果",
-            summary_content
-        )
-
-        printn(
-            "🏁 所有账号本月均已领取，任务结束!"
-        )
-
+        printn("=" * 52)
+        send_pushplus_notification(push_plus_token, "📱 电信权益领取结果", summary_content)
+        printn("🏁 所有账号本月均已领取，任务结束!")
         return
 
     global_stop_event = ThreadingEvent()
-
     result_log = {}
-
     result_lock = ThreadingLock()
-
     file_lock = ThreadingLock()
-
-    num_accounts_to_run = len(
-        accounts_to_run
-    )
+    num_accounts_to_run = len(accounts_to_run)
 
     now = now_cn()
     prepare_time = now.replace(hour=23, minute=59, second=20, microsecond=0)
 
-    # 智能预热调度保护
     if not force_run:
         if now < prepare_time:
             wait_seconds = (prepare_time - now).total_seconds()
@@ -2735,14 +1640,8 @@ def main():
     else:
         printn("🚀 【平时测试/强制运行模式】跳过夜间等待，直接执行全账号登录与可领权益检测！")
 
-    # ========================================================
     # 并发处理账号
-    # ========================================================
-
-    with ThreadPoolExecutor(
-        max_workers=len(accounts_to_run)
-    ) as executor:
-
+    with ThreadPoolExecutor(max_workers=len(accounts_to_run)) as executor:
         futures = [
             executor.submit(
                 process_account,
@@ -2752,47 +1651,21 @@ def main():
                 result_log,
                 result_lock,
                 file_lock,
-                num_accounts_to_run
+                num_accounts_to_run,
+                acc_idx
             )
-            for phoneV in accounts_to_run
+            for acc_idx, phoneV in enumerate(accounts_to_run)
         ]
-
         wait(futures)
 
     duration = time.monotonic() - start_time
+    summary_content = build_summary(all_accounts, accounts_to_run, skipped_phones, result_log)
 
-    # ========================================================
-    # 总结
-    # ========================================================
-
-    summary_content = build_summary(
-        all_accounts,
-        accounts_to_run,
-        skipped_phones,
-        result_log,
-    )
-
-    printn(
-        "=" * 22
-        + " 通知内容预览 "
-        + "=" * 22
-    )
-
+    printn("=" * 22 + " 通知内容预览 " + "=" * 22)
     print(summary_content)
-
-    printn(
-        "=" * 52
-    )
-
-    send_pushplus_notification(
-        push_plus_token,
-        "📱 电信权益领取结果",
-        summary_content
-    )
-
-    printn(
-        f"🏁 所有账号的任务均已结束! 总耗时 {duration:.2f}s"
-    )
+    printn("=" * 52)
+    send_pushplus_notification(push_plus_token, "📱 电信权益领取结果", summary_content)
+    printn(f"🏁 所有账号的任务均已结束! 总耗时 {duration:.2f}s")
 
 
 # ============================================================
@@ -2800,11 +1673,9 @@ def main():
 # ============================================================
 
 if __name__ == '__main__':
-
-    # 运行时变量统一来源于 CONFIG，保持与 v2.3.0 一致的语义
-    inadvance = int(CONFIG.get("INADVANCE", -75))
-    count_per_account = int(CONFIG.get("COUNT_PER_ACCOUNT", 5))
-    interval = int(CONFIG.get("INTERVAL_MS", 35))
+    inadvance = int(CONFIG.get("INADVANCE", -55))
+    count_per_account = int(CONFIG.get("COUNT_PER_ACCOUNT", 3))
+    interval = int(CONFIG.get("INTERVAL_MS", 130))
     enable_ruishu = bool(CONFIG.get("ENABLE_RUISHU", False))
     claimed_log_file = CONFIG.get("CLAIMED_LOG_FILE", "claimed_accounts.json")
     enable_multi_rights = bool(CONFIG.get("ENABLE_MULTI_RIGHTS", False))
@@ -2813,85 +1684,23 @@ if __name__ == '__main__':
     hour = 0
     minute = 0
 
-    # --------------------------------------------------------
-    # True：
-    #   直接运行进入完整准备链路测试
-    #   最后调用一次 receiverRights 诊断
-    #
-    # False：
-    #   恢复正常23:59/0点正式流程
-    # --------------------------------------------------------
-
     DEBUG_MODE = False
-
     debug = DEBUG_MODE
-
     test_only = DEBUG_MODE
-
     ENABLE_RUISHU = enable_ruishu
 
-    claimed_log_file = claimed_log_file
-
-    print(
-        "=" * 52
-    )
-
-    print(
-        "  电信等级会员权益兑换（完整链路测试版）"
-    )
-
-    print(
-        "=" * 52
-    )
-
-    print(
-        f"🕒 目标时间: "
-        f"{hour:02d}:{minute:02d} "
-        f"| 🎯 每号抢购数: {count_per_account} "
-        f"| 💥 抢购间隔: {interval}ms"
-    )
-
-    print(
-        f"⚡️ 首发提前: {-inadvance}ms"
-    )
-
-    print(
-        f"🐞 Debug模式: "
-        f"{'开启' if DEBUG_MODE else '关闭'}"
-    )
-
-    print(
-        f"🧪 完整准备链路测试: "
-        f"{'开启' if test_only else '关闭'}"
-    )
-
-    print(
-        f"🤖 瑞数Cookie: "
-        f"{'启用' if ENABLE_RUISHU else '禁用'}"
-    )
-
-    print(
-        f"🎁 多权益并发: "
-        f"{'启用' if enable_multi_rights else '禁用'}"
-        f"{f' (上限{max_multi_rights_tasks}任务)' if enable_multi_rights else ''}"
-    )
-
-    print(
-        f"📓 领取记录文件: "
-        f"{claimed_log_file}"
-    )
-
-    print(
-        f"📣 推送方式: "
-        f"{'呆呆面板默认通知' if _HAS_DAIDAI_NOTIFY else 'pushplus'}"
-    )
-
-    print(
-        f"📨 推送内容类型: {PUSH_CONTENT_TYPE}"
-    )
-
-    print(
-        "=" * 52
-    )
+    print("=" * 52)
+    print("  电信等级会员权益兑换（完整链路测试版）")
+    print("=" * 52)
+    print(f"🕒 目标时间: {hour:02d}:{minute:02d} | 🎯 每号抢购数: {count_per_account} | 💥 抢购间隔: {interval}ms")
+    print(f"⚡️ 首发提前: {-inadvance}ms")
+    print(f"🐞 Debug模式: {'开启' if DEBUG_MODE else '关闭'}")
+    print(f"🧪 完整准备链路测试: {'开启' if test_only else '关闭'}")
+    print(f"🤖 瑞数Cookie: {'启用' if ENABLE_RUISHU else '禁用'}")
+    print(f"🎁 多权益并发: {'启用' if enable_multi_rights else '禁用'}{f' (上限{max_multi_rights_tasks}任务)' if enable_multi_rights else ''}")
+    print(f"📓 领取记录文件: {claimed_log_file}")
+    print(f"📣 推送方式: {'呆呆面板默认通知' if _HAS_DAIDAI_NOTIFY else 'pushplus'}")
+    print(f"📨 推送内容类型: {PUSH_CONTENT_TYPE}")
+    print("=" * 52)
 
     main()
