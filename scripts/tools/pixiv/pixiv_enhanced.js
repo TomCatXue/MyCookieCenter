@@ -679,7 +679,7 @@ const INJECT_CSS = `
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
   cursor: pointer;
   user-select: none;
-  transition: opacity 0.2s ease, background 0.3s ease;
+  transition: top 0.18s ease, right 0.18s ease, bottom 0.18s ease, opacity 0.2s ease, background 0.3s ease;
 }
 #px-fab:active { transform: scale(0.92); }
 #px-fab.px-busy { opacity: 0.55; }
@@ -801,12 +801,67 @@ function clientRuntime() {
       return;
     }
 
+    if (!rawText && !imageSwitch) {
+      return;
+    }
+
     // 创建右下角 iOS 原生毛玻璃悬浮按钮
     var fab = document.createElement("div");
     fab.id = "px-fab";
-    fab.title = "点击翻译/还原 · 长按设置";
+    fab.title = rawText ? "点击翻译/还原 · 长按设置" : "点击翻译图片 · 长按设置";
+    fab.setAttribute("aria-label", rawText ? "小说翻译" : "图片翻译");
     fab.innerHTML = `__SVG_PLACEHOLDER__`;
     document.body.appendChild(fab);
+
+    function positionFabAroundNativeControls() {
+      if (!fab || !document.body) return;
+      var selectors = [
+        '[aria-label*="喜欢"]', '[aria-label*="いいね"]', '[aria-label*="Like"]',
+        '[title*="喜欢"]', '[title*="いいね"]', '[title*="Like"]',
+        '[data-testid*="like"]', '[data-testid*="favorite"]'
+      ];
+      var controls = [];
+      for (var s = 0; s < selectors.length; s++) {
+        var nodes = document.querySelectorAll(selectors[s]);
+        for (var n = 0; n < nodes.length; n++) {
+          var node = nodes[n];
+          if (node === fab || !node.getBoundingClientRect) continue;
+          var rect = node.getBoundingClientRect();
+          if (rect.width >= 28 && rect.height >= 28 && rect.top < window.innerHeight && rect.bottom > 0) {
+            controls.push(rect);
+          }
+        }
+      }
+      if (!controls.length) {
+        fab.style.top = "";
+        fab.style.right = "";
+        fab.style.bottom = "";
+        return;
+      }
+      controls.sort(function (a, b) { return b.top - a.top; });
+      var control = controls[0];
+      var fabSize = fab.offsetWidth || 52;
+      var top = Math.max(12, control.top - fabSize - 12);
+      var right = Math.max(12, window.innerWidth - control.right);
+      fab.style.top = top + "px";
+      fab.style.right = right + "px";
+      fab.style.bottom = "auto";
+    }
+
+    var fabPositionFrame = 0;
+    function scheduleFabPosition() {
+      if (fabPositionFrame) return;
+      fabPositionFrame = requestAnimationFrame(function () {
+        fabPositionFrame = 0;
+        positionFabAroundNativeControls();
+      });
+    }
+    window.addEventListener("resize", scheduleFabPosition, { passive: true });
+    window.addEventListener("scroll", scheduleFabPosition, { passive: true, capture: true });
+    if (typeof MutationObserver !== "undefined") {
+      new MutationObserver(scheduleFabPosition).observe(document.body, { childList: true, subtree: true });
+    }
+    scheduleFabPosition();
 
     // 单击 → 触发翻译/还原；长按 500ms → 打开设置中心
     var pressTimer = null;

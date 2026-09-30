@@ -2,7 +2,7 @@
 #!desc = 适配 8.9.2 等版本：全页面日文深度汉化 · AI 视觉多模态漫翻 · 仿 Pix-Scripting/Biliverse 内置设置中心。\n• 拦截首页Home/推荐/榜单/详情/评论/画师主页全量汉化\n• 内置 2500+ 高频 Pixiv Tag 离线字典，0ms 极速秒翻且副标题自动净空\n• 小说沉浸式排版：支持苹方/宋体/楷体/圆体，自动净化免责声明规约\n• 智能豁免纯中文内容，不消耗 API 与加载时间\n• 悬浮按钮像素级对齐喜欢按钮上方，100% 灵敏响应，绝无拖拽失灵\n• 劫持帮助中心直达 PreferencePanes 设置中心，实时同步配置。
 #!author = TomCatXue
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
-#!icon = https://is1-ssl.mzstatic.com/image/thumb/Purple126/v4/bf/16/e0/bf16e00b-68ea-e490-449e-ff9bba3eb1f9/AppIcon-0-0-1x_U007epad-0-0-0-85-220.png/512x512bb.jpg
+#!icon = https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/ca/d5/93/cad5932d-6ba6-7e5a-c2a9-818682fde6f3/AppIcon-0-0-1x_U007epad-0-1-85-220.png/512x512bb.jpg
 #!tag = Pixiv,翻译,AI漫翻,去广告,增强
 #!system = iOS,iPadOS,macOS
 #!date = 2026-09-29 16:30

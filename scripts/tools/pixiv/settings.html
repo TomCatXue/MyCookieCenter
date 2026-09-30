@@ -552,7 +552,7 @@
   </div>
 
   <!-- ─── 第一组：界面汉化与智能过滤 ─── -->
-  <div class="section-card expanded" id="sec-content">
+  <div class="section-card" id="sec-content">
     <div class="section-header" onclick="toggleSection('sec-content')">
       <div class="section-icon" style="background: var(--tint-blue);">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
@@ -635,7 +635,7 @@
   </div>
 
   <!-- ─── 第二组：小说出版级沉浸排版 ─── -->
-  <div class="section-card expanded" id="sec-novel">
+  <div class="section-card" id="sec-novel">
     <div class="section-header" onclick="toggleSection('sec-novel')">
       <div class="section-icon" style="background: var(--tint-indigo);">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
@@ -725,7 +725,7 @@
   </div>
 
   <!-- ─── 第三组：智能 AI 与模型端点 (对标 customAISettings) ─── -->
-  <div class="section-card expanded" id="sec-ai">
+  <div class="section-card" id="sec-ai">
     <div class="section-header" onclick="toggleSection('sec-ai')">
       <div class="section-icon" style="background: var(--tint-purple);">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
@@ -846,10 +846,10 @@
       <div class="setting-row">
         <div class="setting-info">
           <div class="setting-label">视觉模型</div>
-          <div class="setting-desc">独立于上方文本翻译引擎，专门处理对白框气泡定位</div>
+          <div class="setting-desc">独立于文本引擎，自动复用上方已保存的 DeepSeek / OpenAI Key</div>
         </div>
         <div class="select-wrap">
-          <select class="select-input" id="cfg-manga-engine" onchange="saveConfig()">
+          <select class="select-input" id="cfg-manga-engine" onchange="onMangaEngineChange()">
             <option value="deepseek_vl">DeepSeek-VL (推荐/极高性价比)</option>
             <option value="gpt4o_mini">GPT-4o-mini Vision (气泡高精度)</option>
             <option value="manga_translator">自建 manga-image-translator</option>

@@ -5,6 +5,7 @@ const settings = fs.readFileSync("scripts/tools/pixiv/settings.html", "utf8");
 const enhanced = fs.readFileSync("scripts/tools/pixiv/pixiv_enhanced.js", "utf8");
 
 assert(settings.includes('id="cfg-floating-switch"'), "settings page needs the floating-button master switch");
+assert(!settings.includes('class="section-card expanded"'), "settings sections should be collapsed by default");
 assert(settings.includes('id="cfg-novel-show-original"'), "novel settings need a show-original switch");
 assert(!settings.includes('value="microsoft"'), "Microsoft translator must be removed from settings");
 assert(!settings.includes('value="baidu"'), "Baidu translator must be removed from settings");
@@ -27,5 +28,8 @@ assert(enhanced.includes("translateMangaImage"), "manga translation must call a 
 assert(!enhanced.includes("mockBubbles"), "manga translation must not return mock bubbles");
 assert(enhanced.includes("imageSwitch"), "manga enable switch must reach runtime");
 assert(enhanced.includes("if (!imageSwitch)"), "disabled manga translation must not start");
+assert(enhanced.includes("positionFabAroundNativeControls"), "floating button must avoid native controls");
+assert(enhanced.includes("cfg.deepseekKey"), "visual translation must reuse saved DeepSeek credentials");
+assert(enhanced.includes("cfg.openaiKey"), "visual translation must reuse saved OpenAI credentials");
 
 console.log("pixiv settings structure: PASS");
