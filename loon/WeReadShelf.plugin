@@ -1,22 +1,25 @@
-#!name = 微信读书 · 优雅书架
-#!desc = 专为微信读书设计：1.全自动嗅探下架书并转化为公版书模型（centPrice:0, cpid:0, 全章节price:0）；2.即时入架（/book/info 与 /shelf/sync），消除刷新延迟；3.彻底根除章节购买冲突与 402 报错；4.拦截 /pay/buyChapters 伪装购买成功；5.支持请求级 /shelf/add 截断秒入架。
+#!name = 微信读书 · 订阅列表增强与专属入架
+#!desc = 专为微信读书设计：1.保持原生逻辑，订阅仅作为收藏；2.仅限“我的订阅列表”内专属加入书架按钮触发自动化流程；3.官方详情页/搜索页加入书架保持官方原生行为；4.全程零通知、零弹窗，状态实时呈现于按钮。
 #!author = TomCatXue
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/35/92/e6/3592e6f4-0b0b-f2e4-7968-7033b281e1f5/AppIcon-0-1x_U007epad-0-11-0-85-220-0.png/512x512bb.jpg
-#!tag = 微信读书,下架书,优雅书架,书架注入
-#!version = 1.0.6
-#!date = 2026-10-01 10:30
+#!tag = 微信读书,订阅列表增强,专属入架,免通知
+#!version = 2.0.0
+#!date = 2026-10-02 08:30
 
 [Argument]
-weread_shelf = switch,true,tag=微信读书·优雅书架,desc=总开关：开启后自动从订阅捕获下架书籍并动态注入书架与阅读器
-weread_inject_books = input,"",tag=下架书籍ID列表(选填),desc=手动指定需要注入书架并解除阅读限制的下架书籍ID (多个用逗号分隔，留空则自动从订阅抓取)
+weread_shelf = switch,true,tag=微信读书·订阅增强总开关,desc=总开关：开启后启用订阅列表增强与专属自动入架
+weread_bot_enable = switch,false,tag=启用API/Bot处理,desc=点击订阅列表加入书架时是否调用外部自动化处理接口
+weread_bot_api_url = input,"",tag=API地址,desc=自动处理服务的Webhook或API接口地址 (例如 http://192.168.1.100:5000/api/weread/fetch)
+weread_bot_token = input,"",tag=API Token,desc=API鉴权Token或Secret (选填)
+weread_bot_chat_id = input,"",tag=Chat ID,desc=Telegram Chat ID 或 用户标识 (选填)
 
 [MITM]
 hostname = i.weread.qq.com, weread.qq.com
 
 [Script]
-# 请求阶段拦截：本地 0ms 截断 /shelf/add 发包并直接返回合法成功，杜绝官方 4xx/下架报错暴露并持久化缓存书籍ID
-request if ${url} ~= /^https?:\/\/(i\.)?weread\.qq\.com\/shelf\/add/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/wxread_enhance/wxread_shelf.js?v=20261001-1030", {${weread_inject_books}}) with enable=${weread_shelf}, tag="微信读书·优雅书架-加架拦截", requires_body=true
+# 请求阶段拦截：区分 /shelf/add 来源，订阅列表来源时触发单书任务并返回成功；同步监控 /shelf/delete 删除动作
+request if ${url} ~= /^https?:\/\/(i\.)?weread\.qq\.com\/shelf\/(add|delete)/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/wxread_enhance/wxread_shelf.js?v=20261002-0830", {${weread_bot_enable}, ${weread_bot_api_url}, ${weread_bot_token}, ${weread_bot_chat_id}}) with enable=${weread_shelf}, tag="微信读书·专属入架-请求分流", requires_body=true
 
-# 响应阶段拦截：订阅抓取、书架增量同步注入、书籍详情/阅读信息防下架、付费时间伪装与全章节免费放行
-response if ${url} ~= /^https?:\/\/(i\.)?weread\.qq\.com\/(shelf\/(sync|syncbook|add|opus)|subscription\/books|book\/(info|infos|readinfo|paytime|chapterInfos)|pay\/buyChapters)/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/wxread_enhance/wxread_shelf.js?v=20261001-1030", {${weread_inject_books}}) with enable=${weread_shelf}, tag="微信读书·优雅书架-响应放行", requires_body=true
+# 响应阶段拦截：读取订阅列表、注入按钮状态、书架真实已完成单书增量同步、删除状态逆向清理
+response if ${url} ~= /^https?:\/\/(i\.)?weread\.qq\.com\/(subscription\/books|shelf\/(sync|syncbook|delete)|book\/info)/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/wxread_enhance/wxread_shelf.js?v=20261002-0830", {${weread_bot_enable}, ${weread_bot_api_url}, ${weread_bot_token}, ${weread_bot_chat_id}}) with enable=${weread_shelf}, tag="微信读书·订阅增强-状态渲染", requires_body=true
