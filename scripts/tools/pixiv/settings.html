@@ -939,6 +939,13 @@
             <input type="text" class="text-input" id="cfg-manga-server" value="http://127.0.0.1:5000" placeholder="http://192.168.1.x:5000" onchange="saveConfig()">
           </div>
         </div>
+
+        <div style="padding: 4px 16px 12px;">
+          <button type="button" class="secondary-btn" id="btn-test-manga" onclick="testMangaConnection()" style="width: 100%; padding: 8px 12px; font-size: 13px;">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 14h12l-4 8 10-10H12l4-8z"/></svg>
+            <span>测试漫翻服务连接与测速</span>
+          </button>
+        </div>
       </div>
 
       <div class="action-btn-row">
@@ -1271,6 +1278,40 @@
         if (btn) {
           btn.disabled = false;
           btn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 14h12l-4 8 10-10H12l4-8z"/></svg><span>测试当前模型连接与延迟</span>';
+        }
+      }, 3000);
+    }
+
+    async function testMangaConnection() {
+      const btn = document.getElementById("btn-test-manga");
+      if (!btn) return;
+      btn.disabled = true;
+      btn.innerHTML = '<span>⏳ 正在测试漫翻服务…</span>';
+      const start = Date.now();
+
+      try {
+        const res = await fetch("/api/test_manga", { method: "POST" })
+          .then(r => r.json())
+          .catch(() => null);
+        const latency = Date.now() - start;
+
+        if (res && res.ok) {
+          btn.innerHTML = '<span>🟢 漫翻正常 · ' + latency + 'ms</span>';
+          showToast("漫翻服务正常 (" + latency + "ms)", "🟢");
+        } else {
+          const err = (res && res.error) ? res.error : "请求超时或连接失败";
+          btn.innerHTML = '<span>🔴 失败: ' + err.slice(0, 16) + '</span>';
+          showToast("漫翻测试失败: " + err, "❌");
+        }
+      } catch (e) {
+        btn.innerHTML = '<span>🔴 网络异常</span>';
+        showToast("网络请求异常", "❌");
+      }
+
+      setTimeout(() => {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 14h12l-4 8 10-10H12l4-8z"/></svg><span>测试漫翻服务连接与测速</span>';
         }
       }, 3000);
     }
