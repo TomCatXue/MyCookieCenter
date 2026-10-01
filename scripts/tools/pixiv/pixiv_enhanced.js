@@ -21,7 +21,7 @@ function Env(t) { return new class { constructor(t) { this.name = t, this.startT
 const $ = new Env("Pixiv 增强翻译");
 
 // ─── 0. 原生设置中心 HTML 模板 (对标 Pix-Scripting) ───
-const SETTINGS_HTML = "<!DOCTYPE html>\n<html lang=\"zh-CN\">\n\n<head>\n  <meta charset=\"utf-8\">\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no\">\n  <title>Pixiv 增强设置</title>\n  <style>\n    :root {\n      --bg-color: #f2f2f7;\n      --card-bg: #ffffff;\n      --card-border: rgba(60, 60, 67, 0.12);\n      --separator-color: rgba(60, 60, 67, 0.12);\n      --text-primary: #000000;\n      --text-secondary: #8e8e93;\n      --tint-blue: #0096fa;\n      --tint-green: #34c759;\n      --tint-orange: #ff9500;\n      --tint-purple: #af52de;\n      --tint-indigo: #5856d6;\n      --tint-cyan: #5ac8fa;\n      --tint-gray: #8e8e93;\n      --switch-bg: #e9e9ea;\n      --badge-bg: rgba(142, 142, 147, 0.12);\n      --badge-text: #8e8e93;\n    }\n\n    @media (prefers-color-scheme: dark) {\n      :root {\n        --bg-color: #000000;\n        --card-bg: #1c1c1e;\n        --card-border: rgba(255, 255, 255, 0.12);\n        --separator-color: rgba(84, 84, 88, 0.35);\n        --text-primary: #ffffff;\n        --text-secondary: #8e8e93;\n        --switch-bg: #39393d;\n        --badge-bg: rgba(255, 255, 255, 0.12);\n        --badge-text: #aeaeb2;\n      }\n    }\n\n    * {\n      box-sizing: border-box;\n      -webkit-tap-highlight-color: transparent;\n      margin: 0;\n      padding: 0;\n    }\n\n    body {\n      background-color: var(--bg-color);\n      color: var(--text-primary);\n      font-family: -apple-system, BlinkMacSystemFont, \"SF Pro Text\", \"PingFang SC\", \"Hiragino Sans GB\", sans-serif;\n      padding: calc(env(safe-area-inset-top, 20px) + 16px) 16px calc(env(safe-area-inset-bottom, 20px) + 32px);\n      max-width: 680px;\n      margin: 0 auto;\n      line-height: 1.5;\n      font-size: 16px;\n      overflow-x: hidden;\n    }\n\n    /* ─── 页面大标题头部 (Pix-Scripting 风格) ─── */\n    .brand-header {\n      display: flex;\n      align-items: center;\n      gap: 14px;\n      margin-bottom: 22px;\n      padding: 4px 6px;\n    }\n\n    .brand-icon {\n      width: 52px;\n      height: 52px;\n      border-radius: 13px;\n      background: var(--tint-blue);\n      display: flex;\n      align-items: center;\n      justify-content: center;\n      color: #fff;\n      box-shadow: none;\n      flex-shrink: 0;\n    }\n\n    .brand-title {\n      font-size: 22px;\n      font-weight: 700;\n      letter-spacing: -0.4px;\n      color: var(--text-primary);\n      display: flex;\n      align-items: center;\n      gap: 8px;\n    }\n\n    .brand-badge {\n      font-size: 11px;\n      font-weight: 600;\n      padding: 2px 7px;\n      border-radius: 6px;\n      background: rgba(0, 150, 250, 0.15);\n      color: var(--tint-blue);\n      letter-spacing: 0;\n    }\n\n    .brand-sub {\n      font-size: 13px;\n      color: var(--text-secondary);\n      margin-top: 2px;\n    }\n\n    /* ─── Grouped 卡片容器 ─── */\n    .section-card {\n      background: var(--card-bg);\n      border-radius: 14px;\n      border: 0.5px solid var(--card-border);\n      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);\n      margin-bottom: 6px;\n      overflow: hidden;\n      transition: all 0.25s ease;\n    }\n\n    .section-header {\n      display: flex;\n      align-items: center;\n      padding: 13px 16px;\n      cursor: pointer;\n      user-select: none;\n      gap: 12px;\n      min-height: 50px;\n    }\n\n    .section-header:active {\n      background: rgba(127, 127, 127, 0.08);\n    }\n\n    .section-icon {\n      width: 28px;\n      height: 28px;\n      border-radius: 7px;\n      display: flex;\n      align-items: center;\n      justify-content: center;\n      color: #fff;\n      flex-shrink: 0;\n    }\n\n    .section-title {\n      font-size: 16px;\n      font-weight: 600;\n      flex: 1;\n      color: var(--text-primary);\n    }\n\n    .section-summary {\n      font-size: 12px;\n      color: var(--badge-text);\n      background: var(--badge-bg);\n      padding: 3px 8px;\n      border-radius: 6px;\n      font-weight: 500;\n      max-width: 140px;\n      white-space: nowrap;\n      overflow: hidden;\n      text-overflow: ellipsis;\n      transition: opacity 0.2s;\n    }\n\n    .chevron-icon {\n      width: 14px;\n      height: 14px;\n      color: var(--text-secondary);\n      transition: transform 0.25s ease;\n      flex-shrink: 0;\n    }\n\n    .section-card.expanded .chevron-icon {\n      transform: rotate(90deg);\n    }\n\n    .section-card.expanded .section-summary {\n      opacity: 0;\n      pointer-events: none;\n    }\n\n    .section-body {\n      display: none;\n      border-top: 0.5px solid var(--separator-color);\n    }\n\n    .section-card.expanded .section-body {\n      display: block;\n    }\n\n    /* ─── 设置条目 (Row) ─── */\n    .setting-row {\n      display: flex;\n      align-items: center;\n      justify-content: space-between;\n      padding: 12px 16px;\n      min-height: 48px;\n      position: relative;\n    }\n\n    .setting-row:not(:last-child)::after {\n      content: \"\";\n      position: absolute;\n      left: 16px;\n      right: 0;\n      bottom: 0;\n      height: 0.5px;\n      background: var(--separator-color);\n    }\n\n    .setting-info {\n      flex: 1;\n      padding-right: 12px;\n    }\n\n    .setting-label {\n      font-size: 15px;\n      font-weight: 500;\n      color: var(--text-primary);\n    }\n\n    .setting-desc {\n      font-size: 12px;\n      color: var(--text-secondary);\n      margin-top: 2px;\n      line-height: 1.35;\n    }\n\n    .cache {\n      padding: 14px 16px 16px;\n    }\n\n    .cache-overview {\n      display: flex;\n      align-items: baseline;\n      gap: 22px;\n      margin: 13px 0 11px;\n    }\n\n    .cache-stat {\n      display: flex;\n      align-items: baseline;\n      gap: 5px;\n    }\n\n    .cache-stat strong {\n      font-size: 20px;\n      font-weight: 600;\n    }\n\n    .cache-stat span {\n      color: var(--text-secondary);\n      font-size: 12px;\n    }\n\n    /* ─── 控件：iOS 原生质感 Toggle 开关 ─── */\n    .switch-wrap {\n      position: relative;\n      width: 51px;\n      height: 31px;\n      flex-shrink: 0;\n    }\n\n    .switch-wrap input {\n      opacity: 0;\n      width: 0;\n      height: 0;\n    }\n\n    .switch-slider {\n      position: absolute;\n      cursor: pointer;\n      top: 0;\n      left: 0;\n      right: 0;\n      bottom: 0;\n      background-color: var(--switch-bg);\n      transition: background-color 0.25s ease;\n      border-radius: 31px;\n    }\n\n    .switch-slider::before {\n      position: absolute;\n      content: \"\";\n      height: 27px;\n      width: 27px;\n      left: 2px;\n      bottom: 2px;\n      background-color: white;\n      transition: transform 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);\n      border-radius: 50%;\n      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);\n    }\n\n    .switch-wrap input:checked+.switch-slider {\n      background-color: var(--tint-green);\n    }\n\n    .switch-wrap input:checked+.switch-slider::before {\n      transform: translateX(20px);\n    }\n\n    /* ─── 控件：Select 选择器 ─── */\n    .select-wrap {\n      position: relative;\n      display: inline-flex;\n      align-items: center;\n    }\n\n    .select-input {\n      appearance: none;\n      -webkit-appearance: none;\n      background: rgba(127, 127, 127, 0.1);\n      border: none;\n      padding: 6px 28px 6px 12px;\n      border-radius: 8px;\n      font-size: 14px;\n      font-family: inherit;\n      color: var(--tint-blue);\n      font-weight: 500;\n      outline: none;\n      cursor: pointer;\n    }\n\n    .select-arrow {\n      position: absolute;\n      right: 8px;\n      width: 12px;\n      height: 12px;\n      color: var(--tint-blue);\n      pointer-events: none;\n    }\n\n    /* ─── 控件：单行输入框 (带显隐眼睛) ─── */\n    .input-wrap {\n      display: flex;\n      align-items: center;\n      background: rgba(127, 127, 127, 0.08);\n      border-radius: 8px;\n      padding: 6px 10px;\n      width: 100%;\n      margin-top: 6px;\n      border: 0.5px solid var(--separator-color);\n    }\n\n    .text-input {\n      flex: 1;\n      background: transparent;\n      border: none;\n      font-size: 14px;\n      font-family: inherit;\n      color: var(--text-primary);\n      outline: none;\n    }\n\n    .text-input::placeholder {\n      color: var(--text-secondary);\n      opacity: 0.6;\n    }\n\n    .input-action-btn {\n      background: none;\n      border: none;\n      color: var(--text-secondary);\n      padding: 2px 4px;\n      cursor: pointer;\n      display: flex;\n      align-items: center;\n    }\n\n    /* ─── 控件：多选 Scope 芯片胶囊 ─── */\n    .cache-overview {\n      display: flex;\n      align-items: baseline;\n      gap: 22px;\n      margin: 13px 0 11px;\n      padding: 8px 16px 14px;\n    .cache-stat {\n      display: flex;\n      align-items: baseline;\n      gap: 5px;\n      font-size: 13px;\n    .cache-stat strong {\n      font-size: 20px;\n      transition: all 0.2s ease;\n    }\n    .cache-stat span {\n    .scope-chip.selected {\n      background: rgba(0, 150, 250, 0.15);\n      border-color: rgba(0, 150, 250, 0.35);\n      font-weight: 600;\n    }\n\n    /* ─── 操作按钮 (Button) ─── */\n    .action-btn-row {\n      padding: 12px 16px;\n      display: flex;\n      gap: 10px;\n    }\n\n    .primary-btn {\n      flex: 1;\n      background: var(--tint-blue);\n      color: #fff;\n      border: none;\n      border-radius: 10px;\n      padding: 11px 16px;\n      font-size: 15px;\n      font-weight: 600;\n      cursor: pointer;\n      display: flex;\n      align-items: center;\n      justify-content: center;\n      gap: 6px;\n      box-shadow: 0 2px 8px rgba(0, 150, 250, 0.25);\n      transition: transform 0.12s, opacity 0.2s;\n    }\n\n    .primary-btn:active {\n      transform: scale(0.97);\n      opacity: 0.9;\n    }\n\n    .secondary-btn {\n      flex: 1;\n      background: rgba(127, 127, 127, 0.12);\n      color: var(--text-primary);\n      border: none;\n      border-radius: 10px;\n      padding: 11px 16px;\n      font-size: 15px;\n      font-weight: 500;\n      cursor: pointer;\n      display: flex;\n      align-items: center;\n      justify-content: center;\n      gap: 6px;\n      transition: transform 0.12s, opacity 0.2s;\n    }\n\n    .secondary-btn:active {\n      transform: scale(0.97);\n    }\n\n    .danger-btn {\n      color: var(--tint-red);\n      background: rgba(255, 59, 48, 0.1);\n    }\n\n    /* ─── 分组说明注脚 (Footer) ─── */\n    .section-footer {\n      font-size: 12px;\n      color: var(--text-secondary);\n      margin: 6px 16px 20px;\n      line-height: 1.4;\n      padding: 0 4px;\n    }\n\n    /* ─── 提示 Toast 悬浮胶囊 ─── */\n    #px-toast {\n      position: fixed;\n      top: calc(env(safe-area-inset-top, 20px) + 12px);\n      left: 50%;\n      transform: translateX(-50%) translateY(-60px);\n      background: rgba(20, 20, 20, 0.9);\n      -webkit-backdrop-filter: blur(20px);\n      backdrop-filter: blur(20px);\n      color: #fff;\n      padding: 8px 18px;\n      border-radius: 20px;\n      font-size: 13px;\n      font-weight: 500;\n      display: flex;\n      align-items: center;\n      gap: 6px;\n      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);\n      z-index: 999999;\n      opacity: 0;\n      transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);\n      pointer-events: none;\n    }\n\n    #px-toast.show {\n      transform: translateX(-50%) translateY(0);\n      opacity: 1;\n    }\n  </style>\n</head>\n\n<body>\n\n  <!-- 提示 Toast 胶囊 -->\n  <div id=\"px-toast\">\n    <span id=\"px-toast-icon\">✓</span>\n    <span id=\"px-toast-msg\">设置已自动保存</span>\n  </div>\n\n  <!-- 页面主标头 (对标 Pix-Scripting) -->\n  <div class=\"brand-header\">\n    <div class=\"brand-icon\">\n      <svg viewBox=\"0 0 24 24\" width=\"28\" height=\"28\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.2\"\n        stroke-linecap=\"round\" stroke-linejoin=\"round\">\n        <path d=\"m5 8 6 6\" />\n        <path d=\"m4 14 6-6 2-3\" />\n        <path d=\"M2 5h12\" />\n        <path d=\"M7 2h1\" />\n        <path d=\"m22 22-5-10-5 10\" />\n        <path d=\"M14 18h6\" />\n      </svg>\n    </div>\n    <div>\n      <div class=\"brand-title\">\n        Pixiv 增强设置\n        <span class=\"brand-badge\">v4.1</span>\n      </div>\n      <div class=\"brand-sub\">全局日文汉化 · AI 视觉漫翻 · 出版级排版</div>\n    </div>\n  </div>\n\n  <!-- ─── 第一组：界面汉化与智能过滤 ─── -->\n  <div class=\"section-card expanded\" id=\"sec-content\">\n    <div class=\"section-header\" onclick=\"toggleSection('sec-content')\">\n      <div class=\"section-icon\" style=\"background: var(--tint-blue);\">\n        <svg viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" fill=\"currentColor\">\n          <path\n            d=\"M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z\" />\n        </svg>\n      </div>\n      <div class=\"section-title\">界面汉化与过滤</div>\n      <div class=\"section-summary\" id=\"sum-content\">自动:开 · 简体</div>\n      <svg class=\"chevron-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\"\n        stroke-linecap=\"round\" stroke-linejoin=\"round\">\n        <path d=\"m9 18 6-6-6-6\" />\n      </svg>\n    </div>\n    <div class=\"section-body\">\n      <div class=\"setting-row\">\n        <div class=\"setting-info\">\n          <div class=\"setting-label\">启用 Pixiv 增强翻译</div>\n          <div class=\"setting-desc\">总开关：接管日文文本汉化与漫画对白识别</div>\n        </div>\n        <label class=\"switch-wrap\">\n          <input type=\"checkbox\" id=\"cfg-global-switch\" onchange=\"saveConfig()\">\n          <span class=\"switch-slider\"></span>\n        </label>\n      </div>\n      <div class=\"setting-row\">\n        <div class=\"setting-info\">\n          <div class=\"setting-label\">默认全自动汉化</div>\n          <div class=\"setting-desc\">进入首页、榜单、详情与小说时直接呈现中文，无需点击</div>\n        </div>\n        <label class=\"switch-wrap\">\n          <input type=\"checkbox\" id=\"cfg-auto-switch\" onchange=\"saveConfig()\">\n          <span class=\"switch-slider\"></span>\n        </label>\n      </div>\n      <div class=\"setting-row\">\n        <div class=\"setting-info\">\n          <div class=\"setting-label\">智能豁免纯中文作品</div>\n          <div class=\"setting-desc\">作者本身使用中文创作时自动跳过，节省配额与零延迟</div>\n        </div>\n        <label class=\"switch-wrap\">\n          <input type=\"checkbox\" id=\"cfg-skip-chinese\" onchange=\"saveConfig()\">\n          <span class=\"switch-slider\"></span>\n        </label>\n      </div>\n      <div class=\"setting-row\">\n        <div class=\"setting-info\">\n          <div class=\"setting-label\">目标语言</div>\n          <div class=\"setting-desc\">期望将外语内容翻译为的目标语种</div>\n        </div>\n        <div class=\"select-wrap\">\n          <select class=\"select-input\" id=\"cfg-target-lang\" onchange=\"saveConfig()\">\n            <option value=\"zh-CN\">简体中文</option>\n            <option value=\"zh-TW\">繁體中文</option>\n            <option value=\"en\">English</option>\n            <option value=\"ja\">日本語 (原文)</option>\n            <option value=\"ko\">한국어</option>\n          </select>\n          <svg class=\"select-arrow\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\">\n            <path d=\"m6 9 6 6 6-6\" />\n          </svg>\n        </div>\n      </div>\n      <div style=\"padding: 10px 16px 4px;\">\n        <div class=\"setting-label\" style=\"font-size: 14px;\">翻译生效模块</div>\n      </div>\n      <div class=\"scope-chips\" id=\"scope-chips-container\">\n        <div class=\"scope-chip\" data-key=\"illust_title\" onclick=\"toggleScope(this)\">作品标题</div>\n        <div class=\"scope-chip\" data-key=\"illust_caption\" onclick=\"toggleScope(this)\">作品简介 (就地汉化)</div>\n        <div class=\"scope-chip\" data-key=\"tags\" onclick=\"toggleScope(this)\">日文标签 (Tag)</div>\n        <div class=\"scope-chip\" data-key=\"novels\" onclick=\"toggleScope(this)\">小说列表与正文</div>\n        <div class=\"scope-chip\" data-key=\"comments\" onclick=\"toggleScope(this)\">评论区 (全语种)</div>\n        <div class=\"scope-chip\" data-key=\"user_profile\" onclick=\"toggleScope(this)\">画师简介</div>\n        <div class=\"scope-chip\" data-key=\"spotlight\" onclick=\"toggleScope(this)\">Pixivision 特辑</div>\n      </div>\n    </div>\n  </div>\n  <div class=\"section-footer\">\n    首页卡片将同时改写底层模型，简介就地展示中文，彻底消除“点击查看更多”弹窗；标签副标题已自动净空，杜绝上下重复堆叠。\n  </div>\n\n  <!-- ─── 第二组：小说出版级沉浸排版 ─── -->\n  <div class=\"section-card expanded\" id=\"sec-novel\">\n    <div class=\"section-header\" onclick=\"toggleSection('sec-novel')\">\n      <div class=\"section-icon\" style=\"background: var(--tint-indigo);\">\n        <svg viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" fill=\"currentColor\">\n          <path\n            d=\"M18 2H6c-1.2 0-2 .8-2 2v16c0 1.2.8 2 2 2h12c1.2 0 2-.8 2-2V4c0-1.2-.8-2-2-2zM6 4h5v8l-2.5-1.5L6 12V4z\" />\n        </svg>\n      </div>\n      <div class=\"section-title\">小说出版级排版</div>\n      <div class=\"section-summary\" id=\"sum-novel\">系统默认 · 规约净化</div>\n      <svg class=\"chevron-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\"\n        stroke-linecap=\"round\" stroke-linejoin=\"round\">\n        <path d=\"m9 18 6-6-6-6\" />\n      </svg>\n    </div>\n    <div class=\"section-body\">\n      <div class=\"setting-row\">\n        <div class=\"setting-info\">\n          <div class=\"setting-label\">排版字体风格</div>\n          <div class=\"setting-desc\">对标 Pix-Scripting 规范，自由注入精致中文印刷字体</div>\n        </div>\n        <div class=\"select-wrap\">\n          <select class=\"select-input\" id=\"cfg-novel-font\" onchange=\"saveConfig()\">\n            <option value=\"system\">系统默认 (苹方)</option>\n            <option value=\"songti\">经典宋体 (纸书质感)</option>\n            <option value=\"kaiti\">优美楷体 (古雅风格)</option>\n            <option value=\"yuanti\">柔和圆体 (亲和温润)</option>\n          </select>\n          <svg class=\"select-arrow\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\">\n            <path d=\"m6 9 6 6 6-6\" />\n          </svg>\n        </div>\n      </div>\n      <div class=\"setting-row\">\n        <div class=\"setting-info\">\n          <div class=\"setting-label\">自动净化作者免责声明</div>\n          <div class=\"setting-desc\">智能过滤台本商用授权、禁止转载等规约，只呈现小说故事</div>\n        </div>\n        <label class=\"switch-wrap\">\n          <input type=\"checkbox\" id=\"cfg-clean-disclaimer\" onchange=\"saveConfig()\">\n          <span class=\"switch-slider\"></span>\n        </label>\n      </div>\n      <div class=\"setting-row\">\n        <div class=\"setting-info\">\n          <div class=\"setting-label\">显示原文</div>\n          <div class=\"setting-desc\">开启后按原文在上、译文在下的段落对显示；关闭后仅显示译文</div>\n        </div>\n        <label class=\"switch-wrap\">\n          <input type=\"checkbox\" id=\"cfg-novel-show-original\" onchange=\"saveConfig()\">\n          <span class=\"switch-slider\"></span>\n        </label>\n      </div>\n    </div>\n  </div>\n  <div class=\"section-footer\">\n    字号、行距、暗黑模式背景及文字颜色严格同态继承 Pixiv 官方设置，阅读正文上方不再插入生硬标题，保持 100% 沉浸阅读。\n  </div>\n\n  <div class=\"section-card\" id=\"sec-floating\">\n    <div class=\"section-header\" onclick=\"toggleSection('sec-floating')\">\n      <div class=\"section-icon\" style=\"background: var(--tint-gray);\">\n        <svg viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"\n          stroke-linecap=\"round\">\n          <path d=\"M6 12h12\" />\n          <path d=\"M12 6v12\" />\n        </svg>\n      </div>\n      <div class=\"section-title\">悬浮按钮</div>\n      <div class=\"section-summary\" id=\"sum-floating\">已开启</div>\n      <svg class=\"chevron-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\"\n        stroke-linecap=\"round\" stroke-linejoin=\"round\">\n        <path d=\"m9 18 6-6-6-6\" />\n      </svg>\n    </div>\n    <div class=\"section-body\">\n      <div class=\"setting-row\">\n        <div class=\"setting-info\">\n          <div class=\"setting-label\">显示悬浮按钮</div>\n          <div class=\"setting-desc\">翻译过程中显示，位置会自动避开页面控件</div>\n        </div>\n        <label class=\"switch-wrap\">\n          <input type=\"checkbox\" id=\"cfg-floating-switch\" onchange=\"saveConfig()\">\n          <span class=\"switch-slider\"></span>\n        </label>\n      </div>\n    </div>\n  </div>\n\n  <!-- ─── 第三组：智能 AI 与模型端点 (对标 customAISettings) ─── -->\n  <div class=\"section-card expanded\" id=\"sec-ai\">\n    <div class=\"section-header\" onclick=\"toggleSection('sec-ai')\">\n      <div class=\"section-icon\" style=\"background: var(--tint-purple);\">\n        <svg viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" fill=\"currentColor\">\n          <path\n            d=\"m19 9 1.25-2.75L23 5l-2.75-1.25L19 1l-1.25 2.75L15 5l2.75 1.25zm-7.5.5L9 4 6.5 9.5 1 12l5.5 2.5L9 20l2.5-5.5L17 12zM19 15l-1.25 2.75L15 19l2.75 1.25L19 23l1.25-2.75L23 19l-2.75-1.25z\" />\n        </svg>\n      </div>\n      <div class=\"section-title\">智能 AI 与模型端点</div>\n      <div class=\"section-summary\" id=\"sum-ai\">Google 免费</div>\n      <svg class=\"chevron-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\"\n        stroke-linecap=\"round\" stroke-linejoin=\"round\">\n        <path d=\"m9 18 6-6-6-6\" />\n      </svg>\n    </div>\n    <div class=\"section-body\">\n      <div class=\"setting-row\">\n        <div class=\"setting-info\">\n          <div class=\"setting-label\">翻译引擎切换</div>\n          <div class=\"setting-desc\">选择底层文本翻译所使用的服务通道</div>\n        </div>\n        <div class=\"select-wrap\">\n          <select class=\"select-input\" id=\"cfg-translator-source\" onchange=\"onTranslatorChange()\">\n            <option value=\"google\">Google 免费切片并发 (极速)</option>\n            <option value=\"deepseek\">DeepSeek AI (文学润色/需Key)</option>\n            <option value=\"openai\">OpenAI / 兼容接口 (需Key)</option>\n          </select>\n          <svg class=\"select-arrow\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\">\n            <path d=\"m6 9 6 6 6-6\" />\n          </svg>\n        </div>\n      </div>\n\n      <!-- DeepSeek 专属配置区 -->\n      <div id=\"ai-deepseek-block\" style=\"padding: 10px 16px 14px; border-bottom: 0.5px solid var(--separator-color);\">\n        <div class=\"setting-label\" style=\"font-size: 14px;\">DeepSeek API Key</div>\n        <div class=\"input-wrap\">\n          <input type=\"password\" class=\"text-input\" id=\"cfg-deepseek-key\" placeholder=\"sk-...\" onchange=\"saveConfig()\">\n          <button type=\"button\" class=\"input-action-btn\" onclick=\"toggleInputMask('cfg-deepseek-key')\">\n            <svg viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" fill=\"currentColor\">\n              <path\n                d=\"M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z\" />\n            </svg>\n          </button>\n        </div>\n        <div style=\"display: flex; gap: 8px; margin-top: 8px;\">\n          <div style=\"flex: 2;\">\n            <div class=\"setting-desc\">端点 URL</div>\n            <div class=\"input-wrap\"><input type=\"text\" class=\"text-input\" id=\"cfg-deepseek-url\"\n                value=\"https://api.deepseek.com/v1/chat/completions\" onchange=\"saveConfig()\"></div>\n          </div>\n          <div style=\"flex: 1.2;\">\n            <div class=\"setting-desc\">模型名称</div>\n            <div class=\"input-wrap\"><input type=\"text\" class=\"text-input\" id=\"cfg-deepseek-model\"\n                value=\"deepseek-v4-flash\" onchange=\"saveConfig()\"></div>\n          </div>\n        </div>\n      </div>\n\n      <!-- OpenAI 专属配置区 -->\n      <div id=\"ai-openai-block\"\n        style=\"padding: 10px 16px 14px; border-bottom: 0.5px solid var(--separator-color); display: none;\">\n        <div class=\"setting-label\" style=\"font-size: 14px;\">OpenAI API Key</div>\n        <div class=\"input-wrap\">\n          <input type=\"password\" class=\"text-input\" id=\"cfg-openai-key\" placeholder=\"sk-...\" onchange=\"saveConfig()\">\n          <button type=\"button\" class=\"input-action-btn\" onclick=\"toggleInputMask('cfg-openai-key')\">\n            <svg viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" fill=\"currentColor\">\n              <path\n                d=\"M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z\" />\n            </svg>\n          </button>\n        </div>\n        <div style=\"margin-top: 8px;\">\n          <div class=\"setting-desc\">OpenAI 兼容端点 URL</div>\n          <div class=\"input-wrap\"><input type=\"text\" class=\"text-input\" id=\"cfg-openai-url\"\n              value=\"https://api.openai.com/v1/chat/completions\" onchange=\"saveConfig()\"></div>\n        </div>\n      </div>\n\n      <!-- 测试连接按钮 (对标 customAISettings 测速与连通性检验) -->\n      <div class=\"action-btn-row\">\n        <button type=\"button\" class=\"primary-btn\" id=\"btn-test-ai\" onclick=\"testAIConnection()\">\n          <span>⚡ 测试模型连接与延迟</span>\n        </button>\n      </div>\n    </div>\n  </div>\n  <div class=\"section-footer\">\n    配置保存在本地 Loon 中。Google 免费源已启用多切片并发加速，无需任何 Key 即可达到 120Hz 丝滑体验。\n  </div>\n\n  <!-- ─── 第四组：漫画多模态 AI 漫翻 ─── -->\n  <div class=\"section-card\" id=\"sec-manga\">\n    <div class=\"section-header\" onclick=\"toggleSection('sec-manga')\">\n      <div class=\"section-icon\" style=\"background: var(--tint-cyan);\">\n        <svg viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" fill=\"currentColor\">\n          <path\n            d=\"M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z\" />\n        </svg>\n      </div>\n      <div class=\"section-title\">漫画多模态 AI 漫翻</div>\n      <div class=\"section-summary\" id=\"sum-manga\">HUD 气泡字幕</div>\n      <svg class=\"chevron-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\"\n        stroke-linecap=\"round\" stroke-linejoin=\"round\">\n        <path d=\"m9 18 6-6-6-6\" />\n      </svg>\n    </div>\n    <div class=\"section-body\">\n      <div class=\"setting-row\">\n        <div class=\"setting-info\">\n          <div class=\"setting-label\">启用图片/漫画 AI 翻译</div>\n          <div class=\"setting-desc\">阅读漫画或插画大图时支持智能视觉字幕识别</div>\n        </div>\n        <label class=\"switch-wrap\">\n          <input type=\"checkbox\" id=\"cfg-manga-switch\" onchange=\"saveConfig()\">\n          <span class=\"switch-slider\"></span>\n        </label>\n      </div>\n      <div class=\"setting-row\">\n        <div class=\"setting-info\">\n          <div class=\"setting-label\">视觉模型</div>\n          <div class=\"setting-desc\">独立于上方文本翻译引擎，专门处理对白框气泡定位</div>\n        </div>\n        <div class=\"select-wrap\">\n          <select class=\"select-input\" id=\"cfg-manga-engine\" onchange=\"saveConfig()\">\n            <option value=\"deepseek_vl\">DeepSeek-VL (推荐/极高性价比)</option>\n            <option value=\"gpt4o_mini\">GPT-4o-mini Vision (气泡高精度)</option>\n            <option value=\"manga_translator\">自建 manga-image-translator</option>\n          </select>\n          <svg class=\"select-arrow\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\">\n            <path d=\"m6 9 6 6 6-6\" />\n          </svg>\n        </div>\n      </div>\n      <div class=\"setting-row\">\n        <div class=\"setting-info\">\n          <div class=\"setting-label\">展现样式</div>\n          <div class=\"setting-desc\">HUD 气泡字幕覆盖保留 100% 原始超清画质，内存占用 < 100KB</div>\n          </div>\n          <div class=\"select-wrap\">\n            <select class=\"select-input\" id=\"cfg-manga-rendermode\" onchange=\"saveConfig()\">\n              <option value=\"overlay\">HUD 气泡字幕悬浮覆盖</option>\n              <option value=\"inpaint\">AI 抹字整图重绘 (需自建)</option>\n            </select>\n            <svg class=\"select-arrow\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\">\n              <path d=\"m6 9 6 6 6-6\" />\n            </svg>\n          </div>\n        </div>\n      </div>\n    </div>\n    <div class=\"section-footer\">\n      HUD 模式仅发送图片链接，模型返回对白坐标后在屏幕上悬浮半透明对白框，杜绝 iOS 内存膨胀断网。\n    </div>\n\n    <!-- ─── 第五组：高级选项与缓存管理 ─── -->\n    <div class=\"section-card\" id=\"sec-advanced\">\n      <div class=\"section-header\" onclick=\"toggleSection('sec-advanced')\">\n        <div class=\"section-icon\" style=\"background: var(--tint-gray);\">\n          <svg viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" fill=\"currentColor\">\n            <path\n              d=\"M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z\" />\n          </svg>\n        </div>\n        <div class=\"section-title\">高级选项与缓存管理</div>\n        <div class=\"section-summary\" id=\"sum-advanced\">已就绪</div>\n        <svg class=\"chevron-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\"\n          stroke-linecap=\"round\" stroke-linejoin=\"round\">\n          <path d=\"m9 18 6-6-6-6\" />\n        </svg>\n      </div>\n      <div class=\"section-body\">\n        <div class=\"setting-row\">\n          <div class=\"setting-info\">\n            <div class=\"setting-label\">标签优先使用离线词典</div>\n            <div class=\"setting-desc\">内置 2500+ ACG 日文 Tag 映射表，0ms 响应且副标自动净空</div>\n          </div>\n          <label class=\"switch-wrap\">\n            <input type=\"checkbox\" id=\"cfg-tag-offline\" checked onchange=\"saveConfig()\">\n            <span class=\"switch-slider\"></span>\n          </label>\n        </div>\n        <div class=\"setting-row\">\n          <div class=\"setting-info\">\n            <div class=\"setting-label\">日志输出级别</div>\n            <div class=\"setting-desc\">控制 Loon 脚本日志的详细程度</div>\n          </div>\n          <div class=\"select-wrap\">\n            <select class=\"select-input\" id=\"cfg-log-level\" onchange=\"saveConfig()\">\n              <option value=\"WARN\">警告与错误 (推荐)</option>\n              <option value=\"INFO\">基础信息</option>\n              <option value=\"DEBUG\">详细调试 (含测速)</option>\n              <option value=\"OFF\">关闭</option>\n            </select>\n            <svg class=\"select-arrow\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\">\n              <path d=\"m6 9 6 6 6-6\" />\n            </svg>\n          </div>\n        </div>\n        <div class=\"cache\" id=\"cache-summary\">\n          <div class=\"setting-label\">翻译缓存</div>\n          <div class=\"setting-desc\">翻译结果会暂存在本地，以减少重复请求</div>\n          <div class=\"cache-overview\">\n            <div class=\"cache-stat\"><strong id=\"cache-size\">读取中…</strong><span>已使用</span></div>\n            <div class=\"cache-stat\"><strong id=\"cache-count\">读取中…</strong><span>缓存条目</span></div>\n          </div>\n          <button type=\"button\" class=\"secondary-btn danger-btn\" onclick=\"confirmClearCache()\">\n            <span>清理缓存</span>\n          </button>\n          <div class=\"setting-desc\" id=\"cache-feedback\" aria-live=\"polite\"></div>\n        </div>\n      </div>\n    </div>\n    <div class=\"section-footer\">\n      图片镜像分流提示：如需节省代理流量并实现看图秒开，可在 Loon 的 [Rule] 段添加规则：<code\n        style=\"background: rgba(127,127,127,0.15); padding: 1px 4px; border-radius: 4px;\">DOMAIN,i.pixiv.re,DIRECT</code>。\n    </div>\n\n    <script>\n      // 默认初始配置字典\n      const DEFAULT_CONFIG = {\n        \"@Pixiv.Enhanced.Settings.Global.Switch\": true,\n        \"@Pixiv.Enhanced.Settings.Auto.Switch\": true,\n        \"@Pixiv.Enhanced.Settings.Auto.Scopes\": [\"illust_title\", \"illust_caption\", \"tags\", \"comments\", \"user_profile\", \"novels\", \"spotlight\"],\n        \"@Pixiv.Enhanced.Settings.Filter.SkipChinese\": true,\n        \"@Pixiv.Enhanced.Settings.Novel.Font\": \"system\",\n        \"@Pixiv.Enhanced.Settings.Novel.CleanDisclaimer\": true,\n        \"@Pixiv.Enhanced.Settings.Novel.ShowOriginal\": true,\n        \"@Pixiv.Enhanced.Settings.Floating.Switch\": true,\n        \"@Pixiv.Enhanced.Settings.Translator.Source\": \"google\",\n        \"@Pixiv.Enhanced.Settings.Target.Lang\": \"zh-CN\",\n        \"@Pixiv.Enhanced.Settings.Tag.OfflineOnly\": true,\n        \"@Pixiv.Enhanced.Settings.Image.Switch\": true,\n        \"@Pixiv.Enhanced.Settings.Image.Engine\": \"deepseek_vl\",\n        \"@Pixiv.Enhanced.Settings.Image.RenderMode\": \"overlay\",\n        \"@Pixiv.Enhanced.Settings.Auth.DeepSeekKey\": \"\",\n        \"@Pixiv.Enhanced.Settings.Auth.DeepSeekUrl\": \"https://api.deepseek.com/v1/chat/completions\",\n        \"@Pixiv.Enhanced.Settings.Auth.DeepSeekModel\": \"deepseek-v4-flash\",\n        \"@Pixiv.Enhanced.Settings.Auth.OpenAIKey\": \"\",\n        \"@Pixiv.Enhanced.Settings.Auth.OpenAIUrl\": \"https://api.openai.com/v1/chat/completions\",\n        \"@Pixiv.Enhanced.Settings.Manga.ServerUrl\": \"http://127.0.0.1:5000\",\n        \"@Pixiv.Enhanced.Settings.LogLevel\": \"WARN\"\n      };\n\n      let currentConfig = Object.assign({}, DEFAULT_CONFIG);\n      let selectedScopes = new Set(DEFAULT_CONFIG[\"@Pixiv.Enhanced.Settings.Auto.Scopes\"]);\n\n      function showToast(msg, icon) {\n        const toast = document.getElementById(\"px-toast\");\n        document.getElementById(\"px-toast-msg\").textContent = msg;\n        document.getElementById(\"px-toast-icon\").textContent = icon || \"✓\";\n        toast.classList.add(\"show\");\n        clearTimeout(window._toastTimer);\n        window._toastTimer = setTimeout(() => toast.classList.remove(\"show\"), 2200);\n      }\n\n      function toggleSection(id) {\n        const card = document.getElementById(id);\n        if (card) card.classList.toggle(\"expanded\");\n      }\n\n      function toggleInputMask(inputId) {\n        const input = document.getElementById(inputId);\n        if (input) input.type = (input.type === \"password\") ? \"text\" : \"password\";\n      }\n\n      function toggleScope(el) {\n        const key = el.getAttribute(\"data-key\");\n        if (selectedScopes.has(key)) {\n          selectedScopes.delete(key);\n          el.classList.remove(\"selected\");\n        } else {\n          selectedScopes.add(key);\n          el.classList.add(\"selected\");\n        }\n        saveConfig();\n      }\n\n      function onTranslatorChange() {\n        const source = document.getElementById(\"cfg-translator-source\").value;\n        const dsBlock = document.getElementById(\"ai-deepseek-block\");\n        const oaBlock = document.getElementById(\"ai-openai-block\");\n        if (dsBlock) dsBlock.style.display = (source === \"deepseek\") ? \"block\" : \"none\";\n        if (oaBlock) oaBlock.style.display = (source === \"openai\") ? \"block\" : \"none\";\n        saveConfig();\n      }\n\n      function updateSummaries() {\n        // 1. 内容与语言\n        const autoOn = document.getElementById(\"cfg-auto-switch\").checked;\n        const targetLang = document.getElementById(\"cfg-target-lang\").value;\n        const langText = (targetLang === \"zh-CN\") ? \"简体\" : (targetLang === \"zh-TW\" ? \"繁體\" : targetLang);\n        document.getElementById(\"sum-content\").textContent = (autoOn ? \"自动:开\" : \"自动:关\") + \" · \" + langText;\n\n        // 2. 小说排版\n        const font = document.getElementById(\"cfg-novel-font\").value;\n        const fontNameMap = { system: \"苹方\", songti: \"宋体\", kaiti: \"楷体\", yuanti: \"圆体\" };\n        const cleanOn = document.getElementById(\"cfg-clean-disclaimer\").checked;\n        document.getElementById(\"sum-novel\").textContent = (fontNameMap[font] || \"原版\") + \" · \" + (cleanOn ? \"规约净化\" : \"保留声明\");\n\n        const floatingOn = document.getElementById(\"cfg-floating-switch\").checked;\n        document.getElementById(\"sum-floating\").textContent = floatingOn ? \"已开启\" : \"已关闭\";\n\n        // 3. AI 引擎\n        const trans = document.getElementById(\"cfg-translator-source\").value;\n        const transMap = { google: \"Google免费\", deepseek: \"DeepSeek\", openai: \"OpenAI\" };\n        document.getElementById(\"sum-ai\").textContent = transMap[trans] || trans;\n\n        // 4. 漫翻\n        const mangaOn = document.getElementById(\"cfg-manga-switch\").checked;\n        document.getElementById(\"sum-manga\").textContent = mangaOn ? \"HUD 气泡字幕\" : \"已关闭\";\n      }\n\n      async function loadConfig() {\n        try {\n          const res = await fetch(\"/api/get\").then(r => r.json()).catch(() => null);\n          if (res && typeof res === \"object\") {\n            currentConfig = Object.assign({}, DEFAULT_CONFIG, res);\n          }\n        } catch (e) { }\n\n        // 回填 UI\n        document.getElementById(\"cfg-global-switch\").checked = !!currentConfig[\"@Pixiv.Enhanced.Settings.Global.Switch\"];\n        document.getElementById(\"cfg-auto-switch\").checked = !!currentConfig[\"@Pixiv.Enhanced.Settings.Auto.Switch\"];\n        document.getElementById(\"cfg-skip-chinese\").checked = !!currentConfig[\"@Pixiv.Enhanced.Settings.Filter.SkipChinese\"];\n        document.getElementById(\"cfg-target-lang\").value = currentConfig[\"@Pixiv.Enhanced.Settings.Target.Lang\"] || \"zh-CN\";\n\n        document.getElementById(\"cfg-novel-font\").value = currentConfig[\"@Pixiv.Enhanced.Settings.Novel.Font\"] || \"system\";\n        document.getElementById(\"cfg-clean-disclaimer\").checked = !!currentConfig[\"@Pixiv.Enhanced.Settings.Novel.CleanDisclaimer\"];\n        document.getElementById(\"cfg-novel-show-original\").checked = currentConfig[\"@Pixiv.Enhanced.Settings.Novel.ShowOriginal\"] !== false;\n        document.getElementById(\"cfg-floating-switch\").checked = currentConfig[\"@Pixiv.Enhanced.Settings.Floating.Switch\"] !== false;\n\n        document.getElementById(\"cfg-translator-source\").value = currentConfig[\"@Pixiv.Enhanced.Settings.Translator.Source\"] || \"google\";\n        document.getElementById(\"cfg-deepseek-key\").value = currentConfig[\"@Pixiv.Enhanced.Settings.Auth.DeepSeekKey\"] || \"\";\n        document.getElementById(\"cfg-deepseek-url\").value = currentConfig[\"@Pixiv.Enhanced.Settings.Auth.DeepSeekUrl\"] || \"https://api.deepseek.com/v1/chat/completions\";\n        document.getElementById(\"cfg-deepseek-model\").value = currentConfig[\"@Pixiv.Enhanced.Settings.Auth.DeepSeekModel\"] || \"deepseek-v4-flash\";\n        document.getElementById(\"cfg-openai-key\").value = currentConfig[\"@Pixiv.Enhanced.Settings.Auth.OpenAIKey\"] || \"\";\n        document.getElementById(\"cfg-openai-url\").value = currentConfig[\"@Pixiv.Enhanced.Settings.Auth.OpenAIUrl\"] || \"https://api.openai.com/v1/chat/completions\";\n\n        document.getElementById(\"cfg-manga-switch\").checked = !!currentConfig[\"@Pixiv.Enhanced.Settings.Image.Switch\"];\n        document.getElementById(\"cfg-manga-engine\").value = currentConfig[\"@Pixiv.Enhanced.Settings.Image.Engine\"] || \"deepseek_vl\";\n        document.getElementById(\"cfg-manga-rendermode\").value = currentConfig[\"@Pixiv.Enhanced.Settings.Image.RenderMode\"] || \"overlay\";\n\n        document.getElementById(\"cfg-tag-offline\").checked = !!currentConfig[\"@Pixiv.Enhanced.Settings.Tag.OfflineOnly\"];\n        document.getElementById(\"cfg-log-level\").value = currentConfig[\"@Pixiv.Enhanced.Settings.LogLevel\"] || \"WARN\";\n\n        // 渲染 scope 芯片\n        const scopes = Array.isArray(currentConfig[\"@Pixiv.Enhanced.Settings.Auto.Scopes\"])\n          ? currentConfig[\"@Pixiv.Enhanced.Settings.Auto.Scopes\"]\n          : DEFAULT_CONFIG[\"@Pixiv.Enhanced.Settings.Auto.Scopes\"];\n        selectedScopes = new Set(scopes);\n        document.querySelectorAll(\".scope-chip\").forEach(chip => {\n          const k = chip.getAttribute(\"data-key\");\n          if (selectedScopes.has(k)) chip.classList.add(\"selected\");\n          else chip.classList.remove(\"selected\");\n        });\n\n        onTranslatorChange();\n        updateSummaries();\n      }\n\n      async function saveConfig() {\n        currentConfig[\"@Pixiv.Enhanced.Settings.Global.Switch\"] = document.getElementById(\"cfg-global-switch\").checked;\n        currentConfig[\"@Pixiv.Enhanced.Settings.Auto.Switch\"] = document.getElementById(\"cfg-auto-switch\").checked;\n        currentConfig[\"@Pixiv.Enhanced.Settings.Filter.SkipChinese\"] = document.getElementById(\"cfg-skip-chinese\").checked;\n        currentConfig[\"@Pixiv.Enhanced.Settings.Target.Lang\"] = document.getElementById(\"cfg-target-lang\").value;\n        currentConfig[\"@Pixiv.Enhanced.Settings.Auto.Scopes\"] = Array.from(selectedScopes);\n\n        currentConfig[\"@Pixiv.Enhanced.Settings.Novel.Font\"] = document.getElementById(\"cfg-novel-font\").value;\n        currentConfig[\"@Pixiv.Enhanced.Settings.Novel.CleanDisclaimer\"] = document.getElementById(\"cfg-clean-disclaimer\").checked;\n        currentConfig[\"@Pixiv.Enhanced.Settings.Novel.ShowOriginal\"] = document.getElementById(\"cfg-novel-show-original\").checked;\n        currentConfig[\"@Pixiv.Enhanced.Settings.Floating.Switch\"] = document.getElementById(\"cfg-floating-switch\").checked;\n\n        currentConfig[\"@Pixiv.Enhanced.Settings.Translator.Source\"] = document.getElementById(\"cfg-translator-source\").value;\n        currentConfig[\"@Pixiv.Enhanced.Settings.Auth.DeepSeekKey\"] = document.getElementById(\"cfg-deepseek-key\").value.trim();\n        currentConfig[\"@Pixiv.Enhanced.Settings.Auth.DeepSeekUrl\"] = document.getElementById(\"cfg-deepseek-url\").value.trim();\n        currentConfig[\"@Pixiv.Enhanced.Settings.Auth.DeepSeekModel\"] = document.getElementById(\"cfg-deepseek-model\").value.trim();\n        currentConfig[\"@Pixiv.Enhanced.Settings.Auth.OpenAIKey\"] = document.getElementById(\"cfg-openai-key\").value.trim();\n        currentConfig[\"@Pixiv.Enhanced.Settings.Auth.OpenAIUrl\"] = document.getElementById(\"cfg-openai-url\").value.trim();\n\n        currentConfig[\"@Pixiv.Enhanced.Settings.Image.Switch\"] = document.getElementById(\"cfg-manga-switch\").checked;\n        currentConfig[\"@Pixiv.Enhanced.Settings.Image.Engine\"] = document.getElementById(\"cfg-manga-engine\").value;\n        currentConfig[\"@Pixiv.Enhanced.Settings.Image.RenderMode\"] = document.getElementById(\"cfg-manga-rendermode\").value;\n\n        currentConfig[\"@Pixiv.Enhanced.Settings.Tag.OfflineOnly\"] = document.getElementById(\"cfg-tag-offline\").checked;\n        currentConfig[\"@Pixiv.Enhanced.Settings.LogLevel\"] = document.getElementById(\"cfg-log-level\").value;\n\n        updateSummaries();\n\n        // 向代理脚本存入 Loon $persistentStore\n        try {\n          await fetch(\"/api/set\", {\n            method: \"POST\",\n            headers: { \"Content-Type\": \"application/json\" },\n            body: JSON.stringify(currentConfig)\n          });\n          showToast(\"设置已实时同步保存\", \"✓\");\n        } catch (e) {\n          showToast(\"已在本地更新\", \"ℹ️\");\n        }\n      }\n\n      async function testAIConnection() {\n        const btn = document.getElementById(\"btn-test-ai\");\n        btn.disabled = true;\n        btn.innerHTML = '<span>⏳ 正在测试连通性与测速…</span>';\n        const start = Date.now();\n\n        try {\n          const source = document.getElementById(\"cfg-translator-source\").value;\n          const res = await fetch(\"/api/test_ai?source=\" + encodeURIComponent(source), { method: \"POST\" })\n            .then(r => r.json())\n            .catch(() => null);\n          const latency = Date.now() - start;\n\n          if (res && res.ok) {\n            btn.innerHTML = '<span>🟢 连接正常 · ' + latency + 'ms</span>';\n            showToast(\"AI 模型连接正常 (\" + latency + \"ms)\", \"🟢\");\n          } else {\n            const err = (res && res.error) ? res.error : \"请求超时或鉴权失败\";\n            btn.innerHTML = '<span>🔴 失败: ' + err.slice(0, 16) + '</span>';\n            showToast(\"连接失败: \" + err, \"❌\");\n          }\n        } catch (e) {\n          btn.innerHTML = '<span>🔴 网络异常</span>';\n          showToast(\"网络请求异常\", \"❌\");\n        }\n\n        setTimeout(() => {\n          btn.disabled = false;\n          btn.innerHTML = '<span>⚡ 测试模型连接与延迟</span>';\n        }, 3000);\n      }\n\n      async function loadCacheStats() {\n        const sizeEl = document.getElementById(\"cache-size\");\n        const countEl = document.getElementById(\"cache-count\");\n        try {\n          const res = await fetch(\"/api/cache_stats\").then(r => r.json());\n          if (!res || !res.ok) throw new Error(\"统计不可用\");\n          sizeEl.textContent = res.sizeText;\n          countEl.textContent = res.count + \" 个\";\n        } catch (e) {\n          sizeEl.textContent = \"不可用\";\n          countEl.textContent = \"不可用\";\n        }\n      }\n\n      async function confirmClearCache() {\n        if (!confirm(\"清理缓存将删除所有已保存的翻译缓存，不会影响插件设置。\\n\\n确定继续吗？\")) return;\n        const feedback = document.getElementById(\"cache-feedback\");\n        feedback.textContent = \"正在清理…\";\n        try {\n          const res = await fetch(\"/api/clear_cache\", { method: \"POST\" }).then(r => r.json());\n          if (!res || !res.ok) throw new Error(\"清理失败\");\n          feedback.textContent = \"缓存已清理 · 已释放 \" + res.sizeText + \" · 已删除 \" + res.count + \" 条\";\n          showToast(\"缓存已清理\", \"✓\");\n          await loadCacheStats();\n        } catch (e) {\n          feedback.textContent = \"清理失败，请稍后重试\";\n          showToast(\"清理缓存失败\", \"!\");\n        }\n      }\n\n      // 页面加载自动拉取配置\n      document.addEventListener(\"DOMContentLoaded\", () => {\n        loadConfig();\n        loadCacheStats();\n      });\n    </script>\n</body>\n\n</html>";
+const SETTINGS_HTML = "<!DOCTYPE html>\n<html lang=\"zh-CN\">\n<head>\n  <meta charset=\"utf-8\">\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no\">\n  <title>Pixiv \u589e\u5f3a\u8bbe\u7f6e</title>\n  <style>\n    :root {\n      --bg-color: #f2f2f7;\n      --card-bg: #ffffff;\n      --card-border: rgba(60, 60, 67, 0.12);\n      --separator-color: rgba(60, 60, 67, 0.12);\n      --text-primary: #000000;\n      --text-secondary: #8e8e93;\n      --tint-blue: #007aff;\n      --tint-green: #34c759;\n      --tint-red: #ff3b30;\n      --switch-bg: #e9e9ea;\n      --badge-bg: rgba(142, 142, 147, 0.12);\n      --badge-text: #8e8e93;\n      --icon-bg: rgba(142, 142, 147, 0.12);\n      --icon-color: #1c1c1e;\n    }\n    @media (prefers-color-scheme: dark) {\n      :root {\n        --bg-color: #000000;\n        --card-bg: #1c1c1e;\n        --card-border: rgba(255, 255, 255, 0.12);\n        --separator-color: rgba(84, 84, 88, 0.35);\n        --text-primary: #ffffff;\n        --text-secondary: #8e8e93;\n        --switch-bg: #39393d;\n        --badge-bg: rgba(255, 255, 255, 0.12);\n        --badge-text: #aeaeb2;\n        --icon-bg: rgba(255, 255, 255, 0.12);\n        --icon-color: #ffffff;\n      }\n    }\n\n    * {\n      box-sizing: border-box;\n      -webkit-tap-highlight-color: transparent;\n      margin: 0;\n      padding: 0;\n    }\n\n    body {\n      background-color: var(--bg-color);\n      color: var(--text-primary);\n      font-family: -apple-system, BlinkMacSystemFont, \"SF Pro Text\", \"PingFang SC\", \"Hiragino Sans GB\", sans-serif;\n      padding: calc(env(safe-area-inset-top, 20px) + 16px) 16px calc(env(safe-area-inset-bottom, 20px) + 32px);\n      max-width: 680px;\n      margin: 0 auto;\n      line-height: 1.5;\n      font-size: 16px;\n      overflow-x: hidden;\n    }\n\n    /* \u2500\u2500\u2500 \u9875\u9762\u54c1\u724c\u5927\u6807\u9898 (\u7edf\u4e00 Apple SF \u98ce\u683c) \u2500\u2500\u2500 */\n    .brand-header {\n      display: flex;\n      align-items: center;\n      gap: 14px;\n      margin-bottom: 24px;\n      padding: 4px 6px;\n    }\n    .brand-icon {\n      width: 48px;\n      height: 48px;\n      border-radius: 12px;\n      background: var(--icon-bg);\n      display: flex;\n      align-items: center;\n      justify-content: center;\n      color: var(--tint-blue);\n      flex-shrink: 0;\n    }\n    .brand-title {\n      font-size: 22px;\n      font-weight: 700;\n      letter-spacing: -0.4px;\n      color: var(--text-primary);\n      display: flex;\n      align-items: center;\n      gap: 8px;\n    }\n    .brand-badge {\n      font-size: 11px;\n      font-weight: 600;\n      padding: 2px 7px;\n      border-radius: 6px;\n      background: rgba(0, 122, 255, 0.12);\n      color: var(--tint-blue);\n      letter-spacing: 0;\n    }\n    .brand-sub {\n      font-size: 13px;\n      color: var(--text-secondary);\n      margin-top: 2px;\n    }\n\n    /* \u2500\u2500\u2500 Grouped \u5361\u7247\u5bb9\u5668 \u2500\u2500\u2500 */\n    .section-card {\n      background: var(--card-bg);\n      border-radius: 14px;\n      border: 0.5px solid var(--card-border);\n      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);\n      margin-bottom: 6px;\n      overflow: hidden;\n      transition: all 0.25s ease;\n    }\n\n    .section-header {\n      display: flex;\n      align-items: center;\n      padding: 13px 16px;\n      cursor: pointer;\n      user-select: none;\n      gap: 12px;\n      min-height: 52px;\n    }\n    .section-header:active {\n      background: rgba(127, 127, 127, 0.06);\n    }\n    .section-icon {\n      width: 28px;\n      height: 28px;\n      border-radius: 7px;\n      background: var(--icon-bg);\n      color: var(--icon-color);\n      display: flex;\n      align-items: center;\n      justify-content: center;\n      flex-shrink: 0;\n    }\n    .section-title {\n      font-size: 16px;\n      font-weight: 600;\n      flex: 1;\n      color: var(--text-primary);\n    }\n    .section-summary {\n      font-size: 12px;\n      color: var(--badge-text);\n      background: var(--badge-bg);\n      padding: 3px 8px;\n      border-radius: 6px;\n      font-weight: 500;\n      max-width: 140px;\n      white-space: nowrap;\n      overflow: hidden;\n      text-overflow: ellipsis;\n      transition: opacity 0.2s;\n    }\n    .chevron-icon {\n      width: 14px;\n      height: 14px;\n      color: var(--text-secondary);\n      transition: transform 0.25s ease;\n      flex-shrink: 0;\n    }\n    .section-card.expanded .chevron-icon {\n      transform: rotate(90deg);\n    }\n    .section-card.expanded .section-summary {\n      opacity: 0;\n      pointer-events: none;\n    }\n\n    .section-body {\n      display: none;\n      border-top: 0.5px solid var(--separator-color);\n    }\n    .section-card.expanded .section-body {\n      display: block;\n    }\n\n    /* \u2500\u2500\u2500 \u8bbe\u7f6e\u6761\u76ee (Row) \u2500\u2500\u2500 */\n    .setting-row {\n      display: flex;\n      align-items: center;\n      justify-content: space-between;\n      padding: 12px 16px;\n      min-height: 48px;\n      position: relative;\n    }\n    .setting-row:not(:last-child)::after {\n      content: \"\";\n      position: absolute;\n      left: 16px;\n      right: 0;\n      bottom: 0;\n      height: 0.5px;\n      background: var(--separator-color);\n    }\n    .setting-info {\n      flex: 1;\n      padding-right: 12px;\n    }\n    .setting-label {\n      font-size: 15px;\n      font-weight: 500;\n      color: var(--text-primary);\n    }\n    .setting-desc {\n      font-size: 12px;\n      color: var(--text-secondary);\n      margin-top: 2px;\n      line-height: 1.35;\n    }\n\n    /* \u2500\u2500\u2500 \u63a7\u4ef6\uff1aiOS \u539f\u751f Toggle \u80f6\u56ca\u5f00\u5173 \u2500\u2500\u2500 */\n    .switch-wrap {\n      position: relative;\n      width: 51px;\n      height: 31px;\n      flex-shrink: 0;\n    }\n    .switch-wrap input {\n      opacity: 0;\n      width: 0;\n      height: 0;\n    }\n    .switch-slider {\n      position: absolute;\n      cursor: pointer;\n      top: 0; left: 0; right: 0; bottom: 0;\n      background-color: var(--switch-bg);\n      transition: background-color 0.25s ease;\n      border-radius: 31px;\n    }\n    .switch-slider::before {\n      position: absolute;\n      content: \"\";\n      height: 27px;\n      width: 27px;\n      left: 2px;\n      bottom: 2px;\n      background-color: white;\n      transition: transform 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);\n      border-radius: 50%;\n      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);\n    }\n    .switch-wrap input:checked + .switch-slider {\n      background-color: var(--tint-green);\n    }\n    .switch-wrap input:checked + .switch-slider::before {\n      transform: translateX(20px);\n    }\n\n    /* \u2500\u2500\u2500 \u63a7\u4ef6\uff1aSelect \u4e0b\u62c9\u9009\u62e9 \u2500\u2500\u2500 */\n    .select-wrap {\n      position: relative;\n      display: inline-flex;\n      align-items: center;\n    }\n    .select-input {\n      appearance: none;\n      -webkit-appearance: none;\n      background: rgba(127, 127, 127, 0.1);\n      border: none;\n      padding: 6px 28px 6px 12px;\n      border-radius: 8px;\n      font-size: 14px;\n      font-family: inherit;\n      color: var(--tint-blue);\n      font-weight: 500;\n      outline: none;\n      cursor: pointer;\n    }\n    .select-arrow {\n      position: absolute;\n      right: 8px;\n      width: 12px;\n      height: 12px;\n      color: var(--tint-blue);\n      pointer-events: none;\n    }\n\n    /* \u2500\u2500\u2500 \u63a7\u4ef6\uff1a\u5355\u884c\u8f93\u5165\u6846 (\u5e26\u663e\u9690\u773c\u775b) \u2500\u2500\u2500 */\n    .input-wrap {\n      display: flex;\n      align-items: center;\n      background: rgba(127, 127, 127, 0.08);\n      border-radius: 8px;\n      padding: 6px 10px;\n      width: 100%;\n      margin-top: 6px;\n      border: 0.5px solid var(--separator-color);\n    }\n    .text-input {\n      flex: 1;\n      background: transparent;\n      border: none;\n      font-size: 14px;\n      font-family: inherit;\n      color: var(--text-primary);\n      outline: none;\n    }\n    .text-input::placeholder {\n      color: var(--text-secondary);\n      opacity: 0.6;\n    }\n    .input-action-btn {\n      background: none;\n      border: none;\n      color: var(--text-secondary);\n      padding: 2px 4px;\n      cursor: pointer;\n      display: flex;\n      align-items: center;\n    }\n\n    /* \u2500\u2500\u2500 \u63a7\u4ef6\uff1a\u591a\u9009 Scope \u82af\u7247\u80f6\u56ca \u2500\u2500\u2500 */\n    .scope-chips {\n      display: flex;\n      flex-wrap: wrap;\n      gap: 8px;\n      padding: 8px 16px 14px;\n    }\n    .scope-chip {\n      padding: 6px 12px;\n      border-radius: 8px;\n      font-size: 13px;\n      font-weight: 500;\n      background: rgba(127, 127, 127, 0.1);\n      color: var(--text-secondary);\n      border: 0.5px solid transparent;\n      cursor: pointer;\n      user-select: none;\n      transition: all 0.2s ease;\n    }\n    .scope-chip.selected {\n      background: rgba(0, 122, 255, 0.12);\n      color: var(--tint-blue);\n      border-color: rgba(0, 122, 255, 0.3);\n      font-weight: 600;\n    }\n\n    /* \u2500\u2500\u2500 \u63a7\u4ef6\uff1a\u7f13\u5b58\u7ba1\u7406\u6570\u636e\u9762\u677f \u2500\u2500\u2500 */\n    .cache-panel {\n      padding: 12px 16px;\n    }\n    .cache-metric-grid {\n      display: grid;\n      grid-template-columns: repeat(3, 1fr);\n      gap: 8px;\n      margin-bottom: 12px;\n    }\n    .cache-metric-box {\n      background: rgba(127, 127, 127, 0.08);\n      border-radius: 10px;\n      padding: 10px 12px;\n      text-align: center;\n    }\n    .cache-metric-title {\n      font-size: 11px;\n      color: var(--text-secondary);\n      font-weight: 500;\n      margin-bottom: 4px;\n    }\n    .cache-metric-val {\n      font-size: 16px;\n      font-weight: 700;\n      color: var(--text-primary);\n    }\n    .cache-feedback-bar {\n      font-size: 12px;\n      color: var(--tint-blue);\n      min-height: 18px;\n      margin-top: 8px;\n      line-height: 1.4;\n      text-align: center;\n    }\n\n    /* \u2500\u2500\u2500 \u64cd\u4f5c\u6309\u94ae (Button) \u2500\u2500\u2500 */\n    .action-btn-row {\n      padding: 10px 16px 14px;\n      display: flex;\n      gap: 10px;\n    }\n    .primary-btn {\n      flex: 1;\n      background: var(--tint-blue);\n      color: #fff;\n      border: none;\n      border-radius: 10px;\n      padding: 11px 16px;\n      font-size: 15px;\n      font-weight: 600;\n      cursor: pointer;\n      display: flex;\n      align-items: center;\n      justify-content: center;\n      gap: 6px;\n      box-shadow: 0 2px 8px rgba(0, 122, 255, 0.2);\n      transition: transform 0.12s, opacity 0.2s;\n    }\n    .primary-btn:active {\n      transform: scale(0.97);\n      opacity: 0.9;\n    }\n    .secondary-btn {\n      flex: 1;\n      background: rgba(127, 127, 127, 0.12);\n      color: var(--text-primary);\n      border: none;\n      border-radius: 10px;\n      padding: 11px 16px;\n      font-size: 15px;\n      font-weight: 500;\n      cursor: pointer;\n      display: flex;\n      align-items: center;\n      justify-content: center;\n      gap: 6px;\n      transition: transform 0.12s, opacity 0.2s;\n    }\n    .secondary-btn:active {\n      transform: scale(0.97);\n    }\n    .danger-btn {\n      color: var(--tint-red);\n      background: rgba(255, 59, 48, 0.1);\n    }\n\n    /* \u2500\u2500\u2500 \u5206\u7ec4\u8bf4\u660e\u6ce8\u811a (Footer) \u2500\u2500\u2500 */\n    .section-footer {\n      font-size: 12px;\n      color: var(--text-secondary);\n      margin: 6px 16px 20px;\n      line-height: 1.4;\n      padding: 0 4px;\n    }\n\n    /* \u2500\u2500\u2500 \u63d0\u793a Toast \u60ac\u6d6e\u80f6\u56ca \u2500\u2500\u2500 */\n    #px-toast {\n      position: fixed;\n      top: calc(env(safe-area-inset-top, 20px) + 12px);\n      left: 50%;\n      transform: translateX(-50%) translateY(-60px);\n      background: rgba(20, 20, 20, 0.92);\n      -webkit-backdrop-filter: blur(20px);\n      backdrop-filter: blur(20px);\n      color: #fff;\n      padding: 8px 18px;\n      border-radius: 20px;\n      font-size: 13px;\n      font-weight: 500;\n      display: flex;\n      align-items: center;\n      gap: 6px;\n      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);\n      z-index: 999999;\n      opacity: 0;\n      transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);\n      pointer-events: none;\n    }\n    #px-toast.show {\n      transform: translateX(-50%) translateY(0);\n      opacity: 1;\n    }\n\n    /* \u2500\u2500\u2500 \u4f18\u96c5\u786e\u8ba4\u5f39\u5c42 (ActionSheet) \u2500\u2500\u2500 */\n    .modal-overlay {\n      position: fixed;\n      top: 0; left: 0; right: 0; bottom: 0;\n      background: rgba(0, 0, 0, 0.4);\n      backdrop-filter: blur(4px);\n      -webkit-backdrop-filter: blur(4px);\n      display: none;\n      align-items: flex-end;\n      justify-content: center;\n      z-index: 999998;\n      padding: 12px;\n    }\n    .modal-overlay.show {\n      display: flex;\n    }\n    .modal-card {\n      background: var(--card-bg);\n      border-radius: 16px;\n      width: 100%;\n      max-width: 420px;\n      padding: 20px;\n      text-align: center;\n      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);\n      animation: modalSlideUp 0.25s cubic-bezier(0.175, 0.885, 0.32, 1);\n    }\n    @keyframes modalSlideUp {\n      from { transform: translateY(100px); opacity: 0; }\n      to { transform: translateY(0); opacity: 1; }\n    }\n    .modal-title {\n      font-size: 17px;\n      font-weight: 600;\n      margin-bottom: 6px;\n    }\n    .modal-desc {\n      font-size: 13px;\n      color: var(--text-secondary);\n      margin-bottom: 18px;\n      line-height: 1.45;\n    }\n    .modal-actions {\n      display: flex;\n      gap: 10px;\n    }\n  </style>\n</head>\n<body>\n\n  <!-- \u63d0\u793a Toast \u80f6\u56ca -->\n  <div id=\"px-toast\">\n    <span id=\"px-toast-icon\">\u2713</span>\n    <span id=\"px-toast-msg\">\u8bbe\u7f6e\u5df2\u81ea\u52a8\u4fdd\u5b58</span>\n  </div>\n\n  <!-- \u6e05\u7406\u786e\u8ba4\u5f39\u5c42 -->\n  <div class=\"modal-overlay\" id=\"clear-modal\">\n    <div class=\"modal-card\">\n      <div class=\"modal-title\">\u6e05\u7406\u7ffb\u8bd1\u7f13\u5b58</div>\n      <div class=\"modal-desc\">\u5c06\u5220\u9664\u6240\u6709\u672c\u5730\u6682\u5b58\u7684\u7ffb\u8bd1\u6587\u672c\uff0c\u4ee5\u4fbf\u91cd\u65b0\u8bf7\u6c42\u6700\u65b0\u5185\u5bb9\u3002<br>\u4e0d\u4f1a\u5f71\u54cd\u60a8\u7684\u63d2\u4ef6\u8bbe\u7f6e\u53ca API \u5bc6\u94a5\u3002</div>\n      <div class=\"modal-actions\">\n        <button type=\"button\" class=\"secondary-btn\" onclick=\"closeClearModal()\">\u53d6\u6d88</button>\n        <button type=\"button\" class=\"primary-btn danger-btn\" onclick=\"executeClearCache()\">\u786e\u5b9a\u6e05\u7406</button>\n      </div>\n    </div>\n  </div>\n\n  <!-- \u9875\u9762\u54c1\u724c\u5927\u6807\u9898 -->\n  <div class=\"brand-header\">\n    <div class=\"brand-icon\">\n      <!-- SF Symbol: character.bubble -->\n      <svg viewBox=\"0 0 24 24\" width=\"26\" height=\"26\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\">\n        <path d=\"M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z\"/>\n        <path d=\"m8 10 2-4 2 4\"/>\n        <path d=\"M8.7 8.5h2.6\"/>\n        <path d=\"M14 8h3\"/>\n        <path d=\"M15.5 8v4\"/>\n      </svg>\n    </div>\n    <div>\n      <div class=\"brand-title\">\n        Pixiv \u589e\u5f3a\u7ffb\u8bd1\n        <span class=\"brand-badge\">v4.2</span>\n      </div>\n      <div class=\"brand-sub\">\u53cc\u8bed\u51fa\u7248\u7ea7\u6392\u7248 \u00b7 \u5168\u9875\u9762\u6c49\u5316 \u00b7 \u79bb\u7ebf\u7f13\u5b58</div>\n    </div>\n  </div>\n\n  <!-- \u2500\u2500\u2500 \u7b2c\u4e00\u7ec4\uff1a\u7ffb\u8bd1 \u2500\u2500\u2500 -->\n  <div class=\"section-card expanded\" id=\"sec-content\">\n    <div class=\"section-header\" onclick=\"toggleSection('sec-content')\">\n      <div class=\"section-icon\">\n        <!-- SF Symbol: globe -->\n        <svg viewBox=\"0 0 24 24\" width=\"18\" height=\"18\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\">\n          <circle cx=\"12\" cy=\"12\" r=\"10\"/>\n          <path d=\"M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20\"/>\n          <path d=\"M2 12h20\"/>\n        </svg>\n      </div>\n      <div class=\"section-title\">\u7ffb\u8bd1\u8bbe\u7f6e</div>\n      <div class=\"section-summary\" id=\"sum-content\">\u81ea\u52a8:\u5f00 \u00b7 \u7b80\u4f53</div>\n      <svg class=\"chevron-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"m9 18 6-6-6-6\"/></svg>\n    </div>\n    <div class=\"section-body\">\n      <div class=\"setting-row\">\n        <div class=\"setting-info\">\n          <div class=\"setting-label\">\u542f\u7528 Pixiv \u589e\u5f3a\u7ffb\u8bd1</div>\n          <div class=\"setting-desc\">\u603b\u5f00\u5173\uff1a\u63a5\u7ba1\u5168\u9875\u9762\u65e5\u6587\u6c49\u5316\u4e0e\u89c6\u89c9\u6f2b\u7ffb</div>\n        </div>\n        <label class=\"switch-wrap\">\n          <input type=\"checkbox\" id=\"cfg-global-switch\" onchange=\"saveConfig()\">\n          <span class=\"switch-slider\"></span>\n        </label>\n      </div>\n      <div class=\"setting-row\">\n        <div class=\"setting-info\">\n          <div class=\"setting-label\">\u9ed8\u8ba4\u81ea\u52a8\u7ffb\u8bd1</div>\n          <div class=\"setting-desc\">\u8fdb\u5165\u9875\u9762\u540e\u76f4\u63a5\u5448\u73b0\u7ffb\u8bd1\u7ed3\u679c\uff0c\u65e0\u9700\u624b\u52a8\u70b9\u51fb</div>\n        </div>\n        <label class=\"switch-wrap\">\n          <input type=\"checkbox\" id=\"cfg-auto-switch\" onchange=\"saveConfig()\">\n          <span class=\"switch-slider\"></span>\n        </label>\n      </div>\n      <div class=\"setting-row\">\n        <div class=\"setting-info\">\n          <div class=\"setting-label\">\u667a\u80fd\u8df3\u8fc7\u7eaf\u4e2d\u6587\u5185\u5bb9</div>\n          <div class=\"setting-desc\">\u4e0d\u5305\u542b\u65e5\u6587\u6216\u5916\u8bed\u7684\u4f5c\u54c1\u81ea\u52a8\u8df3\u8fc7\uff0c\u8282\u7701\u914d\u989d\u4e0e\u96f6\u5ef6\u8fdf</div>\n        </div>\n        <label class=\"switch-wrap\">\n          <input type=\"checkbox\" id=\"cfg-skip-chinese\" onchange=\"saveConfig()\">\n          <span class=\"switch-slider\"></span>\n        </label>\n      </div>\n      <div class=\"setting-row\">\n        <div class=\"setting-info\">\n          <div class=\"setting-label\">\u76ee\u6807\u8bed\u8a00</div>\n          <div class=\"setting-desc\">\u671f\u671b\u5c06\u5916\u8bed\u5185\u5bb9\u7ffb\u8bd1\u4e3a\u7684\u76ee\u6807\u8bed\u8a00</div>\n        </div>\n        <div class=\"select-wrap\">\n          <select class=\"select-input\" id=\"cfg-target-lang\" onchange=\"saveConfig()\">\n            <option value=\"zh-CN\">\u7b80\u4f53\u4e2d\u6587</option>\n            <option value=\"zh-TW\">\u7e41\u9ad4\u4e2d\u6587</option>\n            <option value=\"en\">English</option>\n            <option value=\"ja\">\u65e5\u672c\u8a9e (\u539f\u6587)</option>\n            <option value=\"ko\">\ud55c\uad6d\uc5b4</option>\n          </select>\n          <svg class=\"select-arrow\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"m6 9 6 6 6-6\"/></svg>\n        </div>\n      </div>\n      <div class=\"setting-row\">\n        <div class=\"setting-info\">\n          <div class=\"setting-label\">\u7ffb\u8bd1\u670d\u52a1</div>\n          <div class=\"setting-desc\">\u9009\u62e9\u5e95\u5c42\u6587\u672c\u7ffb\u8bd1\u6240\u4f7f\u7528\u7684\u670d\u52a1\u5f15\u64ce</div>\n        </div>\n        <div class=\"select-wrap\">\n          <select class=\"select-input\" id=\"cfg-translator-source\" onchange=\"onTranslatorChange()\">\n            <option value=\"google\">Google \u514d\u8d39\u5e76\u53d1 (\u6781\u901f)</option>\n            <option value=\"deepseek\">DeepSeek AI (\u6587\u5b66\u6da6\u8272/\u9700Key)</option>\n            <option value=\"openai\">OpenAI / \u517c\u5bb9\u63a5\u53e3 (\u9700Key)</option>\n          </select>\n          <svg class=\"select-arrow\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"m6 9 6 6 6-6\"/></svg>\n        </div>\n      </div>\n\n      <!-- DeepSeek \u914d\u7f6e\u533a -->\n      <div id=\"ai-deepseek-block\" style=\"padding: 10px 16px 14px; border-bottom: 0.5px solid var(--separator-color);\">\n        <div class=\"setting-label\" style=\"font-size: 14px;\">DeepSeek API Key</div>\n        <div class=\"input-wrap\">\n          <input type=\"password\" class=\"text-input\" id=\"cfg-deepseek-key\" placeholder=\"sk-...\" onchange=\"saveConfig()\">\n          <button type=\"button\" class=\"input-action-btn\" onclick=\"toggleInputMask('cfg-deepseek-key')\">\n            <!-- SF Symbol: eye -->\n            <svg viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\">\n              <path d=\"M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z\"/>\n              <circle cx=\"12\" cy=\"12\" r=\"3\"/>\n            </svg>\n          </button>\n        </div>\n        <div style=\"display: flex; gap: 8px; margin-top: 8px;\">\n          <div style=\"flex: 2;\">\n            <div class=\"setting-desc\">\u7aef\u70b9 URL</div>\n            <div class=\"input-wrap\"><input type=\"text\" class=\"text-input\" id=\"cfg-deepseek-url\" value=\"https://api.deepseek.com/v1/chat/completions\" onchange=\"saveConfig()\"></div>\n          </div>\n          <div style=\"flex: 1.2;\">\n            <div class=\"setting-desc\">\u6a21\u578b\u540d\u79f0</div>\n            <div class=\"input-wrap\"><input type=\"text\" class=\"text-input\" id=\"cfg-deepseek-model\" value=\"deepseek-v4-flash\" onchange=\"saveConfig()\"></div>\n          </div>\n        </div>\n      </div>\n\n      <!-- OpenAI \u914d\u7f6e\u533a -->\n      <div id=\"ai-openai-block\" style=\"padding: 10px 16px 14px; border-bottom: 0.5px solid var(--separator-color); display: none;\">\n        <div class=\"setting-label\" style=\"font-size: 14px;\">OpenAI API Key</div>\n        <div class=\"input-wrap\">\n          <input type=\"password\" class=\"text-input\" id=\"cfg-openai-key\" placeholder=\"sk-...\" onchange=\"saveConfig()\">\n          <button type=\"button\" class=\"input-action-btn\" onclick=\"toggleInputMask('cfg-openai-key')\">\n            <svg viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\">\n              <path d=\"M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z\"/>\n              <circle cx=\"12\" cy=\"12\" r=\"3\"/>\n            </svg>\n          </button>\n        </div>\n        <div style=\"margin-top: 8px;\">\n          <div class=\"setting-desc\">\u517c\u5bb9\u7aef\u70b9 URL</div>\n          <div class=\"input-wrap\"><input type=\"text\" class=\"text-input\" id=\"cfg-openai-url\" value=\"https://api.openai.com/v1/chat/completions\" onchange=\"saveConfig()\"></div>\n        </div>\n      </div>\n\n      <div style=\"padding: 12px 16px 4px;\">\n        <div class=\"setting-label\" style=\"font-size: 14px;\">\u751f\u6548\u6a21\u5757\u8303\u56f4</div>\n      </div>\n      <div class=\"scope-chips\" id=\"scope-chips-container\">\n        <div class=\"scope-chip\" data-key=\"illust_title\" onclick=\"toggleScope(this)\">\u4f5c\u54c1\u6807\u9898</div>\n        <div class=\"scope-chip\" data-key=\"illust_caption\" onclick=\"toggleScope(this)\">\u4f5c\u54c1\u7b80\u4ecb</div>\n        <div class=\"scope-chip\" data-key=\"tags\" onclick=\"toggleScope(this)\">\u65e5\u6587\u6807\u7b7e</div>\n        <div class=\"scope-chip\" data-key=\"novels\" onclick=\"toggleScope(this)\">\u5c0f\u8bf4\u6b63\u6587</div>\n        <div class=\"scope-chip\" data-key=\"comments\" onclick=\"toggleScope(this)\">\u8bc4\u8bba\u533a</div>\n        <div class=\"scope-chip\" data-key=\"user_profile\" onclick=\"toggleScope(this)\">\u753b\u5e08\u7b80\u4ecb</div>\n        <div class=\"scope-chip\" data-key=\"spotlight\" onclick=\"toggleScope(this)\">\u7279\u8f91\u6587\u7ae0</div>\n      </div>\n    </div>\n  </div>\n  <div class=\"section-footer\">\n    \u4e3b\u9875\u4f5c\u54c1\u5361\u7247\u540c\u65f6\u5c31\u5730\u6c49\u5316\u6807\u9898\u4e0e\u7b80\u4ecb\uff0c\u5f7b\u5e95\u6d88\u9664\u672a\u7ffb\u8bd1\u622a\u65ad\u5f15\u53d1\u7684\u5f39\u7a97\uff1b\u6807\u7b7e\u526f\u6807\u9898\u5df2\u81ea\u52a8\u51c0\u7a7a\uff0c\u675c\u7edd\u4e0a\u4e0b\u91cd\u590d\u663e\u793a\u3002\n  </div>\n\n  <!-- \u2500\u2500\u2500 \u7b2c\u4e8c\u7ec4\uff1a\u9605\u8bfb\u4f53\u9a8c \u2500\u2500\u2500 -->\n  <div class=\"section-card expanded\" id=\"sec-novel\">\n    <div class=\"section-header\" onclick=\"toggleSection('sec-novel')\">\n      <div class=\"section-icon\">\n        <!-- SF Symbol: text.book.closed -->\n        <svg viewBox=\"0 0 24 24\" width=\"18\" height=\"18\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\">\n          <path d=\"M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z\"/>\n          <path d=\"M6 6h10\"/>\n          <path d=\"M6 10h10\"/>\n          <path d=\"M6 14h6\"/>\n        </svg>\n      </div>\n      <div class=\"section-title\">\u9605\u8bfb\u4f53\u9a8c</div>\n      <div class=\"section-summary\" id=\"sum-novel\">\u53cc\u8bed\u5bf9\u7167 \u00b7 \u7cfb\u7edf\u5b57\u4f53</div>\n      <svg class=\"chevron-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"m9 18 6-6-6-6\"/></svg>\n    </div>\n    <div class=\"section-body\">\n      <div class=\"setting-row\">\n        <div class=\"setting-info\">\n          <div class=\"setting-label\">\u53cc\u8bed\u5bf9\u7167\u9605\u8bfb</div>\n          <div class=\"setting-desc\">\u5f00\u542f\u540e\u6309\u539f\u6587\u5728\u4e0a\u3001\u8bd1\u6587\u5728\u4e0b\u5f62\u6210\u6bb5\u843d\u5bf9\u5c55\u793a\uff1b\u5173\u95ed\u540e\u4ec5\u663e\u793a\u8bd1\u6587</div>\n        </div>\n        <label class=\"switch-wrap\">\n          <input type=\"checkbox\" id=\"cfg-novel-show-original\" onchange=\"saveConfig()\">\n          <span class=\"switch-slider\"></span>\n        </label>\n      </div>\n      <div class=\"setting-row\">\n        <div class=\"setting-info\">\n          <div class=\"setting-label\">\u6392\u7248\u5b57\u4f53\u98ce\u683c</div>\n          <div class=\"setting-desc\">\u63d0\u4f9b\u51fa\u7248\u7ea7\u5370\u5237\u5b57\u4f53\u9884\u8bbe\uff0c\u5b57\u53f7\u4e0e\u884c\u8ddd\u7ee7\u627f\u7cfb\u7edf\u8bbe\u7f6e</div>\n        </div>\n        <div class=\"select-wrap\">\n          <select class=\"select-input\" id=\"cfg-novel-font\" onchange=\"saveConfig()\">\n            <option value=\"system\">\u7cfb\u7edf\u9ed8\u8ba4 (\u82f9\u65b9)</option>\n            <option value=\"songti\">\u7ecf\u5178\u5b8b\u4f53 (\u7eb8\u4e66\u8d28\u611f)</option>\n            <option value=\"kaiti\">\u4f18\u7f8e\u6977\u4f53 (\u53e4\u96c5\u98ce\u683c)</option>\n            <option value=\"yuanti\">\u67d4\u548c\u5706\u4f53 (\u4eb2\u548c\u6e29\u6da6)</option>\n          </select>\n          <svg class=\"select-arrow\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"m6 9 6 6 6-6\"/></svg>\n        </div>\n      </div>\n      <div class=\"setting-row\">\n        <div class=\"setting-info\">\n          <div class=\"setting-label\">\u81ea\u52a8\u51c0\u5316\u4f5c\u8005\u514d\u8d23\u58f0\u660e</div>\n          <div class=\"setting-desc\">\u667a\u80fd\u8fc7\u6ee4\u53f0\u672c\u5546\u7528\u6388\u6743\u3001\u7981\u6b62\u8f6c\u8f7d\u7b49\u89c4\u7ea6\u6761\u6b3e\uff0c\u5448\u73b0\u7eaf\u7cb9\u5c0f\u8bf4\u6b63\u6587</div>\n        </div>\n        <label class=\"switch-wrap\">\n          <input type=\"checkbox\" id=\"cfg-clean-disclaimer\" onchange=\"saveConfig()\">\n          <span class=\"switch-slider\"></span>\n        </label>\n      </div>\n    </div>\n  </div>\n  <div class=\"section-footer\">\n    \u53cc\u8bed\u9605\u8bfb\u4e25\u683c\u6309\u5c0f\u8bf4\u6bb5\u843d\u987a\u5e8f\u4e00\u5bf9\u4e00\u6392\u5217\uff0c\u539f\u6587\u4e3a\u4e3b\u9605\u8bfb\u5c42\u7ea7\uff0c\u8bd1\u6587\u4e3a\u4ece\u5c5e\u8f85\u52a9\u5c42\u7ea7\uff0c\u4e0d\u52a0\u591a\u4f59\u5361\u7247\u8fb9\u6846\u4e0e\u6742\u4e71\u80cc\u666f\u3002\n  </div>\n\n  <!-- \u2500\u2500\u2500 \u7b2c\u4e09\u7ec4\uff1a\u60ac\u6d6e\u6309\u94ae \u2500\u2500\u2500 -->\n  <div class=\"section-card expanded\" id=\"sec-floating\">\n    <div class=\"section-header\" onclick=\"toggleSection('sec-floating')\">\n      <div class=\"section-icon\">\n        <!-- SF Symbol: button.programmable -->\n        <svg viewBox=\"0 0 24 24\" width=\"18\" height=\"18\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\">\n          <circle cx=\"12\" cy=\"12\" r=\"9\"/>\n          <circle cx=\"12\" cy=\"12\" r=\"4\"/>\n        </svg>\n      </div>\n      <div class=\"section-title\">\u60ac\u6d6e\u6309\u94ae</div>\n      <div class=\"section-summary\" id=\"sum-floating\">\u5df2\u5f00\u542f</div>\n      <svg class=\"chevron-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"m9 18 6-6-6-6\"/></svg>\n    </div>\n    <div class=\"section-body\">\n      <div class=\"setting-row\">\n        <div class=\"setting-info\">\n          <div class=\"setting-label\">\u663e\u793a\u60ac\u6d6e\u6309\u94ae</div>\n          <div class=\"setting-desc\">\u7ffb\u8bd1\u8fc7\u7a0b\u4e2d\u663e\u793a\u60ac\u6d6e\u6309\u94ae\uff0c\u652f\u6301\u8f7b\u89e6\u7ffb\u8bd1/\u8fd8\u539f\u4e0e\u957f\u6309\u8bbe\u7f6e</div>\n        </div>\n        <label class=\"switch-wrap\">\n          <input type=\"checkbox\" id=\"cfg-floating-switch\" onchange=\"saveConfig()\">\n          <span class=\"switch-slider\"></span>\n        </label>\n      </div>\n    </div>\n  </div>\n  <div class=\"section-footer\">\n    \u5f00\u542f\u540e\u81ea\u52a8\u907f\u5f00\u9875\u9762\u5df2\u6709\u559c\u6b22\u4e0e\u64cd\u4f5c\u63a7\u4ef6\uff0c\u8f7b\u70b9\u5373\u54cd\u5e94\uff0c\u4e0d\u8df3\u52a8\u4e0d\u91cd\u53e0\uff1b\u5173\u95ed\u540e\u5b8c\u5168\u4e0d\u6ce8\u5165\u4efb\u4f55\u6309\u94ae DOM\u3002\n  </div>\n\n  <!-- \u2500\u2500\u2500 \u7b2c\u56db\u7ec4\uff1a\u9ad8\u7ea7\u4e0e\u7f13\u5b58 \u2500\u2500\u2500 -->\n  <div class=\"section-card\" id=\"sec-advanced\">\n    <div class=\"section-header\" onclick=\"toggleSection('sec-advanced')\">\n      <div class=\"section-icon\">\n        <!-- SF Symbol: slider.horizontal.3 -->\n        <svg viewBox=\"0 0 24 24\" width=\"18\" height=\"18\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\">\n          <path d=\"M4 21v-7\"/>\n          <path d=\"M4 10V3\"/>\n          <path d=\"M12 21v-9\"/>\n          <path d=\"M12 8V3\"/>\n          <path d=\"M20 21v-5\"/>\n          <path d=\"M20 12V3\"/>\n          <path d=\"M1 14h6\"/>\n          <path d=\"M9 8h6\"/>\n          <path d=\"M17 16h6\"/>\n        </svg>\n      </div>\n      <div class=\"section-title\">\u9ad8\u7ea7\u4e0e\u7f13\u5b58</div>\n      <div class=\"section-summary\" id=\"sum-advanced\">\u5df2\u5c31\u7eea</div>\n      <svg class=\"chevron-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"m9 18 6-6-6-6\"/></svg>\n    </div>\n    <div class=\"section-body\">\n      <!-- \u771f\u5b9e\u7f13\u5b58\u7ba1\u7406\u5361\u7247 -->\n      <div class=\"cache-panel\">\n        <div class=\"setting-label\" style=\"margin-bottom: 8px;\">\u7ffb\u8bd1\u7f13\u5b58</div>\n        <div class=\"setting-desc\" style=\"margin-bottom: 12px;\">\u7ffb\u8bd1\u7ed3\u679c\u6682\u5b58\u5728\u672c\u5730\uff0c\u907f\u514d\u91cd\u590d\u8bf7\u6c42\u5e76\u63d0\u5347\u52a0\u8f7d\u901f\u5ea6</div>\n        <div class=\"cache-metric-grid\">\n          <div class=\"cache-metric-box\">\n            <div class=\"cache-metric-title\">\u5df2\u4f7f\u7528</div>\n            <div class=\"cache-metric-val\" id=\"cache-size\">0 B</div>\n          </div>\n          <div class=\"cache-metric-box\">\n            <div class=\"cache-metric-title\">\u7f13\u5b58\u6761\u76ee</div>\n            <div class=\"cache-metric-val\" id=\"cache-count\">0 \u4e2a</div>\n          </div>\n          <div class=\"cache-metric-box\">\n            <div class=\"cache-metric-title\">\u6700\u8fd1\u7f13\u5b58</div>\n            <div class=\"cache-metric-val\" id=\"cache-time\" style=\"font-size: 13px; line-height: 24px;\">\u6682\u65e0\u7f13\u5b58</div>\n          </div>\n        </div>\n        <button type=\"button\" class=\"secondary-btn danger-btn\" style=\"width: 100%;\" onclick=\"openClearModal()\">\n          <!-- SF Symbol: trash -->\n          <svg viewBox=\"0 0 24 24\" width=\"15\" height=\"15\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\">\n            <path d=\"M3 6h18\"/>\n            <path d=\"M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6\"/>\n            <path d=\"M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2\"/>\n          </svg>\n          <span>\u6e05\u7406\u7f13\u5b58</span>\n        </button>\n        <div class=\"cache-feedback-bar\" id=\"cache-feedback\"></div>\n      </div>\n\n      <div class=\"setting-row\">\n        <div class=\"setting-info\">\n          <div class=\"setting-label\">\u6807\u7b7e\u4f18\u5148\u4f7f\u7528\u79bb\u7ebf\u8bcd\u5178</div>\n          <div class=\"setting-desc\">\u5185\u7f6e 2500+ ACG \u65e5\u6587 Tag \u6620\u5c04\uff0c0ms \u54cd\u5e94\u4e14\u526f\u6807\u81ea\u52a8\u51c0\u7a7a</div>\n        </div>\n        <label class=\"switch-wrap\">\n          <input type=\"checkbox\" id=\"cfg-tag-offline\" checked onchange=\"saveConfig()\">\n          <span class=\"switch-slider\"></span>\n        </label>\n      </div>\n\n      <div class=\"setting-row\">\n        <div class=\"setting-info\">\n          <div class=\"setting-label\">\u6f2b\u753b\u56fe\u7247 AI \u7ffb\u8bd1</div>\n          <div class=\"setting-desc\">\u5728\u63d2\u753b\u5927\u56fe\u4e0e\u6f2b\u753b\u9605\u8bfb\u4e2d\u542f\u7528\u591a\u6a21\u6001\u5bf9\u767d\u5b57\u5e55\u8bc6\u522b</div>\n        </div>\n        <label class=\"switch-wrap\">\n          <input type=\"checkbox\" id=\"cfg-manga-switch\" onchange=\"saveConfig()\">\n          <span class=\"switch-slider\"></span>\n        </label>\n      </div>\n\n      <div class=\"action-btn-row\">\n        <button type=\"button\" class=\"primary-btn\" id=\"btn-test-ai\" onclick=\"testAIConnection()\">\n          <!-- SF Symbol: bolt.horizontal -->\n          <svg viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\">\n            <path d=\"M6 14h12l-4 8 10-10H12l4-8z\"/>\n          </svg>\n          <span>\u6d4b\u8bd5\u5f53\u524d\u6a21\u578b\u8fde\u63a5\u4e0e\u5ef6\u8fdf</span>\n        </button>\n      </div>\n    </div>\n  </div>\n  <div class=\"section-footer\">\n    \u6e05\u7406\u7f13\u5b58\u4ec5\u5220\u9664\u5df2\u4fdd\u5b58\u7684\u7ffb\u8bd1\u6b63\u6587\u6761\u76ee\uff0c\u4e0d\u4f1a\u8bef\u5220\u60a8\u7684\u8bbe\u7f6e\u6216 API \u5bc6\u94a5\uff1b\u56fe\u7247\u955c\u50cf\u5982\u9700\u514d\u6d41\uff0c\u53ef\u5728 Loon \u6dfb\u52a0\u89c4\u5219\uff1a<code style=\"background: rgba(127,127,127,0.15); padding: 1px 4px; border-radius: 4px;\">DOMAIN,i.pixiv.re,DIRECT</code>\u3002\n  </div>\n\n  <!-- \u2500\u2500\u2500 \u7b2c\u4e94\u7ec4\uff1a\u5173\u4e8e \u2500\u2500\u2500 -->\n  <div class=\"section-card\" id=\"sec-about\">\n    <div class=\"section-header\" onclick=\"toggleSection('sec-about')\">\n      <div class=\"section-icon\">\n        <!-- SF Symbol: info.circle -->\n        <svg viewBox=\"0 0 24 24\" width=\"18\" height=\"18\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\">\n          <circle cx=\"12\" cy=\"12\" r=\"10\"/>\n          <path d=\"M12 16v-4\"/>\n          <path d=\"M12 8h.01\"/>\n        </svg>\n      </div>\n      <div class=\"section-title\">\u5173\u4e8e\u4e0e\u72b6\u6001</div>\n      <div class=\"section-summary\" id=\"sum-about\">v4.2 \u8131\u673a\u5f15\u64ce</div>\n      <svg class=\"chevron-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"m9 18 6-6-6-6\"/></svg>\n    </div>\n    <div class=\"section-body\">\n      <div class=\"setting-row\">\n        <div class=\"setting-info\">\n          <div class=\"setting-label\">\u63d2\u4ef6\u7248\u672c</div>\n          <div class=\"setting-desc\">Pixiv Enhanced Translation Suite</div>\n        </div>\n        <span style=\"font-size: 14px; color: var(--text-secondary); font-weight: 500;\">4.2.0</span>\n      </div>\n      <div class=\"setting-row\">\n        <div class=\"setting-info\">\n          <div class=\"setting-label\">\u8fd0\u884c\u67b6\u6784</div>\n          <div class=\"setting-desc\">0 \u5916\u90e8 CDN \u4f9d\u8d56 \u00b7 \u672c\u5730\u5185\u5b58\u6781\u901f\u76f4\u51fa</div>\n        </div>\n        <span style=\"font-size: 14px; color: var(--tint-green); font-weight: 500;\">\u25cf \u79bb\u7ebf\u8131\u673a</span>\n      </div>\n    </div>\n  </div>\n\n  <script>\n    const DEFAULT_CONFIG = {\n      \"@Pixiv.Enhanced.Settings.Global.Switch\": true,\n      \"@Pixiv.Enhanced.Settings.Auto.Switch\": true,\n      \"@Pixiv.Enhanced.Settings.Auto.Scopes\": [\"illust_title\", \"illust_caption\", \"tags\", \"comments\", \"user_profile\", \"novels\", \"spotlight\"],\n      \"@Pixiv.Enhanced.Settings.Filter.SkipChinese\": true,\n      \"@Pixiv.Enhanced.Settings.Novel.Font\": \"system\",\n      \"@Pixiv.Enhanced.Settings.Novel.CleanDisclaimer\": true,\n      \"@Pixiv.Enhanced.Settings.Novel.ShowOriginal\": true,\n      \"@Pixiv.Enhanced.Settings.Floating.Switch\": true,\n      \"@Pixiv.Enhanced.Settings.Translator.Source\": \"google\",\n      \"@Pixiv.Enhanced.Settings.Target.Lang\": \"zh-CN\",\n      \"@Pixiv.Enhanced.Settings.Tag.OfflineOnly\": true,\n      \"@Pixiv.Enhanced.Settings.Image.Switch\": true,\n      \"@Pixiv.Enhanced.Settings.Image.Engine\": \"deepseek_vl\",\n      \"@Pixiv.Enhanced.Settings.Image.RenderMode\": \"overlay\",\n      \"@Pixiv.Enhanced.Settings.Auth.DeepSeekKey\": \"\",\n      \"@Pixiv.Enhanced.Settings.Auth.DeepSeekUrl\": \"https://api.deepseek.com/v1/chat/completions\",\n      \"@Pixiv.Enhanced.Settings.Auth.DeepSeekModel\": \"deepseek-v4-flash\",\n      \"@Pixiv.Enhanced.Settings.Auth.OpenAIKey\": \"\",\n      \"@Pixiv.Enhanced.Settings.Auth.OpenAIUrl\": \"https://api.openai.com/v1/chat/completions\",\n      \"@Pixiv.Enhanced.Settings.Manga.ServerUrl\": \"http://127.0.0.1:5000\",\n      \"@Pixiv.Enhanced.Settings.LogLevel\": \"WARN\"\n    };\n\n    let currentConfig = Object.assign({}, DEFAULT_CONFIG);\n    let selectedScopes = new Set(DEFAULT_CONFIG[\"@Pixiv.Enhanced.Settings.Auto.Scopes\"]);\n\n    function showToast(msg, icon) {\n      const toast = document.getElementById(\"px-toast\");\n      document.getElementById(\"px-toast-msg\").textContent = msg;\n      document.getElementById(\"px-toast-icon\").textContent = icon || \"\u2713\";\n      toast.classList.add(\"show\");\n      clearTimeout(window._toastTimer);\n      window._toastTimer = setTimeout(() => toast.classList.remove(\"show\"), 2200);\n    }\n\n    function toggleSection(id) {\n      const card = document.getElementById(id);\n      if (card) card.classList.toggle(\"expanded\");\n    }\n\n    function toggleInputMask(inputId) {\n      const input = document.getElementById(inputId);\n      if (input) input.type = (input.type === \"password\") ? \"text\" : \"password\";\n    }\n\n    function toggleScope(el) {\n      const key = el.getAttribute(\"data-key\");\n      if (selectedScopes.has(key)) {\n        selectedScopes.delete(key);\n        el.classList.remove(\"selected\");\n      } else {\n        selectedScopes.add(key);\n        el.classList.add(\"selected\");\n      }\n      saveConfig();\n    }\n\n    function onTranslatorChange() {\n      const source = document.getElementById(\"cfg-translator-source\").value;\n      const dsBlock = document.getElementById(\"ai-deepseek-block\");\n      const oaBlock = document.getElementById(\"ai-openai-block\");\n      if (dsBlock) dsBlock.style.display = (source === \"deepseek\") ? \"block\" : \"none\";\n      if (oaBlock) oaBlock.style.display = (source === \"openai\") ? \"block\" : \"none\";\n      saveConfig();\n    }\n\n    function updateSummaries() {\n      const autoOn = document.getElementById(\"cfg-auto-switch\").checked;\n      const targetLang = document.getElementById(\"cfg-target-lang\").value;\n      const langText = (targetLang === \"zh-CN\") ? \"\u7b80\u4f53\" : (targetLang === \"zh-TW\" ? \"\u7e41\u9ad4\" : targetLang);\n      document.getElementById(\"sum-content\").textContent = (autoOn ? \"\u81ea\u52a8:\u5f00\" : \"\u81ea\u52a8:\u5173\") + \" \u00b7 \" + langText;\n\n      const font = document.getElementById(\"cfg-novel-font\").value;\n      const fontNameMap = { system: \"\u82f9\u65b9\", songti: \"\u5b8b\u4f53\", kaiti: \"\u6977\u4f53\", yuanti: \"\u5706\u4f53\" };\n      const showOrig = document.getElementById(\"cfg-novel-show-original\").checked;\n      document.getElementById(\"sum-novel\").textContent = (showOrig ? \"\u53cc\u8bed\u5bf9\u7167\" : \"\u4ec5\u8bd1\u6587\") + \" \u00b7 \" + (fontNameMap[font] || \"\u539f\u7248\");\n\n      const floatingOn = document.getElementById(\"cfg-floating-switch\").checked;\n      document.getElementById(\"sum-floating\").textContent = floatingOn ? \"\u5df2\u5f00\u542f\" : \"\u5df2\u5173\u95ed\";\n\n      const trans = document.getElementById(\"cfg-translator-source\").value;\n      const transMap = { google: \"Google\u514d\u8d39\", deepseek: \"DeepSeek\", openai: \"OpenAI\" };\n      document.getElementById(\"sum-ai\").textContent = transMap[trans] || trans;\n    }\n\n    async function loadConfig() {\n      try {\n        const res = await fetch(\"/api/get\").then(r => r.json()).catch(() => null);\n        if (res && typeof res === \"object\") {\n          currentConfig = Object.assign({}, DEFAULT_CONFIG, res);\n        }\n      } catch (e) { }\n\n      document.getElementById(\"cfg-global-switch\").checked = !!currentConfig[\"@Pixiv.Enhanced.Settings.Global.Switch\"];\n      document.getElementById(\"cfg-auto-switch\").checked = !!currentConfig[\"@Pixiv.Enhanced.Settings.Auto.Switch\"];\n      document.getElementById(\"cfg-skip-chinese\").checked = !!currentConfig[\"@Pixiv.Enhanced.Settings.Filter.SkipChinese\"];\n      document.getElementById(\"cfg-target-lang\").value = currentConfig[\"@Pixiv.Enhanced.Settings.Target.Lang\"] || \"zh-CN\";\n\n      document.getElementById(\"cfg-novel-font\").value = currentConfig[\"@Pixiv.Enhanced.Settings.Novel.Font\"] || \"system\";\n      document.getElementById(\"cfg-clean-disclaimer\").checked = !!currentConfig[\"@Pixiv.Enhanced.Settings.Novel.CleanDisclaimer\"];\n      document.getElementById(\"cfg-novel-show-original\").checked = currentConfig[\"@Pixiv.Enhanced.Settings.Novel.ShowOriginal\"] !== false;\n      document.getElementById(\"cfg-floating-switch\").checked = currentConfig[\"@Pixiv.Enhanced.Settings.Floating.Switch\"] !== false;\n\n      document.getElementById(\"cfg-translator-source\").value = currentConfig[\"@Pixiv.Enhanced.Settings.Translator.Source\"] || \"google\";\n      document.getElementById(\"cfg-deepseek-key\").value = currentConfig[\"@Pixiv.Enhanced.Settings.Auth.DeepSeekKey\"] || \"\";\n      document.getElementById(\"cfg-deepseek-url\").value = currentConfig[\"@Pixiv.Enhanced.Settings.Auth.DeepSeekUrl\"] || \"https://api.deepseek.com/v1/chat/completions\";\n      document.getElementById(\"cfg-deepseek-model\").value = currentConfig[\"@Pixiv.Enhanced.Settings.Auth.DeepSeekModel\"] || \"deepseek-v4-flash\";\n      document.getElementById(\"cfg-openai-key\").value = currentConfig[\"@Pixiv.Enhanced.Settings.Auth.OpenAIKey\"] || \"\";\n      document.getElementById(\"cfg-openai-url\").value = currentConfig[\"@Pixiv.Enhanced.Settings.Auth.OpenAIUrl\"] || \"https://api.openai.com/v1/chat/completions\";\n\n      document.getElementById(\"cfg-tag-offline\").checked = !!currentConfig[\"@Pixiv.Enhanced.Settings.Tag.OfflineOnly\"];\n      document.getElementById(\"cfg-manga-switch\").checked = !!currentConfig[\"@Pixiv.Enhanced.Settings.Image.Switch\"];\n\n      const scopes = Array.isArray(currentConfig[\"@Pixiv.Enhanced.Settings.Auto.Scopes\"])\n        ? currentConfig[\"@Pixiv.Enhanced.Settings.Auto.Scopes\"]\n        : DEFAULT_CONFIG[\"@Pixiv.Enhanced.Settings.Auto.Scopes\"];\n      selectedScopes = new Set(scopes);\n      document.querySelectorAll(\".scope-chip\").forEach(chip => {\n        const k = chip.getAttribute(\"data-key\");\n        if (selectedScopes.has(k)) chip.classList.add(\"selected\");\n        else chip.classList.remove(\"selected\");\n      });\n\n      onTranslatorChange();\n      updateSummaries();\n    }\n\n    async function saveConfig() {\n      currentConfig[\"@Pixiv.Enhanced.Settings.Global.Switch\"] = document.getElementById(\"cfg-global-switch\").checked;\n      currentConfig[\"@Pixiv.Enhanced.Settings.Auto.Switch\"] = document.getElementById(\"cfg-auto-switch\").checked;\n      currentConfig[\"@Pixiv.Enhanced.Settings.Filter.SkipChinese\"] = document.getElementById(\"cfg-skip-chinese\").checked;\n      currentConfig[\"@Pixiv.Enhanced.Settings.Target.Lang\"] = document.getElementById(\"cfg-target-lang\").value;\n      currentConfig[\"@Pixiv.Enhanced.Settings.Auto.Scopes\"] = Array.from(selectedScopes);\n\n      currentConfig[\"@Pixiv.Enhanced.Settings.Novel.Font\"] = document.getElementById(\"cfg-novel-font\").value;\n      currentConfig[\"@Pixiv.Enhanced.Settings.Novel.CleanDisclaimer\"] = document.getElementById(\"cfg-clean-disclaimer\").checked;\n      currentConfig[\"@Pixiv.Enhanced.Settings.Novel.ShowOriginal\"] = document.getElementById(\"cfg-novel-show-original\").checked;\n      currentConfig[\"@Pixiv.Enhanced.Settings.Floating.Switch\"] = document.getElementById(\"cfg-floating-switch\").checked;\n\n      currentConfig[\"@Pixiv.Enhanced.Settings.Translator.Source\"] = document.getElementById(\"cfg-translator-source\").value;\n      currentConfig[\"@Pixiv.Enhanced.Settings.Auth.DeepSeekKey\"] = document.getElementById(\"cfg-deepseek-key\").value.trim();\n      currentConfig[\"@Pixiv.Enhanced.Settings.Auth.DeepSeekUrl\"] = document.getElementById(\"cfg-deepseek-url\").value.trim();\n      currentConfig[\"@Pixiv.Enhanced.Settings.Auth.DeepSeekModel\"] = document.getElementById(\"cfg-deepseek-model\").value.trim();\n      currentConfig[\"@Pixiv.Enhanced.Settings.Auth.OpenAIKey\"] = document.getElementById(\"cfg-openai-key\").value.trim();\n      currentConfig[\"@Pixiv.Enhanced.Settings.Auth.OpenAIUrl\"] = document.getElementById(\"cfg-openai-url\").value.trim();\n\n      currentConfig[\"@Pixiv.Enhanced.Settings.Tag.OfflineOnly\"] = document.getElementById(\"cfg-tag-offline\").checked;\n      currentConfig[\"@Pixiv.Enhanced.Settings.Image.Switch\"] = document.getElementById(\"cfg-manga-switch\").checked;\n\n      updateSummaries();\n\n      try {\n        await fetch(\"/api/set\", {\n          method: \"POST\",\n          headers: { \"Content-Type\": \"application/json\" },\n          body: JSON.stringify(currentConfig)\n        });\n        showToast(\"\u8bbe\u7f6e\u5df2\u5b9e\u65f6\u540c\u6b65\u4fdd\u5b58\", \"\u2713\");\n      } catch (e) {\n        showToast(\"\u5df2\u5728\u672c\u5730\u66f4\u65b0\", \"\u2139\ufe0f\");\n      }\n    }\n\n    async function testAIConnection() {\n      const btn = document.getElementById(\"btn-test-ai\");\n      btn.disabled = true;\n      btn.innerHTML = '<span>\u23f3 \u6b63\u5728\u6d4b\u8bd5\u8fde\u63a5\u4e0e\u6d4b\u901f\u2026</span>';\n      const start = Date.now();\n\n      try {\n        const source = document.getElementById(\"cfg-translator-source\").value;\n        const res = await fetch(\"/api/test_ai?source=\" + encodeURIComponent(source), { method: \"POST\" })\n          .then(r => r.json())\n          .catch(() => null);\n        const latency = Date.now() - start;\n\n        if (res && res.ok) {\n          btn.innerHTML = '<span>\ud83d\udfe2 \u8fde\u63a5\u6b63\u5e38 \u00b7 ' + latency + 'ms</span>';\n          showToast(\"AI \u6a21\u578b\u8fde\u63a5\u6b63\u5e38 (\" + latency + \"ms)\", \"\ud83d\udfe2\");\n        } else {\n          const err = (res && res.error) ? res.error : \"\u8bf7\u6c42\u8d85\u65f6\u6216\u9274\u6743\u5931\u8d25\";\n          btn.innerHTML = '<span>\ud83d\udd34 \u5931\u8d25: ' + err.slice(0, 16) + '</span>';\n          showToast(\"\u8fde\u63a5\u5931\u8d25: \" + err, \"\u274c\");\n        }\n      } catch (e) {\n        btn.innerHTML = '<span>\ud83d\udd34 \u7f51\u7edc\u5f02\u5e38</span>';\n        showToast(\"\u7f51\u7edc\u8bf7\u6c42\u5f02\u5e38\", \"\u274c\");\n      }\n\n      setTimeout(() => {\n        btn.disabled = false;\n        btn.innerHTML = '<svg viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 14h12l-4 8 10-10H12l4-8z\"/></svg><span>\u6d4b\u8bd5\u5f53\u524d\u6a21\u578b\u8fde\u63a5\u4e0e\u5ef6\u8fdf</span>';\n      }, 3000);\n    }\n\n    /* \u2500\u2500\u2500 \u771f\u5b9e\u7f13\u5b58\u7ba1\u7406 \u2500\u2500\u2500 */\n    async function loadCacheStats() {\n      const sizeEl = document.getElementById(\"cache-size\");\n      const countEl = document.getElementById(\"cache-count\");\n      const timeEl = document.getElementById(\"cache-time\");\n      try {\n        const res = await fetch(\"/api/cache_stats\").then(r => r.json());\n        if (!res || !res.ok) throw new Error(\"\u7edf\u8ba1\u5931\u8d25\");\n        sizeEl.textContent = res.sizeText || \"0 B\";\n        countEl.textContent = (res.count || 0) + \" \u4e2a\";\n        timeEl.textContent = res.timeText || \"\u6682\u65e0\u7f13\u5b58\";\n      } catch (e) {\n        sizeEl.textContent = \"0 B\";\n        countEl.textContent = \"0 \u4e2a\";\n        timeEl.textContent = \"\u6682\u65e0\u7f13\u5b58\";\n      }\n    }\n\n    function openClearModal() {\n      document.getElementById(\"clear-modal\").classList.add(\"show\");\n    }\n\n    function closeClearModal() {\n      document.getElementById(\"clear-modal\").classList.remove(\"show\");\n    }\n\n    async function executeClearCache() {\n      closeClearModal();\n      const feedback = document.getElementById(\"cache-feedback\");\n      feedback.textContent = \"\u6b63\u5728\u6e05\u7406\u672c\u5730\u7f13\u5b58\u2026\";\n      try {\n        const res = await fetch(\"/api/clear_cache\", { method: \"POST\" }).then(r => r.json());\n        if (!res || !res.ok) throw new Error(\"\u6e05\u7406\u5f02\u5e38\");\n        feedback.textContent = \"\u2713 \u7f13\u5b58\u5df2\u6e05\u7406\uff1a\u5df2\u91ca\u653e \" + res.sizeText + \" \u00b7 \u5df2\u5220\u9664 \" + res.count + \" \u6761\";\n        showToast(\"\u7f13\u5b58\u5df2\u6e05\u7406\", \"\u2713\");\n        await loadCacheStats();\n      } catch (e) {\n        feedback.textContent = \"\u6e05\u7406\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5\";\n        showToast(\"\u6e05\u7406\u7f13\u5b58\u5931\u8d25\", \"!\");\n      }\n    }\n\n    document.addEventListener(\"DOMContentLoaded\", () => {\n      loadConfig();\n      loadCacheStats();\n    });\n  </script>\n</body>\n</html>\n";
 
 // ─── 1. 配置管理中心（对接 PreferencePanes 存储模型）───────────────────────────
 function getSetting(key, defaultVal) {
@@ -222,20 +222,23 @@ function cacheKey(engine, target, text) {
   return engine + ":" + target + ":" + (text.length > 30 ? text.slice(0, 30) + text.length : text);
 }
 
-const CACHE_INDEX_KEY = "pxtc_cache_index_v1";
+const CACHE_META_KEY = "pxtc_meta_index_v2";
 
-function readCacheIndex() {
+function readCacheMeta() {
   try {
-    const raw = $.getdata(CACHE_INDEX_KEY);
-    const index = raw ? JSON.parse(raw) : [];
-    return Array.isArray(index) ? index : [];
+    const raw = $.getdata(CACHE_META_KEY);
+    const meta = raw ? JSON.parse(raw) : null;
+    if (meta && typeof meta === "object" && Array.isArray(meta.keys)) {
+      return meta;
+    }
+    return { keys: [], lastUpdated: 0 };
   } catch (e) {
-    return [];
+    return { keys: [], lastUpdated: 0 };
   }
 }
 
-function writeCacheIndex(index) {
-  try { $.setdata(JSON.stringify(index), CACHE_INDEX_KEY); } catch (e) { }
+function writeCacheMeta(meta) {
+  try { $.setdata(JSON.stringify(meta), CACHE_META_KEY); } catch (e) { }
 }
 
 function cacheRead(key) {
@@ -256,39 +259,74 @@ function cacheWrite(key, val) {
     if (key.length < 80) {
       const storageKey = "pxtc_" + key;
       $.setdata(val, storageKey);
-      const index = readCacheIndex();
-      if (!index.includes(storageKey)) {
-        index.push(storageKey);
-        writeCacheIndex(index);
+      const meta = readCacheMeta();
+      if (!meta.keys.includes(storageKey)) {
+        meta.keys.push(storageKey);
       }
+      meta.lastUpdated = Date.now();
+      writeCacheMeta(meta);
     }
   } catch (e) { }
 }
 
 function getCacheStats() {
-  const keys = readCacheIndex();
+  const meta = readCacheMeta();
   let bytes = 0;
   let count = 0;
-  for (const key of keys) {
-    const value = $.getdata(key);
-    if (value !== undefined && value !== null && value !== "") {
+  const validKeys = [];
+  for (const k of meta.keys) {
+    const v = $.getdata(k);
+    if (v !== undefined && v !== null && v !== "") {
       count++;
-      bytes += String(key).length + String(value).length;
+      bytes += k.length + String(v).length;
+      validKeys.push(k);
     }
   }
-  const sizeText = bytes < 1024 ? bytes + " B" : (bytes / 1024).toFixed(bytes < 1024 * 1024 ? 1 : 2) + (bytes < 1024 * 1024 ? " KB" : " MB");
-  return { count, bytes, sizeText, indexed: keys.length > 0 };
+  if (validKeys.length !== meta.keys.length) {
+    meta.keys = validKeys;
+    writeCacheMeta(meta);
+  }
+  let sizeText = "0 B";
+  if (bytes > 0) {
+    if (bytes < 1024) sizeText = bytes + " B";
+    else if (bytes < 1024 * 1024) sizeText = (bytes / 1024).toFixed(1) + " KB";
+    else sizeText = (bytes / (1024 * 1024)).toFixed(2) + " MB";
+  }
+  let timeText = "暂无缓存";
+  if (meta.lastUpdated > 0 && count > 0) {
+    const diff = Date.now() - meta.lastUpdated;
+    if (diff < 60000) timeText = "刚刚";
+    else if (diff < 3600000) timeText = Math.floor(diff / 60000) + " 分钟前";
+    else if (diff < 86400000) timeText = Math.floor(diff / 3600000) + " 小时前";
+    else {
+      const d = new Date(meta.lastUpdated);
+      timeText = (d.getMonth() + 1) + "月" + d.getDate() + "日";
+    }
+  }
+  return { ok: true, count, bytes, sizeText, timeText };
 }
 
 function clearTranslationCacheData() {
-  const keys = readCacheIndex();
-  const stats = getCacheStats();
-  for (const key of keys) {
-    try { $.setdata("", key); } catch (e) { }
+  const meta = readCacheMeta();
+  let bytes = 0;
+  let count = 0;
+  for (const k of meta.keys) {
+    const v = $.getdata(k);
+    if (v !== undefined && v !== null && v !== "") {
+      count++;
+      bytes += k.length + String(v).length;
+    }
+    try { $.setdata("", k); } catch (e) { }
   }
   MEMORY_CACHE.clear();
-  writeCacheIndex([]);
-  return stats;
+  writeCacheMeta({ keys: [], lastUpdated: 0 });
+  let sizeText = "0 B";
+  if (bytes > 0) {
+    if (bytes < 1024) sizeText = bytes + " B";
+    else if (bytes < 1024 * 1024) sizeText = (bytes / 1024).toFixed(1) + " KB";
+    else sizeText = (bytes / (1024 * 1024)).toFixed(2) + " MB";
+  }
+  return { ok: true, count, bytes, sizeText };
 }
 
 async function googleTranslateChunk(arr, target) {
@@ -664,78 +702,163 @@ const SF_TRANSLATE_SVG = `
 const INJECT_CSS = `
 #px-fab {
   position: fixed;
-  right: 16px;
-  bottom: calc(env(safe-area-inset-bottom, 20px) + 80px);
+  right: 12px;
+  bottom: 150px;
   z-index: 2147483647;
-  width: 52px;
-  height: 52px;
+  width: 48px;
+  height: 48px;
   border-radius: 50%;
-  border: 0.5px solid rgba(255, 255, 255, 0.35);
-  background: #0096fa;
-  color: #fff;
+  border: 0.5px solid rgba(255, 255, 255, 0.4);
+  background: #007aff;
+  color: #ffffff;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
   cursor: pointer;
   user-select: none;
-  transition: top 0.18s ease, right 0.18s ease, bottom 0.18s ease, opacity 0.2s ease, background 0.3s ease;
+  transition: opacity 0.2s ease, background 0.3s ease;
+}
+@media (prefers-color-scheme: dark) {
+  #px-fab {
+    background: #0a84ff;
+    border: 0.5px solid rgba(255, 255, 255, 0.2);
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.45);
+  }
 }
 #px-fab:active { transform: scale(0.92); }
-#px-fab.px-busy { opacity: 0.55; }
-#px-fab.px-done { background: #34c759 !important; }
+#px-fab.px-busy { opacity: 0.55; pointer-events: none; }
+#px-fab.px-done { background: #34c759 !important; color: #fff !important; }
+#px-fab.px-warn { background: #ff9500 !important; color: #fff !important; }
 
-/* 纯净小说排版 (100% 严格继承 Pixiv 原版字号、字体与颜色，并支持自定义字体) */
+/* 纯净小说排版 (严格继承 Pixiv 原版字号、行距、字体与颜色) */
 .pxtc-reader {
   max-width: 720px;
   margin: 0 auto;
-  padding: 20px 16px 110px;
+  padding: 20px 16px 120px;
   background: transparent;
   color: inherit;
   font-family: inherit;
   font-size: inherit;
-  line-height: 1.8;
+  line-height: 1.85;
 }
-.pxtc-reader.font-songti, .pxtc-reader.font-songti .pxtc-para {
+.pxtc-reader.font-songti {
   font-family: "Songti SC", "STSong", "SimSun", "Noto Serif CJK SC", serif !important;
 }
-.pxtc-reader.font-kaiti, .pxtc-reader.font-kaiti .pxtc-para {
+.pxtc-reader.font-kaiti {
   font-family: "Kaiti SC", "STKaiti", "KaiTi", "DFKai-SB", serif !important;
 }
-.pxtc-reader.font-yuanti, .pxtc-reader.font-yuanti .pxtc-para {
+.pxtc-reader.font-yuanti {
   font-family: "Yuanti SC", "STYuanti", "PingFang SC", sans-serif !important;
 }
-.pxtc-para {
-  margin: 6px 0;
-  color: inherit;
-  font-family: inherit;
-  font-size: inherit;
-  line-height: 1.8;
-  word-break: break-word;
+
+/* 顶部轻量状态胶囊 (对标出版物与系统原生交互) */
+.pxtc-status-bar {
+  position: sticky;
+  top: calc(env(safe-area-inset-top, 20px) + 8px);
+  z-index: 1000;
+  margin: 0 auto 16px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  background: rgba(30, 30, 30, 0.86);
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+  color: #ffffff;
+  font: 12px/1.4 -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  max-width: fit-content;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+  transition: opacity 0.3s ease, transform 0.3s ease;
 }
+.pxtc-status-bar.hidden {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-8px);
+}
+.pxtc-status-btn {
+  background: rgba(255, 255, 255, 0.15);
+  border: none;
+  color: #5ac8fa;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+}
+.pxtc-status-btn:active {
+  opacity: 0.7;
+}
+
+/* 出版级双语段落对 (严格一一对应，不堆叠边框/阴影/卡片) */
 .translation-pair {
-  margin: 0 0 1.4em;
-  padding: 0 0 1.1em;
-  border-bottom: 1px solid rgba(127, 127, 127, 0.16);
+  margin: 0 0 1.6em 0;
+}
+.translation-pair.empty {
+  margin: 0 0 0.8em 0;
 }
 .translation-pair .original {
   color: inherit;
-  line-height: 1.8;
+  font-family: inherit;
+  font-size: 1em;
+  line-height: 1.85;
+  word-break: break-word;
 }
 .translation-pair .translated {
-  margin-top: 0.45em;
-  padding-left: 0.8em;
-  border-left: 2px solid rgba(127, 127, 127, 0.28);
+  margin-top: 6px;
   color: inherit;
-  opacity: 0.64;
+  font-family: inherit;
   font-size: 0.94em;
   line-height: 1.75;
+  opacity: 0.68;
+  word-break: break-word;
+  transition: opacity 0.25s ease;
+}
+@media (prefers-color-scheme: dark) {
+  .translation-pair .translated {
+    opacity: 0.62;
+  }
+}
+.translation-pair .translated.pending {
+  font-size: 12px;
+  color: var(--text-secondary, #8e8e93);
+  opacity: 0.45;
+  margin-top: 4px;
 }
 .translation-pair .translation-failed {
-  margin-top: 0.45em;
-  color: #c0392b;
-  font: 13px/1.5 -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
+  margin-top: 6px;
+  color: #ff3b30;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
+.pxtc-retry-inline-btn {
+  background: rgba(255, 59, 48, 0.12);
+  color: #ff3b30;
+  border: none;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+/* 仅译文模式 (当关闭双语对照时，隐藏原文) */
+.pxtc-reader.hide-original .translation-pair .original {
+  display: none;
+}
+.pxtc-reader.hide-original .translation-pair .translated {
+  margin-top: 0;
+  opacity: 1;
+  font-size: 1em;
+  line-height: 1.85;
+}
+
 .px-hud-bubble {
   position: absolute;
   z-index: 1000;
@@ -769,10 +892,18 @@ function clientRuntime() {
 
     var root = null;
     var reader = null;
+    var statusBar = null;
     var originalDisplay = "";
     var currentMode = "ja"; // "ja" or "zh"
     var isTranslating = false;
-    var cachedChineseHtml = null;
+    var hasTranslated = false;
+
+    // 存储分段信息与状态
+    var paragraphItems = [];
+    var batchList = [];
+    var totalCount = 0;
+    var successCount = 0;
+    var failedCount = 0;
 
     function esc(s) {
       return String(s || "").replace(/[&<>"']/g, function (c) {
@@ -789,107 +920,67 @@ function clientRuntime() {
       window.location.href = "https://app-api.pixiv.net/settings/Enhanced";
     }
 
-    // 检查小说是否本身就是中文或目标语言
+    // 检查小说是否本身纯中文
     var rawText = "";
     try { rawText = window.pixiv && window.pixiv.novel ? window.pixiv.novel.text : ""; } catch (e) { }
-    // 如果小说本身纯中文（无日文假名），零打扰纯净享受，不创建任何按钮与DOM
     if (rawText && !hasJapanese(rawText)) {
       return;
     }
 
-    if (!floatingSwitch) {
-      return;
-    }
+    // 悬浮按钮总开关严格判定
+    var fab = null;
+    if (floatingSwitch && (rawText || imageSwitch)) {
+      var prevFab = document.getElementById("px-fab");
+      if (prevFab) prevFab.remove();
 
-    if (!rawText && !imageSwitch) {
-      return;
-    }
+      fab = document.createElement("div");
+      fab.id = "px-fab";
+      fab.title = rawText ? "轻点翻译/还原 · 长按设置" : "轻点翻译图片 · 长按设置";
+      fab.setAttribute("aria-label", "小说翻译");
+      fab.innerHTML = `__SVG_PLACEHOLDER__`;
+      document.body.appendChild(fab);
 
-    // 创建右下角 iOS 原生毛玻璃悬浮按钮
-    var fab = document.createElement("div");
-    fab.id = "px-fab";
-    fab.title = rawText ? "点击翻译/还原 · 长按设置" : "点击翻译图片 · 长按设置";
-    fab.setAttribute("aria-label", rawText ? "小说翻译" : "图片翻译");
-    fab.innerHTML = `__SVG_PLACEHOLDER__`;
-    document.body.appendChild(fab);
-
-    function positionFabAroundNativeControls() {
-      if (!fab || !document.body) return;
-      var selectors = [
-        '[aria-label*="喜欢"]', '[aria-label*="いいね"]', '[aria-label*="Like"]',
-        '[title*="喜欢"]', '[title*="いいね"]', '[title*="Like"]',
-        '[data-testid*="like"]', '[data-testid*="favorite"]'
-      ];
-      var controls = [];
-      for (var s = 0; s < selectors.length; s++) {
-        var nodes = document.querySelectorAll(selectors[s]);
-        for (var n = 0; n < nodes.length; n++) {
-          var node = nodes[n];
-          if (node === fab || !node.getBoundingClientRect) continue;
-          var rect = node.getBoundingClientRect();
-          if (rect.width >= 28 && rect.height >= 28 && rect.top < window.innerHeight && rect.bottom > 0) {
-            controls.push(rect);
-          }
+      var pressTimer = null;
+      function startPress(e) {
+        pressTimer = setTimeout(function () {
+          pressTimer = null;
+          openSettings();
+        }, 500);
+      }
+      function endPress(e) {
+        if (pressTimer) {
+          clearTimeout(pressTimer);
+          pressTimer = null;
+          handleFabClick();
         }
       }
-      if (!controls.length) {
-        fab.style.top = "";
-        fab.style.right = "";
-        fab.style.bottom = "";
-        return;
+      function cancelPress(e) {
+        if (pressTimer) {
+          clearTimeout(pressTimer);
+          pressTimer = null;
+        }
       }
-      controls.sort(function (a, b) { return b.top - a.top; });
-      var control = controls[0];
-      var fabSize = fab.offsetWidth || 52;
-      var top = Math.max(12, control.top - fabSize - 12);
-      var right = Math.max(12, window.innerWidth - control.right);
-      fab.style.top = top + "px";
-      fab.style.right = right + "px";
-      fab.style.bottom = "auto";
+      fab.addEventListener("mousedown", startPress);
+      fab.addEventListener("mouseup", endPress);
+      fab.addEventListener("mouseleave", cancelPress);
+      fab.addEventListener("touchstart", startPress, { passive: true });
+      fab.addEventListener("touchend", endPress);
+      fab.addEventListener("touchcancel", cancelPress);
     }
 
-    var fabPositionFrame = 0;
-    function scheduleFabPosition() {
-      if (fabPositionFrame) return;
-      fabPositionFrame = requestAnimationFrame(function () {
-        fabPositionFrame = 0;
-        positionFabAroundNativeControls();
-      });
-    }
-    window.addEventListener("resize", scheduleFabPosition, { passive: true });
-    window.addEventListener("scroll", scheduleFabPosition, { passive: true, capture: true });
-    if (typeof MutationObserver !== "undefined") {
-      new MutationObserver(scheduleFabPosition).observe(document.body, { childList: true, subtree: true });
-    }
-    scheduleFabPosition();
-
-    // 单击 → 触发翻译/还原；长按 500ms → 打开设置中心
-    var pressTimer = null;
-    function startPress(e) {
-      pressTimer = setTimeout(function () {
-        pressTimer = null;
-        openSettings();
-      }, 500);
-    }
-    function endPress(e) {
-      if (pressTimer) {
-        clearTimeout(pressTimer);
-        pressTimer = null;
-        handleClick();
+    function isDisclaimer(str) {
+      if (!str || typeof str !== "string") return false;
+      var s = str.trim();
+      if (/^[・※*#\-—_~～\s]{2,}$/.test(s)) return true;
+      if (/^(?:https?:\/\/|(?:fanbox|booth|twitter|x\.com))/i.test(s)) return true;
+      if (/^[・※*]/.test(s) && (s.includes("脚本") || s.includes("台本") || s.includes("商用") || s.includes("转载") || s.includes("责任") || s.includes("作者") || s.includes("URL") || s.includes("DM") || s.includes("费用") || s.includes("更改") || s.includes("改编"))) {
+        return true;
       }
-    }
-    function cancelPress(e) {
-      if (pressTimer) {
-        clearTimeout(pressTimer);
-        pressTimer = null;
+      if (/(?:免费脚本|免费台本|商用利用|商业用途|未经许可不得转载|禁止转载|无断转载|自作发言|自作発言|不承担任何责任|责任自负|请注明作者|情景语音|台本使用|使用规约|使用規約|使用规则|不收取任何费用|自由更改|更改对话)/i.test(s)) {
+        return true;
       }
+      return false;
     }
-    fab.addEventListener("mousedown", startPress);
-    fab.addEventListener("mouseup", endPress);
-    fab.addEventListener("mouseleave", cancelPress);
-    fab.addEventListener("touchstart", startPress, { passive: true });
-    fab.addEventListener("touchend", endPress);
-    fab.addEventListener("touchcancel", cancelPress);
 
     function splitParagraphs(text) {
       var t = String(text || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n").replace(/^\n+|\n+$/g, "");
@@ -915,40 +1006,21 @@ function clientRuntime() {
       return out;
     }
 
-    function buildBatches(paragraphs) {
-      var batches = [];
-      var cur = [];
-      var curLen = 0;
-      for (var i = 0; i < paragraphs.length; i++) {
-        var p = paragraphs[i];
-        if (p.length > 2500) {
-          if (cur.length) { batches.push(cur); cur = []; curLen = 0; }
-          var pieces = splitLong(p, 2500);
-          for (var j = 0; j < pieces.length; j++) {
-            if (cur.length && (cur.length >= 20 || curLen + pieces[j].length > 2500)) {
-              batches.push(cur); cur = []; curLen = 0;
-            }
-            cur.push(pieces[j]); curLen += pieces[j].length;
-          }
-        } else {
-          if (cur.length && (cur.length >= 20 || curLen + p.length > 2500)) {
-            batches.push(cur); cur = []; curLen = 0;
-          }
-          cur.push(p); curLen += p.length;
-        }
-      }
-      if (cur.length) batches.push(cur);
-      return batches;
-    }
-
     function buildReader() {
       if (reader) return true;
       root = document.getElementById("root");
       if (!root) return false;
       originalDisplay = root.style.display || "";
+
+      var oldReader = document.getElementById("pxtc-reader");
+      if (oldReader) oldReader.remove();
+
       reader = document.createElement("div");
+      reader.id = "pxtc-reader";
       var fontCls = (CFG && CFG.novelFont && CFG.novelFont !== "system") ? " font-" + CFG.novelFont : "";
-      reader.className = "pxtc-reader" + fontCls;
+      var modeCls = showOriginalText ? "" : " hide-original";
+      reader.className = "pxtc-reader" + fontCls + modeCls;
+
       var bodyStyle = window.getComputedStyle(document.body);
       var rootStyle = window.getComputedStyle(root);
       var pageBg = bodyStyle.backgroundColor || rootStyle.backgroundColor;
@@ -959,28 +1031,63 @@ function clientRuntime() {
       if (textColor && textColor !== "transparent") {
         reader.style.color = textColor;
       }
+
       root.parentNode.insertBefore(reader, root.nextSibling);
       reader.style.display = "none";
       return true;
+    }
+
+    function updateStatus(state) {
+      if (!statusBar && reader) {
+        statusBar = document.createElement("div");
+        statusBar.className = "pxtc-status-bar";
+        reader.insertBefore(statusBar, reader.firstChild);
+      }
+      if (!statusBar) return;
+
+      if (state === "preparing") {
+        statusBar.classList.remove("hidden");
+        statusBar.innerHTML = '<span>准备翻译…</span>';
+        if (fab) { fab.className = "px-busy"; }
+      } else if (state === "translating") {
+        statusBar.classList.remove("hidden");
+        statusBar.innerHTML = '<span>正在翻译 ' + successCount + ' / ' + totalCount + '</span>';
+        if (fab) { fab.className = "px-busy"; }
+      } else if (state === "partial") {
+        statusBar.classList.remove("hidden");
+        statusBar.innerHTML = '<span>部分完成 · ' + successCount + ' / ' + totalCount + '</span><button type="button" class="pxtc-status-btn" id="pxtc-retry-all">重试失败段落</button>';
+        var retryBtn = document.getElementById("pxtc-retry-all");
+        if (retryBtn) retryBtn.addEventListener("click", retryFailedBatches);
+        if (fab) { fab.className = "px-warn"; }
+      } else if (state === "completed") {
+        statusBar.innerHTML = '<span>翻译完成</span>';
+        if (fab) { fab.className = "px-done"; }
+        setTimeout(function () {
+          if (statusBar && state === "completed") statusBar.classList.add("hidden");
+        }, 3200);
+      }
     }
 
     function showOriginal() {
       if (reader) reader.style.display = "none";
       if (root) root.style.display = originalDisplay;
       currentMode = "ja";
-      fab.classList.remove("px-done");
+      if (fab) fab.classList.remove("px-done", "px-warn");
     }
 
     function showTranslated() {
       if (root) root.style.display = "none";
       if (reader) reader.style.display = "block";
       currentMode = "zh";
-      fab.classList.add("px-done");
+      if (fab) {
+        if (failedCount > 0) fab.className = "px-warn";
+        else fab.className = "px-done";
+      }
     }
 
     function toggleNovelMode() {
       if (isTranslating) return;
-      if (!cachedChineseHtml) {
+      if (!hasTranslated) {
         startNovelTranslate();
         return;
       }
@@ -991,113 +1098,188 @@ function clientRuntime() {
       }
     }
 
+    async function translateBatchRequest(batch) {
+      batch.status = "translating";
+      var texts = batch.items.map(function (it) { return it.text; });
+      try {
+        var res = await fetch("/pxtrans?t=novel", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ texts: texts })
+        }).then(function (r) { return r.json(); });
+
+        if (res && Array.isArray(res.translations) && res.translations.length === texts.length) {
+          batch.status = "success";
+          for (var i = 0; i < batch.items.length; i++) {
+            var item = batch.items[i];
+            item.status = "success";
+            item.translation = String(res.translations[i] || "");
+            var el = document.getElementById("pair-trans-" + item.id);
+            if (el) {
+              el.className = "translated";
+              el.innerHTML = esc(item.translation).replace(/\n/g, "<br>");
+            }
+          }
+        } else {
+          throw new Error("返回格式不匹配");
+        }
+      } catch (err) {
+        batch.status = "failed";
+        for (var j = 0; j < batch.items.length; j++) {
+          var fItem = batch.items[j];
+          fItem.status = "failed";
+          var fEl = document.getElementById("pair-trans-" + fItem.id);
+          if (fEl) {
+            fEl.className = "translated";
+            fEl.innerHTML = '<div class="translation-failed"><span>翻译失败</span><button type="button" class="pxtc-retry-inline-btn" data-batch="' + batch.idx + '">重试</button></div>';
+            var rBtn = fEl.querySelector("button");
+            if (rBtn) {
+              rBtn.addEventListener("click", function (e) {
+                e.stopPropagation();
+                var bIdx = Number(this.getAttribute("data-batch"));
+                retrySingleBatch(bIdx);
+              });
+            }
+          }
+        }
+      }
+    }
+
+    function recalculateProgress() {
+      successCount = 0;
+      failedCount = 0;
+      for (var i = 0; i < paragraphItems.length; i++) {
+        if (paragraphItems[i].status === "success") successCount++;
+        else if (paragraphItems[i].status === "failed") failedCount++;
+      }
+      if (failedCount > 0) {
+        updateStatus("partial");
+      } else if (successCount === totalCount && totalCount > 0) {
+        updateStatus("completed");
+      } else {
+        updateStatus("translating");
+      }
+    }
+
+    async function retrySingleBatch(bIdx) {
+      var batch = batchList[bIdx];
+      if (!batch || isTranslating) return;
+      for (var k = 0; k < batch.items.length; k++) {
+        var el = document.getElementById("pair-trans-" + batch.items[k].id);
+        if (el) {
+          el.className = "translated pending";
+          el.textContent = "正在重试…";
+        }
+      }
+      await translateBatchRequest(batch);
+      recalculateProgress();
+    }
+
+    async function retryFailedBatches() {
+      if (isTranslating) return;
+      isTranslating = true;
+      var failedBatches = batchList.filter(function (b) { return b.status === "failed"; });
+      for (var i = 0; i < failedBatches.length; i++) {
+        var batch = failedBatches[i];
+        for (var k = 0; k < batch.items.length; k++) {
+          var el = document.getElementById("pair-trans-" + batch.items[k].id);
+          if (el) {
+            el.className = "translated pending";
+            el.textContent = "正在重试…";
+          }
+        }
+        await translateBatchRequest(batch);
+        recalculateProgress();
+      }
+      isTranslating = false;
+      recalculateProgress();
+    }
+
     async function startNovelTranslate() {
       if (isTranslating) return;
       var text = "";
-      var title = "";
-      var caption = "";
-      var tags = [];
-      var userName = "";
-
-      try {
-        if (window.pixiv && window.pixiv.novel) {
-          text = window.pixiv.novel.text || "";
-          title = window.pixiv.novel.title || "";
-          caption = window.pixiv.novel.caption || "";
-          tags = window.pixiv.novel.tags || [];
-          userName = window.pixiv.novel.userName || "";
-        }
-      } catch (e) { }
-
+      try { text = window.pixiv && window.pixiv.novel ? window.pixiv.novel.text : ""; } catch (e) { }
       if (!text) return;
       if (!buildReader()) return;
 
       isTranslating = true;
-      fab.classList.add("px-busy");
+      currentMode = "zh";
 
-      var paragraphs = splitParagraphs(text);
-      var batches = buildBatches(paragraphs);
-      var allTranslations = new Array(batches.length);
-      var batchStates = new Array(batches.length);
-      var next = 0;
-      async function worker() {
-        while (next < batches.length) {
-          var idx = next++;
-          try {
-            var bTexts = batches[idx];
-            var res = await fetch("/pxtrans?t=novel", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ texts: bTexts })
-            }).then(function (r) { return r.json(); });
-            if (res && Array.isArray(res.translations)) {
-              allTranslations[idx] = res.translations;
-              batchStates[idx] = "success";
-            } else {
-              allTranslations[idx] = [];
-              batchStates[idx] = "failed";
-            }
-          } catch (e) {
-            allTranslations[idx] = [];
-            batchStates[idx] = "failed";
-          }
+      // 1. 段落拆分与规约过滤
+      var rawParagraphs = splitParagraphs(text);
+      var validParagraphs = [];
+      for (var p = 0; p < rawParagraphs.length; p++) {
+        var itemStr = rawParagraphs[p].trim();
+        if (cleanDisclaimer && isDisclaimer(itemStr)) continue;
+        validParagraphs.push(rawParagraphs[p]);
+      }
+
+      // 2. 建立段落项与 DOM 段落对
+      paragraphItems = [];
+      reader.innerHTML = "";
+      statusBar = null;
+
+      for (var i = 0; i < validParagraphs.length; i++) {
+        var originalText = validParagraphs[i];
+        var itemObj = {
+          id: i,
+          text: originalText,
+          status: "pending",
+          translation: ""
+        };
+        paragraphItems.push(itemObj);
+
+        var pairEl = document.createElement("div");
+        pairEl.className = "translation-pair" + (originalText.trim() ? "" : " empty");
+        pairEl.id = "pxtc-pair-" + i;
+        pairEl.innerHTML = '<div class="original">' + esc(originalText).replace(/\n/g, "<br>") + '</div>' +
+          '<div class="translated pending" id="pair-trans-' + i + '"></div>';
+        reader.appendChild(pairEl);
+      }
+
+      totalCount = paragraphItems.length;
+      successCount = 0;
+      failedCount = 0;
+
+      showTranslated();
+      updateStatus("preparing");
+
+      // 3. 构建批次
+      batchList = [];
+      var curItems = [];
+      var curChars = 0;
+      for (var j = 0; j < paragraphItems.length; j++) {
+        var it = paragraphItems[j];
+        if (curItems.length >= 20 || curChars + it.text.length > 2500) {
+          batchList.push({ idx: batchList.length, items: curItems, status: "pending" });
+          curItems = [];
+          curChars = 0;
+        }
+        curItems.push(it);
+        curChars += it.text.length;
+      }
+      if (curItems.length) {
+        batchList.push({ idx: batchList.length, items: curItems, status: "pending" });
+      }
+
+      // 4. 并发调度 (最多 3 批并发，边翻边显示)
+      var nextBatch = 0;
+      async function batchWorker() {
+        while (nextBatch < batchList.length) {
+          var b = batchList[nextBatch++];
+          await translateBatchRequest(b);
+          recalculateProgress();
         }
       }
 
       var workers = [];
-      var concurrency = Math.min(3, batches.length);
-      for (var w = 0; w < concurrency; w++) workers.push(worker());
+      var concurrency = Math.min(3, batchList.length);
+      for (var w = 0; w < concurrency; w++) workers.push(batchWorker());
       await Promise.all(workers);
 
-      // 规约/免责/授权声明智能识别过滤函数
-      function isDisclaimer(str) {
-        if (!str || typeof str !== "string") return false;
-        var s = str.trim();
-        if (/^[・※*#\-—_~～\s]{2,}$/.test(s)) return true;
-        if (/^(?:https?:\/\/|\b(?:fanbox|booth|twitter|x\.com)\b)/i.test(s)) return true;
-        if (/^[・※*]/.test(s) && (s.includes("脚本") || s.includes("台本") || s.includes("商用") || s.includes("转载") || s.includes("责任") || s.includes("作者") || s.includes("URL") || s.includes("DM") || s.includes("费用") || s.includes("更改") || s.includes("改编"))) {
-          return true;
-        }
-        if (/(?:免费脚本|免费台本|商用利用|商业用途|未经许可不得转载|禁止转载|无断转载|自作发言|自作発言|不承担任何责任|责任自负|请注明作者|情景语音|台本使用|使用规约|使用規約|使用规则|不收取任何费用|自由更改|更改对话)/i.test(s)) {
-          return true;
-        }
-        return false;
-      }
-
-      // 按原文段落顺序生成段落对；失败段落保留原文，不冒充已完成。
-      var html = "";
-      var successCount = 0;
-      var failedCount = 0;
-      for (var i = 0; i < allTranslations.length; i++) {
-        var originals = batches[i] || [];
-        var translations = allTranslations[i] || [];
-        for (var j = 0; j < originals.length; j++) {
-          var original = String(originals[j] || "");
-          var translated = String(translations[j] || "");
-          if (!original.trim()) {
-            html += '<div class="translation-pair empty"><div class="original">&nbsp;</div></div>';
-            continue;
-          }
-          if (cleanDisclaimer && isDisclaimer(original)) continue;
-          var ok = batchStates[i] === "success" && translated.trim();
-          if (ok) {
-            successCount++;
-          } else {
-            failedCount++;
-          }
-          html += '<div class="translation-pair">' +
-            (showOriginalText || !ok ? '<div class="original">' + esc(original).replace(/\n/g, "<br>") + '</div>' : '') +
-            (ok ? '<div class="translated">' + esc(translated).replace(/\n/g, "<br>") + '</div>' : '<div class="translation-failed">翻译失败 · 可重新翻译此段</div>') +
-            '</div>';
-        }
-      }
-
-      cachedChineseHtml = html;
-      reader.innerHTML = html;
       isTranslating = false;
-      fab.classList.remove("px-busy");
-      fab.setAttribute("aria-label", failedCount ? "部分完成 · " + successCount + " / " + (successCount + failedCount) : "翻译完成");
-      showTranslated();
+      hasTranslated = true;
+      recalculateProgress();
     }
 
     // ─── 漫画 AI 视觉 HUD 漫翻 ───
@@ -1105,11 +1287,11 @@ function clientRuntime() {
       if (!imageSwitch) return;
       var images = document.querySelectorAll("img");
       if (!images.length) return;
-      fab.classList.add("px-busy");
+      if (fab) fab.className = "px-busy";
       var targetImg = images[0];
       var imgUrl = targetImg.src;
       try {
-        targetImg.parentNode.querySelectorAll(".px-hud-bubble").forEach(function (node) { node.remove(); });
+        targetImg.parentNode.querySelectorAll(".px-hud-bubble").forEach(function (n) { n.remove(); });
         var r = await fetch("/pxtrans?action=vision&url=" + encodeURIComponent(imgUrl)).then(function (res) { return res.json(); });
         if (r && Array.isArray(r.bubbles)) {
           r.bubbles.forEach(function (b) {
@@ -1122,25 +1304,23 @@ function clientRuntime() {
             targetImg.parentNode.style.position = "relative";
             targetImg.parentNode.appendChild(bubble);
           });
-        } else if (r && r.error) {
-          fab.setAttribute("aria-label", "漫画翻译失败：" + r.error);
+          if (fab) fab.className = "px-done";
         }
       } catch (e) {
-        fab.setAttribute("aria-label", "漫画翻译失败");
+        if (fab) fab.className = "px-warn";
       }
-      fab.classList.remove("px-busy");
     }
 
-    function handleClick() {
-      if (window.pixiv && window.pixiv.novel && window.pixiv.novel.text) {
+    function handleFabClick() {
+      if (rawText) {
         toggleNovelMode();
       } else {
         doMangaTranslate();
       }
     }
 
-    // 默认自动翻译检测启动：如果开启了默认自动翻译，进入页面后自动点击触发悬浮按钮翻译
-    if (autoSwitch) {
+    // 默认自动翻译触发
+    if (autoSwitch && rawText) {
       var tries = 0;
       var timer = setInterval(function () {
         tries++;

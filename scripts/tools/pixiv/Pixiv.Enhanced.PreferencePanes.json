@@ -106,10 +106,10 @@
   },
   {
     "id": "@Pixiv.Enhanced.Settings.Floating.Switch",
-    "name": "[小说] 显示悬浮按钮",
+    "name": "[悬浮按钮] 显示悬浮按钮",
     "type": "boolean",
     "val": true,
-    "desc": "关闭后不注入悬浮按钮或相关事件；开启后自动避开页面控件。"
+    "desc": "翻译过程中显示悬浮按钮，支持轻触翻译与长按设置；关闭后不注入任何按钮 DOM。"
   },
   {
     "id": "@Pixiv.Enhanced.Settings.Translator.Source",
