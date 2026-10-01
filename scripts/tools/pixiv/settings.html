@@ -816,174 +816,7 @@
   </div>
 
   <!-- ─── 第四组：高级与缓存 ─── -->
-    <!-- ─── 漫画与图片翻译 (四维全景漫翻方案) ─── -->
-  <div class="section-card expanded" id="sec-manga">
-    <div class="section-header" onclick="toggleSection('sec-manga')">
-      <div class="section-icon">
-        <!-- SF Symbol: photo.on.rectangle.angled -->
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M4 8h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V10a2 2 0 0 1 2-2z"/>
-          <path d="m2 16 5-5 4 4 5-5 6 6"/>
-          <circle cx="8" cy="13" r="1.5"/>
-          <path d="M7 4h10"/>
-        </svg>
-      </div>
-      <div class="section-title">漫画与图片翻译</div>
-      <div class="section-summary" id="sum-manga">百度云端 · 零门槛</div>
-      <svg class="chevron-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
-    </div>
-    <div class="section-body">
-      <div class="setting-row">
-        <div class="setting-info">
-          <div class="setting-label">启用漫画图片翻译</div>
-          <div class="setting-desc">开启后支持漫画大图汉化与小说内插图对白识别</div>
-        </div>
-        <label class="switch-wrap">
-          <input type="checkbox" id="cfg-manga-switch" onchange="saveConfig()">
-          <span class="switch-slider"></span>
-        </label>
-      </div>
-
-      <div class="setting-row">
-        <div class="setting-info">
-          <div class="setting-label">漫翻实现方案</div>
-          <div class="setting-desc">选择最适合您的图片汉化路径</div>
-        </div>
-        <div class="select-wrap">
-          <select class="select-input" id="cfg-manga-engine" onchange="onMangaEngineChange()">
-            <option value="baidu_pic">【推荐】百度图片翻译 (免自建·云端直出)</option>
-            <option value="deepseek_vl">【多模态】DeepSeek-VL (插图气泡字幕)</option>
-            <option value="gpt4o_mini">【多模态】GPT-4o-mini (插图气泡字幕)</option>
-            <option value="manga_translator">【极客】自建 manga-image-translator</option>
-          </select>
-          <svg class="select-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
-        </div>
-      </div>
-
-      <!-- 百度图片翻译配置区 (免自建零门槛首选) -->
-      <div id="manga-baidu-block" style="padding: 10px 16px 14px; border-bottom: 0.5px solid var(--separator-color);">
-        <div class="setting-desc" style="margin-bottom: 8px; color: var(--tint-blue);">
-          🌟 <strong>免自建首选：</strong>无需开电脑或显卡，百度开放平台每月免费赠送图片翻译额度，官方云端抹除日文并自动嵌好中文排版！
-        </div>
-        <div class="setting-label" style="font-size: 14px;">百度翻译 AppID</div>
-        <div class="input-wrap">
-          <input type="text" class="text-input" id="cfg-baidu-appid" placeholder="在 fanyi-api.baidu.com 申请" onchange="saveConfig()">
-        </div>
-        <div class="setting-label" style="font-size: 14px; margin-top: 8px;">百度翻译 Secret 密钥</div>
-        <div class="input-wrap">
-          <input type="password" class="text-input" id="cfg-baidu-secret" placeholder="管理控制台查看应用密钥" onchange="saveConfig()">
-          <button type="button" class="input-action-btn" onclick="toggleInputMask('cfg-baidu-secret')">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/>
-              <circle cx="12" cy="12" r="3"/>
-            </svg>
-          </button>
-        </div>
-      </div>
-
-      <!-- 自建服务配置区 -->
-      <div id="manga-selfhost-block" style="padding: 10px 16px 14px; border-bottom: 0.5px solid var(--separator-color); display: none;">
-        <div class="setting-label" style="font-size: 14px;">自建服务 URL</div>
-        <div class="input-wrap">
-          <input type="text" class="text-input" id="cfg-manga-server" value="http://127.0.0.1:5000" placeholder="http://192.168.1.x:5000" onchange="saveConfig()">
-        </div>
-        <div class="setting-desc" style="margin-top: 4px;">填写本地局域网或远程部署的 manga-image-translator 根地址</div>
-      </div>
-
-      <!-- 四维方案指引卡片 -->
-      <div style="background: rgba(127, 127, 127, 0.05); border-radius: 10px; margin: 12px 16px; padding: 12px 14px;">
-        <div class="setting-label" style="font-size: 13px; color: var(--tint-blue); margin-bottom: 6px;">💡 漫画与图片四大翻译方案全览：</div>
-        <div class="setting-desc" style="font-size: 12px; line-height: 1.6;">
-          1. <strong>免自建云端方案 (百度图片翻译)</strong>：只需填入免费 AppID，翻页时云端自动抹除日文并贴上中文字体，原生画廊直接替换原图！<br>
-          2. <strong>系统级零插件方案 (iOS 实况文本)</strong>：在 Pixiv 查看大图时，长按画面上的日文对白即可弹出 iOS 官方「翻译」；或直接截屏，相册右下角实况文本一键覆盖整页汉化。<br>
-          3. <strong>小说插图气泡字幕 (多模态)</strong>：阅读小说遇到插图时，轻点右下角悬浮按钮即可自动识别对白并叠加半透明字幕。<br>
-          4. <strong>极客本地显卡方案 (自建)</strong>：适合拥有 NAS 或独立显卡的用户，运行开源项目享受更高画质离线嵌字。
-        </div>
-      </div>
-    </div>
-  </div>
-  <div class="section-footer">
-    iOS 原生漫画画廊（UIKit 视图）不属于网页环境，无法注入 DOM 悬浮按钮；使用百度图片翻译可在网络层直接将图片无痕替换为汉化版。
-  </div>
-
-  <div class="section-card" id="sec-advanced">
-    <div class="section-header" onclick="toggleSection('sec-advanced')">
-      <div class="section-icon">
-        <!-- SF Symbol: slider.horizontal.3 -->
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M4 21v-7"/>
-          <path d="M4 10V3"/>
-          <path d="M12 21v-9"/>
-          <path d="M12 8V3"/>
-          <path d="M20 21v-5"/>
-          <path d="M20 12V3"/>
-          <path d="M1 14h6"/>
-          <path d="M9 8h6"/>
-          <path d="M17 16h6"/>
-        </svg>
-      </div>
-      <div class="section-title">高级与缓存</div>
-      <div class="section-summary" id="sum-advanced">已就绪</div>
-      <svg class="chevron-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
-    </div>
-    <div class="section-body">
-      <!-- 真实缓存管理卡片 -->
-      <div class="cache-panel">
-        <div class="setting-label" style="margin-bottom: 8px;">翻译缓存</div>
-        <div class="setting-desc" style="margin-bottom: 12px;">翻译结果暂存在本地，避免重复请求并提升加载速度</div>
-        <div class="cache-metric-grid">
-          <div class="cache-metric-box">
-            <div class="cache-metric-title">已使用</div>
-            <div class="cache-metric-val" id="cache-size">0 B</div>
-          </div>
-          <div class="cache-metric-box">
-            <div class="cache-metric-title">缓存条目</div>
-            <div class="cache-metric-val" id="cache-count">0 个</div>
-          </div>
-          <div class="cache-metric-box">
-            <div class="cache-metric-title">最近缓存</div>
-            <div class="cache-metric-val" id="cache-time" style="font-size: 13px; line-height: 24px;">暂无缓存</div>
-          </div>
-        </div>
-        <button type="button" class="secondary-btn danger-btn" style="width: 100%;" onclick="openClearModal()">
-          <!-- SF Symbol: trash -->
-          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M3 6h18"/>
-            <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/>
-            <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
-          </svg>
-          <span>清理缓存</span>
-        </button>
-        <div class="cache-feedback-bar" id="cache-feedback"></div>
-      </div>
-
-      <div class="setting-row">
-        <div class="setting-info">
-          <div class="setting-label">标签优先使用离线词典</div>
-          <div class="setting-desc">内置 2500+ ACG 日文 Tag 映射，0ms 响应且副标自动净空</div>
-        </div>
-        <label class="switch-wrap">
-          <input type="checkbox" id="cfg-tag-offline" checked onchange="saveConfig()">
-          <span class="switch-slider"></span>
-        </label>
-      </div>
-
-
-
-      <div class="action-btn-row">
-        <button type="button" class="primary-btn" id="btn-test-ai" onclick="testAIConnection()">
-          <!-- SF Symbol: bolt.horizontal -->
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M6 14h12l-4 8 10-10H12l4-8z"/>
-          </svg>
-          <span>测试当前模型连接与延迟</span>
-        </button>
-      </div>
-    </div>
-  </div>
-  <div class="section-footer">
-    清理缓存仅删除已保存的翻译正文条目，不会误删您的设置或 API 密钥；图片镜像如需免流，可在 Loon 添加规则：<code style="background: rgba(127,127,127,0.15); padding: 1px 4px; border-radius: 4px;">DOMAIN,i.pixiv.re,DIRECT</code>。
-  </div>
+    
 
   <!-- ─── 第五组：关于 ─── -->
   <div class="section-card" id="sec-about">
@@ -1018,11 +851,11 @@
     </div>
   </div>
 
-    <!-- 底部醒目保存退出主按钮 -->
+    <!-- 底部醒目保存主按钮 -->
   <div style="margin: 24px 0 16px; padding: 0 4px;">
     <button type="button" class="primary-btn" id="btn-save-bottom" onclick="handleDoneClick()" style="width: 100%; padding: 14px 20px; font-size: 16px; border-radius: 12px; box-shadow: 0 4px 14px rgba(0, 122, 255, 0.3);">
       <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
-      <span>保存并退出设置</span>
+      <span>保存设置</span>
     </button>
   </div>
 
@@ -1170,12 +1003,19 @@
       });
 
       onTranslatorChange();
-      onMangaEngineChange();
+      onMangaSwitchChange();
       updateSummaries();
     }
 
+    function onMangaSwitchChange() {
+      const on = document.getElementById("cfg-manga-switch").checked;
+      const box = document.getElementById("manga-config-box");
+      if (box) box.style.display = on ? "block" : "none";
+      onMangaEngineChange();
+    }
+
     function onMangaEngineChange() {
-      const engine = document.getElementById("cfg-manga-engine").value;
+      const engine = document.getElementById("cfg-manga-engine") ? document.getElementById("cfg-manga-engine").value : "baidu_pic";
       const bBlock = document.getElementById("manga-baidu-block");
       const sBlock = document.getElementById("manga-selfhost-block");
       if (bBlock) bBlock.style.display = (engine === "baidu_pic") ? "block" : "none";
@@ -1186,27 +1026,27 @@
     async function handleDoneClick() {
       const btnTop = document.querySelector(".done-nav-btn");
       const btnBtm = document.getElementById("btn-save-bottom");
-      if (btnTop) btnTop.textContent = "已保存";
-      if (btnBtm) btnBtm.querySelector("span").textContent = "设置已保存，正在返回…";
+      if (btnTop) btnTop.textContent = "✓ 已保存";
+      if (btnBtm) btnBtm.querySelector("span").textContent = "✓ 设置已保存";
 
       try {
         await saveConfig();
       } catch (e) {}
 
-      showToast("设置已保存并生效", "✓");
+      showToast("设置已保存生效 · 可点击左上角 ‹ 返回", "✓");
 
-      // 多策略平滑退出 Webview 回到 Pixiv 原生界面
+      // 1.4秒后自动恢复原样，绝不卡死停留在“正在返回…”或“已保存”
       setTimeout(function () {
-        try {
-          if (window.history.length > 1) {
-            window.history.back();
-          }
-        } catch (e) {}
-        try { window.close(); } catch (e) {}
-        setTimeout(function () {
-          try { window.location.href = "pixiv://"; } catch (e) {}
-        }, 250);
-      }, 350);
+        if (btnTop) btnTop.textContent = "完成";
+        if (btnBtm) btnBtm.querySelector("span").textContent = "保存设置";
+      }, 1400);
+
+      // 如果有历史记录则顺畅后退
+      try {
+        if (window.history.length > 1) {
+          window.history.back();
+        }
+      } catch (e) {}
     }
 
     async function saveConfig() {
