@@ -861,6 +861,17 @@
           </div>
         </div>
 
+        <!-- 快速直达任意漫画作品 -->
+        <div style="padding: 0 16px 12px;">
+          <div class="setting-label" style="font-size: 13px; margin-bottom: 6px;">🔍 快速打开任意漫画作品：</div>
+          <div style="display: flex; gap: 8px;">
+            <div class="input-wrap" style="flex: 1; margin-bottom: 0;">
+              <input type="text" class="text-input" id="quick-illust-id" placeholder="输入作品 ID (如 144146271)">
+            </div>
+            <button type="button" class="primary-btn" onclick="openQuickViewer()" style="white-space: nowrap; padding: 0 16px; font-size: 13px;">打开查看器</button>
+          </div>
+        </div>
+
         <div style="padding: 6px 16px 12px;">
           <button type="button" class="secondary-btn" id="btn-test-manga" onclick="testMangaConnection()" style="width: 100%; padding: 10px 14px; font-size: 14px; font-weight: 600; justify-content: center;">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 14h12l-4 8 10-10H12l4-8z"/></svg>
@@ -869,12 +880,15 @@
         </div>
 
         <div style="background: rgba(127, 127, 127, 0.05); border-radius: 10px; margin: 4px 16px 14px; padding: 12px 14px; border: 0.5px solid var(--card-border);">
-          <div class="setting-label" style="font-size: 13px; color: var(--tint-blue); margin-bottom: 6px;">📱 Pixiv App 漫翻使用说明：</div>
+          <div class="setting-label" style="font-size: 13px; color: var(--tint-blue); margin-bottom: 6px;">📱 Pixiv 漫画汉化两大最佳途径：</div>
           <div class="setting-desc" style="font-size: 12px; line-height: 1.65;">
-            1. <strong>作品简介入口</strong>：在 Pixiv App 打开多图插画或漫画作品时，作品简介最上方会自动注入 <strong>「🌐 [点击进入 AI 漫翻查看器]」</strong> 专属链接；<br>
-            2. <strong>极速全景阅览</strong>：轻点链接即可在 App 内直达全景阅读器，享受 CDN 全球极速大图加载；<br>
-            3. <strong>一键呼出字幕</strong>：阅读器右下角常驻 <strong>「🌐 AI 漫翻」</strong> 悬浮按钮，轻点即刻智能识别对白并覆盖汉化字幕；<br>
-            4. <strong>系统级备用方案</strong>：在原生大图长按，也可直接呼出 iOS 系统的「实况文本翻译」。
+            👑 <strong>方案 A：iOS 原生「实况文本」（最推荐·零门槛·零额度消耗）</strong><br>
+            • 在 Pixiv 浏览漫画大图时长按气泡，直接点击系统「翻译」；<br>
+            • 或轻按截屏，点右下角实况文本按钮，整页所有对白瞬间自动替换为精美中文字幕，不用跳出任何页面！<br><br>
+            🌐 <strong>方案 B：专属 AI 漫翻查看器（原画大图 + 气泡字幕）</strong><br>
+            1. <strong>原生蓝色超链</strong>：作品简介最上方提供 <code>https://www.pixiv.net/manga/viewer</code> 蓝色高亮链接，点击在 App 内部弹窗秒开；<br>
+            2. <strong>快捷直达</strong>：也可在上方直接输入作品 ID 立即开启；<br>
+            3. <strong>一键气泡字幕</strong>：右下角常驻 <code>🌐 AI 漫翻</code> 悬浮按钮，轻点即刻按需智能识别当前页对白。
           </div>
         </div>
       </div>
@@ -1094,6 +1108,16 @@
         el.classList.add("selected");
       }
       saveConfig();
+    }
+
+    function openQuickViewer() {
+      const input = document.getElementById("quick-illust-id");
+      const id = input ? input.value.trim().replace(/\D+/g, "") : "";
+      if (!id) {
+        showToast("请输入有效的纯数字作品 ID", "ℹ️");
+        return;
+      }
+      window.location.href = "https://www.pixiv.net/manga/viewer?illust_id=" + id;
     }
 
     function onTranslatorChange() {
