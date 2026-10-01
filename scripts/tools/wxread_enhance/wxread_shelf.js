@@ -588,12 +588,26 @@ function generateTaskId() {
         }
       }
 
-      // 对已上架书与待上架书两张列表全面执行按钮与在架状态增强
+      // 核心解密：为什么昨天以前有 [加入书架] / [已加入书架] 按钮？
+      // 微信读书 React Native (SubscriptionRecord) 在底层代码中硬编码了渲染逻辑：
+      // 只有挂在 onshelfBooks 列表中的条目，React Native 组件才会分配交互单元格 SubscriptionBookCell，并渲染 [加入书架] / [已在书架] 操作按钮 (addBookInShelfAction)！
+      // 如果放在 offshelfBooks，React Native 就会强制走 SubscriptionOffBookCell，直接渲染为置灰不可操作的“待上架/无内容”！
+      //
+      // 完美解法：
+      // 在订阅响应中，将 offshelfBooks 转移合并进 onshelfBooks 供 React Native 激活按钮渲染；
+      // 但在底层数据流中，保持“订阅只是收藏”的铁律：在 /shelf/sync 中，只有用户在订阅列表真正点击了 [加入书架] 并完成的任务才入书架！
+      if (Array.isArray(data.offshelfBooks) && data.offshelfBooks.length > 0) {
+        if (!Array.isArray(data.onshelfBooks)) data.onshelfBooks = [];
+        for (const b of data.offshelfBooks) {
+          b.isOffshelfSource = true;
+          data.onshelfBooks.push(b);
+        }
+        data.offshelfBooks = [];
+      }
+
+      // 对所有订阅书籍全面执行按钮与在架状态增强
       if (Array.isArray(data.onshelfBooks)) {
         for (const b of data.onshelfBooks) enhanceBookButton(b);
-      }
-      if (Array.isArray(data.offshelfBooks)) {
-        for (const b of data.offshelfBooks) enhanceBookButton(b);
       }
       modified = true;
     }
