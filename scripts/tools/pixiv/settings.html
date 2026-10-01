@@ -589,9 +589,9 @@
   <!-- ─── 第一组：翻译 ─── -->
   <div class="section-card" id="sec-content">
     <div class="section-header" onclick="toggleSection('sec-content')">
-      <div class="section-icon">
+      <div class="section-icon" style="background: #007aff; color: #fff;">
         <!-- SF Symbol: globe -->
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="10"/>
           <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/>
           <path d="M2 12h20"/>
@@ -718,6 +718,12 @@
         <div class="scope-chip" data-key="user_profile" onclick="toggleScope(this)">画师简介</div>
         <div class="scope-chip" data-key="spotlight" onclick="toggleScope(this)">特辑文章</div>
       </div>
+      <div class="action-btn-row" style="padding-top: 4px;">
+        <button type="button" class="primary-btn" id="btn-test-ai" onclick="testAIConnection()">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 14h12l-4 8 10-10H12l4-8z"/></svg>
+          <span>测试翻译模型连接与延迟</span>
+        </button>
+      </div>
     </div>
   </div>
   <div class="section-footer">
@@ -727,9 +733,9 @@
   <!-- ─── 第二组：阅读体验 ─── -->
   <div class="section-card" id="sec-novel">
     <div class="section-header" onclick="toggleSection('sec-novel')">
-      <div class="section-icon">
+      <div class="section-icon" style="background: #5856d6; color: #fff;">
         <!-- SF Symbol: text.book.closed -->
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"/>
           <path d="M6 6h10"/>
           <path d="M6 10h10"/>
@@ -785,9 +791,9 @@
   <!-- ─── 第三组：悬浮按钮 ─── -->
   <div class="section-card" id="sec-floating">
     <div class="section-header" onclick="toggleSection('sec-floating')">
-      <div class="section-icon">
+      <div class="section-icon" style="background: #34c759; color: #fff;">
         <!-- SF Symbol: button.programmable -->
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="9"/>
           <circle cx="12" cy="12" r="4"/>
         </svg>
@@ -816,9 +822,9 @@
   <!-- ─── 第四组：高级与缓存 ─── -->
   <div class="section-card" id="sec-advanced">
     <div class="section-header" onclick="toggleSection('sec-advanced')">
-      <div class="section-icon">
+      <div class="section-icon" style="background: #8e8e93; color: #fff;">
         <!-- SF Symbol: slider.horizontal.3 -->
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M4 21v-7"/>
           <path d="M4 10V3"/>
           <path d="M12 21v-9"/>
@@ -918,7 +924,13 @@
 
         <!-- 百度图片翻译凭证 (仅选百度时展示) -->
         <div id="manga-baidu-block" style="padding: 6px 16px 12px;">
-          <div class="setting-desc" style="margin-bottom: 6px; color: var(--tint-blue);">💡 百度开放平台每月免费赠送图片翻译额度，云端自动抹除日文并填好中文排版，无需自建。</div>
+          <div class="setting-desc" style="margin-bottom: 8px; color: var(--tint-blue); line-height: 1.55; background: rgba(0, 122, 255, 0.08); padding: 8px 10px; border-radius: 8px;">
+            <strong>🌟 百度图片翻译免费开通指引：</strong><br>
+            1. 访问百度翻译开放平台 (<code>fanyi-api.baidu.com</code>)；<br>
+            2. 免费注册并开通「通用图片翻译」（每月赠送免费额度）；<br>
+            3. 在管理控制台开发者信息中，复制 <code>AppID</code> 与 <code>密钥</code> 填入下方。<br>
+            <span style="color: #34c759; font-weight: 600;">🛡️ 额度安全保障：</span>仅在您需要翻译漫画时主动触发，绝不静默消耗日常浏览或无字插画额度！
+          </div>
           <div class="input-wrap" style="margin-bottom: 6px;">
             <input type="text" class="text-input" id="cfg-baidu-appid" placeholder="百度翻译 AppID" onchange="saveConfig()">
           </div>
@@ -948,15 +960,7 @@
         </div>
       </div>
 
-      <div class="action-btn-row">
-        <button type="button" class="primary-btn" id="btn-test-ai" onclick="testAIConnection()">
-          <!-- SF Symbol: bolt.horizontal -->
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M6 14h12l-4 8 10-10H12l4-8z"/>
-          </svg>
-          <span>测试当前模型连接与延迟</span>
-        </button>
-      </div>
+
     </div>
   </div>
   <div class="section-footer">
@@ -966,9 +970,9 @@
   <!-- ─── 第五组：关于 ─── -->
   <div class="section-card" id="sec-about">
     <div class="section-header" onclick="toggleSection('sec-about')">
-      <div class="section-icon">
+      <div class="section-icon" style="background: #ff9500; color: #fff;">
         <!-- SF Symbol: info.circle -->
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="10"/>
           <path d="M12 16v-4"/>
           <path d="M12 8h.01"/>
