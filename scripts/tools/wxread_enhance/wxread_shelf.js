@@ -2,33 +2,37 @@
 ------------------------------------------
 @Description: 微信读书 · 订阅列表增强与专属自动入架流程
 @Author: TomCatXue
-@Version: 2.0.0
-@Date: 2026-10-02 08:30
+@Version: 2.1.0
+@Date: 2026-10-02 09:00
 ------------------------------------------
 核心架构与原则：
   1. 严格分离三大功能：
-     - 微信读书原生订阅：仅作为收藏，保持原生行为，不入书架、不触发自动流程、不改状态。
+     - 微信读书原生订阅：仅作为收藏，已上架与待上架图书全开放订阅按钮；订阅后不自动入架、不修改原书状态。
      - 微信读书官方加入书架（详情页/搜索页）：保持官方原生行为，不篡改、不转发、不触发Bot。
      - 订阅列表加入书架：唯一允许触发自动流程的入口（source = subscription_list_add）。
   2. 修复状态污染 Bug：
      - 严禁将 offshelfBooks 转移至 onshelfBooks；
-     - 严禁篡改 soldout、soldoutType、shelfStatus；真实保留图书状态。
-  3. 修复批量加入与删除复现 Bug：
+     - 严禁篡改 soldout、soldoutType；真实保留图书上下架状态。
+  3. 订阅列表（已上架书与待上架书）按钮全量呈现：
+     - 结合真实书架同步缓存与自动入架库，精准识别每本书的在架状态；
+     - 在架显示：[已加入书架]；未在架显示：[加入书架]；
+     - 任务执行状态机动态呈现：[处理中 0%] -> [处理中 50%] -> [已加入书架] / [失败 重试]。
+  4. 修复批量加入与删除复现 Bug：
      - 单书精准处理：仅针对当前点击的单一 bookId 生成任务；
      - 物理隔离存储体系：
-       * weread_subscribed_books: 仅存订阅关系快照；
-       * weread_auto_shelf_tasks: 仅存自动流程任务状态机 (pending/processing/completed/failed)；
-       * weread_auto_shelf_books: 仅存已完成自动流程的正式入架书籍；
-       * weread_bot_config: 保存用户自定义的 Bot/API 配置，无硬编码。
+       * weread_subscribed_books: 订阅关系快照；
+       * weread_auto_shelf_tasks: 自动流程任务状态机 (pending/processing/completed/failed)；
+       * weread_auto_shelf_books: 已完成自动流程的正式入架书籍；
+       * weread_real_shelf_books: 官方真实书架在架索引缓存；
+       * weread_bot_config: 用户自定义的 Bot/API 配置，无硬编码。
      - 联动清理：/shelf/delete 与 /shelf/sync(removed) 实时剔除已删书籍，杜绝复现。
-  4. 按钮驱动实时反馈：
+  5. 按钮驱动实时反馈：
      - 全程禁止任何 Loon 通知、系统弹窗、Toast 与外部打点；
-     - 所有任务进度纯粹通过订阅列表中该书的按钮文案反馈：
-       [加入书架] -> [处理中 0%] -> [处理中 50%] -> [已加入书架] / [失败 重试]。
+     - 所有任务进度与结果纯粹通过订阅列表中该书的按钮文案反馈。
 */
 
 const SCRIPT_NAME = "微信读书·订阅增强";
-const SCRIPT_VERSION = "2.0.0";
+const SCRIPT_VERSION = "2.1.0";
 const $ = new Env(SCRIPT_NAME);
 
 // ============================================================
@@ -75,12 +79,10 @@ function getArgumentValue(argKey, index) {
     if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
       trimmed = trimmed.slice(1, -1).trim();
     }
-    // 支持按逗号分隔的纯位置参数 (0: enable, 1: apiUrl, 2: token, 3: chatId)
     const parts = trimmed.split(",").map(p => p.trim());
     if (typeof index === "number" && parts.length > index) {
       return parts[index];
     }
-    // 兼容 key=val 传参
     if (argKey) {
       const match = trimmed.match(new RegExp("(?:^|[&,;\\s])" + argKey + "=([^&,;\\s]+)"));
       if (match) return decodeURIComponent(match[1]);
@@ -170,9 +172,6 @@ function generateTaskId() {
           const targetBookId = (Array.isArray(addIds) && addIds.length > 0) ? String(addIds[0]) : "";
 
           if (targetBookId) {
-            // 来源严格判定：
-            // 1. 请求体/URL 显式声明 source = subscription_list_add；
-            // 2. 或处于订阅列表活跃上下文内，且该书隶属于 weread_subscribed_books，且未发生详情页导航
             const pageContext = getJsonStorage("weread_page_context", {});
             const subscribedMap = getJsonStorage("weread_subscribed_books", {});
             const now = Math.floor(Date.now() / 1000);
@@ -185,10 +184,10 @@ function generateTaskId() {
               (pageContext.lastDetailBookId !== targetBookId)
             );
 
-            // 唯一允许触发条件
+            // 唯一允许触发条件：来自订阅列表
             if (isExplicitSource || isContextualSubscription) {
               const bookInfo = subscribedMap[targetBookId] || {};
-              const title = bookInfo.title || `下架书籍 (${targetBookId})`;
+              const title = bookInfo.title || `书籍 (${targetBookId})`;
               const author = bookInfo.author || "微信读书";
               const isbn = bookInfo.isbn || "";
 
@@ -196,7 +195,6 @@ function generateTaskId() {
               let taskMap = getJsonStorage("weread_auto_shelf_tasks", {});
               let existingTask = taskMap[targetBookId];
               if (existingTask && (existingTask.status === "processing" || existingTask.status === "completed")) {
-                // 已经处理中或已完成，静默响应成功，不创建新任务
                 $done({
                   response: {
                     status: 200,
@@ -226,14 +224,12 @@ function generateTaskId() {
               // 检查外部 Bot/API 配置
               const botConfig = loadBotConfig();
               if (botConfig.enable && botConfig.apiUrl) {
-                // 推进任务状态到 processing 50%
                 newTask.status = "processing";
                 newTask.progress = 50;
                 newTask.updatedAt = Math.floor(Date.now() / 1000);
                 taskMap[targetBookId] = newTask;
                 setJsonStorage(taskMap, "weread_auto_shelf_tasks");
 
-                // 发起异步 API 调用 (禁止任何通知)
                 if (typeof $httpClient !== "undefined" && $httpClient.post) {
                   $httpClient.post({
                     url: botConfig.apiUrl,
@@ -257,14 +253,12 @@ function generateTaskId() {
                     const finishTime = Math.floor(Date.now() / 1000);
 
                     if (!err && resp && (resp.status === 200 || resp.statusCode === 200)) {
-                      // API 调用成功 -> 执行加入书架
                       curTask.status = "completed";
                       curTask.progress = 100;
                       curTask.updatedAt = finishTime;
                       tasks[targetBookId] = curTask;
                       setJsonStorage(tasks, "weread_auto_shelf_tasks");
 
-                      // 写入已入架列表
                       let autoShelfBooks = getJsonStorage("weread_auto_shelf_books", {});
                       autoShelfBooks[targetBookId] = {
                         bookId: targetBookId,
@@ -274,7 +268,6 @@ function generateTaskId() {
                       };
                       setJsonStorage(autoShelfBooks, "weread_auto_shelf_books");
                     } else {
-                      // API 调用失败 -> 标记 failed
                       curTask.status = "failed";
                       curTask.progress = 0;
                       curTask.updatedAt = finishTime;
@@ -284,7 +277,6 @@ function generateTaskId() {
                   });
                 }
               } else {
-                // 未启用 Bot/API：本地直接完成加入书架并标记 completed
                 newTask.status = "completed";
                 newTask.progress = 100;
                 newTask.updatedAt = now;
@@ -301,7 +293,6 @@ function generateTaskId() {
                 setJsonStorage(autoShelfBooks, "weread_auto_shelf_books");
               }
 
-              // 订阅专属流程响应 200 OK 且 succ: 1，完全不惊动上游
               $done({
                 response: {
                   status: 200,
@@ -314,13 +305,13 @@ function generateTaskId() {
           }
         }
       } catch (e) {}
-      // 官方加入书架操作：100% 保持官方原生行为，直接放行上游请求
+      // 官方加入书架：100% 保持官方原生行为，直接放行上游请求
       $done({});
       return;
     }
 
     // -----------------------------------------------------------------------
-    // 1.2 /shelf/delete：监听用户删除行为，同步清理 weread_auto_shelf_books
+    // 1.2 /shelf/delete：监听用户删除行为，同步清理各持久化记录
     // -----------------------------------------------------------------------
     if (/\/shelf\/delete/i.test(url)) {
       try {
@@ -332,22 +323,64 @@ function generateTaskId() {
           if (Array.isArray(delIds) && delIds.length > 0) {
             let autoShelfBooks = getJsonStorage("weread_auto_shelf_books", {});
             let taskMap = getJsonStorage("weread_auto_shelf_tasks", {});
+            let realShelf = getJsonStorage("weread_real_shelf_books", {});
             let cleaned = false;
             for (const dId of delIds) {
               const strId = String(dId);
-              if (autoShelfBooks[strId]) {
-                delete autoShelfBooks[strId];
-                cleaned = true;
-              }
-              if (taskMap[strId]) {
-                delete taskMap[strId];
-                cleaned = true;
-              }
+              if (autoShelfBooks[strId]) { delete autoShelfBooks[strId]; cleaned = true; }
+              if (taskMap[strId]) { delete taskMap[strId]; cleaned = true; }
+              if (realShelf[strId]) { delete realShelf[strId]; cleaned = true; }
             }
             if (cleaned) {
               setJsonStorage(autoShelfBooks, "weread_auto_shelf_books");
               setJsonStorage(taskMap, "weread_auto_shelf_tasks");
+              setJsonStorage(realShelf, "weread_real_shelf_books");
             }
+          }
+        }
+      } catch (e) {}
+      $done({});
+      return;
+    }
+
+    // -----------------------------------------------------------------------
+    // 1.3 /subscription/(operation|cancel)：捕获用户点击订阅/取消订阅动作
+    // -----------------------------------------------------------------------
+    if (/\/subscription\/(operation|cancel)/i.test(url)) {
+      try {
+        const bIdMatch = url.match(/[?&]bookIds?=([^&]+)/i);
+        let targetBookId = bIdMatch ? decodeURIComponent(bIdMatch[1]) : "";
+        let opType = 1; // 1: 订阅, 2: 取消订阅
+
+        let reqBodyStr = (typeof $request !== "undefined" && $request.body) ? $request.body : "";
+        if (reqBodyStr) {
+          try { reqBodyStr = b64decode(reqBodyStr); } catch (e) {}
+          try {
+            const reqJson = JSON.parse(reqBodyStr);
+            if (reqJson.bookId) targetBookId = String(reqJson.bookId);
+            if (reqJson.opType !== undefined) opType = reqJson.opType;
+          } catch (e) {}
+        }
+        if (/\/subscription\/cancel/i.test(url)) {
+          opType = 2;
+        }
+
+        if (targetBookId) {
+          let subscribedMap = getJsonStorage("weread_subscribed_books", {});
+          const nowSec = Math.floor(Date.now() / 1000);
+          if (opType === 1) {
+            subscribedMap[targetBookId] = subscribedMap[targetBookId] || {
+              bookId: targetBookId,
+              title: `书籍 (${targetBookId})`,
+              author: "微信读书",
+              cover: "",
+              originalStatus: 0,
+              subscribedAt: nowSec
+            };
+            setJsonStorage(subscribedMap, "weread_subscribed_books");
+          } else if (opType === 2) {
+            delete subscribedMap[targetBookId];
+            setJsonStorage(subscribedMap, "weread_subscribed_books");
           }
         }
       } catch (e) {}
@@ -390,9 +423,9 @@ function generateTaskId() {
     let modified = false;
 
     // -----------------------------------------------------------------------
-    // 2.1 /book/info：只获取详情，更新页面上下文为详情页，严禁写入任务与篡改状态
+    // 2.1 /book/infos?：为详情页所有图书（包含已上架图书）激活“订阅”按钮
     // -----------------------------------------------------------------------
-    if (/\/book\/info/i.test(url)) {
+    if (/\/book\/infos?/i.test(url)) {
       const bIdMatch = url.match(/[?&]bookIds?=([^&]+)/i);
       const detailBookId = bIdMatch ? decodeURIComponent(bIdMatch[1]) : (data.bookId ? String(data.bookId) : "");
       if (detailBookId) {
@@ -401,24 +434,42 @@ function generateTaskId() {
         pageContext.lastDetailBookId = detailBookId;
         pageContext.detailVisitedAt = Math.floor(Date.now() / 1000);
         setJsonStorage(pageContext, "weread_page_context");
+
+        // 核心支持：激活原生详情页“订阅”能力
+        data.canSubscribe = 1;
+        data.showSubscribe = 1;
+        data.showSubscribeButton = 1;
+        data.hasSubscribe = 1;
+
+        // 同步当前的订阅状态
+        const subscribedMap = getJsonStorage("weread_subscribed_books", {});
+        const isSub = Boolean(subscribedMap[detailBookId]);
+        data.isSubscribed = isSub ? 1 : 0;
+        data.subscribed = isSub ? 1 : 0;
+        data.hasSubscribed = isSub ? 1 : 0;
+
+        // 若详情页有完整书名、封面、作者，更新至订阅库快照
+        if (subscribedMap[detailBookId] && data.title) {
+          subscribedMap[detailBookId].title = data.title;
+          if (data.author) subscribedMap[detailBookId].author = data.author;
+          if (data.cover) subscribedMap[detailBookId].cover = data.cover;
+          if (data.isbn) subscribedMap[detailBookId].isbn = data.isbn;
+          setJsonStorage(subscribedMap, "weread_subscribed_books");
+        }
+        modified = true;
       }
-      // 保持微信读书官方原生行为，直接放行
-      $done({});
-      return;
     }
 
     // -----------------------------------------------------------------------
-    // 2.2 /subscription/books：只读取订阅并持久化，注入按钮状态，严禁转移 offshelfBooks
+    // 2.2 /subscription/books：已上架与待上架图书全量注入[加入书架]/[已加入书架]按钮
     // -----------------------------------------------------------------------
     if (/\/subscription\/books/i.test(url)) {
-      // 标记页面上下文为订阅列表
       let pageContext = getJsonStorage("weread_page_context", {});
       pageContext.currentPage = "subscription_list";
       pageContext.lastDetailBookId = "";
       pageContext.subscriptionVisitedAt = Math.floor(Date.now() / 1000);
       setJsonStorage(pageContext, "weread_page_context");
 
-      // 提取所有订阅书籍，纯净同步至 weread_subscribed_books (只读收藏关系)
       let subscribedMap = getJsonStorage("weread_subscribed_books", {});
       const nowSec = Math.floor(Date.now() / 1000);
       let subUpdated = false;
@@ -453,58 +504,91 @@ function generateTaskId() {
         setJsonStorage(subscribedMap, "weread_subscribed_books");
       }
 
-      // 读取当前已完成入架列表与任务状态机
       const autoShelfBooks = getJsonStorage("weread_auto_shelf_books", {});
+      const realShelfMap = getJsonStorage("weread_real_shelf_books", {});
       const taskMap = getJsonStorage("weread_auto_shelf_tasks", {});
 
-      // 核心要求：在按钮上呈现任务状态，严禁弹窗与通知，严禁修改 soldout / soldoutType
+      // 核心支持：不论是已上架书(onshelf)还是待上架书(offshelf)，后面均显示[已加入书架]或[加入书架]按钮
       function enhanceBookButton(bookItem) {
         if (!bookItem || typeof bookItem !== "object") return;
         const bId = String(bookItem.bookId || bookItem.id || "");
         if (!bId) return;
 
-        const isAdded = Boolean(autoShelfBooks[bId]);
         const task = taskMap[bId];
+        // 综合判定是否已经在书架上：
+        // 1. 本地自动入架库已标记完成；
+        // 2. 任务状态机显示 completed；
+        // 3. 服务端原生字段标记已经在架 (inShelf / shelfStatus / isOnBookshelf)；
+        // 4. 用户真实书架缓存中存在该书 ID。
+        const isAlreadyOnShelf = Boolean(
+          autoShelfBooks[bId] ||
+          (task && task.status === "completed") ||
+          bookItem.isOnBookshelf === true ||
+          bookItem.inShelf === 1 ||
+          bookItem.shelfStatus === 1 ||
+          realShelfMap[bId]
+        );
 
-        if (isAdded || (task && task.status === "completed")) {
+        // 强行开启客户端按钮渲染开关
+        bookItem.showShelfButton = true;
+        bookItem.shelfButton = true;
+        bookItem.hasShelfButton = true;
+
+        if (isAlreadyOnShelf) {
           // 状态：已加入书架
           bookItem.buttonText = "已加入书架";
           bookItem.shelfButtonText = "已加入书架";
           bookItem.buttonTitle = "已加入书架";
+          bookItem.actionText = "已加入书架";
+          bookItem.btnText = "已加入书架";
           bookItem.isOnBookshelf = true;
-          bookItem.showShelfButton = true;
-        } else if (task) {
-          if (task.status === "pending") {
-            bookItem.buttonText = "处理中 0%";
-            bookItem.shelfButtonText = "处理中 0%";
-            bookItem.buttonTitle = "处理中 0%";
-            bookItem.showShelfButton = true;
-            bookItem.isOnBookshelf = false;
-          } else if (task.status === "processing") {
-            const p = task.progress || 50;
-            bookItem.buttonText = `处理中 ${p}%`;
-            bookItem.shelfButtonText = `处理中 ${p}%`;
-            bookItem.buttonTitle = `处理中 ${p}%`;
-            bookItem.showShelfButton = true;
-            bookItem.isOnBookshelf = false;
-          } else if (task.status === "failed") {
-            bookItem.buttonText = "失败 重试";
-            bookItem.shelfButtonText = "失败 重试";
-            bookItem.buttonTitle = "失败 重试";
-            bookItem.showShelfButton = true;
-            bookItem.isOnBookshelf = false;
-          }
+          bookItem.inShelf = 1;
+          bookItem.shelfStatus = 1;
+        } else if (task && task.status === "pending") {
+          // 状态：任务已建立，排队中
+          bookItem.buttonText = "处理中 0%";
+          bookItem.shelfButtonText = "处理中 0%";
+          bookItem.buttonTitle = "处理中 0%";
+          bookItem.actionText = "处理中 0%";
+          bookItem.btnText = "处理中 0%";
+          bookItem.isOnBookshelf = false;
+          bookItem.inShelf = 0;
+          bookItem.shelfStatus = 0;
+        } else if (task && task.status === "processing") {
+          // 状态：正在调用外部 API 或处理中
+          const p = task.progress || 50;
+          bookItem.buttonText = `处理中 ${p}%`;
+          bookItem.shelfButtonText = `处理中 ${p}%`;
+          bookItem.buttonTitle = `处理中 ${p}%`;
+          bookItem.actionText = `处理中 ${p}%`;
+          bookItem.btnText = `处理中 ${p}%`;
+          bookItem.isOnBookshelf = false;
+          bookItem.inShelf = 0;
+          bookItem.shelfStatus = 0;
+        } else if (task && task.status === "failed") {
+          // 状态：处理失败，允许重试
+          bookItem.buttonText = "失败 重试";
+          bookItem.shelfButtonText = "失败 重试";
+          bookItem.buttonTitle = "失败 重试";
+          bookItem.actionText = "失败 重试";
+          bookItem.btnText = "失败 重试";
+          bookItem.isOnBookshelf = false;
+          bookItem.inShelf = 0;
+          bookItem.shelfStatus = 0;
         } else {
-          // 默认未加入状态
+          // 默认未在架状态：显示 [加入书架]
           bookItem.buttonText = "加入书架";
           bookItem.shelfButtonText = "加入书架";
           bookItem.buttonTitle = "加入书架";
-          bookItem.showShelfButton = true;
+          bookItem.actionText = "加入书架";
+          bookItem.btnText = "加入书架";
           bookItem.isOnBookshelf = false;
+          bookItem.inShelf = 0;
+          bookItem.shelfStatus = 0;
         }
       }
 
-      // 仅增强展示层按钮，保留原生 onshelfBooks 与 offshelfBooks 的数据隔离
+      // 对已上架书与待上架书两张列表全面执行按钮与在架状态增强
       if (Array.isArray(data.onshelfBooks)) {
         for (const b of data.onshelfBooks) enhanceBookButton(b);
       }
@@ -515,32 +599,34 @@ function generateTaskId() {
     }
 
     // -----------------------------------------------------------------------
-    // 2.3 /shelf/sync：仅同步 weread_auto_shelf_books 中已完成的书籍，杜绝批量恢复
+    // 2.3 /shelf/sync：缓存真实书架在架索引，增量同步已完成书籍，清理删除项
     // -----------------------------------------------------------------------
     if (/\/shelf\/(sync|syncbook)/i.test(url)) {
-      // 1. 若服务端下发了用户在其他端删除的 removed 列表，同步清理
+      // 1. 缓存官方真实书架在架索引
+      let realShelf = getJsonStorage("weread_real_shelf_books", {});
+      if (Array.isArray(data.books)) {
+        for (const b of data.books) {
+          if (b && b.bookId) {
+            realShelf[String(b.bookId)] = true;
+          }
+        }
+      }
+      // 2. 若服务端下发了 removed 删除列表，同步抹除
       if (Array.isArray(data.removed) && data.removed.length > 0) {
         let autoShelfBooks = getJsonStorage("weread_auto_shelf_books", {});
         let taskMap = getJsonStorage("weread_auto_shelf_tasks", {});
-        let hasRemoved = false;
         for (const rmId of data.removed) {
           const strRmId = String(rmId);
-          if (autoShelfBooks[strRmId]) {
-            delete autoShelfBooks[strRmId];
-            hasRemoved = true;
-          }
-          if (taskMap[strRmId]) {
-            delete taskMap[strRmId];
-            hasRemoved = true;
-          }
+          delete realShelf[strRmId];
+          delete autoShelfBooks[strRmId];
+          delete taskMap[strRmId];
         }
-        if (hasRemoved) {
-          setJsonStorage(autoShelfBooks, "weread_auto_shelf_books");
-          setJsonStorage(taskMap, "weread_auto_shelf_tasks");
-        }
+        setJsonStorage(autoShelfBooks, "weread_auto_shelf_books");
+        setJsonStorage(taskMap, "weread_auto_shelf_tasks");
       }
+      setJsonStorage(realShelf, "weread_real_shelf_books");
 
-      // 2. 仅针对 weread_auto_shelf_books 中由用户在订阅列表明确点击并已完成的书籍进行增量注入
+      // 3. 仅增量补入 weread_auto_shelf_books 中已完成自动流程的书籍
       const autoShelfBooks = getJsonStorage("weread_auto_shelf_books", {});
       const completedList = Object.values(autoShelfBooks);
 
@@ -557,7 +643,6 @@ function generateTaskId() {
           const existing = data.books.find(b => b && String(b.bookId) === tId);
 
           if (!existing) {
-            // 增量补入单本已完成的书籍
             data.books.unshift({
               bookId: tId,
               title: target.title || meta.title || "已加入书籍",
@@ -575,7 +660,6 @@ function generateTaskId() {
               chapterIdx: 1
             });
           }
-          // 确保不在 removed 列表中冲刷
           if (Array.isArray(data.removed)) {
             data.removed = data.removed.filter(id => String(id) !== tId);
           }
