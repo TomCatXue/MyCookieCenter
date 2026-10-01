@@ -56,6 +56,39 @@
       overflow-x: hidden;
     }
 
+    /* ─── 顶部导航完成按钮与即改即存提示条 ─── */
+    .done-nav-btn {
+      background: var(--tint-blue);
+      color: #ffffff;
+      border: none;
+      font-size: 14px;
+      font-family: inherit;
+      font-weight: 600;
+      padding: 6px 16px;
+      border-radius: 18px;
+      cursor: pointer;
+      flex-shrink: 0;
+      box-shadow: 0 2px 6px rgba(0, 122, 255, 0.25);
+      transition: opacity 0.15s, transform 0.12s;
+    }
+    .done-nav-btn:active {
+      transform: scale(0.95);
+      opacity: 0.85;
+    }
+    .save-tip-bar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(0, 122, 255, 0.08);
+      color: var(--tint-blue);
+      padding: 7px 12px;
+      border-radius: 9px;
+      font-size: 12px;
+      font-weight: 500;
+      margin-bottom: 14px;
+      line-height: 1.4;
+    }
+
     /* ─── 页面品牌大标题 (统一 Apple SF 风格) ─── */
     .brand-header {
       display: flex;
@@ -540,13 +573,19 @@
         <path d="M15.5 8v4"/>
       </svg>
     </div>
-    <div>
+    <div style="flex: 1;">
       <div class="brand-title">
         Pixiv 增强翻译
         <span class="brand-badge">v4.2</span>
       </div>
       <div class="brand-sub">双语出版级排版 · 全页面汉化 · 离线缓存</div>
     </div>
+    <button type="button" class="done-nav-btn" onclick="handleDoneClick()">完成</button>
+  </div>
+
+  <div class="save-tip-bar">
+    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+    <span>修改任何选项即刻实时自动保存，点击右上角「完成」可直接返回 Pixiv</span>
   </div>
 
   <!-- ─── 第一组：翻译 ─── -->
@@ -849,6 +888,15 @@
           <span class="switch-slider"></span>
         </label>
       </div>
+      <div class="setting-row" style="background: rgba(127, 127, 127, 0.05); border-radius: 8px; margin: 8px 16px; padding: 10px 12px;">
+        <div class="setting-info" style="padding-right: 0;">
+          <div class="setting-label" style="font-size: 13px; color: var(--tint-blue);">💡 漫画与图片翻译使用说明</div>
+          <div class="setting-desc" style="font-size: 12px; line-height: 1.5; margin-top: 4px;">
+            • <strong>小说内插图</strong>：阅读小说遇到插图时，轻点悬浮按钮即可识别对白并在画面悬浮中文气泡字幕。<br>
+            • <strong>Pixiv 原生漫画大图</strong>：由于 iOS 原生画廊非网页环境，若需看漫画直接呈现中文，请自建 <code>manga-image-translator</code> 并在上方配置端点，Loon 将自动为您拦截替换整张漫画图片。
+          </div>
+        </div>
+      </div>
 
       <div class="action-btn-row">
         <button type="button" class="primary-btn" id="btn-test-ai" onclick="testAIConnection()">
@@ -1025,6 +1073,16 @@
 
       onTranslatorChange();
       updateSummaries();
+    }
+
+    async function handleDoneClick() {
+      await saveConfig();
+      showToast("设置已保存并生效", "✓");
+      setTimeout(function () {
+        if (window.history.length > 1) {
+          window.history.back();
+        }
+      }, 400);
     }
 
     async function saveConfig() {
