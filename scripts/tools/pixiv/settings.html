@@ -561,14 +561,14 @@
 
   <!-- 页面品牌大标题 -->
   <div class="brand-header">
-    <div class="brand-icon">
-      <!-- SF Symbol: character.bubble -->
-      <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-        <path d="m8 10 2-4 2 4"/>
-        <path d="M8.7 8.5h2.6"/>
-        <path d="M14 8h3"/>
-        <path d="M15.5 8v4"/>
+    <div class="brand-icon" style="background: linear-gradient(180deg, #18a0fb, #007aff); box-shadow: 0 4px 12px rgba(0, 122, 255, 0.35);">
+      <!-- Apple App Store 官方经典 A 字图标 (铅笔、直尺、毛笔交叉架构) -->
+      <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 2.5 4.5 16h15L12 2.5Z"/>
+        <path d="M7.8 12.5h8.4"/>
+        <path d="M9.5 9.5 5 18.5"/>
+        <path d="M14.5 9.5 19 18.5"/>
+        <path d="M2.5 20h19"/>
       </svg>
     </div>
     <div style="flex: 1;">
@@ -587,7 +587,7 @@
   </div>
 
   <!-- ─── 第一组：翻译 ─── -->
-  <div class="section-card expanded" id="sec-content">
+  <div class="section-card" id="sec-content">
     <div class="section-header" onclick="toggleSection('sec-content')">
       <div class="section-icon">
         <!-- SF Symbol: globe -->
@@ -725,7 +725,7 @@
   </div>
 
   <!-- ─── 第二组：阅读体验 ─── -->
-  <div class="section-card expanded" id="sec-novel">
+  <div class="section-card" id="sec-novel">
     <div class="section-header" onclick="toggleSection('sec-novel')">
       <div class="section-icon">
         <!-- SF Symbol: text.book.closed -->
@@ -783,7 +783,7 @@
   </div>
 
   <!-- ─── 第三组：悬浮按钮 ─── -->
-  <div class="section-card expanded" id="sec-floating">
+  <div class="section-card" id="sec-floating">
     <div class="section-header" onclick="toggleSection('sec-floating')">
       <div class="section-icon">
         <!-- SF Symbol: button.programmable -->
@@ -865,7 +865,18 @@
         <div class="cache-feedback-bar" id="cache-feedback"></div>
       </div>
 
-      <div class="setting-row">
+            <div class="setting-row">
+        <div class="setting-info">
+          <div class="setting-label">优化图片加载速度</div>
+          <div class="setting-desc">走全球 CDN 镜像加速通道 (i.pixiv.re)，大幅提升大图加载速度，翻页更流畅</div>
+        </div>
+        <label class="switch-wrap">
+          <input type="checkbox" id="cfg-image-accelerate" checked onchange="saveConfig()">
+          <span class="switch-slider"></span>
+        </label>
+      </div>
+
+<div class="setting-row">
         <div class="setting-info">
           <div class="setting-label">标签优先使用离线词典</div>
           <div class="setting-desc">内置 2500+ ACG 日文 Tag 映射，0ms 响应且副标自动净空</div>
@@ -998,6 +1009,7 @@
       "@Pixiv.Enhanced.Settings.Floating.Switch": true,
       "@Pixiv.Enhanced.Settings.Translator.Source": "google",
       "@Pixiv.Enhanced.Settings.Target.Lang": "zh-CN",
+      "@Pixiv.Enhanced.Settings.Network.ImageAccelerate": true,
       "@Pixiv.Enhanced.Settings.Tag.OfflineOnly": true,
       "@Pixiv.Enhanced.Settings.Image.Switch": true,
       "@Pixiv.Enhanced.Settings.Image.Engine": "baidu_pic",
@@ -1165,6 +1177,7 @@
       setVal("cfg-baidu-secret", currentConfig["@Pixiv.Enhanced.Settings.Auth.BaiduSecret"] || "");
       setVal("cfg-manga-server", currentConfig["@Pixiv.Enhanced.Settings.Manga.ServerUrl"] || "http://127.0.0.1:5000");
 
+      setCheck("cfg-image-accelerate", currentConfig["@Pixiv.Enhanced.Settings.Network.ImageAccelerate"] !== false);
       setCheck("cfg-tag-offline", currentConfig["@Pixiv.Enhanced.Settings.Tag.OfflineOnly"]);
 
       const scopes = Array.isArray(currentConfig["@Pixiv.Enhanced.Settings.Auto.Scopes"])
@@ -1204,6 +1217,7 @@
       currentConfig["@Pixiv.Enhanced.Settings.Auth.OpenAIKey"] = getVal("cfg-openai-key", "");
       currentConfig["@Pixiv.Enhanced.Settings.Auth.OpenAIUrl"] = getVal("cfg-openai-url", "https://api.openai.com/v1/chat/completions");
 
+      currentConfig["@Pixiv.Enhanced.Settings.Network.ImageAccelerate"] = getCheck("cfg-image-accelerate", true);
       currentConfig["@Pixiv.Enhanced.Settings.Tag.OfflineOnly"] = getCheck("cfg-tag-offline", true);
       currentConfig["@Pixiv.Enhanced.Settings.Image.Switch"] = getCheck("cfg-manga-switch", true);
       currentConfig["@Pixiv.Enhanced.Settings.Image.Engine"] = getVal("cfg-manga-engine", "baidu_pic");
