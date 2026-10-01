@@ -121,7 +121,7 @@ ql repo https://github.com/TomCatXue/MyCookieCenter.git "ql_script" "" "README" 
 | 📺 哔哩哔哩 · 增强版 𝕏 | 空降助手 + 分区修复 + 扫码登录 + 1080P 高码率解锁 | [`scripts/tools/bilibili/`](./scripts/tools/bilibili/) | [`BilibiliFix.plugin`](./loon/BilibiliFix.plugin) | ✅ 已验证 |
 | 📖 微信读书 · 防强更净化 | 屏蔽升级弹窗与强更通知，锁定老版本免费 AI 听书 | [`scripts/tools/wxread_enhance/`](./scripts/tools/wxread_enhance/) | [`WeReadEnhance.plugin`](./loon/WeReadEnhance.plugin) | ✅ 已验证 |
 | ⭐ GitHub · 星标推送时间 | 星标列表语言后显示最近推送时间 | [`scripts/tools/github/`](./scripts/tools/github/) | [`GitHubPushTime.plugin`](./loon/GitHubPushTime.plugin) | ✅ 已验证 |
-| 🎨 Pixiv · 小说翻译 | 小说阅读页一键翻译，支持 Google 免费 / 微软 / 百度 | [`scripts/tools/pixiv/`](./scripts/tools/pixiv/) | [`PixivNovelTranslate.plugin`](./loon/PixivNovelTranslate.plugin) | ✅ 已验证 |
+| 🎨 Pixiv · 全域增强翻译 | 全页面日文深度汉化 · AI 视觉多模态漫翻 · 内置设置中心 | [`scripts/tools/pixiv/`](./scripts/tools/pixiv/) | [`PixivEnhanced.plugin`](./loon/PixivEnhanced.plugin) | ✅ 已验证 |
 
 ## 目录结构
 
@@ -131,7 +131,7 @@ MyCookieCenter/
 │   ├── CookieCenter.plugin         # 核心一站式合集（微信读书 + 中国电信）
 │   ├── BilibiliFix.plugin          # 哔哩哔哩增强版
 │   ├── WeReadEnhance.plugin        # 微信读书防强更净化
-│   ├── PixivNovelTranslate.plugin  # Pixiv小说阅读翻译
+│   ├── PixivEnhanced.plugin        # Pixiv全域增强翻译
 │   ├── QzoneAdBlock.plugin         # QQ空间广告屏蔽
 │   ├── GitHubPushTime.plugin       # GitHub星标时间显示
 │   └── camscanner.plugin           # 扫描全能王签到
