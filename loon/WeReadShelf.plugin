@@ -1,11 +1,11 @@
 #!name = 微信读书 · 优雅书架
-#!desc = 专为微信读书设计：1.全自动嗅探下架书并转化为公版书模型（centPrice:0, cpid:0, 全章节price:0）；2.即时入架（/book/info 与 /shelf/sync），消除刷新延迟；3.彻底根除章节购买冲突与 402 报错；4.拦截 /pay/buyChapters 伪装购买成功。
+#!desc = 专为微信读书设计：1.全自动嗅探下架书并转化为公版书模型（centPrice:0, cpid:0, 全章节price:0）；2.即时入架（/book/info 与 /shelf/sync），消除刷新延迟；3.彻底根除章节购买冲突与 402 报错；4.拦截 /pay/buyChapters 伪装购买成功；5.支持请求级 /shelf/add 截断秒入架。
 #!author = TomCatXue
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/35/92/e6/3592e6f4-0b0b-f2e4-7968-7033b281e1f5/AppIcon-0-1x_U007epad-0-11-0-85-220-0.png/512x512bb.jpg
 #!tag = 微信读书,下架书,优雅书架,书架注入
-#!version = 1.0.5
-#!date = 2026-09-28 04:10
+#!version = 1.0.6
+#!date = 2026-10-01 10:30
 
 [Argument]
 weread_shelf = switch,true,tag=微信读书·优雅书架,desc=总开关：开启后自动从订阅捕获下架书籍并动态注入书架与阅读器
@@ -15,5 +15,8 @@ weread_inject_books = input,"",tag=下架书籍ID列表(选填),desc=手动指�
 hostname = i.weread.qq.com, weread.qq.com
 
 [Script]
-# 拦截订阅抓取、书架同步注入、书籍详情与阅读鉴权伪装
-response if ${url} ~= /^https?:\/\/(i\.)?weread\.qq\.com\/(shelf\/(sync|syncbook|add|opus)|subscription\/books|book\/(info|infos|readinfo|paytime|chapterInfos)|pay\/buyChapters)/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/wxread_enhance/wxread_shelf.js?v=20260928-0410", {${weread_inject_books}}) with enable=${weread_shelf}, tag="微信读书·优雅书架", requires_body=true
+# 请求阶段拦截：本地 0ms 截断 /shelf/add 发包并直接返回合法成功，杜绝官方 4xx/下架报错暴露并持久化缓存书籍ID
+request if ${url} ~= /^https?:\/\/(i\.)?weread\.qq\.com\/shelf\/add/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/wxread_enhance/wxread_shelf.js?v=20261001-1030", {${weread_inject_books}}) with enable=${weread_shelf}, tag="微信读书·优雅书架-加架拦截", requires_body=true
+
+# 响应阶段拦截：订阅抓取、书架增量同步注入、书籍详情/阅读信息防下架、付费时间伪装与全章节免费放行
+response if ${url} ~= /^https?:\/\/(i\.)?weread\.qq\.com\/(shelf\/(sync|syncbook|add|opus)|subscription\/books|book\/(info|infos|readinfo|paytime|chapterInfos)|pay\/buyChapters)/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/wxread_enhance/wxread_shelf.js?v=20261001-1030", {${weread_inject_books}}) with enable=${weread_shelf}, tag="微信读书·优雅书架-响应放行", requires_body=true

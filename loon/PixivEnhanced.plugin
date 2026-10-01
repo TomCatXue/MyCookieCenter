@@ -1,5 +1,5 @@
 #!name = Pixiv · 全局增强翻译
-#!desc = 适配 8.9.2 等版本：全页面日文深度汉化 · AI 视觉多模态漫翻 · 仿 Pix-Scripting 内置设置中心。\n• 出版级双语小说阅读：原文在上一一对应，渐进式渲染与失败重试\n• 统一 Apple SF Symbols 单色矢量图标系统与 Grouped 规范设计\n• 悬浮按钮纯粹总开关控制，自动避开原生控件且滚动不跳跃\n• 真实可管理本地缓存统计（字节级大小、条目数、最近时间、清理反馈）\n• 首页/榜单/详情/评论/画师主页全量汉化，彻底消除查看更多弹窗\n• 内置 2500+ 高频 Pixiv Tag 离线字典，0ms 极速秒翻且副标题自动净空。
+#!desc = 适配 8.9.2 等版本：全页面日文深度汉化 · AI 视觉多模态漫翻 · 内置设置中心。\n• 出版级双语小说阅读：原文在上一一对应，渐进式渲染与失败重试\n• 统一 Apple SF Symbols 单色矢量图标系统与 Grouped 规范设计\n• 悬浮按钮纯粹总开关控制，自动避开原生控件且滚动不跳跃\n• 真实可管理本地缓存统计（字节级大小、条目数、最近时间、清理反馈）\n• 首页/榜单/详情/评论/画师主页全量汉化，彻底消除查看更多弹窗\n• 内置 2500+ 高频 Pixiv Tag 离线字典，0ms 极速秒翻且副标题自动净空。
 #!author = TomCatXue
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/ca/d5/93/cad5932d-6ba6-7e5a-c2a9-818682fde6f3/AppIcon-0-0-1x_U007epad-0-1-85-220.png/512x512bb.jpg
