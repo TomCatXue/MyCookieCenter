@@ -435,18 +435,24 @@ function generateTaskId() {
         pageContext.detailVisitedAt = Math.floor(Date.now() / 1000);
         setJsonStorage(pageContext, "weread_page_context");
 
-        // 核心支持：激活原生详情页“订阅”能力
+        // 核心支持：基于 IPA 逆向实证的 subscribeSeq 与 subscribeCount 字段，全面激活详情页“订阅/关注”组件
+        const subscribedMap = getJsonStorage("weread_subscribed_books", {});
+        const isSub = Boolean(subscribedMap[detailBookId]);
+
+        // 无论是在架书还是下架书，均补齐订阅人数与序号，唤醒客户端底部与正中的订阅/关注交互
+        if (data.subscribeCount === undefined || data.subscribeCount === null || data.subscribeCount === 0) {
+          data.subscribeCount = 100;
+        }
+        data.subscribeSeq = isSub ? 1 : 0;
+        data.isSubscribed = isSub ? 1 : 0;
+        data.subscribed = isSub ? 1 : 0;
+        data.hasSubscribed = isSub ? 1 : 0;
         data.canSubscribe = 1;
         data.showSubscribe = 1;
         data.showSubscribeButton = 1;
         data.hasSubscribe = 1;
-
-        // 同步当前的订阅状态
-        const subscribedMap = getJsonStorage("weread_subscribed_books", {});
-        const isSub = Boolean(subscribedMap[detailBookId]);
-        data.isSubscribed = isSub ? 1 : 0;
-        data.subscribed = isSub ? 1 : 0;
-        data.hasSubscribed = isSub ? 1 : 0;
+        data.subscriptionButtonTextOnPrimary = isSub ? "已订阅" : "订阅";
+        data.unsubscribedText = "订阅";
 
         // 若详情页有完整书名、封面、作者，更新至订阅库快照
         if (subscribedMap[detailBookId] && data.title) {
@@ -588,26 +594,13 @@ function generateTaskId() {
         }
       }
 
-      // 核心解密：为什么昨天以前有 [加入书架] / [已加入书架] 按钮？
-      // 微信读书 React Native (SubscriptionRecord) 在底层代码中硬编码了渲染逻辑：
-      // 只有挂在 onshelfBooks 列表中的条目，React Native 组件才会分配交互单元格 SubscriptionBookCell，并渲染 [加入书架] / [已在书架] 操作按钮 (addBookInShelfAction)！
-      // 如果放在 offshelfBooks，React Native 就会强制走 SubscriptionOffBookCell，直接渲染为置灰不可操作的“待上架/无内容”！
-      //
-      // 完美解法：
-      // 在订阅响应中，将 offshelfBooks 转移合并进 onshelfBooks 供 React Native 激活按钮渲染；
-      // 但在底层数据流中，保持“订阅只是收藏”的铁律：在 /shelf/sync 中，只有用户在订阅列表真正点击了 [加入书架] 并完成的任务才入书架！
-      if (Array.isArray(data.offshelfBooks) && data.offshelfBooks.length > 0) {
-        if (!Array.isArray(data.onshelfBooks)) data.onshelfBooks = [];
-        for (const b of data.offshelfBooks) {
-          b.isOffshelfSource = true;
-          data.onshelfBooks.push(b);
-        }
-        data.offshelfBooks = [];
-      }
-
-      // 对所有订阅书籍全面执行按钮与在架状态增强
+      // 保持分类严格隔离：
+      // onshelfBooks 归入“已上架”列，offshelfBooks 归入“待上架”列，严禁互相移动或合并！
       if (Array.isArray(data.onshelfBooks)) {
         for (const b of data.onshelfBooks) enhanceBookButton(b);
+      }
+      if (Array.isArray(data.offshelfBooks)) {
+        for (const b of data.offshelfBooks) enhanceBookButton(b);
       }
       modified = true;
     }
