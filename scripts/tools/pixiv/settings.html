@@ -561,17 +561,16 @@
 
   <!-- 页面品牌大标题 -->
   <div class="brand-header">
-        <div class="brand-icon" style="background: linear-gradient(180deg, #18a0fb, #007aff); box-shadow: 0 4px 12px rgba(0, 122, 255, 0.35);">
-      <!-- Apple App Store 官方经典 A 字图标 -->
-      <svg viewBox="0 0 100 100" width="30" height="30" fill="none">
-        <path d="M50 16 L78 72 C79 74 77 77 74 77 L26 77 C23 77 21 74 22 72 Z" stroke="#ffffff" stroke-width="7.5" stroke-linejoin="round" stroke-linecap="round"/>
-        <path d="M28 58 L72 58" stroke="#ffffff" stroke-width="7.5" stroke-linecap="round"/>
+    <div class="brand-icon" style="width: 48px; height: 48px; border-radius: 12px; overflow: hidden; background: #0096fa; box-shadow: 0 4px 12px rgba(0, 150, 250, 0.35); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+      <!-- Pixiv 官方经典 P 标 (矢量 SVG，0 网络延迟瞬出，永不失真) -->
+      <svg viewBox="0 0 24 24" width="30" height="30" fill="#ffffff">
+        <path d="M12.18 4.05c3.77 0 6.84 3.06 6.84 6.84 0 3.77-3.07 6.84-6.84 6.84a6.81 6.81 0 0 1-4.05-1.34v4.38H5.2V4.05h6.98zm0 3.13a3.7 3.7 0 1 0 0 7.41 3.7 3.7 0 0 0 0-7.41z"/>
       </svg>
     </div>
     <div style="flex: 1;">
       <div class="brand-title">
         Pixiv 增强翻译
-        <span class="brand-badge">v4.3</span>
+        <span class="brand-badge">v4.4.1</span>
       </div>
       <div class="brand-sub">双语出版级排版 · 全页面汉化 · 离线缓存</div>
     </div>
@@ -655,6 +654,7 @@
             <option value="google">Google 免费并发 (极速)</option>
             <option value="deepseek">DeepSeek AI (文学润色/需Key)</option>
             <option value="openai">OpenAI / 兼容接口 (需Key)</option>
+            <option value="baidu">百度通用翻译 (稳定/需Key)</option>
           </select>
           <svg class="select-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
         </div>
@@ -785,7 +785,106 @@
     双语阅读严格按小说段落顺序一对一排列，原文为主阅读层级，译文为从属辅助层级，不加多余卡片边框与杂乱背景。
   </div>
 
-  <!-- ─── 第三组：悬浮按钮 ─── -->
+  <!-- ─── 第三组：漫画与图片翻译 ─── -->
+  <div class="section-card" id="sec-manga">
+    <div class="section-header" onclick="toggleSection('sec-manga')">
+      <div class="section-icon" style="background: #ff2d55; color: #fff;">
+        <!-- SF Symbol: photo.on.rectangle.angled -->
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 8h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V10a2 2 0 0 1 2-2z"/>
+          <path d="m2 16 5-5 4 4 5-5 6 6"/>
+          <circle cx="8" cy="13" r="1.5"/>
+          <path d="M7 4h10"/>
+        </svg>
+      </div>
+      <div class="section-title">漫画与图片翻译</div>
+      <div class="section-summary" id="sum-manga">未开启</div>
+      <svg class="chevron-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+    </div>
+    <div class="section-body">
+      <div class="setting-row">
+        <div class="setting-info">
+          <div class="setting-label">启用漫画图片翻译</div>
+          <div class="setting-desc">开启后在 Pixiv 浏览漫画作品时可一键进入专属全屏漫翻查看器</div>
+        </div>
+        <label class="switch-wrap">
+          <input type="checkbox" id="cfg-manga-switch" onchange="onMangaSwitchChange()">
+          <span class="switch-slider"></span>
+        </label>
+      </div>
+
+      <!-- 展开的漫翻详细配置区 -->
+      <div id="manga-config-box" style="display: none; border-top: 0.5px solid var(--separator-color); background: rgba(127, 127, 127, 0.03);">
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-label">漫翻引擎</div>
+            <div class="setting-desc">选择底层图片汉化与字幕服务</div>
+          </div>
+          <div class="select-wrap">
+            <select class="select-input" id="cfg-manga-engine" onchange="onMangaEngineChange()">
+              <option value="baidu_pic">百度云端直出 (免自建·推荐)</option>
+              <option value="deepseek_vl">DeepSeek-VL (小说插图气泡)</option>
+              <option value="gpt4o_mini">GPT-4o-mini (小说插图气泡)</option>
+              <option value="manga_translator">自建服务 (manga-translator)</option>
+            </select>
+            <svg class="select-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+          </div>
+        </div>
+
+        <!-- 百度图片翻译凭证 (选百度时展示) -->
+        <div id="manga-baidu-block" style="padding: 6px 16px 12px;">
+          <div class="setting-desc" style="margin-bottom: 8px; color: var(--tint-blue); line-height: 1.55; background: rgba(0, 122, 255, 0.08); padding: 8px 10px; border-radius: 8px;">
+            <strong>🌟 百度图片翻译免费开通指引：</strong><br>
+            1. 访问百度翻译开放平台 (<code>fanyi-api.baidu.com</code>)；<br>
+            2. 免费注册并开通「通用图片翻译」或「通用翻译」（每月赠送免费额度）；<br>
+            3. 在管理控制台开发者信息中，复制 <code>AppID</code> 与 <code>密钥</code> 填入下方。<br>
+            <span style="color: #34c759; font-weight: 600;">🛡️ 额度安全保障：</span>仅在您主动阅读漫画并轻点漫翻按钮时按需调用，绝不静默消耗日常浏览或无字插画额度！
+          </div>
+          <div class="input-wrap" style="margin-bottom: 6px;">
+            <input type="text" class="text-input" id="cfg-baidu-appid" placeholder="百度翻译 AppID" onchange="saveConfig()">
+          </div>
+          <div class="input-wrap">
+            <input type="password" class="text-input" id="cfg-baidu-secret" placeholder="百度翻译 Secret 密钥" onchange="saveConfig()">
+            <button type="button" class="input-action-btn" onclick="toggleInputMask('cfg-baidu-secret')">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/>
+                <circle cx="12" cy="12" r="3"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- 自建服务 (选自建时展示) -->
+        <div id="manga-selfhost-block" style="padding: 6px 16px 12px; display: none;">
+          <div class="input-wrap">
+            <input type="text" class="text-input" id="cfg-manga-server" value="http://127.0.0.1:5000" placeholder="http://192.168.1.x:5000" onchange="saveConfig()">
+          </div>
+        </div>
+
+        <div style="padding: 6px 16px 12px;">
+          <button type="button" class="secondary-btn" id="btn-test-manga" onclick="testMangaConnection()" style="width: 100%; padding: 10px 14px; font-size: 14px; font-weight: 600; justify-content: center;">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 14h12l-4 8 10-10H12l4-8z"/></svg>
+            <span>测试漫翻服务连接与测速</span>
+          </button>
+        </div>
+
+        <div style="background: rgba(127, 127, 127, 0.05); border-radius: 10px; margin: 4px 16px 14px; padding: 12px 14px; border: 0.5px solid var(--card-border);">
+          <div class="setting-label" style="font-size: 13px; color: var(--tint-blue); margin-bottom: 6px;">📱 Pixiv App 漫翻使用说明：</div>
+          <div class="setting-desc" style="font-size: 12px; line-height: 1.65;">
+            1. <strong>作品简介入口</strong>：在 Pixiv App 打开多图插画或漫画作品时，作品简介最上方会自动注入 <strong>「🌐 [点击进入 AI 漫翻查看器]」</strong> 专属链接；<br>
+            2. <strong>极速全景阅览</strong>：轻点链接即可在 App 内直达全景阅读器，享受 CDN 全球极速大图加载；<br>
+            3. <strong>一键呼出字幕</strong>：阅读器右下角常驻 <strong>「🌐 AI 漫翻」</strong> 悬浮按钮，轻点即刻智能识别对白并覆盖汉化字幕；<br>
+            4. <strong>系统级备用方案</strong>：在原生大图长按，也可直接呼出 iOS 系统的「实况文本翻译」。
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="section-footer">
+    iOS 原生漫画画廊为 UIKit 视图层，通过作品简介直达专属查看器即可享受零画质损失的 AI 悬浮气泡汉化；免自建百度翻译每月赠送免费额度，按需触发绝不浪费用量。
+  </div>
+
+  <!-- ─── 第四组：悬浮按钮 ─── -->
   <div class="section-card" id="sec-floating">
     <div class="section-header" onclick="toggleSection('sec-floating')">
       <div class="section-icon" style="background: #34c759; color: #fff;">
@@ -816,7 +915,7 @@
     开启后自动避开页面已有喜欢与操作控件，轻点即响应，不跳动不重叠；关闭后完全不注入任何按钮 DOM。
   </div>
 
-  <!-- ─── 第四组：高级与缓存 ─── -->
+  <!-- ─── 第五组：高级与缓存 ─── -->
   <div class="section-card" id="sec-advanced">
     <div class="section-header" onclick="toggleSection('sec-advanced')">
       <div class="section-icon" style="background: #8e8e93; color: #fff;">
@@ -879,7 +978,7 @@
         </label>
       </div>
 
-<div class="setting-row">
+      <div class="setting-row">
         <div class="setting-info">
           <div class="setting-label">标签优先使用离线词典</div>
           <div class="setting-desc">内置 2500+ ACG 日文 Tag 映射，0ms 响应且副标自动净空</div>
@@ -889,82 +988,13 @@
           <span class="switch-slider"></span>
         </label>
       </div>
-
-      <div class="setting-row">
-        <div class="setting-info">
-          <div class="setting-label">漫画与图片翻译</div>
-          <div class="setting-desc">支持漫画大图云端替换与插图字幕识别</div>
-        </div>
-        <label class="switch-wrap">
-          <input type="checkbox" id="cfg-manga-switch" onchange="onMangaSwitchChange()">
-          <span class="switch-slider"></span>
-        </label>
-      </div>
-
-      <!-- 仅在开启漫画翻译时轻量展开 1 行选择，不占手机屏幕 -->
-      <div id="manga-config-box" style="display: none; border-top: 0.5px solid var(--separator-color); background: rgba(127, 127, 127, 0.03);">
-        <div class="setting-row">
-          <div class="setting-info">
-            <div class="setting-label">漫翻引擎</div>
-            <div class="setting-desc">选择图片汉化服务</div>
-          </div>
-          <div class="select-wrap">
-            <select class="select-input" id="cfg-manga-engine" onchange="onMangaEngineChange()">
-              <option value="baidu_pic">百度云端直出 (免自建·推荐)</option>
-              <option value="deepseek_vl">DeepSeek-VL (小说插图气泡)</option>
-              <option value="gpt4o_mini">GPT-4o-mini (小说插图气泡)</option>
-              <option value="manga_translator">自建服务 (manga-translator)</option>
-            </select>
-            <svg class="select-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
-          </div>
-        </div>
-
-        <!-- 百度图片翻译凭证 (仅选百度时展示) -->
-        <div id="manga-baidu-block" style="padding: 6px 16px 12px;">
-          <div class="setting-desc" style="margin-bottom: 8px; color: var(--tint-blue); line-height: 1.55; background: rgba(0, 122, 255, 0.08); padding: 8px 10px; border-radius: 8px;">
-            <strong>🌟 百度图片翻译免费开通指引：</strong><br>
-            1. 访问百度翻译开放平台 (<code>fanyi-api.baidu.com</code>)；<br>
-            2. 免费注册并开通「通用图片翻译」（每月赠送免费额度）；<br>
-            3. 在管理控制台开发者信息中，复制 <code>AppID</code> 与 <code>密钥</code> 填入下方。<br>
-            <span style="color: #34c759; font-weight: 600;">🛡️ 额度安全保障：</span>仅在您需要翻译漫画时主动触发，绝不静默消耗日常浏览或无字插画额度！
-          </div>
-          <div class="input-wrap" style="margin-bottom: 6px;">
-            <input type="text" class="text-input" id="cfg-baidu-appid" placeholder="百度翻译 AppID" onchange="saveConfig()">
-          </div>
-          <div class="input-wrap">
-            <input type="password" class="text-input" id="cfg-baidu-secret" placeholder="百度翻译 Secret 密钥" onchange="saveConfig()">
-            <button type="button" class="input-action-btn" onclick="toggleInputMask('cfg-baidu-secret')">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/>
-                <circle cx="12" cy="12" r="3"/>
-              </svg>
-            </button>
-          </div>
-        </div>
-
-        <!-- 自建服务 (仅选自建时展示) -->
-        <div id="manga-selfhost-block" style="padding: 6px 16px 12px; display: none;">
-          <div class="input-wrap">
-            <input type="text" class="text-input" id="cfg-manga-server" value="http://127.0.0.1:5000" placeholder="http://192.168.1.x:5000" onchange="saveConfig()">
-          </div>
-        </div>
-
-        <div style="padding: 4px 16px 12px;">
-          <button type="button" class="secondary-btn" id="btn-test-manga" onclick="testMangaConnection()" style="width: 100%; padding: 8px 12px; font-size: 13px;">
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 14h12l-4 8 10-10H12l4-8z"/></svg>
-            <span>测试漫翻服务连接与测速</span>
-          </button>
-        </div>
-      </div>
-
-
     </div>
   </div>
   <div class="section-footer">
     清理缓存仅删除已保存的翻译正文条目，不会误删您的设置或 API 密钥；图片镜像如需免流，可在 Loon 添加规则：<code style="background: rgba(127,127,127,0.15); padding: 1px 4px; border-radius: 4px;">DOMAIN,i.pixiv.re,DIRECT</code>。
   </div>
 
-  <!-- ─── 第五组：关于 ─── -->
+  <!-- ─── 第六组：关于 ─── -->
   <div class="section-card" id="sec-about">
     <div class="section-header" onclick="toggleSection('sec-about')">
       <div class="section-icon" style="background: #ff9500; color: #fff;">
@@ -1109,6 +1139,14 @@
       const sumNovel = document.getElementById("sum-novel");
       if (sumNovel) sumNovel.textContent = (showOrig ? "双语对照" : "仅译文") + " · " + (fontNameMap[font] || "原版");
 
+      const mangaEl = document.getElementById("cfg-manga-switch");
+      const mangaOn = mangaEl ? mangaEl.checked : false;
+      const engineEl = document.getElementById("cfg-manga-engine");
+      const engine = engineEl ? engineEl.value : "baidu_pic";
+      const engineMap = { baidu_pic: "百度云端", deepseek_vl: "DeepSeek-VL", gpt4o_mini: "GPT-4o-mini", manga_translator: "自建服务" };
+      const sumManga = document.getElementById("sum-manga");
+      if (sumManga) sumManga.textContent = mangaOn ? ("已开启 · " + (engineMap[engine] || "云端")) : "未开启";
+
       const floatingEl = document.getElementById("cfg-floating-switch");
       const floatingOn = floatingEl ? floatingEl.checked : true;
       const sumFloating = document.getElementById("sum-floating");
@@ -1116,7 +1154,7 @@
 
       const transEl = document.getElementById("cfg-translator-source");
       const trans = transEl ? transEl.value : "google";
-      const transMap = { google: "Google免费", deepseek: "DeepSeek", openai: "OpenAI" };
+      const transMap = { google: "Google免费", deepseek: "DeepSeek", openai: "OpenAI", baidu: "百度翻译" };
       const sumAi = document.getElementById("sum-ai");
       if (sumAi) sumAi.textContent = transMap[trans] || trans;
     }
@@ -1257,30 +1295,40 @@
       try {
         const sourceEl = document.getElementById("cfg-translator-source");
         const source = sourceEl ? sourceEl.value : "google";
-        const res = await fetch("/api/test_ai?source=" + encodeURIComponent(source), { method: "POST" })
+        const appid = (document.getElementById("cfg-baidu-appid") ? document.getElementById("cfg-baidu-appid").value : "").trim();
+        const secret = (document.getElementById("cfg-baidu-secret") ? document.getElementById("cfg-baidu-secret").value : "").trim();
+
+        saveConfig();
+
+        const query = "?source=" + encodeURIComponent(source) +
+          "&appid=" + encodeURIComponent(appid) +
+          "&secret=" + encodeURIComponent(secret);
+
+        const res = await fetch("/api/test_ai" + query, { method: "POST" })
           .then(r => r.json())
           .catch(() => null);
         const latency = Date.now() - start;
 
         if (res && res.ok) {
-          btn.innerHTML = '<span>🟢 连接正常 · ' + latency + 'ms</span>';
-          showToast("AI 模型连接正常 (" + latency + "ms)", "🟢");
+          const detail = res.translation ? (" · " + res.translation) : "";
+          btn.innerHTML = '<span>🟢 连接正常 · ' + latency + 'ms' + detail + '</span>';
+          showToast("翻译模型连接正常 (" + latency + "ms)", "🟢");
         } else {
           const err = (res && res.error) ? res.error : "请求超时或鉴权失败";
-          btn.innerHTML = '<span>🔴 失败: ' + err.slice(0, 16) + '</span>';
+          btn.innerHTML = '<span>🔴 失败: ' + err.slice(0, 18) + '</span>';
           showToast("连接失败: " + err, "❌");
         }
       } catch (e) {
         btn.innerHTML = '<span>🔴 网络异常</span>';
-        showToast("网络请求异常", "❌");
+        showToast("网络请求异常: " + (e && e.message ? e.message : e), "❌");
       }
 
       setTimeout(() => {
         if (btn) {
           btn.disabled = false;
-          btn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 14h12l-4 8 10-10H12l4-8z"/></svg><span>测试当前模型连接与延迟</span>';
+          btn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 14h12l-4 8 10-10H12l4-8z"/></svg><span>测试翻译模型连接与延迟</span>';
         }
-      }, 3000);
+      }, 3500);
     }
 
     async function testMangaConnection() {
@@ -1291,30 +1339,44 @@
       const start = Date.now();
 
       try {
-        const res = await fetch("/api/test_manga?engine=" + encodeURIComponent(document.getElementById("cfg-manga-engine") ? document.getElementById("cfg-manga-engine").value : "baidu_pic"), { method: "POST" })
+        const engine = document.getElementById("cfg-manga-engine") ? document.getElementById("cfg-manga-engine").value : "baidu_pic";
+        const appid = (document.getElementById("cfg-baidu-appid") ? document.getElementById("cfg-baidu-appid").value : "").trim();
+        const secret = (document.getElementById("cfg-baidu-secret") ? document.getElementById("cfg-baidu-secret").value : "").trim();
+        const server = (document.getElementById("cfg-manga-server") ? document.getElementById("cfg-manga-server").value : "").trim();
+
+        // 立即触发保存保证同步
+        saveConfig();
+
+        const query = "?engine=" + encodeURIComponent(engine) +
+          "&appid=" + encodeURIComponent(appid) +
+          "&secret=" + encodeURIComponent(secret) +
+          "&server=" + encodeURIComponent(server);
+
+        const res = await fetch("/api/test_manga" + query, { method: "POST" })
           .then(r => r.json())
           .catch(() => null);
         const latency = Date.now() - start;
 
         if (res && res.ok) {
-          btn.innerHTML = '<span>🟢 漫翻正常 · ' + latency + 'ms</span>';
-          showToast("漫翻服务正常 (" + latency + "ms)", "🟢");
+          const detail = res.translation ? (" · " + res.translation) : "";
+          btn.innerHTML = '<span>🟢 漫翻正常 · ' + latency + 'ms' + detail + '</span>';
+          showToast("漫翻服务测试正常 (" + latency + "ms)", "🟢");
         } else {
           const err = (res && res.error) ? res.error : "请求超时或连接失败";
-          btn.innerHTML = '<span>🔴 失败: ' + err.slice(0, 16) + '</span>';
+          btn.innerHTML = '<span>🔴 失败: ' + err.slice(0, 18) + '</span>';
           showToast("漫翻测试失败: " + err, "❌");
         }
       } catch (e) {
         btn.innerHTML = '<span>🔴 网络异常</span>';
-        showToast("网络请求异常", "❌");
+        showToast("网络请求异常: " + (e && e.message ? e.message : e), "❌");
       }
 
       setTimeout(() => {
         if (btn) {
           btn.disabled = false;
-          btn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 14h12l-4 8 10-10H12l4-8z"/></svg><span>测试漫翻服务连接与测速</span>';
+          btn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 14h12l-4 8 10-10H12l4-8z"/></svg><span>测试漫翻服务连接与测速</span>';
         }
-      }, 3000);
+      }, 3500);
     }
 
     /* ─── 真实缓存管理 ─── */
