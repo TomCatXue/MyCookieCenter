@@ -570,7 +570,7 @@
     <div style="flex: 1;">
       <div class="brand-title">
         Pixiv 增强翻译
-        <span class="brand-badge">v4.4.6</span>
+        <span class="brand-badge">v4.4.7</span>
       </div>
       <div class="brand-sub">双语出版级排版 · 全页面汉化 · 离线缓存</div>
     </div>
@@ -1018,7 +1018,7 @@
         </svg>
       </div>
       <div class="section-title">关于与状态</div>
-      <div class="section-summary" id="sum-about">v4.4.6 旗舰版</div>
+      <div class="section-summary" id="sum-about">v4.4.7 旗舰版</div>
       <svg class="chevron-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
     </div>
     <div class="section-body">
@@ -1027,7 +1027,7 @@
           <div class="setting-label">插件版本</div>
           <div class="setting-desc">Pixiv Enhanced Translation Suite</div>
         </div>
-        <span style="font-size: 14px; color: var(--text-secondary); font-weight: 500;">v4.4.6</span>
+        <span style="font-size: 14px; color: var(--text-secondary); font-weight: 500;">v4.4.7</span>
       </div>
       <div class="setting-row">
         <div class="setting-info">
@@ -1077,6 +1077,7 @@
 
     let currentConfig = Object.assign({}, DEFAULT_CONFIG);
     let selectedScopes = new Set(DEFAULT_CONFIG["@Pixiv.Enhanced.Settings.Auto.Scopes"]);
+    let isInitializing = false;
 
     function showToast(msg, icon) {
       const toast = document.getElementById("px-toast");
@@ -1119,7 +1120,7 @@
       window.location.href = "https://www.pixiv.net/manga/viewer?illust_id=" + id;
     }
 
-    function onTranslatorChange() {
+    function onTranslatorChange(shouldSave = true) {
       const source = document.getElementById("cfg-translator-source") ? document.getElementById("cfg-translator-source").value : "google";
       const dsBlock = document.getElementById("ai-deepseek-block");
       const oaBlock = document.getElementById("ai-openai-block");
@@ -1129,23 +1130,23 @@
       if (oaBlock) oaBlock.style.display = (source === "openai") ? "block" : "none";
       if (bdBlock) bdBlock.style.display = (source === "baidu") ? "block" : "none";
       if (cyBlock) cyBlock.style.display = (source === "caiyun") ? "block" : "none";
-      saveConfig();
+      if (shouldSave && !isInitializing) saveConfig();
     }
 
-    function onMangaSwitchChange() {
+    function onMangaSwitchChange(shouldSave = true) {
       const el = document.getElementById("cfg-manga-switch");
       const on = el ? el.checked : false;
       const box = document.getElementById("manga-config-box");
       if (box) box.style.display = on ? "block" : "none";
-      onMangaEngineChange();
+      onMangaEngineChange(shouldSave);
     }
 
-    function onMangaEngineChange() {
+    function onMangaEngineChange(shouldSave = true) {
       const engineEl = document.getElementById("cfg-manga-engine");
       const engine = engineEl ? engineEl.value : "deepseek_vl";
       const sBlock = document.getElementById("manga-selfhost-block");
       if (sBlock) sBlock.style.display = (engine === "manga_translator") ? "block" : "none";
-      saveConfig();
+      if (shouldSave && !isInitializing) saveConfig();
     }
 
     function updateSummaries() {
@@ -1187,34 +1188,59 @@
     async function handleDoneClick() {
       const btnTop = document.querySelector(".done-nav-btn");
       const btnBtm = document.getElementById("btn-save-bottom");
-      if (btnTop) btnTop.textContent = "✓ 已保存";
+      if (btnTop) btnTop.textContent = "⏳ 正在保存…";
       if (btnBtm) {
         const span = btnBtm.querySelector("span");
-        if (span) span.textContent = "✓ 设置已保存";
+        if (span) span.textContent = "⏳ 正在保存…";
       }
 
+      let saveOk = false;
       try {
         await saveConfig();
-      } catch (e) {}
-
-      showToast("设置已保存生效 · 可点击左上角 ‹ 返回", "✓");
-
-      setTimeout(function () {
-        if (btnTop) btnTop.textContent = "完成";
+        saveOk = true;
+        showToast("设置已成功保存生效", "✓");
+        if (btnTop) btnTop.textContent = "✓ 已保存";
         if (btnBtm) {
           const span = btnBtm.querySelector("span");
-          if (span) span.textContent = "保存设置";
+          if (span) span.textContent = "✓ 设置已保存";
         }
-      }, 1400);
+      } catch (e) {
+        showToast("保存失败，请检查网络", "❌");
+        if (btnTop) btnTop.textContent = "保存失败";
+        if (btnBtm) {
+          const span = btnBtm.querySelector("span");
+          if (span) span.textContent = "保存失败，重试";
+        }
+      }
 
-      try {
-        if (window.history.length > 1) {
-          window.history.back();
-        }
-      } catch (e) {}
+      if (saveOk) {
+        setTimeout(function () {
+          if (btnTop) btnTop.textContent = "完成";
+          if (btnBtm) {
+            const span = btnBtm.querySelector("span");
+            if (span) span.textContent = "保存设置";
+          }
+          try {
+            if (window.history.length > 1) {
+              window.history.back();
+            } else {
+              window.close();
+            }
+          } catch (e) {}
+        }, 400);
+      } else {
+        setTimeout(function () {
+          if (btnTop) btnTop.textContent = "完成";
+          if (btnBtm) {
+            const span = btnBtm.querySelector("span");
+            if (span) span.textContent = "保存设置";
+          }
+        }, 2000);
+      }
     }
 
     async function loadConfig() {
+      isInitializing = true;
       try {
         const res = await fetch("/api/get").then(r => r.json()).catch(() => null);
         if (res && typeof res === "object") {
@@ -1262,12 +1288,14 @@
         else chip.classList.remove("selected");
       });
 
-      onTranslatorChange();
-      onMangaSwitchChange();
+      onTranslatorChange(false);
+      onMangaSwitchChange(false);
       updateSummaries();
+      isInitializing = false;
     }
 
     async function saveConfig() {
+      if (isInitializing) return;
       const getCheck = (id, def) => { const el = document.getElementById(id); return el ? el.checked : def; };
       const getVal = (id, def) => { const el = document.getElementById(id); return el ? el.value.trim() : def; };
 
@@ -1448,9 +1476,17 @@
       }
     }
 
-    document.addEventListener("DOMContentLoaded", () => {
+    function initSettingsPage() {
       loadConfig();
       loadCacheStats();
+    }
+
+    window.addEventListener("pageshow", () => {
+      initSettingsPage();
+    });
+
+    document.addEventListener("DOMContentLoaded", () => {
+      initSettingsPage();
     });
   </script>
 </body>
