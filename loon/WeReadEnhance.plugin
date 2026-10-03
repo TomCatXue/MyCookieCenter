@@ -1,15 +1,13 @@
 #!name = 微信读书 · 防强更去广告
-#!desc = 净化微信读书界面，去除各类广告、弹窗及商业营销：\n• 去除书城横幅推广与轮播营销 (Banner)\n• 去除阅读器底部特惠推广浮层 (Tips)\n• 去除发现页及阅读流「新福利场」年卡促销卡片\n• 彻底阻断版本更新弹窗、升级公告与强更红点提示 (切断 App Store 嗅探)\n• 拦截腾讯 APM 性能监控与 CLS 日志上报通道\n• 释放试听时长限制 (消除试听倒计时)\n静态推广由 Loon 内核级 Reject-Dict 秒拒，动态流毫秒级过滤，畅享纯净无扰阅读体验。
+#!desc = 净化微信读书界面，去除各类广告、弹窗及商业营销：\n• 去除书城横幅推广与轮播营销 (Banner)\n• 去除阅读器底部特惠推广浮层 (Tips)\n• 去除发现页及阅读流「新福利场」年卡促销卡片\n• 锁定 68 年嗅探周期彻底阻断版本更新弹窗、升级公告与强更红点提示 (不影响系统 App Store 正常搜索)\n• 拦截腾讯 APM 性能监控与 CLS 日志上报通道\n• 释放试听时长限制 (消除试听倒计时)\n静态推广由 Loon 内核级 Reject-Dict 秒拒，动态流毫秒级过滤，畅享纯净无扰阅读体验。
 #!author = TomCatXue
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/35/92/e6/3592e6f4-0b0b-f2e4-7968-7033b281e1f5/AppIcon-0-1x_U007epad-0-11-0-85-220-0.png/512x512bb.jpg
 #!tag = 微信读书,防强更,去弹窗,去广告,AI听书
-#!version = 4.2.0
-#!date = 2026-09-28 18:30
+#!version = 4.2.1
+#!date = 2026-10-03 10:00
 
 [Rule]
-# 阻断 App 向苹果商店 (itunes.apple.com/lookup) 嗅探线上新版本，彻底切断红点与更新弹窗触发源
-DOMAIN, itunes.apple.com, REJECT
 # 阻断腾讯 APM 性能监控与 CLS 日志上报通道
 DOMAIN-SUFFIX, cls.tencentcs.com, REJECT
 DOMAIN, rmonitor.qq.com, REJECT
@@ -23,5 +21,5 @@ DOMAIN, rmonitor.qq.com, REJECT
 hostname = i.weread.qq.com, weread.qq.com
 
 [Script]
-# 拦截全局初始化配置与发现流推广（去除福利场与版本更新）
-response if ${url} ~= /^https?:\/\/(i\.)?weread\.qq\.com\/(feature|config|reconf|app\/upgrade|mobileSync|discoverfeed\/new)/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/wxread_enhance/wxread.js?v=20260928-1830") with tag="微信读书·防强更去广告", requires_body=true
+# 拦截全局初始化配置与发现流推广（去除福利场与版本更新，锁定 68 年嗅探周期）
+response if ${url} ~= /^https?:\/\/(i\.)?weread\.qq\.com\/(feature|config|reconf|app\/upgrade|mobileSync|discoverfeed\/new)/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/wxread_enhance/wxread.js?v=20261003-1000") with tag="微信读书·防强更去广告", requires_body=true

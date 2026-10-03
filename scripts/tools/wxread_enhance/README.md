@@ -14,8 +14,8 @@
 
 ### 🎯 痛点根因与解决原理
 1. **彻底根治更新弹窗**：通过对 WeRead 10.2.0 脱壳 Mach-O 二进制（`0x100a9d10c - 0x100a9d118`）及 8.2.6 二进制（`0x1009b0718 - 0x1009b0724`）反汇编查明：若配置的 `upgrade_query_interval <= 0`，客户端汇编会触发保底指令回退为 86400 秒（24小时）向苹果商店发起嗅探。
-   - 规则层增加 `DOMAIN, itunes.apple.com, REJECT`，物理切断商店嗅探请求；
-   - 脚本层锁定 `upgrade_query_interval = 2147483647`，彻底杜绝弹窗。
+   - 脚本层锁定 `upgrade_query_interval = 2147483647`（约68年）及 `upgrade = 0, notice_type = 0`，从源头彻底阻断客户端向 App Store 触发版本检测；
+   - 移除全局拦截 `itunes.apple.com`，彻底根除影响系统级 App Store 搜索、下载与更新的问题。
 2. **纯净阅读与去广告**：
    - 阅读器底部特惠浮层与横幅推广通过 `[URL Rewrite] reject-dict` 秒回空字典；
    - 阻断腾讯 APM 性能监控与 CLS 遥测日志上报。

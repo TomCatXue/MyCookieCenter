@@ -2,19 +2,19 @@
 ------------------------------------------
 @Description: 微信读书 · 防强更与去广告净化 (可莉风格极简纯净版)
 @Author: TomCatXue
-@Version: 4.2.0
-@Date: 2026-09-28 18:30
+@Version: 4.2.1
+@Date: 2026-10-03 10:00
 ------------------------------------------
 核心功能清单：
   1. 屏蔽发现流「新福利场」：过滤发现页年卡营销、特惠促销等商业推广卡片；
-  2. 彻底阻断版本强更：屏蔽 App Store 嗅探更新，消除所有升级弹窗与系统公告；
+  2. 彻底阻断版本强更：锁定 upgrade_query_interval=2147483647 (68年) 彻底阻断 App Store 嗅探，消除所有升级弹窗与系统公告；
   3. 释放试听时长限制：锁定 VIPRightTimerSeconds=8640000 消除试听倒计时；
   4. 静态秒拒零开销：阅读器底部浮层 (Tips)、书城横幅 (Banner) 由 Loon 内核直接秒拒；
   5. 阻断隐私与性能监控：拦截腾讯 APM 性能监控与 CLS 日志上报通道。
 */
 
 const SCRIPT_NAME = "微信读书·极简去广告";
-const SCRIPT_VERSION = "4.2.0";
+const SCRIPT_VERSION = "4.2.1";
 const $ = new Env(SCRIPT_NAME);
 
 function b64encode(str) {
