@@ -12,17 +12,19 @@
 ================================================================================
 @Name: 微信读书 · 全功能自动化任务（青龙面板专版）
 @Author: TomCatXue
-@Version: 1.3.1
-@Updated: 2026-09-26
+@Version: 1.4.0
+@Updated: 2026-10-04
 ================================================================================
 使用说明：
 - 核心环境变量：
   1. WEREAD_AUTH (必填)：主账号凭据 JSON 字符串 (包含 refreshToken 与 deviceId 实现 100% 自动脱机换票)
-  2. WEREAD_HELPER_AUTH (选填·周五限免全自动)：助力小号凭证。
+  2. WEREAD_HELPER_AUTH (选填·限免好书全自动)：助力小号凭证。
+     - 官方规则：每个小号每周限助力 1 本；主号每周最多领 2 本。
+     - 升级特性：支持多小号轮替助力！支持填入 2 个或更多小号（用换行或 & 分隔，亦支持 JSON 数组）。
+       配置 2 个小号即可实现每周 2 本限免大作 100% 全自动秒级入架！
      - 支持格式 1：微信直接打开 weread.qq.com 抓取的整串 Cookie (包含 wr_vid 与 wr_skey)
      - 支持格式 2：单行极简格式「小号VID#小号SKEY」 (如 935919483#aKemof5X)
      - 支持格式 3：标准 JSON 凭据 (亦支持脱机换票)
-     - 小号无需在手机 App 登录或切号，一个闲置小号即可自动帮主号领满每周 2 本限免图书！
      - 智能通知联动：领到了直接输出书名；没领到自动把官方带签名直达链接发到通知，微信点开秒领！
 - 各功能开关直接在下方的 CONFIG 对象中修改 true 或 false，无需在面板配复杂环境变量！
 ================================================================================
@@ -50,7 +52,7 @@ const CONFIG = {
     // 6. 【备用凭证填入口】：推荐在青龙环境变量配置 WEREAD_AUTH。若不想配环境变量，也可直接将 JSON 粘贴在此引号内：
     MANUAL_AUTH: "",
 
-    // 7. 【周五限免助力小号凭证】：全自动路径A。推荐在青龙配置 WEREAD_HELPER_AUTH，填入小号的 JSON 凭据：
+    // 7. 【周五限免助力小号凭证】：全自动路径A。推荐在青龙配置 WEREAD_HELPER_AUTH（支持换行/&填入多个小号）：
     HELPER_AUTH: ""
 };
 
@@ -58,7 +60,7 @@ const CONFIG = {
 // 常量与系统配置
 // ================================================================================
 const SCRIPT_NAME = "微信读书 · 全功能任务";
-const SCRIPT_VERSION = "1.3.1";
+const SCRIPT_VERSION = "1.4.0";
 const AUTH_KEY = "weread_auth_v2";
 const CACHE_FILE = "./weread_session.json";
 const API = "https://i.weread.qq.com";
@@ -384,8 +386,8 @@ function decode(str) {
     return null;
 }
 
-// 核心自愈：通过 /login 换票刷新 skey 与 wr_skey
-async function tryRefreshLogin(auth) {
+// 核心自愈：通过 /login 换票刷新 skey 与 wr_skey (支持指定 storageKey，防止小号换票覆盖主号 AUTH_KEY)
+async function tryRefreshLogin(auth, storageKey = AUTH_KEY) {
     if (!auth || !auth.refreshToken || !auth.deviceId) {
         $.log("[WeRead] ⚠️ /login 换票跳过：缺少 refreshToken 或 deviceId，请先在手机 App 中退出并重登一次以捕获长效种子");
         return null;
@@ -447,8 +449,10 @@ async function tryRefreshLogin(auth) {
             flipTime: Date.now()
         });
 
-        // 自动回写存储 (青龙写本地缓存文件，Loon 写 persistentStore)
-        $.setdata(JSON.stringify(newAuth), AUTH_KEY);
+        // 自动回写存储 (仅当指定 storageKey 时回写，防止辅助小号覆盖主号配置)
+        if (storageKey) {
+            $.setdata(JSON.stringify(newAuth), storageKey);
+        }
         $.log(`[WeRead] 🎉 成功实现脱机换票！新 skey=${newAuth.skey.slice(0, 8)}..., wrSkey 已同步`);
         return newAuth;
     } catch (e) {
@@ -880,45 +884,135 @@ function getVolStartTime(volStr) {
     return 0;
 }
 
-// 获取限免助力小号凭证 (支持完整 Cookie 串[含 wr_rt] / JSON / vid#skey 任意格式)
-function getHelperAuth() {
+// 解析单条助力小号凭证 (支持 Cookie 串[含 wr_rt] / JSON / vid#skey / vid@skey 任意格式)
+function parseSingleHelper(raw) {
+    if (!raw) return null;
+    if (typeof raw === "object") {
+        let vid = raw.vid || raw.wrVid || raw.wr_vid || "";
+        let skey = raw.wrSkey || raw.skey || raw.wr_skey || raw.accessToken || "";
+        let rt = raw.wrRt || raw.wr_rt || "";
+        if (!vid && !skey && !raw.refreshToken) return null;
+        return {
+            vid: String(vid),
+            skey: String(skey),
+            wrSkey: String(skey),
+            wrRt: String(rt),
+            refreshToken: raw.refreshToken || "",
+            deviceId: raw.deviceId || "",
+            rawCookie: raw.rawCookie || ""
+        };
+    }
+    if (typeof raw !== "string") return null;
+    let s = raw.replace(/\\([_@])/g, "$1").trim();
+    if (!s) return null;
+
+    // 1. JSON 格式
+    if (s.startsWith("{")) {
+        try {
+            let obj = JSON.parse(s);
+            return parseSingleHelper(obj);
+        } catch (e) {}
+    }
+
+    // 2. 完整 Cookie 串 (捕获 wr_vid, wr_skey 及长效续期种子 wr_rt)
+    if (s.includes("wr_vid") || s.includes("wr_skey")) {
+        let vidM = s.match(/wr_vid=([^;\s]+)/);
+        let skeyM = s.match(/wr_skey=([^;\s]+)/);
+        let rtM = s.match(/wr_rt=([^;\s]+)/);
+        if (vidM || skeyM) {
+            return {
+                vid: vidM ? vidM[1] : "",
+                wrSkey: skeyM ? skeyM[1] : "",
+                skey: skeyM ? skeyM[1] : "",
+                wrRt: rtM ? rtM[1] : "",
+                rawCookie: s
+            };
+        }
+    }
+
+    // 3. vid#skey#rt 格式
+    if (s.includes("#")) {
+        let parts = s.split("#");
+        return {
+            vid: parts[0].trim(),
+            wrSkey: parts[1].trim(),
+            skey: parts[1].trim(),
+            wrRt: parts[2] ? parts[2].trim() : "",
+            rawCookie: ""
+        };
+    }
+
+    // 4. vid@skey 格式
+    if (s.includes("@") && !s.includes("wr_")) {
+        let parts = s.split("@");
+        return {
+            vid: parts[0].trim(),
+            wrSkey: parts[1].trim(),
+            skey: parts[1].trim(),
+            wrRt: "",
+            rawCookie: ""
+        };
+    }
+
+    return null;
+}
+
+// 获取限免助力小号凭证列表 (支持多小号换行 / & 分隔 / JSON 数组，实现每周多书全自动轮替助力)
+function getHelperAuthList() {
     let raw = (typeof process !== "undefined" && (process.env.WEREAD_HELPER_AUTH || process.env.WEREAD_HELPER_COOKIE))
         || $.getdata("WEREAD_HELPER_AUTH")
         || CONFIG.HELPER_AUTH;
-    if (typeof raw === "string") {
-        raw = raw.replace(/\\([_@])/g, "$1").trim();
-        // 1. 兼容标准完整 Cookie 串 (捕获 wr_vid, wr_skey 及长效续期种子 wr_rt)
-        if (raw.includes("wr_vid") || raw.includes("wr_skey")) {
-            let vidM = raw.match(/wr_vid=([^;\s]+)/);
-            let skeyM = raw.match(/wr_skey=([^;\s]+)/);
-            let rtM = raw.match(/wr_rt=([^;\s]+)/);
-            if (vidM && skeyM) {
-                return {
-                    vid: vidM[1],
-                    wrSkey: skeyM[1],
-                    skey: skeyM[1],
-                    wrRt: rtM ? rtM[1] : "",
-                    rawCookie: raw
-                };
+    if (!raw) return [];
+
+    let list = [];
+    if (Array.isArray(raw)) {
+        list = raw.map(parseSingleHelper).filter(Boolean);
+    } else if (typeof raw === "object") {
+        let h = parseSingleHelper(raw);
+        if (h) list.push(h);
+    } else if (typeof raw === "string") {
+        let str = raw.replace(/\\([_@])/g, "$1").trim();
+        // 1. JSON 数组格式: [{"vid":...}, {"vid":...}]
+        if (str.startsWith("[")) {
+            try {
+                let arr = JSON.parse(str);
+                if (Array.isArray(arr)) {
+                    list = arr.map(parseSingleHelper).filter(Boolean);
+                }
+            } catch (e) {}
+        }
+        // 2. 多行或分隔符格式
+        if (!list.length) {
+            let lines = str.split(/[\r\n]+/).map(s => s.trim()).filter(Boolean);
+            if (lines.length > 1) {
+                for (let line of lines) {
+                    let h = parseSingleHelper(line);
+                    if (h) list.push(h);
+                }
+            } else if (lines.length === 1) {
+                if (lines[0].startsWith("{") && lines[0].endsWith("}")) {
+                    let h = parseSingleHelper(lines[0]);
+                    if (h) list.push(h);
+                } else if (lines[0].includes("&") && !lines[0].includes("wr_rt") && !lines[0].includes("wr_skey")) {
+                    let sub = lines[0].split("&").map(s => s.trim()).filter(Boolean);
+                    for (let s of sub) {
+                        let h = parseSingleHelper(s);
+                        if (h) list.push(h);
+                    }
+                } else {
+                    let h = parseSingleHelper(lines[0]);
+                    if (h) list.push(h);
+                }
             }
         }
-        // 2. 兼容 JSON 格式
-        if (raw.startsWith("{")) {
-            try {
-                let obj = JSON.parse(raw);
-                if (obj.wr_rt && !obj.wrRt) obj.wrRt = obj.wr_rt;
-                return obj;
-            } catch (e) { }
-        }
-        // 3. 兼容 vid#skey 格式
-        if (raw.includes("#")) {
-            let parts = raw.split("#");
-            return { vid: parts[0].trim(), wrSkey: parts[1].trim(), skey: parts[1].trim(), wrRt: parts[2] ? parts[2].trim() : "" };
-        }
-    } else if (typeof raw === "object" && raw !== null) {
-        return raw;
     }
-    return null;
+    return list;
+}
+
+// 兼容单小号获取
+function getHelperAuth() {
+    let list = getHelperAuthList();
+    return list.length > 0 ? list[0] : null;
 }
 
 // 核心自愈：Web Cookie 自动续期 (参考 findmover/wxread，通过 /web/login/renewal 实现无感换票)
@@ -1246,87 +1340,122 @@ async function runFreeTask(auth, helperAuth) {
 
     let targetBooks = candidates.slice(0, needCount);
 
-    // 7. 路径A：小号助力点击全自动兑换 (支持静态 wrSkey / skey，亦支持脱机换票)
-    let helperVid = helperAuth ? String(helperAuth.vid || helperAuth.wrVid || "") : "";
-    let helperSkey = helperAuth ? (helperAuth.wrSkey || helperAuth.accessToken || helperAuth.skey || "") : "";
+    // 7. 路径A：小号助力点击全自动兑换 (支持多小号轮替助力，解决每小号每周限1本的官方限制)
+    let helperList = Array.isArray(helperAuth) ? helperAuth : (helperAuth ? [helperAuth] : []);
+    helperList = helperList.filter(h => h && (h.vid || h.wrVid));
 
-    if (helperVid && (helperSkey || helperAuth.refreshToken)) {
-        let maskH = helperVid.length > 4 ? helperVid.slice(0, 4) + "****" : helperVid;
-        $.log(`[WeRead] 检测到助力小号凭证 [${maskH}]，启动小号自动助力领书流程...`);
-
-        if (!helperSkey && helperAuth.refreshToken && helperAuth.deviceId) {
-            let refreshedHelper = await tryRefreshLogin(helperAuth);
-            if (refreshedHelper) {
-                helperSkey = refreshedHelper.wrSkey || refreshedHelper.accessToken || refreshedHelper.skey || "";
-            }
-        }
+    if (helperList.length > 0) {
+        let maskList = helperList.map(h => {
+            let v = String(h.vid || h.wrVid || "");
+            return v.length > 4 ? v.slice(0, 4) + "****" : v;
+        }).join(", ");
+        $.log(`[WeRead] 检测到 ${helperList.length} 个助力小号凭证 [${maskList}]，启动多小号轮替助力领书流程...`);
 
         let newlyClaimed = [];
-        for (let b of targetBooks) {
-            let actUrl = `https://weread.qq.com/book-detail/api/activities?type=1&senderVid=${auth.vid}&v=${b.v}&wtype=shareOneGetOne2&scene=freeBooks&timestamp=${freeTimestamp}&sn=${b.sn}&vol=${currentVol}&platform=ios_html`;
-            let actHeaders = {
-                "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 26_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 MicroMessenger/8.0.78(0x18004e31) NetType/WIFI Language/zh_CN",
-                "Referer": `https://weread.qq.com/book-detail?type=1&senderVid=${auth.vid}&v=${b.v}&wtype=shareOneGetOne2&scene=freeBooks&timestamp=${freeTimestamp}&sn=${b.sn}&vol=${currentVol}`,
-                "Cookie": (helperAuth && helperAuth.rawCookie) ? helperAuth.rawCookie : `wr_vid=${helperVid}; wr_skey=${helperSkey}; wr_loggedIn=1;`
-            };
+        let helperIdx = 0; // 当前可用助力小号指针
 
-            let actRes = await get(actUrl, actHeaders);
-            if (actRes.status === 401) {
-                if (helperAuth.wrRt || helperAuth.wr_rt) {
-                    let renewed = await tryWebRenewal(helperAuth);
-                    if (renewed) {
-                        helperSkey = renewed.wrSkey || "";
-                        if (helperAuth.rawCookie) {
-                            helperAuth.rawCookie = helperAuth.rawCookie.replace(/wr_skey=[^;\s]+/, `wr_skey=${helperSkey}`);
-                            if (renewed.wrRt) {
-                                helperAuth.rawCookie = helperAuth.rawCookie.replace(/wr_rt=[^;\s]+/, `wr_rt=${renewed.wrRt}`);
-                            }
-                        }
-                        actHeaders["Cookie"] = (helperAuth && helperAuth.rawCookie) ? helperAuth.rawCookie : `wr_vid=${helperVid}; wr_skey=${helperSkey}; wr_loggedIn=1;`;
-                        actRes = await get(actUrl, actHeaders);
-                    }
-                } else if (helperAuth.refreshToken && helperAuth.deviceId) {
-                    $.log("[WeRead] 助力小号 Session 过期，尝试脱机自愈换票 (/login)...");
-                    let refreshedHelper = await tryRefreshLogin(helperAuth);
+        for (let b of targetBooks) {
+            let bookClaimed = false;
+
+            while (helperIdx < helperList.length && !bookClaimed) {
+                let curHelper = helperList[helperIdx];
+                let helperVid = String(curHelper.vid || curHelper.wrVid || "");
+                let helperSkey = curHelper.wrSkey || curHelper.accessToken || curHelper.skey || "";
+                let maskH = helperVid.length > 4 ? helperVid.slice(0, 4) + "****" : helperVid;
+
+                $.log(`[WeRead] 正在使用小号 [${maskH}] (第 ${helperIdx + 1}/${helperList.length} 个) 助力领取《${b.title}》...`);
+
+                if (!helperSkey && curHelper.refreshToken && curHelper.deviceId) {
+                    let refreshedHelper = await tryRefreshLogin(curHelper, null);
                     if (refreshedHelper) {
                         helperSkey = refreshedHelper.wrSkey || refreshedHelper.accessToken || refreshedHelper.skey || "";
-                        if (helperAuth.rawCookie) {
-                            helperAuth.rawCookie = helperAuth.rawCookie.replace(/wr_skey=[^;\s]+/, `wr_skey=${helperSkey}`);
-                        }
-                        actHeaders["Cookie"] = (helperAuth && helperAuth.rawCookie) ? helperAuth.rawCookie : `wr_vid=${helperVid}; wr_skey=${helperSkey}; wr_loggedIn=1;`;
-                        actRes = await get(actUrl, actHeaders);
                     }
-                } else {
-                    $.log("[WeRead] ⚠️ 助力小号当前 wr_skey 已过期，缺少 wr_rt 或 refreshToken 续期种子");
                 }
+
+                let actUrl = `https://weread.qq.com/book-detail/api/activities?type=1&senderVid=${auth.vid}&v=${b.v}&wtype=shareOneGetOne2&scene=freeBooks&timestamp=${freeTimestamp}&sn=${b.sn}&vol=${currentVol}&platform=ios_html`;
+                let actHeaders = {
+                    "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 26_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 MicroMessenger/8.0.78(0x18004e31) NetType/WIFI Language/zh_CN",
+                    "Referer": `https://weread.qq.com/book-detail?type=1&senderVid=${auth.vid}&v=${b.v}&wtype=shareOneGetOne2&scene=freeBooks&timestamp=${freeTimestamp}&sn=${b.sn}&vol=${currentVol}`,
+                    "Cookie": (curHelper && curHelper.rawCookie) ? curHelper.rawCookie : `wr_vid=${helperVid}; wr_skey=${helperSkey}; wr_loggedIn=1;`
+                };
+
+                let actRes = await get(actUrl, actHeaders);
+                if (actRes.status === 401) {
+                    if (curHelper.wrRt || curHelper.wr_rt) {
+                        let renewed = await tryWebRenewal(curHelper);
+                        if (renewed) {
+                            helperSkey = renewed.wrSkey || "";
+                            if (curHelper.rawCookie) {
+                                curHelper.rawCookie = curHelper.rawCookie.replace(/wr_skey=[^;\s]+/, `wr_skey=${helperSkey}`);
+                                if (renewed.wrRt) {
+                                    curHelper.rawCookie = curHelper.rawCookie.replace(/wr_rt=[^;\s]+/, `wr_rt=${renewed.wrRt}`);
+                                }
+                            }
+                            actHeaders["Cookie"] = (curHelper && curHelper.rawCookie) ? curHelper.rawCookie : `wr_vid=${helperVid}; wr_skey=${helperSkey}; wr_loggedIn=1;`;
+                            actRes = await get(actUrl, actHeaders);
+                        }
+                    }
+                    if (actRes.status === 401 && curHelper.refreshToken && curHelper.deviceId) {
+                        $.log(`[WeRead] 助力小号 [${maskH}] Session 过期，尝试脱机自愈换票 (/login)...`);
+                        let refreshedHelper = await tryRefreshLogin(curHelper, null);
+                        if (refreshedHelper) {
+                            helperSkey = refreshedHelper.wrSkey || refreshedHelper.accessToken || refreshedHelper.skey || "";
+                            if (curHelper.rawCookie) {
+                                curHelper.rawCookie = curHelper.rawCookie.replace(/wr_skey=[^;\s]+/, `wr_skey=${helperSkey}`);
+                            }
+                            actHeaders["Cookie"] = (curHelper && curHelper.rawCookie) ? curHelper.rawCookie : `wr_vid=${helperVid}; wr_skey=${helperSkey}; wr_loggedIn=1;`;
+                            actRes = await get(actUrl, actHeaders);
+                        }
+                    } else if (actRes.status === 401 && !(curHelper.wrRt || curHelper.wr_rt)) {
+                        $.log(`[WeRead] ⚠️ 助力小号 [${maskH}] 当前 wr_skey 已过期，缺少 wr_rt 或 refreshToken 续期种子`);
+                    }
+                }
+
+                let actData = decode(actRes.body);
+                if (actRes.status === 200 && actData && actData.succ === 1 && !actData.errMsg) {
+                    newlyClaimed.push(`《${b.title}》`);
+                    $.log(`[WeRead] 🎉 小号 [${maskH}] 助力领取成功: 《${b.title}》 (售价: ${b.price.toFixed(1)}书币)`);
+                    bookClaimed = true;
+                    helperIdx++; // 该小号配额已消耗，切换到下一个小号！
+                } else {
+                    let errMsg = actData?.errMsg || actData?.errmsg || ("HTTP " + actRes.status);
+                    $.log(`[WeRead] ❌ 小号 [${maskH}] 助力领取《${b.title}》失败: ${errMsg}`);
+
+                    // 核心安全熔断：若官方返回 -2057，表明主账号本周领书次数已达上限 (2本)
+                    if (String(errMsg) === "-2057" || (actData && actData.errCode === -2057)) {
+                        $.log("[WeRead] ℹ️ 触发官方配额保护：主账号本周免费好书已达领取上限(2本)，停止后续助力请求并锁定结果");
+                        result.allClaimed = true;
+                        result.unclaimedBooks = [];
+                        if (result.addedBooks.length > 0) {
+                            result.details = `本周已领图书: ${result.addedBooks.join(", ")}`;
+                            $.setdata(JSON.stringify({ vol: currentVol, allClaimed: true, addedBooks: result.addedBooks, details: result.details }), cacheKey);
+                        }
+                        return result;
+                    }
+
+                    // 遇到配额限制（已帮其他用户解锁），说明该小号配额耗尽，轮换到下一个小号重试本书
+                    if (String(errMsg).includes("已帮其他用户") || String(errMsg).includes("解锁过")) {
+                        $.log(`[WeRead] ⚠️ 小号 [${maskH}] 本周助力配额已达上限(1本/周)`);
+                        helperIdx++;
+                        if (helperIdx < helperList.length) {
+                            let nextMask = String(helperList[helperIdx].vid || helperList[helperIdx].wrVid || "").slice(0, 4) + "****";
+                            $.log(`[WeRead] 🔄 正在自动轮换至备用小号 [${nextMask}] 重新助力《${b.title}》...`);
+                        }
+                    } else {
+                        helperIdx++;
+                    }
+                }
+                await new Promise(r => setTimeout(r, 1000));
             }
 
-            let actData = decode(actRes.body);
-            if (actRes.status === 200 && actData && actData.succ === 1 && !actData.errMsg) {
-                newlyClaimed.push(`《${b.title}》`);
-                $.log(`[WeRead] 🎉 小号助力领取成功: 《${b.title}》 (售价: ${b.price.toFixed(1)}书币)`);
-            } else {
-                let errMsg = actData?.errMsg || actData?.errmsg || ("HTTP " + actRes.status);
-                $.log(`[WeRead] ❌ 小号助力领取《${b.title}》失败: ${errMsg}`);
-
-                // 核心安全熔断：若官方返回 -2057，表明主账号本周领书次数已达上限
-                if (String(errMsg) === "-2057" || (actData && actData.errCode === -2057)) {
-                    $.log("[WeRead] ℹ️ 触发官方配额保护：主账号本周免费好书已达领取上限(2本)，停止后续助力请求并锁定结果");
-                    result.allClaimed = true;
-                    result.unclaimedBooks = [];
-                    // 立即将主号已领的书持久化，防止产生无谓重试
-                    if (result.addedBooks.length > 0) {
-                        result.details = `本周已领图书: ${result.addedBooks.join(", ")}`;
-                        $.setdata(JSON.stringify({ vol: currentVol, allClaimed: true, addedBooks: result.addedBooks, details: result.details }), cacheKey);
-                    }
-                    break;
+            if (!bookClaimed) {
+                if (helperIdx >= helperList.length && targetBooks.indexOf(b) > 0) {
+                    $.log(`[WeRead] ℹ️ 助力小号已全部耗尽（微信读书规则：每个小号每周限助力 1 本）。`);
+                    $.log(`[WeRead] 💡 如需每周 2 本全部全自动入架，请在青龙环境变量 WEREAD_HELPER_AUTH 中换行或用 & 添加第 2 个小号。`);
                 }
-
-                // 收集未成功的直达链接
                 let link = `https://weread.qq.com/book-detail?type=1&senderVid=${auth.vid}&v=${b.v}&wtype=shareOneGetOne2&scene=freeBooks&timestamp=${freeTimestamp}&sn=${b.sn}&vol=${currentVol}`;
                 result.unclaimedBooks.push({ title: b.title, url: link });
             }
-            await new Promise(r => setTimeout(r, 1000));
         }
 
         if (newlyClaimed.length > 0) {
@@ -1450,10 +1579,13 @@ async function main() {
             resFlip = await runFlipTask(auth);
         }
 
-        // 任务 3: 周五限免图书入架
+        // 任务 3: 周五限免图书入架 (支持多小号轮替助力)
         if (canFree) {
-            let helper = (accounts.length > 1) ? accounts[(i + 1) % accounts.length] : getHelperAuth();
-            resFree = await runFreeTask(auth, helper);
+            let helpers = getHelperAuthList();
+            if (!helpers.length && accounts.length > 1) {
+                helpers = accounts.filter((_, idx) => idx !== i);
+            }
+            resFree = await runFreeTask(auth, helpers);
         }
 
         // 格式化各子任务输出行
