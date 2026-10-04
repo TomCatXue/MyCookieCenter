@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 ===================================================================
-📌 版本: v2.7.0 (穿透502/超时防脱水/多路阶梯突发重构版)
+📌 版本: v2.7.1 (长时锁事务适配 / 防风控限频控量版)
 中国电信 · 0点等级会员权益兑换（每日限量102份·高并发秒杀脚本）
 ===================================================================
 new Env('中国电信 · 0点等级权益兑换');
@@ -59,8 +59,8 @@ from concurrent.futures import ThreadPoolExecutor, wait
 CONFIG = {
     "FORCE_RUN": False,         # 平日测试模式: False=仅夜间23:55~23:59准备并抢购; True=平时任何时间均可运行全链路测试
     "INADVANCE": -60,           # 提前60毫秒首发抢购（压哨冲线，精准对冲单向网络与网关路由延迟）
-    "COUNT_PER_ACCOUNT": 5,     # 每个账号并发抢购数 (5次阶梯并发，充分覆盖0点秒杀黄金放量窗口)
-    "INTERVAL_MS": 160,         # 并发请求微间隔(160ms，5发覆盖-60ms、+100ms、+260ms、+420ms、+580ms，避开首波502熔断)
+    "COUNT_PER_ACCOUNT": 4,     # 每个账号计划发包数 (4次阶梯并发，兼顾成功率与防风控限频)
+    "INTERVAL_MS": 180,         # 并发请求微间隔(180ms，4发覆盖-60ms、+120ms、+300ms、+480ms，避开首波502熔断并覆盖放量带)
     "ENABLE_RUISHU": False,     # 瑞数安全Cookie开关
     "CLAIMED_LOG_FILE": "claimed_accounts.json",
     "ENABLE_MULTI_RIGHTS": False,   # 多权益并发领取: False=仅抢 rightsList[0] 默认权益; True=对接口返回的每个权益独立并发领取
@@ -68,8 +68,8 @@ CONFIG = {
 }
 
 inadvance = int(CONFIG.get("INADVANCE", -60))
-count_per_account = int(CONFIG.get("COUNT_PER_ACCOUNT", 5))
-interval = int(CONFIG.get("INTERVAL_MS", 160))
+count_per_account = int(CONFIG.get("COUNT_PER_ACCOUNT", 4))
+interval = int(CONFIG.get("INTERVAL_MS", 180))
 enable_ruishu = bool(CONFIG.get("ENABLE_RUISHU", False))
 claimed_log_file = CONFIG.get("CLAIMED_LOG_FILE", "claimed_accounts.json")
 enable_multi_rights = bool(CONFIG.get("ENABLE_MULTI_RIGHTS", False))
@@ -669,7 +669,7 @@ async def _send_burst_retry(
             json={"para": paraV},
             cookies=rs_cookies,
             headers=retry_headers,
-            timeout=aiohttp.ClientTimeout(total=2.0, connect=1.0)
+            timeout=aiohttp.ClientTimeout(total=3.5, connect=1.5)
         ) as retry_resp:
             r_http_status = retry_resp.status
             r_elapsed = (time.perf_counter() - retry_perf) * 1000
@@ -739,7 +739,8 @@ async def _send_burst_retry(
                 if rights_count <= 1 and not local_stop_event.is_set():
                     local_stop_event.set()
     except Exception as re_err:
-        printn(f"⚠️【{phone}】@{retry_time} {rights_tag}[{retry_label}] 异常: {re_err}")
+        err_str = f"{type(re_err).__name__}: {str(re_err)}".strip().rstrip(":")
+        printn(f"⚠️【{phone}】@{retry_time} {rights_tag}[{retry_label}] 异常: {err_str}")
 
 
 async def async_staggered_burst_worker(
@@ -834,13 +835,13 @@ async def async_staggered_burst_worker(
         request_perf = time.perf_counter()
         actual_drift_ms = (now_cn() - fire_time).total_seconds() * 1000
 
-        # 单次秒杀请求超时保护收紧至 2.0s，避免服务端过载排队挂死拖垮全部协程与重试机会
+        # 单次秒杀请求超时保护设为 3.8s，为电信后端高并发数据库行锁排队预留充足处理时间
         async with session.post(
             url,
             json={"para": paraV},
             cookies=rs_cookies,
             headers=headers,
-            timeout=aiohttp.ClientTimeout(total=2.0, connect=1.0)
+            timeout=aiohttp.ClientTimeout(total=3.8, connect=1.5)
         ) as response:
 
             http_status = response.status
@@ -999,16 +1000,17 @@ async def async_staggered_burst_worker(
                 else:
                     printn(f"🌐【{phone}】@{request_time} {rights_tag} HTTP错误 (状态码{http_status}): {text[:200]}")
 
-                # 瞬态 502/空响应极速换通道补发（Connection: close 强迫网关重路由穿透 502）
-                retry_delay = random.uniform(0.06, 0.14)
-                await asyncio.sleep(retry_delay)
-                await _send_burst_retry(
-                    session, url, paraV, rs_cookies, headers, phone, rights_tag,
-                    rights_stat, level, amount, base_target_time,
-                    rights_stop_event, local_stop_event, global_stop_event,
-                    rights_count, result_log, result_lock, file_lock,
-                    retry_label="补发"
-                )
+                # 瞬态 502/空响应极速换通道补发（受发包总量保护，确保单号发包在5次以内不触犯限频）
+                if rights_stat.get('request_count', 0) < 5:
+                    retry_delay = random.uniform(0.06, 0.12)
+                    await asyncio.sleep(retry_delay)
+                    await _send_burst_retry(
+                        session, url, paraV, rs_cookies, headers, phone, rights_tag,
+                        rights_stat, level, amount, base_target_time,
+                        rights_stop_event, local_stop_event, global_stop_event,
+                        rights_count, result_log, result_lock, file_lock,
+                        retry_label="补发"
+                    )
 
     except asyncio.CancelledError:
         pass
@@ -1017,15 +1019,6 @@ async def async_staggered_burst_worker(
         _record_stat(rights_stat, 'timeout_count')
         _record_stat(rights_stat, 'request_count')
         printn(f"⏰【{phone}】@{request_time} {rights_tag} 请求超时 | 耗时{elapsed_ms:.1f}ms")
-
-        # 超时快速救活补刀：单枪 2s 超时后若仍在黄金窗口内，立即换新连接补打一枪
-        await _send_burst_retry(
-            session, url, paraV, rs_cookies, headers, phone, rights_tag,
-            rights_stat, level, amount, base_target_time,
-            rights_stop_event, local_stop_event, global_stop_event,
-            rights_count, result_log, result_lock, file_lock,
-            retry_label="超时补发"
-        )
     except Exception as e:
         printn(f"🚨【{phone}】@{request_time} {rights_tag} 未预期异常: {e.__class__.__name__} - {str(e)}")
 
@@ -1740,8 +1733,8 @@ def main():
 
 if __name__ == '__main__':
     inadvance = int(CONFIG.get("INADVANCE", -60))
-    count_per_account = int(CONFIG.get("COUNT_PER_ACCOUNT", 5))
-    interval = int(CONFIG.get("INTERVAL_MS", 160))
+    count_per_account = int(CONFIG.get("COUNT_PER_ACCOUNT", 4))
+    interval = int(CONFIG.get("INTERVAL_MS", 180))
     enable_ruishu = bool(CONFIG.get("ENABLE_RUISHU", False))
     claimed_log_file = CONFIG.get("CLAIMED_LOG_FILE", "claimed_accounts.json")
     enable_multi_rights = bool(CONFIG.get("ENABLE_MULTI_RIGHTS", False))
