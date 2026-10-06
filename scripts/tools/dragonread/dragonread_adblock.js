@@ -2,18 +2,19 @@
 ------------------------------------------
 @Description: 番茄小说 · 极简去广告与特权净化 (高性能版)
 @Author: TomCatXue
-@Version: 2026-10-06.r3
-@Date: 2026-10-06 12:15
+@Version: 2026-10-06.r4
+@Date: 2026-10-06 12:45
 ------------------------------------------
 核心功能清单：
-  1. VIP 状态与免广告注入：改写 /api/novel/account/v1/vip/info/，激活官方原生免广告特权通道；
-  2. 阅读流正文广告清洗：精准剥离章节内嵌 ad_info、chapter_ad、flow_ad 等广告占位，保护正文毫发无损；
-  3. 底部导航栏 Tab 纯净化：过滤福利/金币/任务等营销 Tab，恢复书架与书城极简布局；
-  4. 静态秒拒与零脚本执行：开屏广告、章末推广、商业化挂件、穿山甲 SDK 广告由 Loon 内核直接秒拒。
+  1. 穿山甲 / 广告联盟 SDK 控频截断：伪造官方 status_code: 20001 (填充率限制)，使 SDK 彻底停止广告请求与重试；
+  2. VIP 状态与免广告注入：改写 /api/novel/account/v1/vip/info/，激活官方原生免广告特权通道；
+  3. 阅读流正文广告清洗：精准剥离章节内嵌 ad_info、chapter_ad、flow_ad 等广告占位，保护正文毫发无损；
+  4. 底部导航栏 Tab 纯净化：过滤福利/金币/任务等营销 Tab，恢复书架与书城极简布局；
+  5. 静态秒拒与零脚本执行：开屏广告、章末推广、商业化挂件、穿山甲 SDK 广告由 Loon 内核直接秒拒。
 */
 
 const SCRIPT_NAME = "番茄小说·极简去广告";
-const SCRIPT_VERSION = "2026-10-06.r3";
+const SCRIPT_VERSION = "2026-10-06.r4";
 var $ = (typeof $ !== "undefined" && $) ? $ : ((typeof Env !== "undefined") ? new Env(SCRIPT_NAME) : { log: console.log });
 
 (function main() {
@@ -28,6 +29,21 @@ var $ = (typeof $ !== "undefined" && $) ? $ : ((typeof Env !== "undefined") ? ne
 
   try {
     const data = JSON.parse(body);
+
+    // 0. 穿山甲 / 广告联盟 SDK 官方控频状态伪造 (status_code: 20001, reason: 112 彻底关闭广告位)
+    if (
+      url.includes("/api/ad/union/sdk/get_ads") ||
+      (url.includes("pangolin-sdk-toutiao") && url.includes("/api/ad/"))
+    ) {
+      const mockAdObj = {
+        request_id: (data && data.request_id) ? data.request_id : "F5617E54-3FF4-4052-9B09-4227D09B5105",
+        status_code: 20001,
+        reason: 112,
+        desc: "该代码位请求量过大且消耗过低，因此填充率控制在10%以内，该策略每日生效，如果当天该代码位的消耗上涨或请求量小于5000，则次日不会命中该策略"
+      };
+      $done({ body: JSON.stringify(mockAdObj) });
+      return;
+    }
 
     // 1. VIP 状态与免广告特权注入
     if (/\/api\/novel\/account\/v\d\/vip\/info/i.test(url)) {

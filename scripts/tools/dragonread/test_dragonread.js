@@ -165,9 +165,34 @@ function runTests(scriptCode) {
     console.log("   ✓ 招财猫接口置空测试通过");
   }
 
-  // 6. 测试非 JSON 与异常容错
+  // 6. 测试穿山甲 / 广告联盟 SDK 控频截断 (20001 官方控频状态伪造)
   {
-    console.log("6. 测试非 JSON 与空响应容错...");
+    console.log("6. 测试穿山甲广告 SDK 控频截断 (20001)...");
+    for (const testUrl of [
+      "https://api-access.pangolin-sdk-toutiao.com/api/ad/union/sdk/get_ads",
+      "https://api-access.pangolin-sdk-toutiao-b.com/api/ad/union/sdk/get_ads",
+      "https://is.snssdk.com/api/ad/union/sdk/get_ads"
+    ]) {
+      const rawBody = JSON.stringify({
+        message: "success",
+        status_code: 0,
+        request_id: "req123",
+        creatives: [{ id: "ad1" }]
+      });
+
+      const res = runScriptWithMock(testUrl, rawBody, scriptCode);
+      assert(res && res.body, "必须返回改写后的响应");
+      const json = JSON.parse(res.body);
+      assert.strictEqual(json.status_code, 20001, "status_code 必须改写为 20001");
+      assert.strictEqual(json.reason, 112, "reason 必须改写为 112");
+      assert(json.desc.includes("填充率"), "desc 必须包含控频说明");
+    }
+    console.log("   ✓ 穿山甲广告 SDK 控频截断测试通过");
+  }
+
+  // 7. 测试非 JSON 与异常容错
+  {
+    console.log("7. 测试非 JSON 与空响应容错...");
     const url = "https://api5-normal-c-lq.fqnovel.com/api/ad/something";
     const rawBody = "<html><body>502 Bad Gateway</body></html>";
 
