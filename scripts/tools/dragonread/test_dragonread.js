@@ -30,29 +30,35 @@ function runScriptWithMock(url, responseBody, scriptCode) {
 function runTests(scriptCode) {
   console.log("=== 开始运行番茄小说去广告自动化测试 ===");
 
-  // 1. 测试 VIP 接口注入
+  // 1. 测试 VIP 接口注入 (带斜杠与不带斜杠兼容性)
   {
     console.log("1. 测试 VIP 接口注入...");
-    const url = "https://api5-normal-c-lq.fqnovel.com/api/novel/account/v1/vip/info/";
-    const rawBody = JSON.stringify({
-      code: 0,
-      message: "success",
-      data: {
-        is_vip: 0,
-        vip_type: 0,
-        ad_free: 0,
-        expire_time: 0
-      }
-    });
+    for (const testUrl of [
+      "https://api5-normal-c-lq.fqnovel.com/api/novel/account/v1/vip/info/",
+      "https://api5-normal-lf.fqnovel.com/api/novel/account/v1/vip/info"
+    ]) {
+      const rawBody = JSON.stringify({
+        code: 0,
+        message: "success",
+        data: {
+          is_vip: 0,
+          vip_type: 0,
+          ad_free: 0,
+          expire_time: 0
+        }
+      });
 
-    const res = runScriptWithMock(url, rawBody, scriptCode);
-    assert(res && res.body, "必须返回改写后的响应正文");
-    const json = JSON.parse(res.body);
-    assert.strictEqual(json.data.is_vip, 1, "is_vip 必须为 1");
-    assert.strictEqual(json.data.ad_free, 1, "ad_free 必须为 1");
-    assert.strictEqual(json.data.is_ad_free, 1, "is_ad_free 必须为 1");
-    assert.strictEqual(json.data.expire_time, 4070880000, "expire_time 必须设为远期时间戳");
-    assert.strictEqual(json.data.vip_expire_time, 4070880000, "vip_expire_time 必须设为远期时间戳");
+      const res = runScriptWithMock(testUrl, rawBody, scriptCode);
+      assert(res && res.body, "必须返回改写后的响应正文");
+      const json = JSON.parse(res.body);
+      assert.strictEqual(json.data.is_vip, 1, "is_vip 必须为 1");
+      assert.strictEqual(json.data.ad_free, 1, "ad_free 必须为 1");
+      assert.strictEqual(json.data.is_ad_free, 1, "is_ad_free 必须为 1");
+      assert.strictEqual(json.data.has_vip, 1, "has_vip 必须为 1");
+      assert.strictEqual(json.data.is_svip, 1, "is_svip 必须为 1");
+      assert.strictEqual(json.data.expire_time, 4070880000, "expire_time 必须设为远期时间戳");
+      assert.strictEqual(json.data.vip_expire_time, 4070880000, "vip_expire_time 必须设为远期时间戳");
+    }
     console.log("   ✓ VIP 接口注入测试通过");
   }
 
@@ -74,37 +80,46 @@ function runTests(scriptCode) {
     const json = JSON.parse(res.body);
     assert.strictEqual(json.data.is_vip, 1, "用户信息 is_vip 必须为 1");
     assert.strictEqual(json.data.ad_free, 1, "用户信息 ad_free 必须为 1");
+    assert.strictEqual(json.data.has_vip, 1, "用户信息 has_vip 必须为 1");
     console.log("   ✓ 用户信息 VIP 注入测试通过");
   }
 
   // 3. 测试阅读流正文广告清洗
   {
     console.log("3. 测试阅读正文广告清洗...");
-    const url = "https://api5-normal-c-lq.fqnovel.com/reading/reader/full/v1/?item_id=123";
-    const rawBody = JSON.stringify({
-      code: 0,
-      data: {
-        novel_data: {
-          content: "这是正文第一段，内容包含正常的文学宣传和广告讨论。\n这是正文第二段。",
-          chapter_title: "第一章",
-          ad_info: { ad_id: "999", type: "interstitial" },
-          chapter_ad: { banner: "http://ad.com" },
-          flow_ad_list: [{ id: "ad1" }],
-          need_ad: true,
-          show_ad: 1
+    for (const testUrl of [
+      "https://api5-normal-c-lq.fqnovel.com/reading/reader/full/v1/?item_id=123",
+      "https://api5-normal-lf.fqnovel.com/reading/chapter/detail?chapter_id=456"
+    ]) {
+      const rawBody = JSON.stringify({
+        code: 0,
+        data: {
+          novel_data: {
+            content: "这是正文第一段，内容包含正常的文学宣传和广告讨论。\n这是正文第二段。",
+            chapter_title: "第一章",
+            ad_info: { ad_id: "999", type: "interstitial" },
+            chapter_ad: { banner: "http://ad.com" },
+            flow_ad_list: [{ id: "ad1" }],
+            commercial: { id: "c1" },
+            promotion: { id: "p1" },
+            need_ad: true,
+            show_ad: 1
+          }
         }
-      }
-    });
+      });
 
-    const res = runScriptWithMock(url, rawBody, scriptCode);
-    assert(res && res.body, "必须返回改写后的正文");
-    const json = JSON.parse(res.body);
-    assert(json.data.novel_data.content.includes("文学宣传和广告讨论"), "正文字符串必须毫发无损");
-    assert.strictEqual(json.data.novel_data.ad_info, undefined, "ad_info 必须被删除");
-    assert.strictEqual(json.data.novel_data.chapter_ad, undefined, "chapter_ad 必须被删除");
-    assert.strictEqual(json.data.novel_data.flow_ad_list, undefined, "flow_ad_list 必须被删除");
-    assert.strictEqual(json.data.novel_data.need_ad, false, "need_ad 必须置为 false");
-    assert.strictEqual(json.data.novel_data.show_ad, 0, "show_ad 必须置为 0");
+      const res = runScriptWithMock(testUrl, rawBody, scriptCode);
+      assert(res && res.body, "必须返回改写后的正文");
+      const json = JSON.parse(res.body);
+      assert(json.data.novel_data.content.includes("文学宣传和广告讨论"), "正文字符串必须毫发无损");
+      assert.strictEqual(json.data.novel_data.ad_info, undefined, "ad_info 必须被删除");
+      assert.strictEqual(json.data.novel_data.chapter_ad, undefined, "chapter_ad 必须被删除");
+      assert.strictEqual(json.data.novel_data.flow_ad_list, undefined, "flow_ad_list 必须被删除");
+      assert.strictEqual(json.data.novel_data.commercial, undefined, "commercial 必须被删除");
+      assert.strictEqual(json.data.novel_data.promotion, undefined, "promotion 必须被删除");
+      assert.strictEqual(json.data.novel_data.need_ad, false, "need_ad 必须置为 false");
+      assert.strictEqual(json.data.novel_data.show_ad, 0, "show_ad 必须置为 0");
+    }
     console.log("   ✓ 阅读正文广告清洗测试通过");
   }
 
