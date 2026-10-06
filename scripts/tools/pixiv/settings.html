@@ -570,7 +570,7 @@
     <div style="flex: 1;">
       <div class="brand-title">
         Pixiv 增强翻译
-        <span class="brand-badge">v4.5.2</span>
+        <span class="brand-badge">v4.5.3</span>
       </div>
       <div class="brand-sub">双语出版级排版 · 全页面汉化 · 离线缓存</div>
     </div>
@@ -857,12 +857,28 @@
           </div>
           <div class="select-wrap">
             <select class="select-input" id="cfg-manga-engine" onchange="onMangaEngineChange()">
+              <option value="gemini_vl">Gemini 2.0 Flash (推荐·官方免费空间视觉)</option>
               <option value="deepseek_vl">DeepSeek-VL (推荐·高精度气泡)</option>
               <option value="gpt4o_mini">GPT-4o-mini (OpenAI 视觉气泡)</option>
               <option value="manga_translator">自建服务 (manga-translator)</option>
             </select>
             <svg class="select-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
           </div>
+        </div>
+
+        <!-- Gemini 2.0 Flash 专属配置区 (选 Gemini 时展示) -->
+        <div id="manga-gemini-block" style="padding: 10px 16px 14px; border-bottom: 0.5px solid var(--separator-color); display: none;">
+          <div class="setting-label" style="font-size: 14px; margin-bottom: 6px;">Gemini API Key</div>
+          <div class="input-wrap">
+            <input type="password" class="text-input" id="cfg-gemini-key" placeholder="AIzaSy..." onchange="saveConfig()">
+            <button type="button" class="input-action-btn" onclick="toggleInputMask('cfg-gemini-key')">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/>
+                <circle cx="12" cy="12" r="3"/>
+              </svg>
+            </button>
+          </div>
+          <div class="setting-desc" style="margin-top: 6px; color: var(--tint-blue);">🌟 Google AI Studio (aistudio.google.com) 免费申请 API Key，每日 1500 次永久免费额度，对白定位毫米级贴合。</div>
         </div>
 
         <!-- 自建服务 (选自建时展示) -->
@@ -1018,7 +1034,7 @@
         </svg>
       </div>
       <div class="section-title">关于与状态</div>
-      <div class="section-summary" id="sum-about">v4.5.2 旗舰版</div>
+      <div class="section-summary" id="sum-about">v4.5.3 旗舰版</div>
       <svg class="chevron-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
     </div>
     <div class="section-body">
@@ -1027,7 +1043,7 @@
           <div class="setting-label">插件版本</div>
           <div class="setting-desc">Pixiv Enhanced Translation Suite</div>
         </div>
-        <span style="font-size: 14px; color: var(--text-secondary); font-weight: 500;">v4.5.2</span>
+        <span style="font-size: 14px; color: var(--text-secondary); font-weight: 500;">v4.5.3</span>
       </div>
       <div class="setting-row">
         <div class="setting-info">
@@ -1062,7 +1078,8 @@
       "@Pixiv.Enhanced.Settings.Network.ImageAccelerate": true,
       "@Pixiv.Enhanced.Settings.Tag.OfflineOnly": true,
       "@Pixiv.Enhanced.Settings.Image.Switch": true,
-      "@Pixiv.Enhanced.Settings.Image.Engine": "deepseek_vl",
+      "@Pixiv.Enhanced.Settings.Image.Engine": "gemini_vl",
+      "@Pixiv.Enhanced.Settings.Auth.GeminiKey": "",
       "@Pixiv.Enhanced.Settings.Auth.DeepSeekKey": "",
       "@Pixiv.Enhanced.Settings.Auth.DeepSeekUrl": "https://api.deepseek.com/v1/chat/completions",
       "@Pixiv.Enhanced.Settings.Auth.DeepSeekModel": "deepseek-v4-flash",
@@ -1143,8 +1160,10 @@
 
     function onMangaEngineChange(shouldSave = true) {
       const engineEl = document.getElementById("cfg-manga-engine");
-      const engine = engineEl ? engineEl.value : "deepseek_vl";
+      const engine = engineEl ? engineEl.value : "gemini_vl";
+      const gBlock = document.getElementById("manga-gemini-block");
       const sBlock = document.getElementById("manga-selfhost-block");
+      if (gBlock) gBlock.style.display = (engine === "gemini_vl") ? "block" : "none";
       if (sBlock) sBlock.style.display = (engine === "manga_translator") ? "block" : "none";
       if (shouldSave && !isInitializing) saveConfig();
     }
@@ -1168,8 +1187,8 @@
       const mangaEl = document.getElementById("cfg-manga-switch");
       const mangaOn = mangaEl ? mangaEl.checked : false;
       const engineEl = document.getElementById("cfg-manga-engine");
-      const engine = engineEl ? engineEl.value : "deepseek_vl";
-      const engineMap = { deepseek_vl: "DeepSeek-VL", gpt4o_mini: "GPT-4o-mini", manga_translator: "自建服务" };
+      const engine = engineEl ? engineEl.value : "gemini_vl";
+      const engineMap = { gemini_vl: "Gemini 2.0", deepseek_vl: "DeepSeek-VL", gpt4o_mini: "GPT-4o-mini", manga_translator: "自建服务" };
       const sumManga = document.getElementById("sum-manga");
       if (sumManga) sumManga.textContent = mangaOn ? ("已开启 · " + (engineMap[engine] || "视觉AI")) : "未开启";
 
@@ -1269,7 +1288,8 @@
       setVal("cfg-openai-url", currentConfig["@Pixiv.Enhanced.Settings.Auth.OpenAIUrl"] || "https://api.openai.com/v1/chat/completions");
 
       setCheck("cfg-manga-switch", currentConfig["@Pixiv.Enhanced.Settings.Image.Switch"]);
-      setVal("cfg-manga-engine", currentConfig["@Pixiv.Enhanced.Settings.Image.Engine"] || "deepseek_vl");
+      setVal("cfg-manga-engine", currentConfig["@Pixiv.Enhanced.Settings.Image.Engine"] || "gemini_vl");
+      setVal("cfg-gemini-key", currentConfig["@Pixiv.Enhanced.Settings.Auth.GeminiKey"] || "");
       setVal("cfg-baidu-appid", currentConfig["@Pixiv.Enhanced.Settings.Auth.BaiduAppid"] || "");
       setVal("cfg-baidu-secret", currentConfig["@Pixiv.Enhanced.Settings.Auth.BaiduSecret"] || "");
       setVal("cfg-caiyun-token", currentConfig["@Pixiv.Enhanced.Settings.Auth.CaiyunToken"] || "");
@@ -1320,7 +1340,8 @@
       currentConfig["@Pixiv.Enhanced.Settings.Network.ImageAccelerate"] = getCheck("cfg-image-accelerate", true);
       currentConfig["@Pixiv.Enhanced.Settings.Tag.OfflineOnly"] = getCheck("cfg-tag-offline", true);
       currentConfig["@Pixiv.Enhanced.Settings.Image.Switch"] = getCheck("cfg-manga-switch", true);
-      currentConfig["@Pixiv.Enhanced.Settings.Image.Engine"] = getVal("cfg-manga-engine", "deepseek_vl");
+      currentConfig["@Pixiv.Enhanced.Settings.Image.Engine"] = getVal("cfg-manga-engine", "gemini_vl");
+      currentConfig["@Pixiv.Enhanced.Settings.Auth.GeminiKey"] = getVal("cfg-gemini-key", "");
       currentConfig["@Pixiv.Enhanced.Settings.Auth.BaiduAppid"] = getVal("cfg-baidu-appid", "");
       currentConfig["@Pixiv.Enhanced.Settings.Auth.BaiduSecret"] = getVal("cfg-baidu-secret", "");
       currentConfig["@Pixiv.Enhanced.Settings.Auth.CaiyunToken"] = getVal("cfg-caiyun-token", "");
@@ -1396,14 +1417,18 @@
       const start = Date.now();
 
       try {
-        const engine = document.getElementById("cfg-manga-engine") ? document.getElementById("cfg-manga-engine").value : "deepseek_vl";
+        const engine = document.getElementById("cfg-manga-engine") ? document.getElementById("cfg-manga-engine").value : "gemini_vl";
         const server = (document.getElementById("cfg-manga-server") ? document.getElementById("cfg-manga-server").value : "").trim();
+        const geminiKey = (document.getElementById("cfg-gemini-key") ? document.getElementById("cfg-gemini-key").value : "").trim();
 
         // 立即触发保存保证同步
         saveConfig();
 
-        const query = "?engine=" + encodeURIComponent(engine) +
+        let query = "?engine=" + encodeURIComponent(engine) +
           "&server=" + encodeURIComponent(server);
+        if (engine === "gemini_vl") {
+          query += "&gemini_key=" + encodeURIComponent(geminiKey);
+        }
 
         const res = await fetch("/api/test_manga" + query, { method: "POST" })
           .then(r => r.json())
