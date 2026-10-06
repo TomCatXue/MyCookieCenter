@@ -102,7 +102,7 @@ ql repo https://github.com/TomCatXue/MyCookieCenter.git "ql_script" "" "README" 
 | App | 功能 | 捕获操作 | 脚本 | 状态 |
 |---|---|---|---|---|
 | 📚 微信读书 · 自动任务 | 每日阅读领卡 + 周二翻牌 + 周五限免入架 (脱机换票) | 退出微信读书并重新登录一次 (捕获长效凭据) | [`scripts/weread/`](./scripts/weread/) | ✅ 已验证 (青龙/Loon双栖) |
-| 📱 山西电信 · 体验AI领福利 | 凭证静默捕获 + 月度福利领取 | 电信 App 首页 AI 搜索「领福利」进入活动页 | [`plugins/sx_ai_benefit/`](./plugins/sx_ai_benefit/) | ✅ 已验证 |
+| 📱 山西电信 · 体验AI领福利 | 凭证静默捕获 + 月度福利领取 | 电信 App 首页 AI 搜索「领福利」进入活动页 | [`scripts/telecom/`](./scripts/telecom/) | ✅ 已验证 |
 | ☎️ 中国电信 · 全系权益中心 | 周三双抽奖 + 幸运抽奖秒领 + 0点话费秒杀 + 山西福利 | 电信5G会员小程序（进任意页秒领）/ 营业厅App（0点抢话费） | [`scripts/telecom/`](./scripts/telecom/) | ✅ 已验证 |
 | 📷 扫描全能王 · 签到 | 抓取 Cookie + 每日签到 | 打开扫描全能王 App（静默抓取） | [`scripts/tools/camscanner/`](./scripts/tools/camscanner/) | ✅ 已验证（外部依赖） |
 

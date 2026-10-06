@@ -9,7 +9,7 @@
 每个脚本应该是一个独立子目录，放在对应的分类目录下：
 
 ```
-app/
+scripts/
 ├── README.md           ← 分类索引(已有,只需更新表格)
 └── <脚本名>/           ← 新建这个文件夹
     ├── <脚本名>.js     ← 脚本主体(抓 Cookie + 签到合一)
@@ -19,7 +19,7 @@ app/
 例如新增 App 脚本 `jd`（京东）：
 
 ```
-app/
+scripts/
 ├── README.md           ← 在表格里加一行 jd
 └── jd/
     ├── jd.js
@@ -29,7 +29,7 @@ app/
 如脚本包含独立的 Cookie 抓取脚本，统一用点号风格命名（见下方"命名规范"）：
 
 ```
-app/jd/
+scripts/jd/
 ├── jd.js
 ├── jd.cookie.js
 └── README.md
@@ -41,10 +41,10 @@ app/jd/
 
 ### 1. 创建脚本目录
 
-在 `app/` 下创建目录，放入脚本文件：
+在 `scripts/` 下创建目录，放入脚本文件：
 
 ```
-app/jd/jd.js
+scripts/jd/jd.js
 ```
 
 ### 2. 写脚本 README
@@ -53,7 +53,7 @@ app/jd/jd.js
 
 ### 3. 更新分类索引
 
-打开 `app/README.md`，在脚本清单表格里追加一行：
+打开 `scripts/README.md`，在脚本清单表格里追加一行：
 
 | [`jd/`](./jd/) | 京东 - 每日签到 | 🧪 待验证 |
 
@@ -110,9 +110,9 @@ feat: 新增 jd 脚本(京东每日签到)
 hostname = <域名>
 
 [Script]
-http-request <重写正则> tag=<显示名> Cookie, script-path=https://raw.githubusercontent.com/<owner>/<repo>/refs/heads/main/app/<脚本名>/<脚本名>.js, requires-body=false, img-url=<图标 URL>
+http-request <重写正则> tag=<显示名> Cookie, script-path=https://raw.githubusercontent.com/<owner>/<repo>/refs/heads/main/scripts/<脚本名>/<脚本名>.js, requires-body=false, img-url=<图标 URL>
 
-cron "0 9 * * *" script-path=https://raw.githubusercontent.com/<owner>/<repo>/refs/heads/main/app/<脚本名>/<脚本名>.js, tag=<显示名>签到, img-url=<图标 URL>, enable=true
+cron "0 9 * * *" script-path=https://raw.githubusercontent.com/<owner>/<repo>/refs/heads/main/scripts/<脚本名>/<脚本名>.js, tag=<显示名>签到, img-url=<图标 URL>, enable=true
 ```
 
 ## Surge
@@ -122,9 +122,9 @@ cron "0 9 * * *" script-path=https://raw.githubusercontent.com/<owner>/<repo>/re
 hostname = <域名>
 
 [Script]
-<显示名> Cookie = type=http-request,pattern=<重写正则>,requires-body=false,max-size=0,script-path=https://raw.githubusercontent.com/<owner>/<repo>/refs/heads/main/app/<脚本名>/<脚本名>.js,img-url=<图标 URL>
+<显示名> Cookie = type=http-request,pattern=<重写正则>,requires-body=false,max-size=0,script-path=https://raw.githubusercontent.com/<owner>/<repo>/refs/heads/main/scripts/<脚本名>/<脚本名>.js,img-url=<图标 URL>
 
-<显示名>签到 = type=cron,cronexp=0 9 * * *,timeout=60,script-path=https://raw.githubusercontent.com/<owner>/<repo>/refs/heads/main/app/<脚本名>/<脚本名>.js,img-url=<图标 URL>
+<显示名>签到 = type=cron,cronexp=0 9 * * *,timeout=60,script-path=https://raw.githubusercontent.com/<owner>/<repo>/refs/heads/main/scripts/<脚本名>/<脚本名>.js,img-url=<图标 URL>
 ```
 
 ## Quantumult X
@@ -134,10 +134,10 @@ hostname = <域名>
 hostname = <域名>
 
 [rewrite_local]
-<重写正则> url script-request-header https://raw.githubusercontent.com/<owner>/<repo>/refs/heads/main/app/<脚本名>/<脚本名>.js
+<重写正则> url script-request-header https://raw.githubusercontent.com/<owner>/<repo>/refs/heads/main/scripts/<脚本名>/<脚本名>.js
 
 [task_local]
-0 9 * * * https://raw.githubusercontent.com/<owner>/<repo>/refs/heads/main/app/<脚本名>/<脚本名>.js, tag=<显示名>签到, img-url=<图标 URL>, enabled=true
+0 9 * * * https://raw.githubusercontent.com/<owner>/<repo>/refs/heads/main/scripts/<脚本名>/<脚本名>.js, tag=<显示名>签到, img-url=<图标 URL>, enabled=true
 ```
 
 ## Stash
@@ -160,7 +160,7 @@ http:
 
 script-providers:
   <显示名>签到:
-    url: https://raw.githubusercontent.com/<owner>/<repo>/refs/heads/main/app/<脚本名>/<脚本名>.js
+    url: https://raw.githubusercontent.com/<owner>/<repo>/refs/heads/main/scripts/<脚本名>/<脚本名>.js
     interval: 86400
 ```
 

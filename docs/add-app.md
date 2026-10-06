@@ -27,12 +27,12 @@
 
 ```bash
 cp -r scripts/example scripts/myapp
-mv scripts/myscripts/example.js scripts/myscripts/myapp.js
+mv scripts/myapp/example.js scripts/myapp/myapp.js
 ```
 
 ## 第 3 步：改脚本
 
-打开 `scripts/myscripts/myapp.js`，全局替换占位符：
+打开 `scripts/myapp/myapp.js`，全局替换占位符：
 
 | 占位符 | 替换为 |
 |---|---|
@@ -53,7 +53,7 @@ mv scripts/myscripts/example.js scripts/myscripts/myapp.js
 
 在 `scripts/README.md` 的脚本清单表格追加：
 
-| [`myscripts/`](./myscripts/) | 我的App - 每日签到 | 🧪 待验证 |
+| [`myapp/`](./myapp/) | 我的App - 每日签到 | 🧪 待验证 |
 
 ## 第 6 步：（可选）汇总配置
 

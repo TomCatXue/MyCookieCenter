@@ -4,7 +4,7 @@
 
 ## 改造步骤
 
-1. 复制目录：`app/example/` → `app/<脚本名>/`
+1. 复制目录：`scripts/example/` → `scripts/<脚本名>/`
 2. 重命名脚本：`example.js` → `<脚本名>.js`（全小写英文，无空格/下划线/连字符）
 3. 全局替换占位符：
 
@@ -19,7 +19,7 @@
 
 4. 替换 `main()` 里的签到接口 URL 与成功判断逻辑
 5. 写 README（复制根目录 `CONTRIBUTING.md` 里的模板）
-6. 在 `app/README.md` 的脚本清单追加一行
+6. 在 `scripts/README.md` 的脚本清单追加一行
 
 ## 详细规范
 

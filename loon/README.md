@@ -3,7 +3,7 @@
 本目录存放所有 Loon 专用的 `.plugin` 文件，按功能分两类：
 
 - **统一签到 / 权益插件** — `CookieCenter.plugin`，整合「微信读书」与「中国电信」全系业务的凭据捕获与后台定时任务
-- **独立功能插件** — 对应 `plugins/` 下的解锁/净化脚本，各自独立开关
+- **独立功能插件** — 对应 `scripts/tools/` 下的解锁 / 净化脚本，各自独立开关
 
 > `CookieCenter.plugin` 内置了 Loon 极简双主控开关与后台 cron 任务；[BoxJS 订阅](../boxjs/README.md) 统一提供凭据持久化、参数配置与手动测试入口。
 
@@ -15,20 +15,18 @@
 
 | 文件 | 说明 | 整合业务与脚本来源 |
 |---|---|---|
-| [`CookieCenter.plugin`](./CookieCenter.plugin) | 微信读书 / 中国电信全系业务的一站式凭据捕获 + 后台定时任务 | **微信读书**：[`app/weread_claim/`](../app/weread_claim/)<br>**中国电信**：[`plugins/telecom_member_draw/`](../plugins/telecom_member_draw/)（周三双抽奖+幸运抽奖）、[`plugins/telecom_rights/`](../plugins/telecom_rights/)（0点秒杀话费）、[`plugins/sx_ai_benefit/`](../plugins/sx_ai_benefit/)（山西福利） |
+| [`CookieCenter.plugin`](./CookieCenter.plugin) | 微信读书 / 中国电信全系业务的一站式凭据捕获 + 后台定时任务 | **微信读书**：[`scripts/weread/`](../scripts/weread/)<br>**中国电信**：[`scripts/telecom/`](../scripts/telecom/)（周三双抽奖+幸运抽奖、0 点秒杀话费、山西福利） |
 
 ### 独立功能（解锁 / 净化类）
 
 | 文件 | 说明 | 类型 |
 |---|---|---|
 | [`QzoneAdBlock.plugin`](./QzoneAdBlock.plugin) | QQ空间·清净 — 广告退散，空间清净 | 规则型（无脚本） |
-| [`BilibiliFix.plugin`](./BilibiliFix.plugin) | 哔哩哔哩·增强版 𝕏 — 空降助手、分区修复、扫码登录、画质解锁 | 脚本型 · [`plugins/bilibili/`](../plugins/bilibili/) |
+| [`BilibiliFix.plugin`](./BilibiliFix.plugin) | 哔哩哔哩·增强版 𝕏 — 空降助手、分区修复、扫码登录、画质解锁 | 脚本型 · [`scripts/tools/bilibili/`](../scripts/tools/bilibili/) |
 | [`WeReadEnhance.plugin`](./WeReadEnhance.plugin) | 微信读书·防强更去广告 — 屏蔽升级弹窗、强更通知与去广告精简，锁定老版本免费 AI 听书 | 脚本型 · [`scripts/tools/wxread_enhance/`](../scripts/tools/wxread_enhance/) |
 | [`GitHubPushTime.plugin`](./GitHubPushTime.plugin) | GitHub·星标推送时间 — 在 GitHub App 星标列表语言后显示最近推送时间 | 脚本型 · [`scripts/tools/github/`](../scripts/tools/github/) |
 | [`PixivEnhanced.plugin`](./PixivEnhanced.plugin) | Pixiv·全域增强翻译 — 全页面日文深度汉化 · AI 视觉多模态漫翻 · 内置设置中心 | 脚本型 · [`scripts/tools/pixiv/`](../scripts/tools/pixiv/) |
-| [`camscanner.plugin`](./camscanner.plugin) | 扫描全能王·签到 — 抓取 Cookie + 每日签到 | 脚本型 · 抓取内化 [`plugins/camscanner/`](../plugins/camscanner/) / 签到外部 |
-| [Parsingbook.plugin](./Parsingbook.plugin) | 用心读书 · 体验优化与特权调试 适配 2.7.1(v3) 与 2.6.3(v2)，屏蔽强更弹窗与遥测 | 纯净体验 / 离线Mock |
-| [`DragonRead_remove_ads.plugin`](./DragonRead_remove_ads.plugin) | 番茄小说·极简去广告 — 移除开屏/章末/阅读广告与悬浮部件，激活官方免广告通道，精简底栏福利 Tab | 规则+重写+脚本型 · [`scripts/tools/dragonread/`](../scripts/tools/dragonread/) |
+| [`camscanner.plugin`](./camscanner.plugin) | 扫描全能王·签到 — 抓取 Cookie + 每日签到 | 脚本型 · 抓取内化 [`scripts/tools/camscanner/`](../scripts/tools/camscanner/) / 签到外部 |
 
 ---
 
