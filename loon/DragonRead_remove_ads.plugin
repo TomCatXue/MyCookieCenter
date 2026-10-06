@@ -7,8 +7,8 @@
 #!system_version = 15.0
 #!loon_version = 3.5.1(988)
 #!tag = 去广告,番茄小说,体验优化,工具
-#!version = 1.0.3
-#!date = 2026-10-06 12:45
+#!version = 1.0.4
+#!date = 2026-10-06 13:10
 
 [Rule]
 # 1. 核心白名单：用户中心与音频流直连放行，防止登录态失效与听书异常
@@ -102,8 +102,7 @@ DOMAIN, p3-webcast-sign.douyinpic.com, REJECT
 ^https?:\/\/(?:[^\/]+\.)?fqnovel\.com\/api\/ad\/v\d\/(?:aggregate|banner|inspire|dislike|report|live_cmm) reject-dict
 ^https?:\/\/(?:[^\/]+\.)?fqnovel\.com\/api\/ad\/union\/sdk\/get_ads reject-dict
 
-# 彻底阻断招财猫/金币任务/悬浮小猪挂件/活动配置
-^https?:\/\/(?:[^\/]+\.)?fqnovel\.com\/luckycat\/ reject-dict
+# 激励视频弹窗与再领提示
 ^https?:\/\/(?:[^\/]+\.)?fqnovel\.com\/polaris\/task\/incentive_ad_again_info reject-dict
 
 # PCDN 与客户端遥测配置
@@ -124,7 +123,7 @@ hostname = api5-normal-lf.fqnovel.com, api5-normal-c-lq.fqnovel.com, api5-normal
 
 [Script]
 # 1. 穿山甲 / 广告联盟 SDK 官方控频状态伪造 (status_code: 20001, reason: 112 彻底关闭广告位，防止轮询重试)
-response if ${url} ~= /^https?:\/\/(?:api-access\.pangolin-sdk-toutiao(?:\d|-b)?|is\.snssdk)\.com\/api\/ad\/union\/sdk\/get_ads/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/dragonread/dragonread_adblock.js?v=20261006-1245") with tag="番茄小说·穿山甲控频", requires_body=true
+response if ${url} ~= /^https?:\/\/(?:api-access\.pangolin-sdk-toutiao(?:\d|-b)?|is\.snssdk)\.com\/api\/ad\/union\/sdk\/get_ads/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/dragonread/dragonread_adblock.js?v=20261006-1310") with tag="番茄小说·穿山甲控频", requires_body=true
 
-# 2. 官方标准 Script v2 语法：激活官方原生免广告特权通道、正文广告兜底清洗、精简底栏福利 Tab
-response if ${url} ~= /^https?:\/\/(?:api\d?-normal[^/]*|[^/]+)\.fqnovel\.com\/(?:api\/novel\/(?:account\/v\d\/vip\/info|book\/reader\/content)|reading\/(?:user\/(?:info|basic_info)|reader\/(?:full|batch_full)|chapter|content|flow|bookapi\/bookmall\/tab|commerceapi)|openapi\/setting\/tab)/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/dragonread/dragonread_adblock.js?v=20261006-1245") with tag="番茄小说·极简去广告", requires_body=true
+# 2. 官方标准 Script v2 语法：激活官方原生免广告特权通道、注入 VIP 个人中心徽章、正文广告兜底清洗、精简底栏福利 Tab
+response if ${url} ~= /^https?:\/\/(?:api\d?-normal[^/]*|[^/]+)\.fqnovel\.com\/(?:api\/novel\/(?:account\/v\d\/vip\/info|book\/reader\/content|trade\/vip)|reading\/(?:user\/(?:info|profile|basic_info)|reader\/(?:full|batch_full)|chapter|content|flow|bookapi\/(?:bookmall\/tab|my_tab)|commerceapi)|openapi\/setting\/tab|luckycat|usercenter)/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/dragonread/dragonread_adblock.js?v=20261006-1310") with tag="番茄小说·极简去广告", requires_body=true

@@ -62,26 +62,39 @@ function runTests(scriptCode) {
     console.log("   ✓ VIP 接口注入测试通过");
   }
 
-  // 2. 测试用户信息中的 VIP 标识注入
+  // 2. 测试用户资料与个人中心中的 VIP 标识与特权卡片注入 (包含 SSMyUserViewVipView 与 SSVipProfileShow)
   {
-    console.log("2. 测试用户信息 VIP 注入...");
-    const url = "https://api5-normal-c-lq.fqnovel.com/reading/user/info";
-    const rawBody = JSON.stringify({
-      code: 0,
-      data: {
-        user_id: 123456,
-        user_name: "TestUser",
-        is_vip: 0
-      }
-    });
+    console.log("2. 测试用户信息与个人中心全景 VIP 注入...");
+    for (const testUrl of [
+      "https://api5-normal-c-lq.fqnovel.com/reading/user/info",
+      "https://api5-normal-c-lq.fqnovel.com/reading/user/profile/get/v1/",
+      "https://api5-normal-lf.fqnovel.com/api/novel/trade/vip/center/page_data/v1/"
+    ]) {
+      const rawBody = JSON.stringify({
+        code: 0,
+        data: {
+          user_id: 123456,
+          user_name: "TestUser",
+          is_vip: 0,
+          free_ad: false,
+          free_left: 0
+        }
+      });
 
-    const res = runScriptWithMock(url, rawBody, scriptCode);
-    assert(res && res.body, "必须返回改写后的响应正文");
-    const json = JSON.parse(res.body);
-    assert.strictEqual(json.data.is_vip, 1, "用户信息 is_vip 必须为 1");
-    assert.strictEqual(json.data.ad_free, 1, "用户信息 ad_free 必须为 1");
-    assert.strictEqual(json.data.has_vip, 1, "用户信息 has_vip 必须为 1");
-    console.log("   ✓ 用户信息 VIP 注入测试通过");
+      const res = runScriptWithMock(testUrl, rawBody, scriptCode);
+      assert(res && res.body, "必须返回改写后的响应正文");
+      const json = JSON.parse(res.body);
+      const target = json.data || json;
+      assert.strictEqual(target.is_vip, 1, "用户信息 is_vip 必须为 1");
+      assert.strictEqual(target.ad_free, 1, "用户信息 ad_free 必须为 1");
+      assert.strictEqual(target.has_vip, 1, "用户信息 has_vip 必须为 1");
+      assert.strictEqual(target.free_ad, 1, "用户信息 free_ad 必须为 1");
+      assert.strictEqual(target.free_left, 4070880000, "用户信息 free_left 必须为远期时间戳");
+      assert.strictEqual(target.is_ad_vip, 1, "用户信息 is_ad_vip 必须为 1");
+      assert(target.vip_info && target.vip_info.is_vip === 1, "vip_info 对象必须存在且 is_vip=1");
+      assert(target.vip_profile_show && target.vip_profile_show.show_vip === true, "vip_profile_show 必须存在且 show_vip=true");
+    }
+    console.log("   ✓ 用户信息与个人中心全景 VIP 注入测试通过");
   }
 
   // 3. 测试阅读流正文广告清洗
@@ -147,22 +160,32 @@ function runTests(scriptCode) {
     console.log("   ✓ 底栏 Tab 净化测试通过");
   }
 
-  // 5. 测试招财猫与商业化广告接口置空兜底
+  // 5. 测试招财猫接口清空与缓存注销 (必须返回标准 code:0 与空数组契约，促使客户端执行 no tabs data 清理本地缓存)
   {
-    console.log("5. 测试招财猫接口置空兜底...");
-    const url = "https://api5-normal-c-lq.fqnovel.com/luckycat/crossover/v1/get_timer_widget";
-    const rawBody = JSON.stringify({
-      code: 0,
-      data: {
-        timer_widget: { icon: "http://pendant.png", time: 30 }
-      }
-    });
+    console.log("5. 测试招财猫接口清空与缓存注销...");
+    for (const testUrl of [
+      "https://api5-normal-c-lq.fqnovel.com/luckycat/crossover/v1/get_timer_widget",
+      "https://api5-normal-c-lq.fqnovel.com/luckycat/activity/v1/tabs",
+      "https://api5-normal-lf.fqnovel.com/luckycat/novel/page/ios_task"
+    ]) {
+      const rawBody = JSON.stringify({
+        code: 0,
+        data: {
+          timer_widget: { icon: "http://pendant.png", time: 30 },
+          tabs: [{ name: "福利", id: 1 }],
+          welfare_tab_infos: [{ name: "福利" }]
+        }
+      });
 
-    const res = runScriptWithMock(url, rawBody, scriptCode);
-    assert(res && res.body, "必须返回改写后的响应");
-    const json = JSON.parse(res.body);
-    assert.deepStrictEqual(json.data, {}, "招财猫数据对象必须被置空");
-    console.log("   ✓ 招财猫接口置空测试通过");
+      const res = runScriptWithMock(testUrl, rawBody, scriptCode);
+      assert(res && res.body, "必须返回改写后的响应");
+      const json = JSON.parse(res.body);
+      assert.strictEqual(json.code, 0, "code 必须为 0");
+      assert.deepStrictEqual(json.data.tabs, [], "tabs 必须被置为空数组");
+      assert.deepStrictEqual(json.data.welfare_tab_infos, [], "welfare_tab_infos 必须被置为空数组");
+      assert.strictEqual(json.data.should_show_welfare_tab, false, "should_show_welfare_tab 必须为 false");
+    }
+    console.log("   ✓ 招财猫接口清空与缓存注销测试通过");
   }
 
   // 6. 测试穿山甲 / 广告联盟 SDK 控频截断 (20001 官方控频状态伪造)

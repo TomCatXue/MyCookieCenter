@@ -39,15 +39,14 @@ $$\text{Rule (0ms/0脚本)} > \text{Rewrite (<1ms/0脚本)} > \text{Script (5~50
 2. **【第二层：URL Rewrite】内核级秒回空字典（<1ms，0脚本）**：
    - 开屏广告配置与实时库存接口直接 `reject-dict` 秒回 `{}`，消除冷启动黑屏与跳过倒计时等待；
    - 章节末尾广告资源位与商业化混排直接秒回空字典，翻页时不唤起 JS 沙箱；
-   - 彻底阻断招财猫（`/luckycat/`）与福利活动，悬浮金币球、计时器小部件与激励视频弹窗直接秒回空字典；
+   - 激励视频弹窗与再领提示直接秒回空字典；
    - 切断 PCDN 与客户端遥测配置（`is.snssdk.com/service/settings/`）；
    - 动态广告离线包与素材图片由内核直接返回空响应（`reject-200`）；
-3. **【第三层：Script】穿山甲控频截断、官方免广告特权激活与底栏纯净化**：
+3. **【第三层：Script】穿山甲控频截断、全景 VIP 标识注入与福利 Tab 缓存注销**：
    - 穿山甲 / 广告联盟 SDK 官方控频状态伪造（`status_code: 20001, reason: 112`），使 SDK 认为当日代码位填充率已被控频限制，彻底停止广告加载与重试；
-   - 改写 `/api/novel/account/v1/vip/info/`，向客户端注入终身免广告（`is_vip: 1`, `ad_free: 1`, `expire_time: 4070880000`）；
-   - 客户端自动开启**官方原生免广告排版**，彻底杜绝阅读器排版抖动与空白占位；
-   - 正文流广告字段精准兜底剥离（绝不触碰小说正文文字内容，零误杀）；
-   - 过滤底栏多余福利/赚钱 Tab，还原书架与书城极简布局。
+   - 全场景会员特权注入：覆盖 `/api/novel/account/v1/vip/info/`、`/reading/user/info`、`/reading/user/profile/get`、`/api/novel/trade/vip/center/page_data`，对齐客户端模型（`SSMyUserViewVipView`、`SSVipProfileShow`、`BDNovelVipCenter`），完整注入 `is_vip: 1`、`free_ad: 1`、`free_left: 4070880000`、`vip_info`、`vip_profile_show`，激活官方原生免广告排版与个人中心尊贵 VIP 徽章；
+   - 彻底移除底栏福利 Tab：将 `/luckycat/` 流量转交脚本响应空数组契约（`tabs: []`、`welfare_tab_infos: []`），促使客户端主动触发 `no tabs data` 清空 `NSUserDefaults` 本地缓存（避免了之前返回空字典导致抛出 `tab error` 而回退复用本地旧缓存的缺陷），彻底干掉底栏福利标签；
+   - 正文流广告字段精准兜底剥离（绝不触碰小说正文文字内容，零误杀）。
 
 ---
 
