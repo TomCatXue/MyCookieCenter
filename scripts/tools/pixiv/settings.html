@@ -226,6 +226,7 @@
     }
     .setting-info {
       flex: 1;
+      min-width: 120px;
       padding-right: 12px;
     }
     .setting-label {
@@ -284,6 +285,8 @@
       position: relative;
       display: inline-flex;
       align-items: center;
+      flex-shrink: 0;
+      max-width: 60%;
     }
     .select-input {
       appearance: none;
@@ -298,6 +301,10 @@
       font-weight: 500;
       outline: none;
       cursor: pointer;
+      max-width: 100%;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      overflow: hidden;
     }
     .select-arrow {
       position: absolute;
@@ -570,7 +577,7 @@
     <div style="flex: 1;">
       <div class="brand-title">
         Pixiv 增强翻译
-        <span class="brand-badge">v4.5.3</span>
+        <span class="brand-badge">v4.5.4</span>
       </div>
       <div class="brand-sub">双语出版级排版 · 全页面汉化 · 离线缓存</div>
     </div>
@@ -857,9 +864,9 @@
           </div>
           <div class="select-wrap">
             <select class="select-input" id="cfg-manga-engine" onchange="onMangaEngineChange()">
-              <option value="gemini_vl">Gemini 2.0 Flash (推荐·官方免费空间视觉)</option>
-              <option value="deepseek_vl">DeepSeek-VL (推荐·高精度气泡)</option>
-              <option value="gpt4o_mini">GPT-4o-mini (OpenAI 视觉气泡)</option>
+              <option value="gemini_vl">Gemini 2.0 (空间视觉·免费)</option>
+              <option value="deepseek_vl">DeepSeek-VL (推荐·高精度)</option>
+              <option value="gpt4o_mini">GPT-4o-mini (OpenAI 视觉)</option>
               <option value="manga_translator">自建服务 (manga-translator)</option>
             </select>
             <svg class="select-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
@@ -1034,7 +1041,7 @@
         </svg>
       </div>
       <div class="section-title">关于与状态</div>
-      <div class="section-summary" id="sum-about">v4.5.3 旗舰版</div>
+      <div class="section-summary" id="sum-about">v4.5.4 旗舰版</div>
       <svg class="chevron-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
     </div>
     <div class="section-body">
@@ -1043,7 +1050,7 @@
           <div class="setting-label">插件版本</div>
           <div class="setting-desc">Pixiv Enhanced Translation Suite</div>
         </div>
-        <span style="font-size: 14px; color: var(--text-secondary); font-weight: 500;">v4.5.3</span>
+        <span style="font-size: 14px; color: var(--text-secondary); font-weight: 500;">v4.5.4</span>
       </div>
       <div class="setting-row">
         <div class="setting-info">
@@ -1436,7 +1443,7 @@
         const latency = Date.now() - start;
 
         if (res && res.ok) {
-          const detail = res.translation ? (" · " + res.translation) : "";
+          const detail = (res.count !== undefined) ? (" · " + res.count + "处") : (res.translation ? (" · " + res.translation) : "");
           btn.innerHTML = '<span>🟢 漫翻正常 · ' + latency + 'ms' + detail + '</span>';
           showToast("漫翻服务测试正常 (" + latency + "ms)", "🟢");
         } else {
