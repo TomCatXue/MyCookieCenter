@@ -1,5 +1,5 @@
 #!name = 番茄小说 · 极简去广告
-#!desc = 移除番茄小说（DragonRead）全场景广告与多余营销：\n• 开屏广告与实时库存秒回空字典，消除启动卡顿\n• 移除章节底部、章末广告位、商业化混排及阅读内插页广告\n• 激活官方原生免广告特权通道，保留最舒适的小说排版\n• 移除阅读器悬浮活动部件、计时器金币球及激励视频弹窗\n• 过滤底栏多余福利/赚钱 Tab，恢复清爽纯净布局\n• 全面阻断穿山甲广告 SDK、巨量与日志上报通道\n分层拦截架构，0 多余沙箱开销，畅享极简纯净阅读。
+#!desc = 移除番茄小说（DragonRead）全场景广告与多余营销：\n• 开屏广告与实时库存秒回空字典，消除启动卡顿\n• 移除章节底部、章末广告位、商业化混排及阅读内插页广告\n• 激活官方原生免广告特权通道，保留最舒适的小说排版\n• 移除阅读器悬浮活动部件、存钱罐小猪/计时器金币挂件及激励视频弹窗\n• 过滤底栏多余福利/赚钱 Tab，恢复清爽纯净布局\n• 全面阻断穿山甲广告 SDK、巨量、Gecko 动态素材与日志上报通道\n分层拦截架构，0 多余沙箱开销，畅享极简纯净阅读。
 #!author = TomCatXue
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://raw.githubusercontent.com/luestr/IconResource/main/App_icon/120px/DragonRead.png
@@ -7,13 +7,12 @@
 #!system_version = 15.0
 #!loon_version = 3.5.1(988)
 #!tag = 去广告,番茄小说,体验优化,工具
-#!version = 1.0.1
-#!date = 2026-10-06 11:35
+#!version = 1.0.2
+#!date = 2026-10-06 12:15
 
 [Rule]
 # 1. 核心白名单：用户中心与音频流直连放行，防止登录态失效与听书异常
 DOMAIN, ecomuser.snssdk.com, DIRECT
-AND, ((DOMAIN-SUFFIX, fqnovel.com), (DOMAIN-KEYWORD, normal)), DIRECT
 AND, ((DOMAIN-SUFFIX, fqnovelvod.com), (DOMAIN-KEYWORD, tts)), DIRECT
 
 # 2. 穿山甲 / 巨量广告 SDK 与联盟域名
@@ -26,7 +25,16 @@ DOMAIN-SUFFIX, toutiaocloud.com, REJECT
 DOMAIN-SUFFIX, toutiaocloud.net, REJECT
 DOMAIN, zlink.ugsdk.cn, REJECT
 
-# 3. 广告分发、追踪与分析
+# 3. 广告离线包平台 Gecko 与 Lottie 悬浮挂件 CDN（阻断存钱罐小猪/金币挂件下载）
+DOMAIN-SUFFIX, bytegecko.com, REJECT
+DOMAIN-SUFFIX, bytegoofy.com, REJECT
+DOMAIN-SUFFIX, byteorge.com, REJECT
+DOMAIN, gecko.zijieapi.com, REJECT
+DOMAIN, gecko3.zijieapi.com, REJECT
+DOMAIN, gecko5.zijieapi.com, REJECT
+DOMAIN-KEYWORD, gecko.zijieapi.com, REJECT
+
+# 4. 广告分发、追踪与分析
 DOMAIN-KEYWORD, -ad-sign.byteimg.com, REJECT
 DOMAIN-KEYWORD, -ad-sign.fqnovelpic.com, REJECT
 DOMAIN-KEYWORD, -applog.fqnovel.com, REJECT
@@ -44,8 +52,6 @@ DOMAIN, mssdk.zijieapi.com, REJECT
 DOMAIN, mssdk-bu.bytedance.com, REJECT
 DOMAIN, mssdk.volces.com, REJECT
 DOMAIN, feedback-c.zijieapi.com, REJECT
-DOMAIN, gecko3.zijieapi.com, REJECT
-DOMAIN, gecko5.zijieapi.com, REJECT
 DOMAIN, minigame3-normal.zijieapi.com, REJECT
 DOMAIN, minigame5-normal.zijieapi.com, REJECT
 DOMAIN, timon.zijieapi.com, REJECT
@@ -57,8 +63,6 @@ DOMAIN, log.snssdk.com, REJECT
 DOMAIN, extlog.snssdk.com, REJECT
 DOMAIN, toblog.ctobsnssdk.com, REJECT
 DOMAIN, lf-ad-ies.bytecdn.cn, REJECT
-DOMAIN, lf-normal-gr-sourcecdn.bytegecko.com, REJECT
-DOMAIN, lf-webcast-gr-sourcecdn.bytegecko.com, REJECT
 DOMAIN, p3-developer.bytemaimg.com, REJECT
 DOMAIN, webcast-open.douyin.com, REJECT
 DOMAIN, p11-webcast-sign.douyinpic.com, REJECT
@@ -75,27 +79,28 @@ DOMAIN, p3-webcast-sign.douyinpic.com, REJECT
 ^https?:\/\/(?:[^\/]+\.)?fqnovel\.com\/reading\/commerceapi\/chapter_end\/resource\/ reject-dict
 ^https?:\/\/(?:[^\/]+\.)?fqnovel\.com\/reading\/commerceapi\/ad\/ reject-dict
 ^https?:\/\/(?:[^\/]+\.)?fqnovel\.com\/reading\/commerceapi\/commerce\/tab\/ reject-dict
+^https?:\/\/(?:[^\/]+\.)?fqnovel\.com\/reading\/bookapi\/commerce\/tag_info reject-dict
 
 # 通用广告聚合接口与穿山甲 SDK 广告下发
 ^https?:\/\/(?:[^\/]+\.)?fqnovel\.com\/api\/ad\/v\d\/(?:aggregate|banner|inspire|dislike|report|live_cmm) reject-dict
 ^https?:\/\/(?:[^\/]+\.)?fqnovel\.com\/api\/ad\/union\/sdk\/get_ads reject-dict
 
-# 悬浮活动挂件、计时器金币球与激励视频
-^https?:\/\/(?:[^\/]+\.)?fqnovel\.com\/luckycat\/crossover\/v\d\/get_timer_widget reject-dict
+# 彻底阻断招财猫/金币任务/悬浮小猪挂件/活动配置
+^https?:\/\/(?:[^\/]+\.)?fqnovel\.com\/luckycat\/ reject-dict
 ^https?:\/\/(?:[^\/]+\.)?fqnovel\.com\/polaris\/task\/incentive_ad_again_info reject-dict
-^https?:\/\/(?:[^\/]+\.)?fqnovel\.com\/luckycat\/novel\/page\/ios_task reject-dict
 
 # 字节静态图文广告素材与动态广告离线包拦截
 ^https?:\/\/[^\/]+\.pstatp\.com\/(?:obj|img)\/(?:ad-app-package|ad|web\.business\.image) reject-200
 ^https?:\/\/[^\/]+\.pstatp\.com\/bytecom\/resource\/track_log\/src\/ reject-200
 ^https?:\/\/[^\/]+\.pglstatp-toutiao\.com\/obj\/(?:ad-pattern|ad-app-package)\/ reject-200
 ^https?:\/\/[^\/]+\.byteimg\.com\/(?:ad-app-package|web\.business\.image) reject-200
+^https?:\/\/[^\/]+\.bytegecko\.com\/.* reject-200
 ^https?:\/\/gurd\.snssdk\.com\/src\/server\/v\d\/package reject-dict
 ^https?:\/\/lf-cdn-tos\.bytescm\.com\/obj\/static\/ad\/ reject-200
 
 [MITM]
-hostname = api5-normal-lf.fqnovel.com, api5-normal-c-lq.fqnovel.com, api5-normal-c-hl.fqnovel.com, api3-normal-c-lq.fqnovel.com, api5-normal.fqnovel.com, api-normal.fqnovel.com, api.fqnovel.com, *.fqnovel.com, *.*.fqnovel.com, *.novelreading.com, *.pangolin-sdk-toutiao.com, *.pstatp.com, *.pglstatp-toutiao.com, *.byteimg.com, gurd.snssdk.com, lf-cdn-tos.bytescm.com, tnc3-alisc1.zijieapi.com
+hostname = api5-normal-lf.fqnovel.com, api5-normal-c-lq.fqnovel.com, api5-normal-c-hl.fqnovel.com, api3-normal-c-lq.fqnovel.com, api5-normal.fqnovel.com, api-normal.fqnovel.com, api.fqnovel.com, *.fqnovel.com, *.novelreading.com, *.pangolin-sdk-toutiao.com, *.pstatp.com, *.pglstatp-toutiao.com, *.byteimg.com, gurd.snssdk.com, lf-cdn-tos.bytescm.com, tnc3-alisc1.zijieapi.com, *.bytegecko.com, gecko.zijieapi.com
 
 [Script]
-# 全平台兼容语法：激活官方原生免广告特权通道、正文广告兜底清洗、精简底栏福利 Tab
-http-response ^https?:\/\/(?:api\d?-normal[^/]*|[^/]+)\.fqnovel\.com\/(?:api\/novel\/(?:account\/v\d\/vip\/info|book\/reader\/content)|reading\/(?:user\/(?:info|basic_info)|reader\/(?:full|batch_full)|chapter|content|flow|bookapi\/bookmall\/tab|commerceapi)|openapi\/setting\/tab) requires-body=1, script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/dragonread/dragonread_adblock.js?v=20261006-1135, tag=番茄小说·极简去广告
+# 官方标准 Script v2 语法：激活官方原生免广告特权通道、正文广告兜底清洗、精简底栏福利 Tab
+response if ${url} ~= /^https?:\/\/(?:api\d?-normal[^/]*|[^/]+)\.fqnovel\.com\/(?:api\/novel\/(?:account\/v\d\/vip\/info|book\/reader\/content)|reading\/(?:user\/(?:info|basic_info)|reader\/(?:full|batch_full)|chapter|content|flow|bookapi\/bookmall\/tab|commerceapi)|openapi\/setting\/tab)/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/dragonread/dragonread_adblock.js?v=20261006-1215") with tag="番茄小说·极简去广告", requires_body=true

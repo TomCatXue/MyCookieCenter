@@ -147,9 +147,27 @@ function runTests(scriptCode) {
     console.log("   ✓ 底栏 Tab 净化测试通过");
   }
 
-  // 5. 测试非 JSON 与异常容错
+  // 5. 测试招财猫与商业化广告接口置空兜底
   {
-    console.log("5. 测试非 JSON 与空响应容错...");
+    console.log("5. 测试招财猫接口置空兜底...");
+    const url = "https://api5-normal-c-lq.fqnovel.com/luckycat/crossover/v1/get_timer_widget";
+    const rawBody = JSON.stringify({
+      code: 0,
+      data: {
+        timer_widget: { icon: "http://pendant.png", time: 30 }
+      }
+    });
+
+    const res = runScriptWithMock(url, rawBody, scriptCode);
+    assert(res && res.body, "必须返回改写后的响应");
+    const json = JSON.parse(res.body);
+    assert.deepStrictEqual(json.data, {}, "招财猫数据对象必须被置空");
+    console.log("   ✓ 招财猫接口置空测试通过");
+  }
+
+  // 6. 测试非 JSON 与异常容错
+  {
+    console.log("6. 测试非 JSON 与空响应容错...");
     const url = "https://api5-normal-c-lq.fqnovel.com/api/ad/something";
     const rawBody = "<html><body>502 Bad Gateway</body></html>";
 

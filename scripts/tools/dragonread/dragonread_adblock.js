@@ -2,8 +2,8 @@
 ------------------------------------------
 @Description: 番茄小说 · 极简去广告与特权净化 (高性能版)
 @Author: TomCatXue
-@Version: 2026-10-06.r2
-@Date: 2026-10-06 11:35
+@Version: 2026-10-06.r3
+@Date: 2026-10-06 12:15
 ------------------------------------------
 核心功能清单：
   1. VIP 状态与免广告注入：改写 /api/novel/account/v1/vip/info/，激活官方原生免广告特权通道；
@@ -13,7 +13,7 @@
 */
 
 const SCRIPT_NAME = "番茄小说·极简去广告";
-const SCRIPT_VERSION = "2026-10-06.r2";
+const SCRIPT_VERSION = "2026-10-06.r3";
 var $ = (typeof $ !== "undefined" && $) ? $ : ((typeof Env !== "undefined") ? new Env(SCRIPT_NAME) : { log: console.log });
 
 (function main() {
@@ -84,6 +84,20 @@ var $ = (typeof $ !== "undefined" && $) ? $ : ((typeof Env !== "undefined") ? ne
       /\/openapi\/setting\/tab/i.test(url)
     ) {
       modified = cleanTabBar(data);
+    }
+
+    // 5. 招财猫与商业化广告兜底拦截 (若穿透 Rewrite 则在脚本层置空)
+    else if (
+      /\/luckycat\//i.test(url) ||
+      /\/polaris\/task\/incentive_ad_again_info/i.test(url) ||
+      /\/reading\/commerceapi\//i.test(url)
+    ) {
+      if (data && typeof data === "object") {
+        data.data = {};
+        data.code = 0;
+        data.message = "success";
+        modified = true;
+      }
     }
 
     if (modified) {
