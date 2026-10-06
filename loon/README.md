@@ -28,6 +28,7 @@
 | [`PixivEnhanced.plugin`](./PixivEnhanced.plugin) | Pixiv·全域增强翻译 — 全页面日文深度汉化 · AI 视觉多模态漫翻 · 内置设置中心 | 脚本型 · [`scripts/tools/pixiv/`](../scripts/tools/pixiv/) |
 | [`camscanner.plugin`](./camscanner.plugin) | 扫描全能王·签到 — 抓取 Cookie + 每日签到 | 脚本型 · 抓取内化 [`plugins/camscanner/`](../plugins/camscanner/) / 签到外部 |
 | [Parsingbook.plugin](./Parsingbook.plugin) | 用心读书 · 体验优化与特权调试 适配 2.7.1(v3) 与 2.6.3(v2)，屏蔽强更弹窗与遥测 | 纯净体验 / 离线Mock |
+| [`DragonRead_remove_ads.plugin`](./DragonRead_remove_ads.plugin) | 番茄小说·极简去广告 — 移除开屏/章末/阅读广告与悬浮部件，激活官方免广告通道，精简底栏福利 Tab | 规则+重写+脚本型 · [`scripts/tools/dragonread/`](../scripts/tools/dragonread/) |
 
 ---
 
