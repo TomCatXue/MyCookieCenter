@@ -1707,8 +1707,27 @@ function parseMangaBubbles(content) {
   }
   if (!Array.isArray(value)) value = value && (value.bubbles || value.items);
   if (!Array.isArray(value)) return [];
-  return value.filter(item => item && Array.isArray(item.box) && item.box.length === 4 && item.zh)
-    .map(item => ({ box: item.box.map(Number), ja: String(item.ja || ""), zh: String(item.zh) }));
+
+  const valid = value.filter(item => item && Array.isArray(item.box) && item.box.length === 4 && item.zh);
+  if (!valid.length) return [];
+
+  // 坐标数值尺度自适应检测与防御性归一化
+  const allCoords = [];
+  valid.forEach(item => item.box.forEach(n => {
+    const num = Number(n);
+    if (!isNaN(num)) allCoords.push(num);
+  }));
+  const maxVal = allCoords.length ? Math.max(...allCoords) : 0;
+
+  return valid.map(item => {
+    let box = item.box.map(Number);
+    if (maxVal > 100) {
+      box = box.map(v => v / 10);
+    } else if (maxVal <= 1.0 && maxVal > 0) {
+      box = box.map(v => v * 100);
+    }
+    return { box, ja: String(item.ja || ""), zh: String(item.zh) };
+  });
 }
 
 async function translateMangaImage(imageUrl, cfg) {
@@ -1724,7 +1743,7 @@ async function translateMangaImage(imageUrl, cfg) {
     if (!key) throw new Error("未配置 Gemini API Key，请在设置中心填入");
     const endpoint = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
     const model = "gemini-2.0-flash";
-    const prompt = 'Detect every dialogue bubble in this manga image.\nReturn ONLY a valid JSON array of objects without Markdown code fence formatting.\nEach object must have:\n- "box": [ymin, xmin, ymax, xmax] as normalized percentages (numbers from 0 to 100),\n- "ja": original detected Japanese text,\n- "zh": natural Simplified Chinese translation in anime/manga style.\nOrder the list by manga reading flow (right-to-left, top-to-bottom).';
+    const prompt = `Detect every dialogue bubble in this manga image.\nReturn ONLY a valid JSON array of objects without Markdown code fence formatting.\nEach object must have:\n- "box": [ymin, xmin, ymax, xmax] as normalized percentages (numbers from 0 to 100),\n- "ja": original detected Japanese text,\n- "zh": natural ${target.ai} translation in anime/manga style.\nOrder the list by manga reading flow (right-to-left, top-to-bottom).`;
 
     const res = await $.post({
       url: endpoint,
@@ -2314,6 +2333,7 @@ async function handleApiTestManga(cfg) {
   const engine = (matchEngine ? decodeURIComponent(matchEngine[1]) : (cfg.imageEngine || "gemini_vl")).toLowerCase();
   const server = ((matchServer ? decodeURIComponent(matchServer[1]) : "") || cfg.mangaServer || "").trim();
   const geminiKey = ((matchGeminiKey ? decodeURIComponent(matchGeminiKey[1]) : "") || cfg.geminiKey || "").trim();
+  const testImg = "https://i.pixiv.re/c/540x540_70/img-master/img/2021/08/31/00/38/21/92390436_p0_square1200.jpg";
 
   try {
     if (engine === "gemini_vl") {
@@ -2321,28 +2341,10 @@ async function handleApiTestManga(cfg) {
         doneWithResponse(200, { "Content-Type": "application/json; charset=utf-8" }, JSON.stringify({ ok: false, error: "未填写 Gemini API Key" }));
         return;
       }
-      const endpoint = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
-      const res = await $.post({
-        url: endpoint,
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": "Bearer " + geminiKey
-        },
-        body: JSON.stringify({
-          model: "gemini-2.0-flash",
-          messages: [{ role: "user", content: "Hi" }],
-          max_tokens: 5
-        }),
-        timeout: 15000
-      });
+      const tempCfg = Object.assign({}, cfg, { imageEngine: "gemini_vl", geminiKey });
+      const bubbles = await translateMangaImage(testImg, tempCfg);
       const latency = Date.now() - start;
-      let raw = res && res.body;
-      let payload;
-      try { payload = typeof raw === "string" ? JSON.parse(raw) : raw; } catch(e) { throw new Error("Gemini 模型返回非 JSON 响应"); }
-      if (payload && payload.error) {
-        throw new Error(payload.error.message || JSON.stringify(payload.error));
-      }
-      doneWithResponse(200, { "Content-Type": "application/json; charset=utf-8" }, JSON.stringify({ ok: true, latency }));
+      doneWithResponse(200, { "Content-Type": "application/json; charset=utf-8" }, JSON.stringify({ ok: true, latency, count: bubbles.length }));
       return;
     }
 
@@ -2365,7 +2367,6 @@ async function handleApiTestManga(cfg) {
       doneWithResponse(200, { "Content-Type": "application/json; charset=utf-8" }, JSON.stringify({ ok: false, error: "未填写 " + (isDeepSeek ? "DeepSeek" : "OpenAI") + " API Key" }));
       return;
     }
-    const testImg = "https://i.pixiv.re/c/540x540_70/img-master/img/2021/08/31/00/38/21/92390436_p0_square1200.jpg";
     const bubbles = await translateMangaImage(testImg, cfg);
     const latency = Date.now() - start;
     doneWithResponse(200, { "Content-Type": "application/json; charset=utf-8" }, JSON.stringify({ ok: true, latency, count: bubbles.length }));
