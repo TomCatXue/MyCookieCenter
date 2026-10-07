@@ -5891,7 +5891,7 @@ async function executeAllLotteryTasks(triggerSource = '定时调度') {
 }
 
 // ==================== 4. 周三会员日抽奖实现 ====================
-async function runWednesdayLottery(actNo, actTitle, sessionKey, productNo) {
+async function runLotteryEngine(actNo, actTitle, sessionKey, productNo) {
   let isWinning = false;
   try {
     // 1. 查询活动详情
@@ -5989,7 +5989,7 @@ async function runWednesdayLottery(actNo, actTitle, sessionKey, productNo) {
       await sleep(1500);
     }
 
-    const detailText = drawCount > 0 
+    const detailText = drawCount > 0
       ? `完成 ${drawCount} 次，获得: ${prizeNames.join(', ')}`
       : '未产生抽奖';
 
@@ -5999,6 +5999,11 @@ async function runWednesdayLottery(actNo, actTitle, sessionKey, productNo) {
     $.log(`[${actTitle}] 执行异常: ${err.message || err}`);
     return { name: actTitle, status: '异常', details: err.message || err, isWinning: false };
   }
+}
+
+// 周三会员日抽奖 = 共享抽奖引擎的直接调用（保留函数名以兼容既有调用点）
+async function runWednesdayLottery(actNo, actTitle, sessionKey, productNo) {
+  return runLotteryEngine(actNo, actTitle, sessionKey, productNo);
 }
 
 
@@ -6060,104 +6065,37 @@ async function runLuckyLottery(actId, actTitle, sessionKey, productNo) {
     const lotteryActivityNo = lotteryModule?.lotteryActivityNo || 'hd70226376';
     $.log(`[${actTitle}] 成功确认活动: ${pageTitle}`);
 
-    // 2. 免费领取抽奖机会 (freeReceiveLotteryOpportunity)
-    try {
-      $.log(`[${actTitle}] 尝试免费领取抽奖机会...`);
-      const freeRes = await requestC005('https://mapi-h5.bestpay.com.cn/gapi/equitymall/client/lottery/freeReceiveLotteryOpportunity', {
-        activityId: actId,
-        lotteryId: lotteryId,
-        lotteryActivityNo: lotteryActivityNo,
-        sessionKey: sessionKey,
-        productNo: productNo,
-        phoneNo: productNo,
-        fromChannelId: '5g_mini_program',
-        fromchannelId: '5g_mini_program',
-        encyType: "C005"
-      }, productNo, sessionKey, '5g_mini_program');
-      if (freeRes && freeRes.success) {
-        $.log(`[${actTitle}] 免费机会领取成功！`);
-      } else {
-        $.log(`[${actTitle}] 免费机会状态: ${freeRes?.errorMsg || '正常'}`);
+    // 2. 走 H5 可达的 op-lottery-system 引擎完成抽奖。
+    // 2026-10-07 抓包 + 线上实测确认：equitymall/client/lottery/* 家族
+    // （freeReceiveLotteryOpportunity / completeLotteryTask /
+    //  queryCustomerLotteryTimes / lotteryReceive）在 H5 网关【不存在】，
+    // 一律返回 API500002「接口服务不存在」——它们只在小程序 mgs 通道开放。
+    // 而 op-lottery-system/DrawService/* 与周三会员抽奖同一个抽奖引擎，H5 完全可达，
+    // 用上面取到的 lotteryActivityNo 即可查询次数、真实抽奖并领取。
+    //
+    // H5 无对应任务核销接口，故任务类机会仍需在小程序内完成，
+    // 这里如实回显任务清单，绝不伪报已完成。
+    const taskCodes = Array.isArray(lotteryModule?.taskList) ? lotteryModule.taskList : [];
+    if (taskCodes.length) {
+      const TASK_LABELS = {
+        sharedToWeChat: '分享给微信好友', orderMallMember: '订购权益商城会员',
+        inviteFriends: '邀请好友助力', pointsExchange: '积分兑换抽奖机会',
+        viewActivity: '浏览活动页'
+      };
+      const pending = taskCodes.filter(c => c !== 'orderMallMember');
+      if (pending.length) {
+        $.log(`[${actTitle}] 待办任务(需在小程序内完成): ${pending.map(c => TASK_LABELS[c] || c).join('、')}`);
       }
-    } catch(e) {}
-
-    // 3. 尝试完成日常任务 (浏览与分享打卡)
-    const taskCodes = ['sharedToWeChat', 'viewActivity'];
-    for (const code of taskCodes) {
-      try {
-        await requestC005('https://mapi-h5.bestpay.com.cn/gapi/equitymall/client/lottery/completeLotteryTask', {
-          activityId: actId,
-          lotteryId: lotteryId,
-          taskCode: code,
-          sessionKey: sessionKey,
-          productNo: productNo,
-          phoneNo: productNo,
-          fromChannelId: '5g_mini_program',
-          fromchannelId: '5g_mini_program',
-          encyType: "C005"
-        }, productNo, sessionKey, '5g_mini_program');
-      } catch(e) {}
     }
 
-    // 4. 查询可用抽奖次数
-    const countRes = await requestC005('https://mapi-h5.bestpay.com.cn/gapi/equitymall/client/lottery/queryCustomerLotteryTimes', {
-      activityId: actId,
-      lotteryId: lotteryId,
-      sessionKey: sessionKey,
-      productNo: productNo,
-      phoneNo: productNo,
-      fromChannelId: '5g_mini_program',
-      fromchannelId: '5g_mini_program',
-      encyType: "C005"
-    }, productNo, sessionKey, '5g_mini_program');
+    const engineRes = await runLotteryEngine(lotteryActivityNo, `${actTitle}·抽奖引擎`, sessionKey, productNo);
+    return {
+      name: pageTitle,
+      status: engineRes.status,
+      details: engineRes.details,
+      isWinning: engineRes.isWinning
+    };
 
-    let count = countRes?.result?.lotteryCount || 0;
-    $.log(`[${actTitle}] 可用抽奖次数: ${count}`);
-
-    if (count <= 0) {
-      return { name: pageTitle, status: '已无可抽次数', details: '今日次数为 0', isWinning: false };
-    }
-
-    // 5. 循环执行抽奖
-    let drawCount = 0;
-    const prizeNames = [];
-
-    while (count > 0) {
-      $.log(`[${actTitle}] 正在执行第 ${drawCount + 1} 次抽奖 (剩余 ${count} 次)...`);
-      const drawRes = await requestC005('https://mapi-h5.bestpay.com.cn/gapi/equitymall/client/lottery/lotteryReceive', {
-        activityId: actId,
-        lotteryId: lotteryId,
-        sessionKey: sessionKey,
-        productNo: productNo,
-        phoneNo: productNo,
-        fromChannelId: '5g_mini_program',
-        fromchannelId: '5g_mini_program',
-        encyType: "C005"
-      }, productNo, sessionKey, '5g_mini_program');
-
-      if (drawRes && drawRes.success) {
-        drawCount++;
-        count--;
-        const prize = drawRes.result || {};
-        const prizeName = prize.prizeName || prize.name || '奖品入账';
-        const isThanks = prizeName.includes('谢谢');
-        $.log(`[${actTitle}] 抽奖成功: ${prizeName}`);
-        prizeNames.push(prizeName);
-        if (!isThanks) isWinning = true;
-      } else {
-        const err = drawRes?.errorMsg || '抽奖未成功';
-        $.log(`[${actTitle}] 抽奖停止: ${err}`);
-        break;
-      }
-
-      await sleep(1500);
-    }
-
-    const detailText = drawCount > 0 
-      ? `完成 ${drawCount} 次，获得: ${prizeNames.join(', ')}`
-      : '未产生抽奖';
-
-    return { name: pageTitle, status: '完成', details: detailText, isWinning: isWinning };
 
   } catch (err) {
     $.log(`[${actTitle}] 执行异常: ${err.message || err}`);
