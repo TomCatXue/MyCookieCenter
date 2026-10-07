@@ -14,6 +14,7 @@
  * - 【内置 C005 混合加密】：纯 JS 封装 RSA + AES-128-CBC + MD5 一机一密通信引擎，零外部依赖
  * - 【权益包自动领取】：扫描 unreceived 权益逐张真实领取，凭 rebateDetailNo 二次轮询确认到账，
  *    遇「库存不足/已领完/活动结束」立即熔断，杜绝盲目重试扣减资产（v1.7.0 新增）
+ * - 【当日锁自愈】：会话失效不再锁定当天，捕获到全新会话主动解锁并即时重跑（v1.8.1 修复）
  *
  * GitHub: https://github.com/TomCatXue/MyCookieCenter
  */
@@ -5760,8 +5761,22 @@ async function handleCapture() {
   const currentSession = $.read(STORAGE_KEYS.SESSION_KEY);
   const currentPhone = $.read(STORAGE_KEYS.PRODUCT_NO);
 
+  // 【v1.8.1 修复】捕获到全新会话时，主动解除当日锁。
+  // 原逻辑缺陷：当日锁在任务「全部因会话失效而失败」时也会被写入，
+  // 导致后续进小程序拿到新鲜凭据后却被 lastClaimed === todayStr 拦下，
+  // 全程不执行、不通知、不记日志，表现为「进小程序什么都捕获不到」。
+  if (isSessionUpdated) {
+    if (lastClaimed === todayStr) {
+      $.log(`[即时自动领] 检测到全新会话，主动解除当日已完成锁，允许本次重新执行`);
+      $.write('', STORAGE_KEYS.LAST_CLAIMED_DATE);
+    }
+  }
+
+  // 重新读取解除后的锁状态
+  const claimGate = $.read(STORAGE_KEYS.LAST_CLAIMED_DATE) || '';
+
   // 检查是否具备领取条件且今日未领取过
-  if (currentSession && currentPhone && lastClaimed !== todayStr && !isRunningLock) {
+  if (currentSession && currentPhone && claimGate !== todayStr && !isRunningLock) {
     isRunningLock = true;
     $.log(`[即时自动领] 检测到小程序活跃且今日尚未自动领取，立即后台启动全套抽奖...`);
     // 异步执行抽奖流程，不阻塞当前请求通过
@@ -5774,6 +5789,10 @@ async function handleCapture() {
         isRunningLock = false;
       }
     }, 1000);
+  } else if (!currentSession || !currentPhone) {
+    $.log(`[即时自动领] 凭据不完整 (session=${!!currentSession}, phone=${!!currentPhone})，本次仅捕获不执行`);
+  } else if (claimGate === todayStr) {
+    $.log(`[即时自动领] 今日已成功执行过且会话未更新，跳过重复执行`);
   }
 
   $.done();
@@ -5852,9 +5871,6 @@ async function executeAllLotteryTasks(triggerSource = '定时调度') {
   const balance = await queryEquityCoinBalance(sessionKey, productNo);
   reportList.push({ name: '账户权益币余额', status: '完成', details: balance, isWinning: false });
 
-  // 记录今日已完成，避免当天频繁重复执行
-  $.write(todayStr, STORAGE_KEYS.LAST_CLAIMED_DATE);
-
   // 整理战报通知
   const notifyLines = reportList.map((r, i) => `${i+1}. ${r.name}: ${r.status} (${r.details})`);
   const notifyBody = notifyLines.join('\n');
@@ -5869,18 +5885,38 @@ async function executeAllLotteryTasks(triggerSource = '定时调度') {
   // 否则会话失效时判定恒为 false，抑制失效、每次调度都弹通知（v1.7.1 修复）。
   const authTasks = reportList.filter(r => r.needAuth === true);
 
-  const isLoginFailResult = (r) => {
-    const d = String(r.details || '');
-    return d.indexOf('登录') !== -1 || d.indexOf('100003') !== -1 || d.indexOf('100008') !== -1;
+  // 【v1.8.1 修复】改为「反向白名单判定」：只要鉴权任务没有真正跑通，就不算成功。
+  // 原正向黑名单（只认「登录」/100003/100008）会漏判网络异常、网关 nonce 失败、
+  // 超时等故障 —— 这些情况下任务实际未完成，却仍被写入当日锁并发送「完成」战报，
+  // 既锁死了后续捕获重跑的机会，又给出误导性的成功提示。
+  // 判定依据改为稳定的 status 枚举（由各抽奖引擎显式返回），而非抠 details 文本。
+  const isAuthSettled = (r) => {
+    const s = String(r.status || '');
+    // 明确的失败/中断终态
+    if (s === '查询受阻' || s === '异常') return false;
+    if (s === '完成' || s === '已无可抽次数') return true;
+    // 未知状态保守视为未跑通，避免误锁当天
+    return false;
   };
 
-  // 会话失效判定：任一鉴权任务明确报「登录失败/100003/100008」即静默。
-  // 注意不能用「全部任务都非完成态」作为条件 —— 会话正常但今日次数已用完
-  // （status=已无可抽次数）属正常结果，仍应发送战报。
-  if (authTasks.some(isLoginFailResult)) {
-    $.log('[通知控制] 本次鉴权任务会话失效，已静默处理，避免冗余弹窗');
+  // 任一鉴权任务未能达成正常终态，即视为本次未跑通
+  if (authTasks.length === 0 || !authTasks.every(isAuthSettled)) {
+    const isLoginCase = authTasks.some(r => {
+      const d = String(r.details || '');
+      return d.indexOf('登录') !== -1 || d.indexOf('100003') !== -1 || d.indexOf('100008') !== -1;
+    });
+    $.log('[通知控制] 本次鉴权任务未跑通，已静默处理，避免冗余弹窗');
+    // 【v1.8.1 修复】未跑通时「不写入」当日锁。
+    // 原逻辑无条件写锁，导致失效当天后续即使捕获到全新会话也被永久拦下，
+    // 必须先等自然跨天才能恢复，是「进小程序捕获不到」的直接成因。
+    // 同时补发「今日唯一一次」提醒 —— 原先此处直接 return，
+    // 用户收不到任何提示，不知道需要进小程序重新激活。
+    notifyExpiredOnce(isLoginCase ? '会话已失效，需重新进小程序激活' : '任务执行未完成，请稍后重试');
     return;
   }
+
+  // 仅在鉴权任务全部真正跑通时才锁定当日，避免当天频繁重复执行
+  $.write(todayStr, STORAGE_KEYS.LAST_CLAIMED_DATE);
 
   // 仅在任务真正执行完成时发送 1 次汇总通知，绝不日常骚扰
   const subTitle = isWednesday 
