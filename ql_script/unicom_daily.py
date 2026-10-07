@@ -186,6 +186,9 @@ HOMETOWN_MATERIAL_BYTES = base64.b64decode(
 )
 WOSTORE_CLOUD_TIMEOUT = int(os.environ.get("UNICOM_WOSTORE_TIMEOUT", "15") or "15")
 WOSTORE_CLOUD_RETRIES = int(os.environ.get("UNICOM_WOSTORE_RETRIES", "3") or "3")
+# 沃云手机双网关: h5api/h5forphone 走 uphone.wostore.cn, bucp 走 uphone.wo-adv.cn
+# (v1.2.0 一刀切迁移导致 bucp 404, 见 AGENTS.md 联通章节)
+WOSTORE_BUCP_BASE = os.environ.get("UNICOM_WOSTORE_BUCP_BASE", "https://uphone.wo-adv.cn")
 UNICOM_TOKEN_CACHE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "unicom_token_cache.json")
 
 # 客户端公开小程序标识 (Base64解码以规避平台误报Secret扫描)
@@ -4935,23 +4938,25 @@ class UserService:
         }
 
     def wostore_cloud_bucp_get(self, path, user_token):
-        url = f"https://uphone.wostore.cn/bucp{path}"
+        url = f"{WOSTORE_BUCP_BASE}/bucp{path}"
         try:
             r = self.session.get(url, headers=self.wostore_cloud_headers(user_token), timeout=WOSTORE_CLOUD_TIMEOUT)
             if not r.text or not r.text.strip():
                 return {}
             return r.json()
-        except Exception:
+        except Exception as e:
+            self.log(f"沃云手机: 请求异常 {e}")
             return {}
 
     def wostore_cloud_bucp_post(self, path, user_token, payload=None):
-        url = f"https://uphone.wostore.cn/bucp{path}"
+        url = f"{WOSTORE_BUCP_BASE}/bucp{path}"
         try:
             r = self.session.post(url, json=payload or {}, headers=self.wostore_cloud_headers(user_token), timeout=WOSTORE_CLOUD_TIMEOUT)
             if not r.text or not r.text.strip():
                 return {}
             return r.json()
-        except Exception:
+        except Exception as e:
+            self.log(f"沃云手机: 请求异常 {e}")
             return {}
 
     def wostore_cloud_activity_post(self, path, payload, user_token="", label="云手机请求"):
