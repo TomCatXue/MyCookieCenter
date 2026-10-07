@@ -92,6 +92,15 @@ globalConfig = {
         "run_ah_friday": True,    # True = 开启安徽超级星期五 (需配合 UNICOM_AH_FRIDAY_AMOUNT 设置面额)
     },
 
+    # --- 🎬 云盘乘风活动内部细分开关 ---
+    "yphd_config": {
+        "run_member": True,    # 云盘会员体验领取
+        "run_fragment": True,  # 碎片任务激活
+        "run_ai": True,        # AI 助手保活
+        "run_mgtv": True,      # 芒果TV视频制作 (需 UNICOM_YPHD_MGTV_IMG_FID)
+        "run_draw": True,      # 抽奖
+    },
+
     # --- 2. 设备ID配置 ---
     "refresh_device_id": False,   # False:使用缓存ID, True:强制刷新
 }
@@ -189,6 +198,20 @@ WOSTORE_CLOUD_RETRIES = int(os.environ.get("UNICOM_WOSTORE_RETRIES", "3") or "3"
 # 沃云手机双网关: h5api/h5forphone 走 uphone.wostore.cn, bucp 走 uphone.wo-adv.cn
 # (v1.2.0 一刀切迁移导致 bucp 404, 见 AGENTS.md 联通章节)
 WOSTORE_BUCP_BASE = os.environ.get("UNICOM_WOSTORE_BUCP_BASE", "https://uphone.wo-adv.cn")
+# 云盘乘风 AI 活动 (activityId=Mjg=)
+# 签名密钥与 AES IV 复用家乡打卡同源参数, 仅手机号 AES Key 不同
+YPHD_ENABLE = os.environ.get("UNICOM_YPHD_ENABLE", "1").strip() not in ("0", "false", "False", "")
+YPHD_ACTIVITY_ID = "Mjg="
+YPHD_MOVE_FILE_FID = "pNKsm_lDq4EJWsx1rFMP/uVX7f1Gbu4K4uDaFJepfssdrGui4u/poSDp/vKG21xEIiBk//"
+YPHD_MOVE_FILE_NAME = "乘风2026精彩时刻-雨爱.mp4"
+YPHD_MGTV_BASE = "https://mgcact.api.mgtv.com"
+YPHD_MGTV_TEMPLATE_ID = "2053018128116371456"
+# 人脸素材仅取自环境变量, 禁止自动扫描云盘 (避免私人照片外泄至第三方平台)
+YPHD_MGTV_IMG_FID = os.environ.get("UNICOM_YPHD_MGTV_IMG_FID", "").strip()
+YPHD_MEMBER_SKU_CODE = "S251222T1F1M3702758"
+YPHD_MEMBER_ACTIVITY_CODE = "7IO6ren5HVMw3ouGRTepcSoFBM0r86ZGs9+Fjv6Xjv0="
+YPHD_MEMBER_TOUCHPOINT = "300300010005"
+YPHD_MEMBER_PHONE_KEY = "yEKmse436lnvTsle"
 UNICOM_TOKEN_CACHE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "unicom_token_cache.json")
 
 # 客户端公开小程序标识 (Base64解码以规避平台误报Secret扫描)
