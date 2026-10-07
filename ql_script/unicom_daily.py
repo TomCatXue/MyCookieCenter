@@ -2382,6 +2382,97 @@ class UserService:
         self.log(f"云盘乘风活动: 视频仍在生成 taskId={task_id}")
         return False
 
+    def yphd_activity_task(self, is_query_only=False):
+        if not YPHD_ENABLE:
+            return
+        if not getattr(self.cloudDisk, "userToken", ""):
+            return
+        rc = globalConfig.get("yphd_config", {})
+        try:
+            self.log("==== 云盘乘风活动 ====")
+            if is_query_only:
+                records = self.yphd_post("/activity/aiRole/userDrawRecords", {"activityId": YPHD_ACTIVITY_ID}, "1001000035")
+                draw_records = records.get("result") or []
+                self.log(f"云盘乘风活动: [查询模式] 历史抽奖记录 {len(draw_records)} 条", notify=True)
+                return
+            if rc.get("run_member", True):
+                self.yphd_member_claim()
+            status = self.yphd_signed_post("/activity/fragment/status", "activity:fragment:status", {}, "1001000035")
+            result = status.get("result") or {}
+            fragment_step = safe_int(result.get("fragmentStep"))
+            self.log(f"云盘乘风活动: 碎片阶段 {fragment_step}")
+            if rc.get("run_fragment", True):
+                task_info = self.yphd_get("/activity/activity/task/info", {"activityId": YPHD_ACTIVITY_ID}, "1001000035")
+                logs = (task_info.get("result") or {}).get("logs") or []
+                if logs:
+                    self.log("云盘乘风活动: 已完成 " + "、".join(x.get("taskName", "") for x in logs if x.get("taskName")))
+                self.yphd_signed_post("/activity/fragment/task/activate", "activity:fragment:activate")
+                self.yphd_move_file()
+                if rc.get("run_ai", True):
+                    self.yphd_ai_query()
+                task1 = self.yphd_signed_post("/activity/aiRole/task1/acquire", "activity:acquire:task1", {}, "1001000035")
+                self.log(f"云盘乘风活动: task1 {task1.get('meta', {}).get('message') or response_summary(task1)}")
+            if rc.get("run_mgtv", True):
+                ticket, access_token = self.yphd_mgtv_login()
+                mgtv_ok = self.yphd_mgtv_task(ticket, access_token) if ticket else False
+                if mgtv_ok:
+                    query = self.yphd_task2_query()
+                    if safe_int(query.get("result")) != 1:
+                        task2 = self.yphd_signed_post("/activity/aiRole/task2", "activity:acquire:task2", {}, "1001000165", {
+                            "X-YP-Open-Version": "v1.0",
+                            "X-CM-SERVICE": self.account_mobile or "",
+                            "X-PATH": "/h5/wocloud_ai_1/workFlow",
+                            "accesstoken": self.cloudDisk.userToken,
+                            "Access-Token": self.cloudDisk.userToken,
+                            "App-Version": "yp-app/5.5.0",
+                            "Client-Id": "1001000165",
+                        })
+                        self.log(f"云盘乘风活动: task2 {task2.get('meta', {}).get('message') or response_summary(task2)}")
+            if rc.get("run_draw", True):
+                self.yphd_draw()
+            final = self.yphd_signed_post("/activity/fragment/status", "activity:fragment:status", {}, "1001000035")
+            self.log(f"云盘乘风活动: 完成，碎片阶段 {safe_int((final.get('result') or {}).get('fragmentStep'))}", notify=True)
+        except Exception as e:
+            self.log(f"云盘乘风活动异常: {e}")
+
+    def yphd_task2_query(self):
+        extra = {
+            "Accept": "application/json, text/plain, */*",
+            "source-type": "woapi",
+            "requestTime": str(int(time.time() * 1000)),
+            "X-Requested-With": "com.chinaunicom.bol.cloudapp",
+            "X-YP-Client-Id": "1001000035",
+            "Referer": f"https://panservice.mail.wo.cn/h5/activitymobile/aiActor/main1?activityId=Mjg%3D&touchpoint=300300010005&token={self.cloudDisk.userToken}",
+        }
+        return self.yphd_signed_post("/activity/aiRole/task2/query", "activity:query:task2", {}, "1001000165", extra)
+
+    def yphd_draw(self):
+        extra = {
+            "Accept": "application/json, text/plain, */*",
+            "source-type": "woapi",
+            "requestTime": str(int(time.time() * 1000)),
+            "X-Requested-With": "com.chinaunicom.bol.cloudapp",
+            "X-YP-Client-Id": "1001000035",
+            "Referer": f"https://panservice.mail.wo.cn/h5/activitymobile/aiActor/main1?activityId=Mjg%3D&touchpoint=300300010005&token={self.cloudDisk.userToken}",
+        }
+        times = self.yphd_get("/activity/lottery/lottery-times", {"activityId": YPHD_ACTIVITY_ID}, "1001000035", extra)
+        if str((times.get("meta") or {}).get("code")) != "200":
+            self.log(f"云盘乘风活动: 抽奖次数查询失败 {response_summary(times)}")
+            return
+        times_result = times.get("result")
+        if isinstance(times_result, dict):
+            times_result = times_result.get("lotteryTimes") or times_result.get("times") or times_result.get("count") or 0
+        count = int(times_result or 0)
+        self.log(f"云盘乘风活动: 抽奖次数 {count}")
+        for index in range(count):
+            prize = self.yphd_signed_post("/activity/lottery", "activity:lottery", {}, "1001000035", extra)
+            info = prize.get("result") or {}
+            name = info.get("prizeName")
+            self.log(f"云盘乘风活动: 第{index + 1}次抽奖 {name or response_summary(prize)}", notify=bool(name))
+            time.sleep(2)
+        if count:
+            self.yphd_signed_post("/activity/fragment/updateFrontendStatus", "activity:fragment:frontendStatus", {"frontendStatus": 1}, "1001000035")
+
     def clean_duplicate_files_cloud(self):
         token = getattr(self.cloudDisk, 'userToken', '')
         if not token:
@@ -2503,6 +2594,7 @@ class UserService:
         token = self.get_ltypDispatcher_cloud(ticket)
         if not token:
             return
+        self.yphd_activity_task(is_query_only=is_query_only)
         if HOMETOWN_ENABLE:
             self.hometown_task(token)
         self.clean_duplicate_files_cloud()
