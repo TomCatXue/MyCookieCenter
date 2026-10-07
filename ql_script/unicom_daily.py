@@ -2280,6 +2280,108 @@ class UserService:
         except Exception as e:
             self.log(f"云盘乘风活动: AI助手异常 {e}")
 
+    def yphd_mgtv_headers(self):
+        return {
+            "User-Agent": "Mozilla/5.0 (Linux; Android 9; 23113RKC6C Build/PQ3A.190605.10201411; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/91.0.4472.114 Safari/537.36/woapp LianTongYunPan/5.5.0 (Android 9)",
+            "Accept": "application/json, text/plain, */*",
+            "Content-Type": "application/json",
+            "Origin": "https://pop.mgtv.com",
+            "Referer": "https://pop.mgtv.com/",
+        }
+
+    def yphd_mgtv_login(self):
+        data = self.yphd_post("/api-user/api/user/ticket", {}, "1001000035")
+        ticket = (data.get("result") or {}).get("ticket")
+        if not ticket:
+            self.log(f"云盘乘风活动: 芒果ticket失败 {response_summary(data)}")
+            return "", ""
+        res = self.session.get(
+            f"{YPHD_MGTV_BASE}/api/cu/login",
+            params={"ticket": ticket, "t": int(time.time() * 1000)},
+            headers=self.yphd_mgtv_headers(),
+            timeout=20,
+        )
+        self.log("云盘乘风活动: 芒果登录成功" if res.status_code == 200 else f"云盘乘风活动: 芒果登录失败 {res.status_code}")
+        try:
+            info = res.json().get("data") or {}
+        except Exception:
+            info = {}
+        mgtv_ticket = info.get("ticket") or ticket
+        access_token = info.get("accessToken", "")
+        self.session.get(
+            f"{YPHD_MGTV_BASE}/api/cu/popup/check",
+            params={"ticket": mgtv_ticket},
+            headers=self.yphd_mgtv_headers(),
+            timeout=20,
+        )
+        return mgtv_ticket, access_token
+
+    def yphd_mgtv_template_submit(self, payload):
+        try:
+            res = self.session.post(
+                f"{YPHD_MGTV_BASE}/api/cu/video/template/submit",
+                json=payload,
+                headers=self.yphd_mgtv_headers(),
+                timeout=20,
+            )
+            return res.json()
+        except Exception as e:
+            self.log(f"云盘乘风活动: 模板提交异常 {e}")
+            return {"msg": f"请求异常 {e}"}
+
+    def yphd_mgtv_task(self, ticket, access_token):
+        if not YPHD_MGTV_IMG_FID:
+            self.log("云盘乘风活动: 未配置 UNICOM_YPHD_MGTV_IMG_FID，跳过视频制作 (配置后可参与)")
+            return False
+        payload = {"ticket": ticket, "templateId": YPHD_MGTV_TEMPLATE_ID, "index": 0, "imgUrl": YPHD_MGTV_IMG_FID}
+        data = self.yphd_mgtv_template_submit(payload)
+        for retry in range(3):
+            if data.get("msg") != "权益扣减失败":
+                break
+            off = self.session.get(
+                f"{YPHD_MGTV_BASE}/api/cu/offlineSubscribe",
+                params={"ticket": ticket},
+                headers=self.yphd_mgtv_headers(),
+                timeout=20,
+            )
+            try:
+                off_data = off.json()
+                off_msg = off_data.get("msg") or off_data.get("message") or response_summary(off_data)
+                success = (off_data.get("data") or {}).get("success")
+                if success is not None:
+                    off_msg = f"{off_msg} success={success}"
+            except Exception:
+                off_msg = off.text[:80] or f"HTTP {off.status_code}"
+            self.log(f"云盘乘风活动: 订阅权益 {off_msg}")
+            time.sleep(8 + retry * 6)
+            data = self.yphd_mgtv_template_submit(payload)
+        result = data.get("data") or {}
+        task_id = result.get("taskId") or data.get("taskId")
+        if not task_id:
+            msg = data.get("msg") or response_summary(data)
+            self.log(f"云盘乘风活动: 模板提交失败 {msg}")
+            return False
+        for _ in range(20):
+            try:
+                result_data = self.session.get(
+                    f"{YPHD_MGTV_BASE}/api/cu/video/template/result",
+                    params={"taskId": task_id, "ticket": ticket},
+                    headers=self.yphd_mgtv_headers(),
+                    timeout=20,
+                ).json()
+            except Exception as e:
+                self.log(f"云盘乘风活动: 模板结果查询异常 {e}")
+                return False
+            info = result_data.get("data") or {}
+            audit_state = safe_int(info.get("auditState"))
+            algorithm_state = safe_int(info.get("algorithmState"))
+            if result_data.get("errno") == "0" and (audit_state == 2 or (audit_state > 1 and algorithm_state > 1)):
+                self.log(f"云盘乘风活动: 视频制作成功 taskId={task_id}", notify=True)
+                return True
+            time.sleep(3)
+        self.log(f"云盘乘风活动: 视频仍在生成 taskId={task_id}")
+        return False
+
     def clean_duplicate_files_cloud(self):
         token = getattr(self.cloudDisk, 'userToken', '')
         if not token:
