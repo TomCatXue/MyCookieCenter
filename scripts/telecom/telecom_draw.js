@@ -4,13 +4,17 @@
  * 1. 周三会员日抽奖一：山西甄选周三会员日 (默认 hd76690472)
  * 2. 周三会员日抽奖二：山西抽奖新-每周三次 (默认 hd92859166)
  * 3. 权益商城幸运抽奖：每周/每日免费抽奖与任务 (默认 A2025011413413484352835699495179)
- * 
+ * 4. 权益包自动领取：双通道扫描待领权益 → manualReceiveEquity 逐张领取 → 轮询确认到账（v1.7.0 新增）
+ * 5. 权益币余额回显：myCashPage 查询真实余额（v1.7.0 新增）
+ *
  * 核心升级：
  * - 【100% 静默捕获】：进小程序彻底告别频繁弹窗打扰，凭据后台静默更新
  * - 【进小程序全自动秒领】：捕获到新鲜活跃凭据瞬间，后台自动触发做任务与抽奖，中奖自动领奖入账
  * - 【双重调度保底】：支持周三上午 09:00:00 Cron 定时兜底，配合进小程序即时抽奖双保险
  * - 【内置 C005 混合加密】：纯 JS 封装 RSA + AES-128-CBC + MD5 一机一密通信引擎，零外部依赖
- * 
+ * - 【权益包自动领取】：扫描 unreceived 权益逐张真实领取，凭 rebateDetailNo 二次轮询确认到账，
+ *    遇「库存不足/已领完/活动结束」立即熔断，杜绝盲目重试扣减资产（v1.7.0 新增）
+ *
  * GitHub: https://github.com/TomCatXue/MyCookieCenter
  */
 
@@ -5836,6 +5840,15 @@ async function executeAllLotteryTasks(triggerSource = '定时调度') {
   reportList.push(resLucky);
   if (resLucky.isWinning) hasWinning = true;
 
+  // --- 任务 4：权益包自动领取 (日常/周三均可领) ---
+  const resClaim = await runAutoClaimEquity(sessionKey, productNo);
+  reportList.push(resClaim);
+  if (resClaim.isWinning) hasWinning = true;
+
+  // --- 任务 5：权益币余额回显 ---
+  const balance = await queryEquityCoinBalance(sessionKey, productNo);
+  reportList.push({ name: '账户权益币余额', status: '完成', details: balance, isWinning: false });
+
   // 记录今日已完成，避免当天频繁重复执行
   $.write(todayStr, STORAGE_KEYS.LAST_CLAIMED_DATE);
 
@@ -6219,6 +6232,239 @@ async function getDynamicNonce(productNo, channelId = '5g_mini_program') {
     return json?.result?.nonce || null;
   } catch (e) {
     return null;
+  }
+}
+
+// ==================== 5.2 权益包自动领取 (manualReceiveEquity) ====================
+// 2026-10-07 抓包逆向确认（来源 equity-goods-h5 bundle）：
+//   manualReceiveEquity:  "gapi/ep-product-center/RebateService/manualReceiveEquity"
+//   queryUserEquityReceiveStatus: "gapi/ep-product-center/RebateService/queryUserEquityReceiveStatus"
+//   两者均 isNeedEncrypt:false + encyType:"C005" + needSessionKey:true，走 H5 网关即可
+// 权益商城(equity-goods-h5)生产 agreeId
+const EQUITY_MALL_AGREE_ID = '20211223030100213484984697094168';
+// 电信会员专区(telecom-member-h5)生产 agreeId（抓包实测 queryCouponList 所用值）
+const TELECOM_MEMBER_AGREE_ID = '20200827030100038416476813657090';
+
+// 遇硬性失败立即终止，杜绝盲目重试扣减资产
+const CLAIM_STOP_KEYWORDS = ['库存不足', '已领完', '已抢完', '领完', '活动已结束', '活动结束', '已结束', '已领取过'];
+
+async function manualReceiveEquity(params, productNo, sessionKey) {
+  return requestC005(
+    'https://mapi-h5.bestpay.com.cn/gapi/ep-product-center/RebateService/manualReceiveEquity',
+    {
+      phoneNo: productNo,
+      sessionKey: sessionKey,
+      agreeId: EQUITY_MALL_AGREE_ID,
+      encyType: 'C005',
+      fromChannelId: '5g_mini_program',
+      fromchannelId: '5g_mini_program',
+      ...params
+    },
+    productNo, sessionKey, '5g_mini_program'
+  );
+}
+
+async function queryUserEquityReceiveStatus(params, productNo, sessionKey) {
+  return requestC005(
+    'https://mapi-h5.bestpay.com.cn/gapi/ep-product-center/RebateService/queryUserEquityReceiveStatus',
+    {
+      phoneNo: productNo,
+      sessionKey: sessionKey,
+      encyType: 'C005',
+      fromChannelId: '5g_mini_program',
+      fromchannelId: '5g_mini_program',
+      ...params
+    },
+    productNo, sessionKey, '5g_mini_program'
+  );
+}
+
+// 凭 rebateDetailNo 二次轮询确认真正到账（对齐页面 queryReceiveResult 状态机）
+async function pollReceiveResult(rebateDetailNo, productNo, sessionKey, maxPoll = 3) {
+  if (!rebateDetailNo) return 'PENDING';
+  for (let i = 1; i <= maxPoll; i++) {
+    const res = await queryUserEquityReceiveStatus({ rebateDetailNo }, productNo, sessionKey);
+    if (!res || typeof res !== 'object') return 'UNKNOWN';
+    if (res.error === -1 || res.error === 1) return 'FAILURE';
+    const status = String(res?.result?.receiveStatus || '').toUpperCase();
+    if (status === 'SUCCESS') return 'SUCCESS';
+    if (status === 'FAILURE') return 'FAILURE';
+    if ((status === 'INIT' || status === 'PENDING' || !status) && i < maxPoll) {
+      await sleep(1000);
+      continue;
+    }
+  }
+  return 'PENDING';
+}
+
+// 扫描账户下待领取(unreceived)的权益券，双通道取并集
+async function queryUnreceivedCoupons(productNo, sessionKey) {
+  const candidates = [];
+  const seen = new Set();
+
+  const absorb = (items) => {
+    (items || []).forEach(it => {
+      if (!it || typeof it !== 'object') return;
+      const st = String(it.couponStatus || it.status || '').toLowerCase();
+      // 仅接纳明确待领或未标注状态；已领/已用一律排除
+      if (st && ['unreceived', 'unclaimed', 'init'].indexOf(st) === -1) return;
+      const key = String(it.equityId || it.equityNo || it.orderNo || '');
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      candidates.push(it);
+    });
+  };
+
+  // 通道 1：电信会员专区券列表
+  try {
+    const r1 = await requestC005(
+      'https://mapi-h5.bestpay.com.cn/gapi/marketingConsultation/CouponQueryService/queryCouponList',
+      {
+        accountStatus: 'ENABLE', pageNo: 1, pageSize: 20,
+        productNo: productNo, sessionKey: sessionKey,
+        agreeId: TELECOM_MEMBER_AGREE_ID, appType: '94',
+        requestSystem: 'telecome-member-h5', requestSecSystem: 'telecome-member-h5',
+        encyType: 'C005', fromChannelId: 'MINIPROG', fromchannelId: 'MINIPROG'
+      }, productNo, sessionKey, 'MINIPROG');
+    if (r1 && r1.success && r1.result) {
+      ['couponList', 'list', 'resList', 'dataList'].some(k => {
+        if (Array.isArray(r1.result[k])) { absorb(r1.result[k]); return true; }
+        return false;
+      });
+    }
+  } catch (e) { $.log(`[权益扫描] queryCouponList 异常: ${e.message || e}`); }
+
+  // 通道 2：会员专区券凭证列表（与通道 1 互补）
+  try {
+    const r2 = await requestC005(
+      'https://mapi-h5.bestpay.com.cn/gapi/marketingConsultation/ConsultationQueryService/queryVoucherList',
+      {
+        voucherStatus: 'notUse', pageNo: 1, pageSize: 10,
+        productNo: productNo, sessionKey: sessionKey,
+        agreeId: TELECOM_MEMBER_AGREE_ID, appType: '94',
+        requestSystem: 'telecome-member-h5', requestSecSystem: 'telecome-member-h5',
+        encyType: 'C005', fromChannelId: 'MINIPROG', fromchannelId: 'MINIPROG'
+      }, productNo, sessionKey, 'MINIPROG');
+    if (r2 && r2.success && r2.result) {
+      ['voucherList', 'list', 'resList', 'dataList'].some(k => {
+        if (Array.isArray(r2.result[k])) { absorb(r2.result[k]); return true; }
+        return false;
+      });
+    }
+  } catch (e) { $.log(`[权益扫描] queryVoucherList 异常: ${e.message || e}`); }
+
+  return candidates;
+}
+
+// 权益包自动领取执行器：扫描 → 逐张领取 → 轮询确认到账
+async function runAutoClaimEquity(sessionKey, productNo) {
+  $.log('\n--- 正在扫描账户待领取权益 ---');
+  let coupons = [];
+  try {
+    coupons = await queryUnreceivedCoupons(productNo, sessionKey);
+  } catch (e) {
+    $.log(`[权益领取] 扫描异常: ${e.message || e}`);
+    return { name: '权益包自动领取', status: '异常', details: e.message || String(e), isWinning: false };
+  }
+
+  if (!coupons.length) {
+    $.log('[权益领取] 当前无待领取权益');
+    return { name: '权益包自动领取', status: '完成', details: '暂无待领权益', isWinning: false };
+  }
+
+  $.log(`[权益领取] 扫描到 ${coupons.length} 张待领权益，开始自动领取...`);
+  const claimed = [], failed = [], pending = [], skipped = [];
+
+  for (let i = 0; i < coupons.length; i++) {
+    const cp = coupons[i];
+    const name = cp.equityName || cp.couponName || cp.goodsName || `权益${i + 1}`;
+    // 字段名严格对齐页面 confirmGetCoupon 实现
+    const bizParams = {
+      equityNo: cp.equityId || cp.equityNo || '',
+      orderNo: cp.orderNo || '',
+      equityModuleId: cp.equityModuleId || '',
+      priceType: cp.priceType || '',
+      robStrategyNo: cp.robStrategyNo || '',
+      unitEquityId: cp.rightsId || cp.unitEquityId || '',
+      currentRebateCycle: cp.currentRebateCycle || '',
+      currentCycleEndDate: cp.currentCycleEndDate || ''
+    };
+    if (!bizParams.equityNo && !bizParams.orderNo) { skipped.push(name); continue; }
+
+    $.log(`[权益领取] (${i + 1}/${coupons.length}) 正在领取: ${name}`);
+    let res;
+    try {
+      res = await manualReceiveEquity(bizParams, productNo, sessionKey);
+    } catch (e) {
+      failed.push(`${name}(异常)`);
+      continue;
+    }
+
+    const result = (res && typeof res.result === 'object') ? res.result : {};
+    const status = String(result.status || '').toUpperCase();
+    const rebateDetailNo = result.rebateDetailNo || '';
+    const errMsg = result.errorMsg || result.errorMessage || res?.errorMsg || '';
+
+    if (status === 'SUCCESS' && rebateDetailNo) {
+      const confirm = await pollReceiveResult(rebateDetailNo, productNo, sessionKey);
+      if (confirm === 'SUCCESS') {
+        claimed.push(name);
+        $.log(`[权益领取] 🎉 领取成功: ${name}`);
+      } else if (confirm === 'FAILURE') {
+        failed.push(`${name}(确认失败)`);
+      } else {
+        pending.push(`${name}(待确认)`);
+      }
+    } else if (status === 'FAIL') {
+      const reason = errMsg || '接口返回失败';
+      failed.push(`${name}(${reason})`);
+      // 硬性终止信号：库存/活动类失败立即停止，杜绝盲目重试
+      if (CLAIM_STOP_KEYWORDS.some(k => reason.indexOf(k) !== -1)) {
+        $.log(`[权益领取] 🛑 触发终止信号(${reason})，停止后续领取`);
+        break;
+      }
+    } else if (CLAIM_STOP_KEYWORDS.some(k => JSON.stringify(res || {}).indexOf(k) !== -1)) {
+      failed.push(`${name}(已领完/已领取)`);
+    } else {
+      failed.push(`${name}(${errMsg || status || '未返回明确状态'})`);
+    }
+    await sleep(1500);
+  }
+
+  const parts = [];
+  if (claimed.length) parts.push(`成功 ${claimed.length} 张: ${claimed.join('、')}`);
+  if (pending.length) parts.push(`待确认 ${pending.length} 张`);
+  if (failed.length) parts.push(`失败 ${failed.length} 张: ${failed.join('、')}`);
+  if (skipped.length) parts.push(`跳过 ${skipped.length} 张(参数不全)`);
+
+  return {
+    name: '权益包自动领取',
+    status: '完成',
+    details: parts.length ? parts.join('；') : '未产生领取动作',
+    isWinning: claimed.length > 0
+  };
+}
+
+// ==================== 5.3 权益币余额回显 ====================
+async function queryEquityCoinBalance(sessionKey, productNo) {
+  try {
+    const res = await requestC005(
+      'https://mapi-h5.bestpay.com.cn/gapi/op-product-system/myCashPageService/myCashPage',
+      {
+        encyType: 'C005', appType: '94',
+        fromchannelId: 'MINIPROG', fromChannelId: 'MINIPROG',
+        traceLogId: 'trace_' + Date.now(),
+        productNo: productNo, sessionKey: sessionKey
+      }, productNo, sessionKey, 'MINIPROG');
+    if (!res || !res.success) {
+      return res?.errorMsg ? `查询受阻 (${res.errorMsg})` : '查询失败';
+    }
+    const r = res.result || {};
+    const bal = r.availableShowValue ?? r.totalAvailableValue ?? r.availableAmount
+             ?? r.availableQuota ?? r.availableValue ?? r.balance;
+    return bal != null ? `${bal} 权益币` : '0 权益币';
+  } catch (e) {
+    return '查询异常';
   }
 }
 
