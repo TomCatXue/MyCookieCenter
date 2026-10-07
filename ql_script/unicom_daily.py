@@ -2136,6 +2136,64 @@ class UserService:
             time.sleep(1)
         return deleted
 
+    # ============ 云盘乘风 AI 活动 ============
+    def yphd_headers(self, client_id="1001000165", extra=None):
+        token = self.cloudDisk.userToken
+        headers = {
+            "X-YP-Access-Token": token,
+            "User-Agent": "Mozilla/5.0 (Linux; Android 9; 23113RKC6C Build/PQ3A.190605.10201411; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/91.0.4472.114 Safari/537.36/woapp LianTongYunPan/5.5.0 (Android 9)",
+            "clientId": client_id,
+            "X-SH-Access-Token": "",
+            "X-YP-GRAY-FLAG": "undefined",
+            "Content-Type": "application/json",
+            "X-YP-Client-Id": client_id,
+            "token": token,
+            "Origin": "https://panservice.mail.wo.cn",
+            "Referer": f"https://panservice.mail.wo.cn/h5/activitymobile/aiActor?activityId=Mjg%3D&touchpoint=300300010005&token={token}",
+        }
+        if extra:
+            headers.update(extra)
+        return headers
+
+    def yphd_post(self, path, payload=None, client_id="1001000165", extra=None):
+        try:
+            res = self.session.post(
+                f"https://panservice.mail.wo.cn{path}",
+                json=payload or {},
+                headers=self.yphd_headers(client_id, extra),
+                timeout=20,
+            )
+            return res.json()
+        except Exception as e:
+            self.log(f"云盘乘风活动: 请求异常 {e}")
+            return {}
+
+    def yphd_get(self, path, params=None, client_id="1001000165", extra=None):
+        try:
+            res = self.session.get(
+                f"https://panservice.mail.wo.cn{path}",
+                params=params or {},
+                headers=self.yphd_headers(client_id, extra),
+                timeout=20,
+            )
+            return res.json()
+        except Exception as e:
+            self.log(f"云盘乘风活动: 请求异常 {e}")
+            return {}
+
+    def yphd_signed_post(self, path, key, payload=None, client_id="1001000165", extra=None):
+        ts = self.yphd_post("/activity/getTimestamp", {"key": key})
+        result = ts.get("result") or {}
+        nonce = result.get("nonce")
+        timestamp = result.get("timestamp")
+        if not nonce or not timestamp:
+            self.log(f"云盘乘风活动: getTimestamp失败 {response_summary(ts)}")
+            return {}
+        body = dict(payload or {})
+        body.update({"activityId": YPHD_ACTIVITY_ID, "nonce": nonce, "timestamp": timestamp})
+        body["sign"] = self.hometown_sign_payload(body)
+        return self.yphd_post(path, body, client_id, extra)
+
     def clean_duplicate_files_cloud(self):
         token = getattr(self.cloudDisk, 'userToken', '')
         if not token:
