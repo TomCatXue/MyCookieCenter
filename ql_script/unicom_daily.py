@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 ===================================================================
-📌 版本: v1.2.0 (2026-09-20 核心服务逆向优化版)
+📌 版本: v1.3.0 (2026-10-07 双网关修复与乘风活动版)
 中国联通 · 每日签到与福利任务聚合脚本
 ===================================================================
 new Env('中国联通 · 每日签到与福利');
@@ -21,13 +21,35 @@ tag: 中国联通
   8. 联通爱听 (JF积分任务 / 自动签到 / 积分查询)
   9. 沃云手机 (每日签到 / 任务 / 抽奖)
   10. 区域专区 (自动识别安徽超级星期五 / 辽宁福利魔方 / 新疆 / 河南 / 云南)
-  11. 规范通知: 100% 对齐微信读书单行 Bullet 极简排版，使用青龙默认推送。
+  11. 云盘乘风活动 (会员体验 / 碎片任务 / AI保活 / 芒果视频制作 / 抽奖)
+  12. 规范通知: 100% 对齐微信读书单行 Bullet 极简排版，使用青龙默认推送。
 
 环境变量配置 (chinaUnicomCookie):
   多账号换行或使用 & 分隔:
   a. 账号密码自动获取Token (推荐): export chinaUnicomCookie="18600000000#123456"
   b. Token#AppId 免密模式 (推荐): export chinaUnicomCookie="a3e4c1ff2xxxxxxxxx#912d30xxxxxx"
   c. 仅Token模式: export chinaUnicomCookie="a3e4c1ff2xxxxxxxxx"
+
+更新说明 (v1.3.0):
+  - 修复沃云手机双网关路由: bucp 前缀回归 uphone.wo-adv.cn, 恢复用户信息 / 积分查询 / 设备激活
+  - 新增云盘乘风活动 (会员体验 / 碎片任务 / AI保活 / 芒果视频制作 / 抽奖)
+  - 行为变更: 区域专区 run_ah_friday 默认值 True → False。若你此前依赖默认开启安徽超级
+    星期五且已配置 UNICOM_AH_FRIDAY_AMOUNT, 升级后需显式将 run_ah_friday 设回 True。
+
+可选环境变量:
+  UNICOM_PROXY_API         代理提取链接 (支持 JSON/TXT, 自动识别)
+  UNICOM_PROXY_TYPE        代理类型 (http / socks5, 默认 socks5)
+  UNICOM_TEST_MODE=query   仅查询模式, 跳过任务执行只查询资产
+  UNICOM_GRAB_AMOUNT       抢兑面额 (默认5)
+  UNICOM_AH_FRIDAY_AMOUNT  安徽超级星期五抢红包面额 (不填则不执行)
+  UNICOM_HOMETOWN_ENABLE   家乡打卡开关 (默认1)
+  UNICOM_YPHD_ENABLE       乘风活动总开关 (默认1)
+  UNICOM_YPHD_MGTV_IMG_FID 芒果视频制作的人脸图片FID (不填则跳过制作)
+
+定时规则建议 (Cron):
+  30 10 * * *   常规日常任务 (推荐)
+  0 58 9,17 * * *  抢兑专用 (需 sign_config.run_grab_coupon=True)
+  0 58 9 * * 5     安徽超级星期五 (需 UNICOM_AH_FRIDAY_AMOUNT)
 ===================================================================
 """
 import os
@@ -54,7 +76,7 @@ from requests.packages.urllib3.util.retry import Retry
 from Crypto.Cipher import AES, PKCS1_v1_5
 from Crypto.PublicKey import RSA
 from Crypto.Util.Padding import pad, unpad
-SCRIPT_VERSION = "v1.2.0"
+SCRIPT_VERSION = "v1.3.0"
 # ========================================
 # 全局配置 (globalConfig)
 # true=开启, false=关闭
@@ -89,7 +111,7 @@ globalConfig = {
 
     # --- 🏷️ 区域专区内部细分开关 ---
     "regional_config": {
-        "run_ah_friday": True,    # True = 开启安徽超级星期五 (需配合 UNICOM_AH_FRIDAY_AMOUNT 设置面额)
+        "run_ah_friday": False,   # True = 开启安徽超级星期五 (需配合 UNICOM_AH_FRIDAY_AMOUNT 设置面额)
     },
 
     # --- 🎬 云盘乘风活动内部细分开关 ---
