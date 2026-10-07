@@ -7109,7 +7109,13 @@ def format_wechat_reading_summary(users):
                 elif "家乡打卡" in l and "抽奖结果" in l:
                     p = l.split("抽奖结果")[-1].strip()
                     specials.append(f"云盘抽奖 [{p}]")
-            
+                elif "云盘乘风活动: 第" in l and "次抽奖" in l:
+                    p = l.split("抽奖", 1)[-1].strip()
+                    if p and "失败" not in p:
+                        specials.append(f"乘风抽奖 [{p}]")
+                elif "云盘乘风活动: 会员体验领取" in l:
+                    specials.append("乘风会员已领")
+
             if specials:
                 bullets.append(f"• 专项福利收获: {' · '.join(specials[:2])}")
 
