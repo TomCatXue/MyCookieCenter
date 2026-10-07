@@ -5816,6 +5816,7 @@ async function executeAllLotteryTasks(triggerSource = '定时调度') {
   if (isWednesday) {
     $.log(`\n--- 正在执行周三会员日抽奖 1 [活动号: ${act1}] ---`);
     const res1 = await runWednesdayLottery(act1, '山西甄选周三会员日', sessionKey, productNo);
+    res1.needAuth = true;
     reportList.push(res1);
     if (res1.isWinning) hasWinning = true;
   } else {
@@ -5826,6 +5827,7 @@ async function executeAllLotteryTasks(triggerSource = '定时调度') {
   if (isWednesday) {
     $.log(`\n--- 正在执行周三会员日抽奖 2 [活动号: ${act2}] ---`);
     const res2 = await runWednesdayLottery(act2, '山西抽奖新-每周三次', sessionKey, productNo);
+    res2.needAuth = true;
     reportList.push(res2);
     if (res2.isWinning) hasWinning = true;
   } else {
@@ -5837,6 +5839,7 @@ async function executeAllLotteryTasks(triggerSource = '定时调度') {
   // --- 任务 3：权益商城幸运抽奖 (日常/周三均可领) ---
   $.log(`\n--- 正在执行权益商城幸运抽奖 [活动ID: ${luckyAct}] ---`);
   const resLucky = await runLuckyLottery(luckyAct, '权益商城幸运抽奖', sessionKey, productNo);
+  resLucky.needAuth = true;
   reportList.push(resLucky);
   if (resLucky.isWinning) hasWinning = true;
 
@@ -5860,14 +5863,22 @@ async function executeAllLotteryTasks(triggerSource = '定时调度') {
   $.log(notifyBody);
   $.log('==================================');
 
-  // 检查是否全因凭证失效失败
-  const isAllLoginFail = reportList.length > 0 && reportList.every(r => 
-    (r.details && (r.details.includes('登录') || r.details.includes('100003') || r.details.includes('100008')))
-  );
+  // 凭证失效判定：仅统计【真正需要鉴权的抽奖任务】（push 时以 needAuth 显式标记）。
+  // 不能按任务名匹配 —— runWednesdayLottery 会用服务端返回的 activityName 覆盖 name，
+  // 也不能把资产类任务（权益包扫描/余额回显，不依赖登录态）纳入判定，
+  // 否则会话失效时判定恒为 false，抑制失效、每次调度都弹通知（v1.7.1 修复）。
+  const authTasks = reportList.filter(r => r.needAuth === true);
 
-  if (isAllLoginFail) {
-    // 已经由 notifyExpiredOnce 单日提示过，此处不再弹战报造成骚扰
-    $.log('[通知控制] 本次全因会话过期未执行成功，已静默处理，避免冗余弹窗');
+  const isLoginFailResult = (r) => {
+    const d = String(r.details || '');
+    return d.indexOf('登录') !== -1 || d.indexOf('100003') !== -1 || d.indexOf('100008') !== -1;
+  };
+
+  // 会话失效判定：任一鉴权任务明确报「登录失败/100003/100008」即静默。
+  // 注意不能用「全部任务都非完成态」作为条件 —— 会话正常但今日次数已用完
+  // （status=已无可抽次数）属正常结果，仍应发送战报。
+  if (authTasks.some(isLoginFailResult)) {
+    $.log('[通知控制] 本次鉴权任务会话失效，已静默处理，避免冗余弹窗');
     return;
   }
 
