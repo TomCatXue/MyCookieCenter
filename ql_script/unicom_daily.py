@@ -2194,6 +2194,92 @@ class UserService:
         body["sign"] = self.hometown_sign_payload(body)
         return self.yphd_post(path, body, client_id, extra)
 
+    def yphd_member_claim(self):
+        phone = self.account_mobile or ""
+        if not phone:
+            self.log("云盘乘风活动: 未识别手机号，跳过会员体验")
+            return False
+        cipher = AES.new(YPHD_MEMBER_PHONE_KEY.encode(), AES.MODE_CBC, HOMETOWN_AES_IV.encode())
+        encrypted = base64.b64encode(cipher.encrypt(pad(str(phone).encode(), AES.block_size, style="pkcs7"))).decode()
+        extra = {"Referer": f"https://panservice.mail.wo.cn/h5/activitymobile/experienceMember?touchpoint={YPHD_MEMBER_TOUCHPOINT}&appName=yunpan&token={self.cloudDisk.userToken}"}
+        payload = {"phone": encrypted}
+        check = self.yphd_post("/activity/check/yp/members/eligibility", payload, "1001000001", extra)
+        meta = check.get("meta") or {}
+        if str(meta.get("code")) != "200":
+            self.log(f"云盘乘风活动: 会员资格查询失败 {meta.get('message') or response_summary(check)}")
+            return False
+        state = safe_int((check.get("result") or {}).get("state"), -1)
+        if state == 1:
+            self.log("云盘乘风活动: 会员体验已参与", notify=True)
+            return True
+        if state != 0:
+            self.log(f"云盘乘风活动: 会员体验暂不可领 state={state}")
+            return False
+        payload.update({
+            "skuCode": YPHD_MEMBER_SKU_CODE,
+            "activityCode": YPHD_MEMBER_ACTIVITY_CODE,
+            "channel": "6",
+            "touchpoint": YPHD_MEMBER_TOUCHPOINT,
+        })
+        data = self.yphd_post("/activity/experience/yp/members", payload, "1001000001", extra)
+        meta = data.get("meta") or {}
+        ok = str(meta.get("code")) == "200"
+        order_no = (data.get("result") or {}).get("orderNo")
+        self.log(f"云盘乘风活动: 会员体验领取 {meta.get('message') or response_summary(data)}" + (f" orderNo={order_no}" if order_no else ""), notify=ok)
+        return ok
+
+    def yphd_move_file(self):
+        payload = {
+            "activityId": YPHD_ACTIVITY_ID,
+            "fids": [YPHD_MOVE_FILE_FID],
+            "taskType": 10,
+            "fileType": 2,
+            "fileName": YPHD_MOVE_FILE_NAME,
+            "directoryId": 0,
+            "additionalParams": {"aiHeaderSubType": 0},
+        }
+        extra = {
+            "Access-Token": self.cloudDisk.userToken,
+            "Client-Id": "1001000165",
+            "App-Version": "yp-app/5.5.0",
+        }
+        res = self.yphd_post("/wohome/open/v1/ai/moveFile2Person", payload, "1001000165", extra)
+        self.log(f"云盘乘风活动: 视频转存 {res.get('meta', {}).get('message') or response_summary(res)}")
+        return res
+
+    def yphd_ai_query(self):
+        payload = {
+            "input": "你好",
+            "modelId": 0,
+            "platform": 2,
+            "tag": 21,
+            "conversationId": "",
+            "knowledgeId": "",
+            "referFileInfo": [],
+            "messageId": "",
+            "conversationType": 0,
+            "recipient": "",
+            "async": False,
+        }
+        headers = self.yphd_headers("1001000035", {
+            "accept": "text/event-stream",
+            "X-YP-App-Version": "5.4.2",
+            "Referer": f"https://panservice.mail.wo.cn/h5/wocloud_ai_1/workFlow?needBackBtn=true&token={self.cloudDisk.userToken}",
+        })
+        try:
+            res = self.session.post(
+                "https://panservice.mail.wo.cn/wohome/ai/assistant/query",
+                json=payload,
+                headers=headers,
+                stream=True,
+                timeout=30,
+            )
+            for _ in res.iter_lines(decode_unicode=True):
+                pass
+            self.log("云盘乘风活动: AI助手保活完成" if res.status_code == 200 else f"云盘乘风活动: AI助手失败 {res.status_code}")
+        except Exception as e:
+            self.log(f"云盘乘风活动: AI助手异常 {e}")
+
     def clean_duplicate_files_cloud(self):
         token = getattr(self.cloudDisk, 'userToken', '')
         if not token:
