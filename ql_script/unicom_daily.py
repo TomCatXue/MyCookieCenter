@@ -2296,8 +2296,10 @@ class UserService:
                 stream=True,
                 timeout=30,
             )
-            for _ in res.iter_lines(decode_unicode=True):
-                pass
+            for i, _ in enumerate(res.iter_lines(decode_unicode=True)):
+                if i > 200:
+                    break
+            res.close()
             self.log("云盘乘风活动: AI助手保活完成" if res.status_code == 200 else f"云盘乘风活动: AI助手失败 {res.status_code}")
         except Exception as e:
             self.log(f"云盘乘风活动: AI助手异常 {e}")
@@ -2323,12 +2325,19 @@ class UserService:
             headers=self.yphd_mgtv_headers(),
             timeout=20,
         )
-        self.log("云盘乘风活动: 芒果登录成功" if res.status_code == 200 else f"云盘乘风活动: 芒果登录失败 {res.status_code}")
+        if res.status_code != 200:
+            self.log(f"云盘乘风活动: 芒果登录失败 HTTP {res.status_code}，跳过视频制作")
+            return "", ""
         try:
             info = res.json().get("data") or {}
         except Exception:
-            info = {}
-        mgtv_ticket = info.get("ticket") or ticket
+            self.log("云盘乘风活动: 芒果登录响应解析失败，跳过视频制作")
+            return "", ""
+        mgtv_ticket = info.get("ticket")
+        if not mgtv_ticket:
+            self.log("云盘乘风活动: 芒果登录未返回ticket，跳过视频制作")
+            return "", ""
+        self.log("云盘乘风活动: 芒果登录成功")
         access_token = info.get("accessToken", "")
         self.session.get(
             f"{YPHD_MGTV_BASE}/api/cu/popup/check",
