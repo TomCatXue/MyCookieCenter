@@ -7113,11 +7113,11 @@ def format_wechat_reading_summary(users):
                     p = l.split("抽奖", 1)[-1].strip()
                     if p and "失败" not in p:
                         specials.append(f"乘风抽奖 [{p}]")
-                elif "云盘乘风活动: 会员体验领取" in l:
+                elif "云盘乘风活动: 会员体验" in l:
                     specials.append("乘风会员已领")
 
             if specials:
-                bullets.append(f"• 专项福利收获: {' · '.join(specials[:2])}")
+                bullets.append(f"• 专项福利收获: {' · '.join(specials[:4])}")
 
         if total_count > 1:
             blocks.append(f"【账号 {u.index}: {phone_str}】\n" + "\n".join(bullets))

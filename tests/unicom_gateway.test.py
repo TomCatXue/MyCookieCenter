@@ -298,4 +298,27 @@ assert _fid_assign, "YPHD_MGTV_IMG_FID must be assigned at module level"
 assert 'os.environ.get("UNICOM_YPHD_MGTV_IMG_FID"' in _fid_assign.group(1), \
     "YPHD_MGTV_IMG_FID must be sourced from os.environ, not a hard-coded constant"
 
+# ---------- I 项: 通知提取器专项福利汇总 (任务 8 修复回归) ----------
+
+# 默认配置下 乡村能量/安全管家 恒先于 乘风 条目入列, 若 [:2] 截断则乘风收获永不显示
+_summary_stub = types.SimpleNamespace(
+    mobile="13800138000",
+    account_mobile="13800138000",
+    index=1,
+    token="stub-token",
+    notify_logs=[
+        "通通乡村: 登录成功，碳能量123g，生态值5",
+        "安全管家: 用户a积分变动：10 → 15 | 新增: 5",
+        "云盘乘风活动: 第1次抽奖 一等奖",
+        "云盘乘风活动: 会员体验已参与",
+    ],
+)
+_subtitle, _summary_body = ud.format_wechat_reading_summary([_summary_stub])
+assert "专项福利收获" in _summary_body, \
+    "specials summary bullet must be present: %r" % (_summary_body,)
+assert "乘风抽奖" in _summary_body, \
+    "乘风抽奖 must survive specials truncation (raise the [:N] cap): %r" % (_summary_body,)
+assert "乘风会员已领" in _summary_body, \
+    "会员体验已参与 steady-state log must map to 乘风会员已领: %r" % (_summary_body,)
+
 print("unicom gateway & yphd: PASS")
