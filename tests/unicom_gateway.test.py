@@ -321,4 +321,81 @@ assert "乘风抽奖" in _summary_body, \
 assert "乘风会员已领" in _summary_body, \
     "会员体验已参与 steady-state log must map to 乘风会员已领: %r" % (_summary_body,)
 
+# ---------- J 项: 芒果权益明细 (领到了什么要通知) ----------
+
+_quota_gets = []
+
+
+class _QuotaSession:
+    def get(self, url, **kw):
+        _quota_gets.append(url)
+        if "queryMemberInfo" in url:
+            return types.SimpleNamespace(status_code=200, json=lambda: {
+                "data": {"startTime": 1700000000000, "endTime": 1735689600000},
+            })
+        if "queryAvailableTimes" in url:
+            return types.SimpleNamespace(status_code=200, json=lambda: {
+                "errno": "0", "data": {"faceCount": "3"},
+            })
+        return types.SimpleNamespace(status_code=200, json=lambda: {})
+
+    def post(self, url, **kw):
+        return types.SimpleNamespace(status_code=200, json=lambda: {})
+
+
+_quota_obj = object.__new__(ud.UserService)
+_quota_obj.session = _QuotaSession()
+_quota_obj.yphd_mgtv_headers = lambda: {}
+_quota_obj.log = lambda msg, notify=False: None
+_q_end, _q_face = ud.UserService.yphd_mgtv_quota_info(_quota_obj, "mticket")
+assert _q_face == 3, "faceCount string must parse to int: %r" % (_q_face,)
+assert _q_end == 1735689600000, "endTime must be returned verbatim: %r" % (_q_end,)
+assert any("queryMemberInfo" in u for u in _quota_gets), "must query member info"
+assert any("queryAvailableTimes" in u for u in _quota_gets), "must query available times"
+
+# ---------- K 项: 会员体验权益提取 (领到了什么要通知) ----------
+
+_k_logs = []
+
+
+def _member_ok_post(path, payload=None, client_id="1001000165", extra=None):
+    if "eligibility" in path:
+        return {"meta": {"code": "200"}, "result": {"state": 0}}
+    return {"meta": {"code": "200"},
+            "result": {"orderNo": "X1", "benefitName": "云盘会员7天", "memberDays": 7}}
+
+
+_k_obj = object.__new__(ud.UserService)
+_k_obj.account_mobile = "13800138000"
+_k_obj.cloudDisk = types.SimpleNamespace(userToken="tok")
+_k_obj.yphd_post = _member_ok_post
+_k_obj.log = lambda msg, notify=False: (_k_logs.append((msg, notify)))
+_k_ret = ud.UserService.yphd_member_claim(_k_obj)
+assert _k_ret is True, "successful claim must return True"
+assert any(n and "权益[" in m and "云盘会员7天" in m for m, n in _k_logs), \
+    "member claim notify must include the extracted benefit: %r" % (_k_logs,)
+
+# ---------- L 项: 提取器透传乘风权益明细 ----------
+
+_summary_stub2 = types.SimpleNamespace(
+    mobile="13800138000",
+    account_mobile="13800138000",
+    index=1,
+    token="stub-token",
+    notify_logs=[
+        "通通乡村: 登录成功，碳能量123g，生态值5",
+        "安全管家: 用户a积分变动：10 → 15 | 新增: 5",
+        "云盘乘风活动: 会员体验领取 权益[云盘会员7天]",
+        "云盘乘风活动: 芒果权益 AI制作[3次] 会员到期[12-31]",
+        "云盘乘风活动: 第1次抽奖 一等奖",
+    ],
+)
+_sub2, _body2 = ud.format_wechat_reading_summary([_summary_stub2])
+assert "乘风会员 云盘会员7天" in _body2, \
+    "member benefit must be surfaced in summary: %r" % (_body2,)
+assert "芒果" in _body2 and "3次" in _body2, \
+    "mgtv benefit must be surfaced in summary: %r" % (_body2,)
+assert "乘风抽奖" in _body2 and "一等奖" in _body2, \
+    "draw prize must survive truncation alongside benefits: %r" % (_body2,)
+
 print("unicom gateway & yphd: PASS")

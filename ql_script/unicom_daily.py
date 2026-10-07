@@ -2246,9 +2246,29 @@ class UserService:
         data = self.yphd_post("/activity/experience/yp/members", payload, "1001000001", extra)
         meta = data.get("meta") or {}
         ok = str(meta.get("code")) == "200"
-        order_no = (data.get("result") or {}).get("orderNo")
-        self.log(f"云盘乘风活动: 会员体验领取 {meta.get('message') or response_summary(data)}" + (f" orderNo={order_no}" if order_no else ""), notify=ok)
+        result = data.get("result") or {}
+        order_no = result.get("orderNo")
+        benefit = self.yphd_member_benefit(result)
+        msg = f"云盘乘风活动: 会员体验领取 {meta.get('message') or response_summary(data)}"
+        if benefit:
+            msg += f" 权益[{benefit}]"
+        elif order_no:
+            msg += f" orderNo={order_no}"
+        self.log(msg, notify=ok)
         return ok
+
+    def yphd_member_benefit(self, result):
+        """从领取响应提取权益文案; 字段名无现网抓包证据, 防御性枚举常见命名"""
+        if not isinstance(result, dict):
+            return ""
+        benefit = (result.get("benefitName") or result.get("giftName")
+                   or result.get("prizeName") or result.get("skuName")
+                   or result.get("rightsName") or result.get("memberName") or "")
+        if not benefit:
+            days = result.get("memberDays") or result.get("validDays") or result.get("days")
+            if days:
+                benefit = f"云盘会员{days}天"
+        return str(benefit)
 
     def yphd_move_file(self):
         payload = {
@@ -2347,6 +2367,33 @@ class UserService:
         )
         return mgtv_ticket, access_token
 
+    def yphd_mgtv_quota_info(self, mgtv_ticket):
+        """芒果权益明细: 会员到期时间 + AI制作剩余次数 (领到了什么要如实通知)"""
+        end_time = None
+        face_count = 0
+        try:
+            info = self.session.get(
+                f"{YPHD_MGTV_BASE}/api/cu/queryMemberInfo",
+                params={"ticket": mgtv_ticket, "t": int(time.time() * 1000)},
+                headers=self.yphd_mgtv_headers(),
+                timeout=20,
+            ).json().get("data") or {}
+            end_time = info.get("endTime")
+        except Exception as e:
+            self.log(f"云盘乘风活动: 芒果会员信息查询异常 {e}")
+        try:
+            times = self.session.get(
+                f"{YPHD_MGTV_BASE}/api/cu/queryAvailableTimes",
+                params={"ticket": mgtv_ticket, "t": int(time.time() * 1000)},
+                headers=self.yphd_mgtv_headers(),
+                timeout=20,
+            ).json()
+            if times.get("errno") == "0" and isinstance(times.get("data"), dict):
+                face_count = safe_int((times.get("data") or {}).get("faceCount"), 0)
+        except Exception as e:
+            self.log(f"云盘乘风活动: 芒果AI次数查询异常 {e}")
+        return end_time, face_count
+
     def yphd_mgtv_template_submit(self, payload):
         try:
             res = self.session.post(
@@ -2365,6 +2412,17 @@ class UserService:
             self.log("云盘乘风活动: 未配置 UNICOM_YPHD_MGTV_IMG_FID，跳过视频制作 (配置后可参与)")
             return False
         payload = {"ticket": ticket, "templateId": YPHD_MGTV_TEMPLATE_ID, "index": 0, "imgUrl": YPHD_MGTV_IMG_FID}
+        end_time, face_count = self.yphd_mgtv_quota_info(ticket)
+        parts = []
+        if face_count:
+            parts.append(f"AI制作[{face_count}次]")
+        if end_time:
+            try:
+                parts.append(f"会员到期[{datetime.fromtimestamp(int(end_time) / 1000).strftime('%m-%d')}]")
+            except Exception:
+                parts.append(f"会员到期[{end_time}]")
+        if parts:
+            self.log(f"云盘乘风活动: 芒果权益 {' '.join(parts)}", notify=True)
         data = self.yphd_mgtv_template_submit(payload)
         for retry in range(3):
             if data.get("msg") != "权益扣减失败":
@@ -7144,11 +7202,16 @@ def format_wechat_reading_summary(users):
                     p = l.split("抽奖", 1)[-1].strip()
                     if p and "失败" not in p:
                         specials.append(f"乘风抽奖 [{p}]")
+                elif "云盘乘风活动: 会员体验领取" in l and "权益[" in l:
+                    benefit = l.split("权益[", 1)[1].split("]", 1)[0]
+                    specials.append(f"乘风会员 {benefit}")
                 elif "云盘乘风活动: 会员体验" in l:
                     specials.append("乘风会员已领")
+                elif "云盘乘风活动: 芒果权益" in l:
+                    specials.append("芒果 " + l.split("芒果权益", 1)[1].strip())
 
             if specials:
-                bullets.append(f"• 专项福利收获: {' · '.join(specials[:4])}")
+                bullets.append(f"• 专项福利收获: {' · '.join(specials[:6])}")
 
         if total_count > 1:
             blocks.append(f"【账号 {u.index}: {phone_str}】\n" + "\n".join(bullets))
