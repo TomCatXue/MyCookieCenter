@@ -234,6 +234,8 @@ YPHD_MEMBER_SKU_CODE = "S251222T1F1M3702758"
 YPHD_MEMBER_ACTIVITY_CODE = "7IO6ren5HVMw3ouGRTepcSoFBM0r86ZGs9+Fjv6Xjv0="
 YPHD_MEMBER_TOUCHPOINT = "300300010005"
 YPHD_MEMBER_PHONE_KEY = "yEKmse436lnvTsle"
+# 调试开关: 置 1 时打印会员体验/芒果权益的原始响应结构 (用于确认权益字段名)
+YPHD_DEBUG = os.environ.get("UNICOM_YPHD_DEBUG", "0").strip() not in ("0", "false", "False", "")
 UNICOM_TOKEN_CACHE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "unicom_token_cache.json")
 
 # 客户端公开小程序标识 (Base64解码以规避平台误报Secret扫描)
@@ -2231,6 +2233,8 @@ class UserService:
             self.log(f"云盘乘风活动: 会员资格查询失败 {meta.get('message') or response_summary(check)}")
             return False
         state = safe_int((check.get("result") or {}).get("state"), -1)
+        if YPHD_DEBUG:
+            self.log(f"云盘乘风活动: [DEBUG] 资格响应 result={pretty_json(check.get('result') or {})}")
         if state == 1:
             self.log("云盘乘风活动: 会员体验已参与", notify=True)
             return True
@@ -2249,6 +2253,8 @@ class UserService:
         result = data.get("result") or {}
         order_no = result.get("orderNo")
         benefit = self.yphd_member_benefit(result)
+        if YPHD_DEBUG:
+            self.log(f"云盘乘风活动: [DEBUG] 领取响应 result={pretty_json(result)}")
         msg = f"云盘乘风活动: 会员体验领取 {meta.get('message') or response_summary(data)}"
         if benefit:
             msg += f" 权益[{benefit}]"
@@ -2413,6 +2419,8 @@ class UserService:
             return False
         payload = {"ticket": ticket, "templateId": YPHD_MGTV_TEMPLATE_ID, "index": 0, "imgUrl": YPHD_MGTV_IMG_FID}
         end_time, face_count = self.yphd_mgtv_quota_info(ticket)
+        if YPHD_DEBUG:
+            self.log(f"云盘乘风活动: [DEBUG] 芒果权益 endTime={end_time} faceCount={face_count}")
         parts = []
         if face_count:
             parts.append(f"AI制作[{face_count}次]")
@@ -7205,8 +7213,10 @@ def format_wechat_reading_summary(users):
                 elif "云盘乘风活动: 会员体验领取" in l and "权益[" in l:
                     benefit = l.split("权益[", 1)[1].split("]", 1)[0]
                     specials.append(f"乘风会员 {benefit}")
-                elif "云盘乘风活动: 会员体验" in l:
-                    specials.append("乘风会员已领")
+                elif "云盘乘风活动: 会员体验领取" in l:
+                    specials.append("乘风会员 已领取")
+                elif "云盘乘风活动: 会员体验已参与" in l:
+                    specials.append("乘风会员 往期已领")
                 elif "云盘乘风活动: 芒果权益" in l:
                     specials.append("芒果 " + l.split("芒果权益", 1)[1].strip())
 

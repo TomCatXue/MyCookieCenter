@@ -318,8 +318,8 @@ assert "专项福利收获" in _summary_body, \
     "specials summary bullet must be present: %r" % (_summary_body,)
 assert "乘风抽奖" in _summary_body, \
     "乘风抽奖 must survive specials truncation (raise the [:N] cap): %r" % (_summary_body,)
-assert "乘风会员已领" in _summary_body, \
-    "会员体验已参与 steady-state log must map to 乘风会员已领: %r" % (_summary_body,)
+assert "乘风会员 往期已领" in _summary_body, \
+    "会员体验已参与 steady-state log must map to 乘风会员 往期已领: %r" % (_summary_body,)
 
 # ---------- J 项: 芒果权益明细 (领到了什么要通知) ----------
 
@@ -395,6 +395,18 @@ assert "乘风会员 云盘会员7天" in _body2, \
     "member benefit must be surfaced in summary: %r" % (_body2,)
 assert "芒果" in _body2 and "3次" in _body2, \
     "mgtv benefit must be surfaced in summary: %r" % (_body2,)
+
+# 本次新领取 与 往期已领 必须在通知里可区分 (真机验证: 两者曾都渲染成"已领")
+_stub_new = types.SimpleNamespace(
+    mobile="13800138000", account_mobile="13800138000",
+    index=1, token="stub-token",
+    notify_logs=["云盘乘风活动: 会员体验领取 成功"],
+)
+_, _body_new = ud.format_wechat_reading_summary([_stub_new])
+assert "乘风会员 已领取" in _body_new, \
+    "newly-claimed must differ from steady-state 往期已领: %r" % (_body_new,)
+assert "往期已领" not in _body_new, \
+    "newly-claimed log must not render as 往期已领: %r" % (_body_new,)
 assert "乘风抽奖" in _body2 and "一等奖" in _body2, \
     "draw prize must survive truncation alongside benefits: %r" % (_body2,)
 
