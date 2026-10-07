@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 ===================================================================
-📌 版本: v1.6.0 (2026-10-07 自动换票 / 权益包自动领取 / 抽奖自动领奖版)
+📌 版本: v1.6.1 (2026-10-07 凭证验活自愈 / 自动换票 / 权益包自动领取 / 抽奖自动领奖版)
 中国电信 · 周三会员双抽奖与幸运抽奖聚合脚本
 ===================================================================
 new Env('中国电信 · 周三会员抽奖');
@@ -19,11 +19,15 @@ tag: 中国电信
         H5 网关 mapi-h5 无此服务(API500002)，故任务三改走 H5 可达的活动配置 + op-lottery-system 抽奖引擎。
   4. 资产回显：自动查询并回显当前账户真实权益币余额
 
-  ★ v1.6.0 新增三大能力（基于 2026-10-07 全链路抓包逆向验证）：
-  5. 【自动换票】SessionKey 全自动获取与续期：
-     - 未配置 SessionKey 时，自动走 电信登录 → Ticket → singleAuthorizedLogin 换取 SessionKey；
-     - 换票接口 /gapi/quanyi/product/singleAuthorizedLogin 标注 authLogin:false，无需既有会话即可调用；
-     - 换取成功后自动落盘持久化(telecom_wed_session.json)，下次运行直接复用，实现免人工抓包。
+  ★ v1.6.0/v1.6.1 新增三大能力（基于 2026-10-07 全链路抓包逆向 + 线上实测校准）：
+  5. 【自动换票 + 凭证验活自愈】SessionKey 全自动获取与续期：
+     - 关键：即便环境变量已填 SessionKey，也会先调探针接口验活；失效则自动换票续期，
+       绝不会拿着过期旧 Key 去调业务接口而全军覆没（v1.6.1 修复的核心缺陷）；
+     - 探针选用 getLotteryCount：实测服务端确实校验凭证(伪造 Key 返回 100008)，
+       而 queryActivityInfo 会忽略凭证不可用，故弃用；
+     - 换票链路：电信登录 → Ticket → singleAuthorizedLogin → SessionKey；
+     - 换取成功后自动落盘持久化(telecom_wed_session.json)，下次运行直接复用，实现免人工抓包；
+     - 凭证获取三级降级：环境变量(验活) → 本地缓存(验活) → 自动换票。
   6. 【权益包自动领取】基于 manualReceiveEquity (H5 C005 通道，isNeedEncrypt:false)：
      - 自动扫描 couponStatus == "unreceived" 的待领权益并逐张真实领取；
      - 通过 rebateDetailNo 二次轮询 receiveStatus 确认到账(INIT/PENDING→SUCCESS)；
@@ -82,7 +86,7 @@ except ImportError:
 
 # ==================== 🛠️ 脚本功能开关配置 ====================
 
-SCRIPT_VERSION = "v1.6.0"
+SCRIPT_VERSION = "v1.6.1"
 
 CONFIG = {
     "ENABLE_WED_COIN_DRAW": True,   # 任务 1: 周三会员抽权益币 (专场抽权益币, 默认 hd76690472)
@@ -1084,6 +1088,59 @@ def run_lucky_lottery(sess: requests.Session, act_id: str, act_title: str, sessi
 
 
 # ==================== 💓 会话心跳保活引擎 (Keep-Alive) ====================
+def is_session_key_alive(sess: requests.Session, phone: str, session_key: str) -> bool:
+    """
+    探测 SessionKey 是否仍然有效（用于判断是否需要触发自动换票）。
+
+    探针接口选型依据（2026-10-07 线上实测对照）：
+      携带明显伪造的 SessionKey 请求各接口，观察服务端是否真正执行鉴权：
+
+        queryActivityInfo      → success=True（★ 完全忽略凭证，不能作探针）
+        queryDrawActivity      → 100008 登录验证失败  ✅
+        getLotteryCount        → 100008 登录验证失败  ✅
+        queryCouponList        → 100008 登录验证失败  ✅
+        queryUserEquityReceiveStatus → 100008 登录验证失败 ✅
+
+    最终选用 getLotteryCount：只读、幂等、无任何业务副作用，
+    且服务端确实会校验 SessionKey，能可靠区分「有效」与「已失效」。
+
+    返回 True 表示凭证可用；False 表示已失效，应触发自动换票续期。
+    """
+    if not session_key:
+        return False
+
+    try:
+        res = request_c005(sess, f'{BESTPAY_H5_BASE}/gapi/op-lottery-system/DrawService/getLotteryCount', {
+            'activityNo': CONFIG.get("ACT_COIN", "hd76690472"),
+            'sessionKey': session_key,
+            'productNo': phone,
+            'phoneNo': phone,
+            'deviceNo': f'miniprogram_{phone}',
+            'appType': '94',
+            'fromChannelId': 'MINIPROG',
+            'fromchannelId': 'MINIPROG',
+            'encyType': 'C005',
+        }, phone, session_key, 'MINIPROG')
+
+        if not isinstance(res, dict):
+            return False
+
+        code = str(res.get('errorCode') or '')
+        msg = str(res.get('errorMsg') or '')
+
+        # 明确的登录态失效信号
+        if code == '100008' or '登录失败' in msg or '重新登录' in msg or '未授权' in msg:
+            return False
+
+        # 无失效信号且请求成功，视为凭证可用
+        if res.get('success'):
+            return True
+
+        # 其他业务错误（如非周三活动未开放 100008 之外的码）不代表凭证失效
+        return True
+    except Exception:
+        return False
+
 def send_session_keep_alive(sess: requests.Session, phone: str, session_key: str) -> bool:
     """
     在非周三平时运行时，通过调用活跃接口刷新服务端 Session TTL，
@@ -1209,18 +1266,32 @@ def main():
 
         session_key = direct_session_key
 
-        # ---- 凭证获取三级降级链：环境变量直配 → 本地落盘缓存 → 自动换票 ----
-        ticket_source = ""
+        # ---- 凭证获取与自愈链 ----
+        # 关键设计：即便环境变量已填 SessionKey，也必须先验活；失效则自动换票续期。
+        # 否则会拿着过期旧 Key 去调业务接口，全部返回 100008 而无法自愈。
+        ticket_source = "环境变量" if session_key else ""
+        auto_ticket_on = CONFIG.get("ENABLE_AUTO_TICKET", True)
 
-        if not session_key and CONFIG.get("ENABLE_AUTO_TICKET", True):
-            # 第二级：复用上次自动换票落盘的 SessionKey，免去重复换票
+        # 第一级：验证环境变量所配 SessionKey 是否仍然有效
+        if session_key:
+            if is_session_key_alive(sess, phone, session_key):
+                log(f"✅ [{m_phone}] 环境变量 SessionKey 验活通过，直接使用")
+            else:
+                log(f"⚠️ [{m_phone}] 环境变量 SessionKey 已失效，转入自动换票续期")
+                session_key = ""
+
+        # 第二级：复用本地落盘的 SessionKey（同样需要验活）
+        if not session_key and auto_ticket_on:
             cached_sk = get_cached_session_key(phone)
             if cached_sk:
-                session_key = cached_sk
-                ticket_source = "本地缓存"
-                log(f"♻️ [{m_phone}] 命中本地 SessionKey 缓存，直接复用 (免换票)")
+                if is_session_key_alive(sess, phone, cached_sk):
+                    session_key = cached_sk
+                    ticket_source = "本地缓存"
+                    log(f"♻️ [{m_phone}] 命中本地 SessionKey 缓存且验活通过，直接复用")
+                else:
+                    log(f"⚠️ [{m_phone}] 本地缓存 SessionKey 已失效，转入自动换票")
 
-        # 优先使用直通 SessionKey 执行周三抽奖；若未提供则尝试电信官方协议验真
+        # 第三级：走电信官方协议登录，拿 Ticket 自动换取全新 SessionKey
         if not session_key:
             user_info = login_telecom(sess, phone, pwd, android_id)
             if not user_info:
@@ -1234,14 +1305,13 @@ def main():
                     summary_report.append("\n".join(bullets))
                 continue
 
-            # 第三级：登录成功拿到 Ticket 后，自动换取 SessionKey（v1.6.0 新增核心能力）
-            if CONFIG.get("ENABLE_AUTO_TICKET", True) and user_info.get('ticket'):
+            if auto_ticket_on and user_info.get('ticket'):
                 exchanged = exchange_ticket_for_session_key(sess, phone, user_info['ticket'])
                 if exchanged:
                     session_key = exchanged
                     ticket_source = "自动换票"
-        else:
-            # 已配 SessionKey 时执行电信官方验真（若遇风控不阻断周三抽奖业务）
+        elif auto_ticket_on:
+            # 环境变量/缓存的 Key 仍有效时，顺带做一次登录验真（遇风控不阻断业务）
             try:
                 login_telecom(sess, phone, pwd, android_id)
             except Exception:
@@ -1250,13 +1320,13 @@ def main():
 
         if not session_key:
             bullets = [
-                "• 自动换票: 未能获取 SessionKey (请检查服务密码或稍后重试)",
+                "• 自动换票: 未能获取有效 SessionKey (请检查服务密码或稍后重试)",
                 "• 周三会员抽权益币: 需 SessionKey",
                 "• 周三会员抽三次: 需 SessionKey",
                 "• 权益商城幸运抽奖: 需 SessionKey",
                 "• 账户当前权益币: 需 SessionKey 查验"
             ]
-            log(f"⚠️ [{m_phone}] 未能获取 SessionKey，已跳过翼支付专属抽奖")
+            log(f"⚠️ [{m_phone}] 未能获取有效 SessionKey，已跳过翼支付专属抽奖")
         else:
             if ticket_source:
                 bullets.append(f"• 凭证来源: {ticket_source}")
