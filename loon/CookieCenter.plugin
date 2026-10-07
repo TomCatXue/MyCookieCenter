@@ -4,8 +4,8 @@
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://avatars.githubusercontent.com/u/138953496?v=4
 #!tag = 签到, Cookie, 凭据捕获, 定时任务, 中国电信, 微信读书
-#!version = 4.2.1
-#!date = 2026-10-07 16:20
+#!version = 4.2.2
+#!date = 2026-10-07 16:45
 
 # =================== 1. 功能开关 ===================
 
@@ -34,9 +34,9 @@ cron "0 10 * * 5" then script("https://raw.githubusercontent.com/TomCatXue/MyCoo
 # -------------------------------------------------------------
 # 1. 抓取层：多源精准凭据捕获 (100% 静默捕获，进小程序任意页面即自动秒领)
 # [周三会员日与幸运抽奖] 微信小程序打开电信5G会员/权益商城，自动静默提取 SessionKey 与手机号
-request if ${url} ~= /^https?:\/\/cdn\.bestpay\.cn\/marketing\/telecom\.member\.config\.json/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/telecom/telecom_draw.js?v=20261007") with enable=${telecom}, tag="电信·会员配置捕获"
-response if ${url} ~= /^https?:\/\/mapi\.bestpay\.com\.cn\/mapi\/miniProgrameLoginEnc/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/telecom/telecom_draw.js?v=20261007") with enable=${telecom}, tag="电信·小程序登录捕获", requires_body=true
-request if ${url} ~= /^https?:\/\/spanner\.bestpay\.com\.cn:10081/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/telecom/telecom_draw.js?v=20261007") with enable=${telecom}, tag="电信·MGS网关捕获"
+request if ${url} ~= /^https?:\/\/cdn\.bestpay\.cn\/marketing\/telecom\.member\.config\.json/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/telecom/telecom_draw.js?v=202610071645") with enable=${telecom}, tag="电信·会员配置捕获"
+request if ${url} ~= /^https?:\/\/mapi-h5\.bestpay\.com\.cn\/gapi\/handyservice\/miniprogram\/checkParam/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/telecom/telecom_draw.js?v=202610071645") with enable=${telecom}, tag="电信·小程序登录捕获", requires_body=true
+request if ${url} ~= /^https?:\/\/spanner\.bestpay\.com\.cn:10081/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/telecom/telecom_draw.js?v=202610071645") with enable=${telecom}, tag="电信·MGS网关捕获"
 
 # [等级权益秒杀] 电信营业厅 App 签到/等级权益页凭据捕获与会话回填
 request if ${url} ~= /^https?:\/\/(waphub|wappark)\.189\.cn\/(jt-sign|gateway|JinDouMall)\//i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/telecom/telecom_rights.js?v=20260912") with enable=${telecom}, tag="电信·等级权益凭证捕获"
@@ -47,7 +47,7 @@ request if ${url} ~= /^https:\/\/wx\.sx\.189\.cn\/sx_ai_benefit\/h5\/HD/i then s
 
 # 2. 执行层：后台定时与偷跑调度
 # [周三会员抽奖] 每周三上午 09:00:00 自动执行周三双抽奖与幸运抽奖（进小程序亦可即时秒领）
-cron "0 9 * * 3" then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/telecom/telecom_draw.js?v=20261007") with enable=${telecom}, tag="电信·周三会员抽奖"
+cron "0 9 * * 3" then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/telecom/telecom_draw.js?v=202610071645") with enable=${telecom}, tag="电信·周三会员抽奖"
 
 # [等级话费秒杀] 每日 23:59:00 提前唤醒，23:59:59.750 毫秒级偷跑抢兑等级话费券
 cron "59 23 * * *" then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/telecom/telecom_rights.js?v=20260912") with enable=${telecom}, tag="电信·零点抢兑话费", timeout=90

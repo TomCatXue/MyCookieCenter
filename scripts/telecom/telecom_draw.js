@@ -15,6 +15,9 @@
  * - 【权益包自动领取】：扫描 unreceived 权益逐张真实领取，凭 rebateDetailNo 二次轮询确认到账，
  *    遇「库存不足/已领完/活动结束」立即熔断，杜绝盲目重试扣减资产（v1.7.0 新增）
  * - 【当日锁自愈】：会话失效不再锁定当天，捕获到全新会话主动解锁并即时重跑（v1.8.1 修复）
+ * - 【登录接口迁移适配】：翼支付登录接口由 mapi.bestpay.com.cn/miniProgrameLoginEnc
+ *   迁移至 mapi-h5.bestpay.com.cn/gapi/handyservice/miniprogram/checkParam，
+ *   捕获层新增 base64 明文 JSON 请求体解码，抓取真实 sessionKey 与 productNo（v1.8.2）
  *
  * GitHub: https://github.com/TomCatXue/MyCookieCenter
  */
@@ -5686,6 +5689,12 @@ async function handleCapture() {
       let parsed = null;
       if (body.startsWith('{')) {
         parsed = JSON.parse(body);
+      } else if (/^[A-Za-z0-9+/=]+$/.test(body.trim())) {
+        // 【v1.8.2】纯 base64 请求体：checkParam 登录校验请求的 C005 明文 JSON
+        parsed = tryDecodeBase64Json(body);
+        if (parsed) {
+          $.log(`[凭据捕获] 解码 base64 登录校验请求体成功，提取凭据`);
+        }
       } else {
         parsed = parseQueryString(body);
       }
@@ -6479,6 +6488,43 @@ function getTodayDateStr() {
 function getQueryParam(url, param) {
   const match = url.match(new RegExp('[?&]' + param + '=([^&#]*)', 'i'));
   return match ? decodeURIComponent(match[1]) : '';
+}
+
+// 【v1.8.2】解码 checkParam 请求体的 base64 明文 JSON（登录校验请求，含真实 sessionKey+productNo）
+// 自包含 base64 解码：不依赖 CryptoKit 闭包内的 Base64（那是 IIFE 局部变量，全局不可见），
+// 也不依赖 Loon JavaScriptCore 缺失的 atob。
+function _b64ToUtf8(b64) {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  const clean = String(b64).replace(/[^A-Za-z0-9+/=]/g, '');
+  let out = '';
+  let bits = 0, acc = 0;
+  for (let i = 0; i < clean.length; i++) {
+    const c = clean[i];
+    if (c === '=') break;
+    const v = chars.indexOf(c);
+    if (v === -1) continue;
+    acc = (acc << 6) | v;
+    bits += 6;
+    if (bits >= 8) {
+      bits -= 8;
+      out += String.fromCharCode((acc >> bits) & 0xff);
+    }
+  }
+  return out;
+}
+
+function tryDecodeBase64Json(str) {
+  if (!str || typeof str !== 'string') return null;
+  const t = str.trim();
+  // 仅当是纯 base64（无 { 开头）时尝试解码；已是 JSON 则直接返回
+  if (t.startsWith('{')) {
+    try { return JSON.parse(t); } catch (e) { return null; }
+  }
+  try {
+    return JSON.parse(_b64ToUtf8(t));
+  } catch (e) {
+    return null;
+  }
 }
 
 function parseQueryString(str) {
