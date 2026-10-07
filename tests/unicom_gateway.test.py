@@ -100,4 +100,202 @@ assert ud.globalConfig["regional_config"]["run_ah_friday"] is False, \
 # 版本号
 assert ud.SCRIPT_VERSION == "v1.3.0", f"expected v1.3.0, got {ud.SCRIPT_VERSION}"
 
+# ---------- D 项: 乘风模块硬约束 (任务 7 审查) ----------
+
+
+def _method_body(name):
+    """从 SOURCE 切出方法体: 'def name(' 起, 到下一个同级 'def ' 之前"""
+    marker = "def %s(" % name
+    start = SOURCE.find(marker)
+    assert start != -1, "method %s not found in SOURCE" % name
+    nxt = SOURCE.find("\n    def ", start + len(marker))
+    return SOURCE[start:nxt] if nxt != -1 else SOURCE[start:]
+
+
+# 调用顺序: 乘风活动必须在家乡打卡之前执行
+_ltyp_body = _method_body("ltyp_task")
+assert "self.yphd_activity_task(" in _ltyp_body, \
+    "ltyp_task must invoke yphd_activity_task"
+assert "self.hometown_task(token)" in _ltyp_body, \
+    "ltyp_task must invoke hometown_task(token)"
+assert _ltyp_body.index("self.yphd_activity_task(") < \
+    _ltyp_body.index("self.hometown_task(token)"), \
+    "ltyp_task must run yphd_activity_task BEFORE hometown_task(token)"
+
+# 错误隔离: 乘风活动异常只记日志, 绝不上抛
+_yphd_body = _method_body("yphd_activity_task")
+assert "raise" not in _yphd_body, \
+    "yphd_activity_task must isolate failures (no raise; log-only)"
+
+# ---------- E 项: 隐私边界行为断言 (任务 6 审查) ----------
+
+
+def _fake_yphd_self(mobile="13800138000", token="tok"):
+    """裸 UserService, 记录全部出站请求 (get/post)"""
+    obj = object.__new__(ud.UserService)
+    calls = []
+
+    class RecordingSession:
+        def get(self, url, **kw):
+            calls.append(("GET", url))
+            return types.SimpleNamespace(text="{}", status_code=200, json=lambda: {})
+
+        def post(self, url, **kw):
+            calls.append(("POST", url))
+            return types.SimpleNamespace(text="{}", status_code=200, json=lambda: {})
+
+    obj.session = RecordingSession()
+    obj.cloudDisk = types.SimpleNamespace(userToken=token)
+    obj.account_mobile = mobile
+    obj.log = lambda msg, notify=False: None
+    return obj, calls
+
+
+# 未配置素材时: 返回 False 且零出站请求 (不得扫描云盘/调用第三方)
+_mgtv_obj, _mgtv_calls = _fake_yphd_self()
+_saved_fid = ud.YPHD_MGTV_IMG_FID
+try:
+    ud.YPHD_MGTV_IMG_FID = ""  # 临时置空模块级常量, finally 还原
+    _mgtv_ret = ud.UserService.yphd_mgtv_task(_mgtv_obj, "ticket", "access")
+finally:
+    ud.YPHD_MGTV_IMG_FID = _saved_fid
+assert _mgtv_ret is False, "yphd_mgtv_task must return False when the image FID is empty"
+assert _mgtv_calls == [], \
+    "empty image FID must issue ZERO outbound requests, got %r" % (_mgtv_calls,)
+
+# ---------- F 项: 请求层行为断言 (任务 4 审查) ----------
+
+for _m in ("def yphd_headers", "def yphd_post", "def yphd_get", "def yphd_signed_post"):
+    assert _m in SOURCE, "%s must exist" % _m
+
+import hmac as _hmac
+import hashlib as _hashlib
+import base64 as _b64
+import re as _re
+from Crypto.Cipher import AES as _AES
+from Crypto.Util.Padding import unpad as _unpad
+
+
+_signed_posts = []
+
+
+class _TimestampSession:
+    """首个 POST(/activity/getTimestamp) 返回 nonce/timestamp, 其余返回空"""
+
+    def post(self, url, **kw):
+        _signed_posts.append((url, kw))
+        if "getTimestamp" in url:
+            return types.SimpleNamespace(
+                text="", status_code=200,
+                json=lambda: {"result": {"nonce": "n0nce", "timestamp": "1234567890123"}},
+            )
+        return types.SimpleNamespace(text="", status_code=200, json=lambda: {})
+
+    def get(self, url, **kw):
+        _signed_posts.append((url, kw))
+        return types.SimpleNamespace(text="", status_code=200, json=lambda: {})
+
+
+_signed_obj, _ = _fake_yphd_self()
+_signed_obj.session = _TimestampSession()
+ud.UserService.yphd_signed_post(
+    _signed_obj, "/activity/fragment/status", "activity:fragment:status", {}, "1001000035"
+)
+
+assert len(_signed_posts) == 2, \
+    "signed post must make exactly 2 requests (getTimestamp + signed), got %d" % len(_signed_posts)
+assert "getTimestamp" in _signed_posts[0][0], "first request must be /activity/getTimestamp"
+_body = _signed_posts[1][1].get("json")
+assert isinstance(_body, dict), "second request must carry a json body"
+assert set(_body.keys()) == {"activityId", "nonce", "timestamp", "sign"}, \
+    "signed body key set drifted: %r" % (sorted(_body.keys()),)
+assert _body["activityId"] == ud.YPHD_ACTIVITY_ID, "signed body must carry activityId"
+assert _body["nonce"] == "n0nce" and _body["timestamp"] == "1234567890123", \
+    "signed body must carry nonce/timestamp from getTimestamp"
+
+# 独立复算期望签名 (不调用被测的 hometown_sign_payload, 避免同义反复)
+_expected_raw = "&".join(
+    "%s=%s" % (k, _body[k]) for k in sorted(("activityId", "nonce", "timestamp"))
+) + "&secret=%s" % ud.HOMETOWN_LOTTERY_SECRET
+_expected_sign = _hmac.new(
+    ud.HOMETOWN_LOTTERY_SECRET.encode(), _expected_raw.encode(), _hashlib.sha256
+).hexdigest()
+assert _body["sign"] == _expected_sign, \
+    "sign drifted from independently recomputed value: %s != %s" % (
+        _body["sign"], _expected_sign)
+
+# 短路: getTimestamp 返回 {} 时不得发出第二次请求
+_short_posts = []
+
+
+class _EmptyTsSession:
+    def post(self, url, **kw):
+        _short_posts.append((url, kw))
+        return types.SimpleNamespace(text="", status_code=200, json=lambda: {})
+
+    def get(self, url, **kw):
+        _short_posts.append((url, kw))
+        return types.SimpleNamespace(text="", status_code=200, json=lambda: {})
+
+
+_short_obj, _ = _fake_yphd_self()
+_short_obj.session = _EmptyTsSession()
+_short_ret = ud.UserService.yphd_signed_post(
+    _short_obj, "/activity/lottery", "activity:lottery", {}, "1001000035"
+)
+assert _short_ret == {}, "signed post must return {} when getTimestamp yields no nonce"
+assert len(_short_posts) == 1, \
+    "must NOT issue a second request after an empty getTimestamp, got %d" % len(_short_posts)
+assert "getTimestamp" in _short_posts[0][0], "the only request must be /activity/getTimestamp"
+
+# ---------- G 项: 会员手机号 AES 往返 (任务 5 审查) ----------
+
+_member_captured = []
+
+
+def _capture_member_post(path, payload=None, client_id="1001000165", extra=None):
+    _member_captured.append({"path": path, "payload": payload, "client_id": client_id})
+    # meta.code != 200 -> 方法在资格查询处提前返回, 不触发第二次请求
+    return {"meta": {"code": "500", "message": "test-stub"}}
+
+
+_member_obj = object.__new__(ud.UserService)
+_member_obj.account_mobile = "13800138000"
+_member_obj.cloudDisk = types.SimpleNamespace(userToken="tok")
+_member_obj.log = lambda msg, notify=False: None
+_member_obj.yphd_post = _capture_member_post  # 打桩, 不打真实接口
+_member_ret = ud.UserService.yphd_member_claim(_member_obj)
+
+assert _member_ret is False, "stubbed eligibility failure must yield False"
+assert len(_member_captured) == 1, "claim must stop after the failed eligibility check"
+assert _member_captured[0]["path"] == "/activity/check/yp/members/eligibility", \
+    "first claim request must be the eligibility check"
+_enc_phone = (_member_captured[0]["payload"] or {}).get("phone")
+assert _enc_phone, "member payload must carry an encrypted phone field"
+
+# 用公开常量独立解密, 必须还原出原文手机号
+_member_cipher = _AES.new(
+    ud.YPHD_MEMBER_PHONE_KEY.encode(), _AES.MODE_CBC, ud.HOMETOWN_AES_IV.encode()
+)
+try:
+    _dec_phone = _unpad(
+        _member_cipher.decrypt(_b64.b64decode(_enc_phone)), _AES.block_size, style="pkcs7"
+    ).decode()
+except Exception as _e:
+    _dec_phone = None
+    _dec_err = _e
+assert _dec_phone == "13800138000", \
+    "member phone AES round-trip mismatch (wrong key/IV?): %r (%r)" % (_dec_phone, locals().get("_dec_err"))
+
+# ---------- H 项: 子开关默认值 (任务 3 审查) ----------
+
+assert ud.YPHD_ENABLE is True, "YPHD_ENABLE must default to True (no env var)"
+assert "UNICOM_YPHD_MGTV_IMG_FID" in SOURCE, \
+    "mgtv image material must come from the UNICOM_YPHD_MGTV_IMG_FID env var"
+# 强化: 赋值语句本身必须真的从该环境变量读取 (而非写死常量)
+_fid_assign = _re.search(r"^YPHD_MGTV_IMG_FID\s*=\s*(.+)$", SOURCE, _re.M)
+assert _fid_assign, "YPHD_MGTV_IMG_FID must be assigned at module level"
+assert 'os.environ.get("UNICOM_YPHD_MGTV_IMG_FID"' in _fid_assign.group(1), \
+    "YPHD_MGTV_IMG_FID must be sourced from os.environ, not a hard-coded constant"
+
 print("unicom gateway & yphd: PASS")
