@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 ===================================================================
-📌 版本: v1.5.0 (2026-09-23 权益商城抽奖通道修正版)
+📌 版本: v1.6.0 (2026-10-07 自动换票 / 权益包自动领取 / 抽奖自动领奖版)
 中国电信 · 周三会员双抽奖与幸运抽奖聚合脚本
 ===================================================================
 new Env('中国电信 · 周三会员抽奖');
@@ -19,10 +19,22 @@ tag: 中国电信
         H5 网关 mapi-h5 无此服务(API500002)，故任务三改走 H5 可达的活动配置 + op-lottery-system 抽奖引擎。
   4. 资产回显：自动查询并回显当前账户真实权益币余额
 
+  ★ v1.6.0 新增三大能力（基于 2026-10-07 全链路抓包逆向验证）：
+  5. 【自动换票】SessionKey 全自动获取与续期：
+     - 未配置 SessionKey 时，自动走 电信登录 → Ticket → singleAuthorizedLogin 换取 SessionKey；
+     - 换票接口 /gapi/quanyi/product/singleAuthorizedLogin 标注 authLogin:false，无需既有会话即可调用；
+     - 换取成功后自动落盘持久化(telecom_wed_session.json)，下次运行直接复用，实现免人工抓包。
+  6. 【权益包自动领取】基于 manualReceiveEquity (H5 C005 通道，isNeedEncrypt:false)：
+     - 自动扫描 couponStatus == "unreceived" 的待领权益并逐张真实领取；
+     - 通过 rebateDetailNo 二次轮询 receiveStatus 确认到账(INIT/PENDING→SUCCESS)；
+     - 遇「库存不足/已领完/活动结束」立即停止，遇网络超时记为待确认，绝不盲目重试。
+  7. 【抽奖自动领奖】抽奖后自动调用 receivePrize 完成领奖入账，无需再进小程序手动点领取。
+
 环境变量配置：
   TELECOM_WED_AUTH : 专属环境变量 (支持简写 dx_wed)
                      格式为 '手机号#服务密码#AndroidID#SessionKey' 或 '手机号#服务密码#AndroidID'
                      多账号换行粘贴，彻底独立于 0716 脚本的 dxlin 与 0点权益的 dxqy
+                     ★ 第四段 SessionKey 现在可省略：脚本会自动换取并落盘复用
 
 依赖环境：
   pip install pycryptodome requests certifi urllib3
@@ -70,12 +82,15 @@ except ImportError:
 
 # ==================== 🛠️ 脚本功能开关配置 ====================
 
-SCRIPT_VERSION = "v1.5.0"
+SCRIPT_VERSION = "v1.6.0"
 
 CONFIG = {
     "ENABLE_WED_COIN_DRAW": True,   # 任务 1: 周三会员抽权益币 (专场抽权益币, 默认 hd76690472)
     "ENABLE_WED_THRICE_DRAW": True, # 任务 2: 周三会员抽三次 (专属抽3次专场, 默认 hd92859166)
     "ENABLE_LUCKY_MALL_DRAW": True, # 任务 3: 权益商城幸运抽奖 (自动做任务+大转盘抽奖)
+    "ENABLE_AUTO_TICKET": True,     # 任务 4: 自动换票 (电信登录→Ticket→SessionKey，无需人工抓包)
+    "ENABLE_AUTO_CLAIM": True,      # 任务 5: 权益包自动领取 (manualReceiveEquity 真实领券入账)
+    "ENABLE_AUTO_RECEIVE_PRIZE": True, # 任务 6: 抽奖后自动领奖 (receivePrize 自动入账)
     "FORCE_RUN": True,             # 调试模式: False=仅周三自动执行，True=非周三平时强制运行所有任务测试
     "DELAY_SEC": 2,                 # 各接口请求间隔(秒)，避免触发电信风控频控
     "ACT_COIN": "hd76690472",       # 周三抽权益币活动代号
@@ -84,8 +99,21 @@ CONFIG = {
     "UA": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 MicroMessenger/8.0.38(0x1800262c) NetType/WIFI Language/zh_CN"
 }
 
+# ==================== 🌐 翼支付网关生产环境常量 ====================
+# 2026-10-07 抓包逆向确认：生产环境 window.mapiUrl = https://mapi-h5.bestpay.com.cn
+# （来源 bestpay-html5-3.0.js 的 env map："prod"===n → e.mapiUrl="https://mapi-h5.bestpay.com.cn"）
+BESTPAY_H5_BASE = "https://mapi-h5.bestpay.com.cn"
+
+# 权益商城(equity-goods-h5)生产 agreeId，来源 bundle 常量：
+#   H={development:"20211210030100208705256496824388",pre:"...",prod:"20211223030100213484984697094168"}
+EQUITY_MALL_AGREE_ID = "20211223030100213484984697094168"
+
+# 电信会员专区(telecom-member-h5)生产 agreeId，实测抓包(idx 274/275 queryVoucherList/queryCouponList)所用值
+TELECOM_MEMBER_AGREE_ID = "20200827030100038416476813657090"
+
 # ==================== 💾 战果本地缓存管理 ====================
 REWARDS_CACHE_FILE = Path(__file__).parent / 'telecom_rewards_cache.json'
+SESSION_CACHE_FILE = Path(__file__).parent / 'telecom_wed_session.json'
 
 def load_rewards_cache() -> dict:
     try:
@@ -113,6 +141,36 @@ def set_today_reward(phone: str, task_name: str, result_text: str):
     key = f"{phone}_{today}_{task_name}"
     cache[key] = result_text
     save_rewards_cache(cache)
+
+# ==================== 💾 SessionKey 本地持久化 (自动换票自愈闭环) ====================
+def load_session_store() -> dict:
+    """读取本地 SessionKey 落盘缓存，实现换票后免人工抓包的长期复用"""
+    try:
+        if SESSION_CACHE_FILE.exists():
+            data = json.loads(SESSION_CACHE_FILE.read_text(encoding='utf-8'))
+            return data if isinstance(data, dict) else {}
+    except Exception:
+        pass
+    return {}
+
+def save_session_store(phone: str, session_key: str, extra: Optional[dict] = None):
+    """换票成功后落盘回写，使下一次定时调度运行无缝继承最新票据"""
+    try:
+        store = load_session_store()
+        store[phone] = {
+            'sessionKey': session_key,
+            'updateTime': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            **(extra or {})
+        }
+        SESSION_CACHE_FILE.write_text(json.dumps(store, ensure_ascii=False, indent=2), encoding='utf-8')
+        log(f"💾 [{mask(phone)}] SessionKey 已落盘持久化，下次运行自动复用")
+    except Exception as e:
+        log(f"⚠️ 保存 SessionKey 缓存失败: {e}")
+
+def get_cached_session_key(phone: str) -> str:
+    """从落盘缓存中取出该账号最新可用的 SessionKey"""
+    rec = load_session_store().get(phone) or {}
+    return str(rec.get('sessionKey') or '').strip()
 
 # ==================== 🔐 电信官方登录加密常量 ====================
 KEYS = {
@@ -251,12 +309,17 @@ def request_c005(sess: requests.Session, url: str, biz_params: dict, phone: str,
     }
 
     # 关键核验：Cookie 里的 productNo 必须是真实的 11 位手机号，sessionKey 方可完成手机号鉴权绑定
+    # 免登录换票场景(singleAuthorizedLogin)不携带 sessionKey，此时仅下发 productNo 避免空值污染
+    cookie_parts = [f'productNo={phone}']
+    if session_key:
+        cookie_parts.insert(0, f'sessionKey={session_key}')
+
     req_headers = {
         'content-type': 'application/json;charset=utf-8',
         'user-agent': CONFIG["UA"],
         'origin': 'https://h5.bestpay.cn',
         'referer': 'https://h5.bestpay.cn/',
-        'cookie': f'sessionKey={session_key}; productNo={phone}'
+        'cookie': '; '.join(cookie_parts)
     }
 
     res = api_req(sess, url, json=payload, headers=req_headers)
@@ -389,6 +452,378 @@ def login_telecom(sess: requests.Session, phone: str, password: str, android_id:
         log(f"❌ [解析Ticket异常] {m_phone}: {str(e)}")
         return None
 
+# ==================== 🎫 自动换票：Ticket → SessionKey ====================
+def exchange_ticket_for_session_key(sess: requests.Session, phone: str, ticket: str) -> Optional[str]:
+    """
+    电信 SSO Ticket → 翼支付 SessionKey 自动换票。
+
+    2026-10-07 抓包逆向依据（来源 telecom-member-h5 主包 bundle）：
+      singleAuthorizedLogin: {
+        BASEURL: "REACT_APP_NEW_API_URL",   // 生产解析为 https://mapi-h5.bestpay.com.cn
+        url: "quanyi/product/singleAuthorizedLogin",
+        extensionData: { agreeId: "REACT_APP_US_AUTH_AGREEID" },
+        authLogin: false                     // ★ 无需既有会话，正是为换票设计的免登录接口
+      }
+
+    调用实现（页面 u() 函数）：
+      let s = "singleAuthorizedLogin";
+      const c = "1" === t.ssoType;
+      let u = { ticket: t.ticket, fromchannelId: r, systemType: null, channel: r, encyType: "C005" };
+      // 成功后 r.result 中即含 sessionKey
+    """
+    m_phone = mask(phone)
+    log(f"🎫 [{m_phone}] 正在使用 SSO Ticket 自动换取 SessionKey...")
+
+    url = f"{BESTPAY_H5_BASE}/gapi/quanyi/product/singleAuthorizedLogin"
+
+    # 2026-10-07 线上实测校准（三轮探测结论）：
+    #   1. appType=94 为翼支付 H5 渠道固定标识，缺失将报「APPTYPE:应用类型不能为空」；
+    #   2. channel / fromchannelId 必须为 "XCX"，其余取值(5g_mini_program/MINIPROG/APPLET 等)
+    #      一律返回「未配置渠道及对应的请求地址」——这是网关白名单强校验；
+    #   3. 实测成功响应结构：{result:{sessionKey, operatorNo, productNo, isRegistedBestpayCustomer}, success:true}
+    biz = {
+        'ticket': ticket,
+        'fromchannelId': 'XCX',
+        'fromchannelId': 'XCX',
+        'systemType': None,
+        'channel': 'XCX',
+        'appType': '94',
+        'encyType': 'C005',
+    }
+
+    res = request_c005(sess, url, biz, phone, '', 'XCX')
+
+    if not isinstance(res, dict):
+        log(f"❌ [{m_phone}] 换票响应异常（非 JSON 结构）")
+        return None
+
+    if not res.get('success'):
+        err = res.get('errorMsg') or res.get('errorCode') or '未知错误'
+        log(f"❌ [{m_phone}] 换票未通过: {err}")
+        return None
+
+    result = res.get('result') if isinstance(res.get('result'), dict) else {}
+    sk = str(result.get('sessionKey') or '').strip()
+
+    # 兼容部分环境下 sessionKey 位于 result 外层的情形
+    if not sk:
+        sk = str(res.get('sessionKey') or '').strip()
+
+    # 未换出 sessionKey 时，结合注册标识给出精准原因，避免误判为「服务密码错误」
+    if not sk:
+        registered = str(result.get('isRegistedBestpayCustomer') or '')
+        if registered and registered != '1':
+            log(f"ℹ️ [{m_phone}] Ticket 有效但该号码尚未注册翼支付账号(isRegistedBestpayCustomer={registered})，无法换票")
+        else:
+            log(f"❌ [{m_phone}] 换票未返回 sessionKey，响应: {json.dumps(res, ensure_ascii=False)[:300]}")
+        return None
+
+    # 换票成功 → 立即落盘持久化，实现免人工抓包的自愈闭环
+    save_session_store(phone, sk, {
+        'productNo': result.get('productNo') or phone,
+        'operatorNo': result.get('operatorNo') or '',
+        'source': 'auto_ticket',
+    })
+    log(f"✅ [{m_phone}] 自动换票成功，SessionKey 已就绪 ({sk[:8]}...)")
+    return sk
+
+# ==================== 🎁 权益包自动领取 (manualReceiveEquity) ====================
+def query_user_equity_receive_status(sess: requests.Session, phone: str, session_key: str, params: dict) -> dict:
+    """
+    查询指定权益的领取状态。
+
+    接口定义（来源 equity-goods-h5 bundle）：
+      queryUserEquityReceiveStatus:
+        url: "gapi/ep-product-center/RebateService/queryUserEquityReceiveStatus"
+        operationType: "...RebateService.queryUserEquityReceiveStatus"
+        isNeedEncrypt: false, encyType: "C005", needSessionKey: true
+    """
+    biz = {
+        'phoneNo': phone,
+        'sessionKey': session_key,
+        'encyType': 'C005',
+        'fromChannelId': '5g_mini_program',
+        'fromchannelId': '5g_mini_program',
+        **params,
+    }
+    return request_c005(
+        sess,
+        f"{BESTPAY_H5_BASE}/gapi/ep-product-center/RebateService/queryUserEquityReceiveStatus",
+        biz, phone, session_key, '5g_mini_program'
+    )
+
+def manual_receive_equity(sess: requests.Session, phone: str, session_key: str, params: dict) -> dict:
+    """
+    权益包一键领取（真实领券入账）。
+
+    接口定义（来源 equity-goods-h5 bundle，2026-10-07 抓包逆向确认）：
+      manualReceiveEquity:
+        url: "gapi/ep-product-center/RebateService/manualReceiveEquity"
+        operationType: "com.bestpay.opproduct.service.api.plus.EquityPlusService.manualReceiveEquity"
+        isNeedEncrypt: false,        // ★ 无需额外加密
+        encyType: "C005",            // ★ 标准 C005，脚本已完整实现
+        agreeIdObj: H(prod=20211223030100213484984697094168),
+        needSessionKey: true         // ★ 仅需 sessionKey
+    """
+    biz = {
+        'phoneNo': phone,
+        'sessionKey': session_key,
+        'agreeId': EQUITY_MALL_AGREE_ID,
+        'encyType': 'C005',
+        'fromChannelId': '5g_mini_program',
+        'fromchannelId': '5g_mini_program',
+        **params,
+    }
+    return request_c005(
+        sess,
+        f"{BESTPAY_H5_BASE}/gapi/ep-product-center/RebateService/manualReceiveEquity",
+        biz, phone, session_key, '5g_mini_program'
+    )
+
+def poll_receive_result(sess: requests.Session, phone: str, session_key: str,
+                        rebate_detail_no: str, max_poll: int = 3) -> str:
+    """
+    凭 rebateDetailNo 二次轮询领取结果，确认真正到账。
+
+    状态机（对齐页面 queryReceiveResult 实现）：
+      INIT / PENDING  → 继续轮询（1s 间隔，最多 max_poll 次）
+      SUCCESS         → 领取成功
+      FAILURE         → 领取失败
+      其余            → 视为待确认
+    """
+    if not rebate_detail_no:
+        return 'PENDING'
+
+    for attempt in range(1, max_poll + 1):
+        res = query_user_equity_receive_status(sess, phone, session_key, {
+            'rebateDetailNo': rebate_detail_no,
+        })
+        if not isinstance(res, dict):
+            return 'UNKNOWN'
+
+        # 显式错误码判定（对齐页面：[-1,1] 视为领取失败）
+        err_code = res.get('error')
+        if err_code in (-1, 1):
+            return 'FAILURE'
+
+        result = res.get('result') if isinstance(res.get('result'), dict) else {}
+        status = str(result.get('receiveStatus') or '').upper()
+
+        if status == 'SUCCESS':
+            return 'SUCCESS'
+        if status == 'FAILURE':
+            return 'FAILURE'
+        if status in ('INIT', 'PENDING'):
+            if attempt < max_poll:
+                time.sleep(1)
+            continue
+        # 空状态：首轮可能尚未生成，继续轮询
+        if not status and attempt < max_poll:
+            time.sleep(1)
+            continue
+
+    return 'PENDING'
+
+# 停止领取的终止信号：遇库存不足/活动结束等硬性失败必须立即停止，严禁盲目重试
+CLAIM_STOP_KEYWORDS = ('库存不足', '已领完', '已抢完', '领完', '活动已结束', '活动结束', '已结束', '已领取过')
+
+def auto_claim_equity_coupons(sess: requests.Session, phone: str, session_key: str,
+                              coupon_list: List[dict], act_title: str = "权益包自动领取") -> str:
+    """
+    权益包自动领取执行器。
+
+    对候选权益列表逐张执行「领取 → 轮询确认」闭环，返回人类可读的战果摘要。
+    所有候选均需具备 couponStatus == "unreceived" 且携带完整业务参数。
+    """
+    m_phone = mask(phone)
+    if not coupon_list:
+        return "暂无可领取权益"
+
+    log(f"\n🎁 >>> 正在执行：{act_title} ({m_phone})，共 {len(coupon_list)} 张待领 <<<")
+
+    claimed, failed, pending, skipped = [], [], [], []
+
+    for idx, cp in enumerate(coupon_list, start=1):
+        name = cp.get('equityName') or cp.get('couponName') or cp.get('goodsName') or f'权益{idx}'
+
+        # 组装 manualReceiveEquity 业务参数（字段名严格对齐页面 confirmGetCoupon 实现）
+        biz_params = {
+            'equityNo': cp.get('equityId') or cp.get('equityNo') or '',
+            'orderNo': cp.get('orderNo') or '',
+            'equityModuleId': cp.get('equityModuleId') or '',
+            'priceType': cp.get('priceType') or '',
+            'robStrategyNo': cp.get('robStrategyNo') or '',
+            'unitEquityId': cp.get('rightsId') or cp.get('unitEquityId') or '',
+            'currentRebateCycle': cp.get('currentRebateCycle') or '',
+            'currentCycleEndDate': cp.get('currentCycleEndDate') or '',
+        }
+
+        # 缺少核心定位参数则跳过，避免无效请求
+        if not biz_params['equityNo'] and not biz_params['orderNo']:
+            skipped.append(name)
+            continue
+
+        log(f"[{act_title}] ({idx}/{len(coupon_list)}) 正在领取: {name}")
+        res = manual_receive_equity(sess, phone, session_key, biz_params)
+
+        if not isinstance(res, dict):
+            failed.append(f"{name}(响应异常)")
+            continue
+
+        result = res.get('result') if isinstance(res.get('result'), dict) else {}
+        status = str(result.get('status') or '').upper()
+        rebate_detail_no = result.get('rebateDetailNo') or ''
+        err_msg = result.get('errorMsg') or result.get('errorMessage') or res.get('errorMsg') or ''
+
+        if status == 'SUCCESS' and rebate_detail_no:
+            # 二次轮询确认真正到账
+            confirm = poll_receive_result(sess, phone, session_key, rebate_detail_no)
+            if confirm == 'SUCCESS':
+                claimed.append(name)
+                log(f"🎉 [{act_title}] 领取成功: {name}")
+            elif confirm == 'FAILURE':
+                failed.append(f"{name}(确认失败)")
+                log(f"❌ [{act_title}] 领取确认失败: {name}")
+            else:
+                pending.append(f"{name}(待确认)")
+                log(f"⏳ [{act_title}] 已提交待确认: {name}")
+        elif status == 'FAIL':
+            reason = err_msg or '接口返回失败'
+            # 硬性终止信号：库存/活动类失败必须立即停止，杜绝盲目重试
+            if any(k in reason for k in CLAIM_STOP_KEYWORDS):
+                log(f"🛑 [{act_title}] 触发终止信号({reason})，停止后续领取")
+                failed.append(f"{name}({reason})")
+                break
+            failed.append(f"{name}({reason})")
+            log(f"❌ [{act_title}] 领取失败: {name} - {reason}")
+        elif any(k in str(res) for k in CLAIM_STOP_KEYWORDS):
+            failed.append(f"{name}(已领完/已领取)")
+            log(f"ℹ️ [{act_title}] {name} 已领完或已领取")
+        else:
+            reason = err_msg or status or '未返回明确状态'
+            failed.append(f"{name}({reason})")
+            log(f"❌ [{act_title}] 领取未成功: {name} - {reason}")
+
+        time.sleep(CONFIG.get("DELAY_SEC", 2))
+
+    parts = []
+    if claimed:
+        parts.append(f"成功 {len(claimed)} 张: [{', '.join(claimed)}]")
+    if pending:
+        parts.append(f"待确认 {len(pending)} 张: [{', '.join(pending)}]")
+    if failed:
+        parts.append(f"失败 {len(failed)} 张: [{', '.join(failed)}]")
+    if skipped:
+        parts.append(f"跳过 {len(skipped)} 张(参数不全)")
+
+    summary = "；".join(parts) if parts else "未产生领取动作"
+    set_today_reward(phone, 'auto_claim', summary)
+    return summary
+
+# ==================== 📋 待领权益发现 (自动领取的前置扫描) ====================
+def query_unreceived_coupons(sess: requests.Session, phone: str, session_key: str) -> List[dict]:
+    """
+    查询账户下所有「待领取(unreceived)」的权益券，作为自动领取的候选池。
+
+    2026-10-07 线上可达性实测（H5 网关 mapi-h5）：
+      ✅ queryVoucherList  → 100008 登录验证失败（接口存在，需有效 SessionKey）
+      ✅ queryCouponList   → 100008 登录验证失败（接口存在，需有效 SessionKey）
+      ❌ queryQyUnclaimed  → API500002 接口服务不存在（该接口未迁移到 H5，故不采用）
+
+    因此本函数只走上述两条实测可达的通道，取并集后按 couponStatus 过滤，
+    仅保留页面判定为可领取的条目（unreceived / 未标注状态），已领已用一律排除。
+    """
+    m_phone = mask(phone)
+    candidates: List[dict] = []
+    seen_keys = set()
+
+    def _absorb(items: List[dict]):
+        for it in items:
+            status = str(it.get('couponStatus') or it.get('status') or '').lower()
+            # 仅接纳明确待领或未标注状态的条目；已领/已用一律排除
+            if status and status not in ('unreceived', 'unclaimed', 'init'):
+                continue
+            key = str(it.get('equityId') or it.get('equityNo') or it.get('orderNo') or '')
+            if not key or key in seen_keys:
+                continue
+            seen_keys.add(key)
+            candidates.append(it)
+
+    # 通道 1：电信会员专区券列表
+    try:
+        res = request_c005(sess, f'{BESTPAY_H5_BASE}/gapi/marketingConsultation/CouponQueryService/queryCouponList', {
+            'accountStatus': 'ENABLE',
+            'pageNo': 1,
+            'pageSize': 20,
+            'productNo': phone,
+            'sessionKey': session_key,
+            'agreeId': TELECOM_MEMBER_AGREE_ID,
+            'appType': '94',
+            'requestSystem': 'telecome-member-h5',
+            'requestSecSystem': 'telecome-member-h5',
+            'fromChannelId': 'MINIPROG',
+            'fromchannelId': 'MINIPROG',
+            'encyType': 'C005',
+        }, phone, session_key, 'MINIPROG')
+        if isinstance(res, dict) and res.get('success'):
+            result = res.get('result') if isinstance(res.get('result'), dict) else {}
+            for key in ('couponList', 'list', 'resList', 'dataList'):
+                v = result.get(key)
+                if isinstance(v, list):
+                    _absorb([r for r in v if isinstance(r, dict)])
+                    break
+    except Exception as e:
+        log(f"ℹ️ [{m_phone}] queryCouponList 扫描异常: {e}")
+
+    # 通道 2：会员专区券凭证列表（与通道 1 互补，覆盖不同券类型）
+    try:
+        res = request_c005(sess, f'{BESTPAY_H5_BASE}/gapi/marketingConsultation/ConsultationQueryService/queryVoucherList', {
+            'voucherStatus': 'notUse',
+            'pageNo': 1,
+            'pageSize': 10,
+            'productNo': phone,
+            'sessionKey': session_key,
+            'agreeId': TELECOM_MEMBER_AGREE_ID,
+            'appType': '94',
+            'requestSystem': 'telecome-member-h5',
+            'requestSecSystem': 'telecome-member-h5',
+            'fromChannelId': 'MINIPROG',
+            'fromchannelId': 'MINIPROG',
+            'encyType': 'C005',
+        }, phone, session_key, 'MINIPROG')
+        if isinstance(res, dict) and res.get('success'):
+            result = res.get('result') if isinstance(res.get('result'), dict) else {}
+            for key in ('voucherList', 'list', 'resList', 'dataList'):
+                v = result.get(key)
+                if isinstance(v, list):
+                    _absorb([r for r in v if isinstance(r, dict)])
+                    break
+    except Exception as e:
+        log(f"ℹ️ [{m_phone}] queryVoucherList 扫描异常: {e}")
+
+    return candidates
+
+def run_auto_claim(sess: requests.Session, phone: str, session_key: str) -> str:
+    """
+    权益包自动领取总入口：扫描待领权益 → 逐张真实领取 → 轮询确认到账。
+    返回人类可读的战果摘要；无待领权益时返回空字符串（不污染通知）。
+    """
+    m_phone = mask(phone)
+    log(f"\n🔍 >>> 正在扫描 [{m_phone}] 账户下的待领取权益 <<<")
+
+    try:
+        coupons = query_unreceived_coupons(sess, phone, session_key)
+    except Exception as e:
+        log(f"⚠️ [{m_phone}] 待领权益扫描异常: {e}")
+        return ""
+
+    if not coupons:
+        log(f"ℹ️ [{m_phone}] 当前无待领取权益，自动领取环节跳过")
+        return ""
+
+    log(f"📋 [{m_phone}] 扫描到 {len(coupons)} 张待领取权益，开始自动领取...")
+    return auto_claim_equity_coupons(sess, phone, session_key, coupons)
+
 # ==================== 🎯 真实周三会员抽奖业务实现 (100% 对齐 telecom_draw.js) ====================
 
 def query_recent_lottery_history(sess: requests.Session, phone: str, session_key: str, act_no: str, top_n: int = 3) -> str:
@@ -421,6 +856,54 @@ def query_recent_lottery_history(sess: requests.Session, phone: str, session_key
         return f"今日已抽完 (近{len(items)}次: {', '.join(items)})"
     except Exception as e:
         return "今日抽奖次数已用尽"
+
+def receive_lottery_prize(sess: requests.Session, phone: str, session_key: str,
+                          act_no: str, order_no: str, act_title: str) -> str:
+    """
+    抽奖中奖后自动领奖入账（v1.6.0 新增真实结果校验）。
+
+    接口：POST /gapi/op-lottery-system/DrawService/receivePrize (H5 C005 通道)
+    抓包依据：2026-10-07 HAR idx 501 真实捕获到该请求，
+      且 /marketing/rights.prefecture.conf.js 的 MGS_ONE_ADD_EC 迁移清单中明确包含
+      'receivePrize' —— 证实该接口在 H5 网关可直连，无需小程序 mgs 容器。
+
+    返回状态：SUCCESS / PENDING / FAILED / UNKNOWN
+    """
+    log(f"[{act_title}] 正在自动领取入账 (orderNo={order_no})...")
+    try:
+        res = request_c005(sess, f'{BESTPAY_H5_BASE}/gapi/op-lottery-system/DrawService/receivePrize', {
+            'activityNo': act_no,
+            'sessionKey': session_key,
+            'productNo': phone,
+            'orderNo': order_no,
+            'sourceChannel': 'APPLET',
+            'appType': '94',
+            'fromChannelId': 'MINIPROG',
+            'fromchannelId': 'MINIPROG',
+            'encyType': 'C005'
+        }, phone, session_key, 'MINIPROG')
+
+        if not isinstance(res, dict):
+            return 'UNKNOWN'
+
+        if res.get('success'):
+            result = res.get('result') if isinstance(res.get('result'), dict) else {}
+            msg = str(result.get('resoultMsg') or result.get('msg') or res.get('errorMsg') or '')
+            if '已领取' in msg or '重复' in msg:
+                log(f"ℹ️ [{act_title}] 该奖品已领取过，无需重复操作")
+                return 'SUCCESS'
+            log(f"✅ [{act_title}] 领奖成功入账 (orderNo={order_no})")
+            return 'SUCCESS'
+
+        err = res.get('errorMsg') or res.get('errorCode') or '未返回明确状态'
+        log(f"❌ [{act_title}] 领奖未成功: {err}")
+        # 网络超时类错误记为待确认，避免误判为失败
+        if '超时' in str(err) or 'TIMEOUT' in str(err).upper():
+            return 'PENDING'
+        return 'FAILED'
+    except Exception as e:
+        log(f"⚠️ [{act_title}] 领奖异常: {str(e)}")
+        return 'UNKNOWN'
 
 def run_wednesday_lottery(sess: requests.Session, act_no: str, act_title: str, session_key: str, phone: str,
                           closed_hint: str = "非周三活动暂未开放 (每周三 09:00 开放)") -> str:
@@ -503,18 +986,13 @@ def run_wednesday_lottery(sess: requests.Session, act_no: str, act_title: str, s
             prize_names.append(prize_name)
 
             if not is_thanks and order_no:
-                log(f"[{act_title}] 正在自动领取入账 (orderNo={order_no})...")
-                request_c005(sess, 'https://mapi-h5.bestpay.com.cn/gapi/op-lottery-system/DrawService/receivePrize', {
-                    'activityNo': act_no,
-                    'sessionKey': session_key,
-                    'productNo': phone,
-                    'orderNo': order_no,
-                    'sourceChannel': 'APPLET',
-                    'appType': '94',
-                    'fromChannelId': 'MINIPROG',
-                    'fromchannelId': 'MINIPROG',
-                    'encyType': 'C005'
-                }, phone, session_key, 'MINIPROG')
+                # 抽奖后自动领奖入账（v1.6.0 起改为真实校验返回结果，不再盲发）
+                if CONFIG.get("ENABLE_AUTO_RECEIVE_PRIZE", True):
+                    receive_result = receive_lottery_prize(sess, phone, session_key, act_no, order_no, act_title)
+                    if receive_result != 'SUCCESS':
+                        log(f"⚠️ [{act_title}] 奖品「{prize_name}」领奖状态: {receive_result}")
+                else:
+                    log(f"[{act_title}] 自动领奖已关闭，跳过 orderNo={order_no}")
         else:
             err = draw_res.get('errorMsg', '抽奖未成功') if isinstance(draw_res, dict) else '响应异常'
             log(f"[{act_title}] 抽奖停止: {err}")
@@ -698,6 +1176,10 @@ def main():
     print("=" * 65)
     print(f"  🎉 [{SCRIPT_VERSION}] 中国电信 · 周三会员双抽奖与幸运抽奖聚合脚本 🎉  ")
     print("=" * 65)
+    print(f"  🎫 自动换票: {'启用' if CONFIG.get('ENABLE_AUTO_TICKET', True) else '禁用'}"
+          f" | 🎁 权益包自动领取: {'启用' if CONFIG.get('ENABLE_AUTO_CLAIM', True) else '禁用'}"
+          f" | 🏆 抽奖自动领奖: {'启用' if CONFIG.get('ENABLE_AUTO_RECEIVE_PRIZE', True) else '禁用'}")
+    print("=" * 65)
 
     now = datetime.now()
     is_wednesday = now.weekday() == 2  # 0=周一, 2=周三
@@ -727,6 +1209,17 @@ def main():
 
         session_key = direct_session_key
 
+        # ---- 凭证获取三级降级链：环境变量直配 → 本地落盘缓存 → 自动换票 ----
+        ticket_source = ""
+
+        if not session_key and CONFIG.get("ENABLE_AUTO_TICKET", True):
+            # 第二级：复用上次自动换票落盘的 SessionKey，免去重复换票
+            cached_sk = get_cached_session_key(phone)
+            if cached_sk:
+                session_key = cached_sk
+                ticket_source = "本地缓存"
+                log(f"♻️ [{m_phone}] 命中本地 SessionKey 缓存，直接复用 (免换票)")
+
         # 优先使用直通 SessionKey 执行周三抽奖；若未提供则尝试电信官方协议验真
         if not session_key:
             user_info = login_telecom(sess, phone, pwd, android_id)
@@ -740,6 +1233,13 @@ def main():
                 else:
                     summary_report.append("\n".join(bullets))
                 continue
+
+            # 第三级：登录成功拿到 Ticket 后，自动换取 SessionKey（v1.6.0 新增核心能力）
+            if CONFIG.get("ENABLE_AUTO_TICKET", True) and user_info.get('ticket'):
+                exchanged = exchange_ticket_for_session_key(sess, phone, user_info['ticket'])
+                if exchanged:
+                    session_key = exchanged
+                    ticket_source = "自动换票"
         else:
             # 已配 SessionKey 时执行电信官方验真（若遇风控不阻断周三抽奖业务）
             try:
@@ -750,13 +1250,17 @@ def main():
 
         if not session_key:
             bullets = [
-                "• 周三会员抽权益币: 需 SessionKey (未填第四段)",
-                "• 周三会员抽三次: 需 SessionKey (未填第四段)",
-                "• 权益商城幸运抽奖: 需 SessionKey (未填第四段)",
+                "• 自动换票: 未能获取 SessionKey (请检查服务密码或稍后重试)",
+                "• 周三会员抽权益币: 需 SessionKey",
+                "• 周三会员抽三次: 需 SessionKey",
+                "• 权益商城幸运抽奖: 需 SessionKey",
                 "• 账户当前权益币: 需 SessionKey 查验"
             ]
-            log(f"⚠️ [{m_phone}] 未提供 SessionKey，已跳过翼支付专属抽奖")
+            log(f"⚠️ [{m_phone}] 未能获取 SessionKey，已跳过翼支付专属抽奖")
         else:
+            if ticket_source:
+                bullets.append(f"• 凭证来源: {ticket_source}")
+
             # 任务 1: 周三会员抽权益币 (hd76690472 山西甄选周三会员日)
             if CONFIG.get("ENABLE_WED_COIN_DRAW", True):
                 res_coin = run_wednesday_lottery(sess, CONFIG.get("ACT_COIN", "hd76690472"), "周三会员抽权益币", session_key, phone)
@@ -772,6 +1276,12 @@ def main():
                 lucky_act = os.environ.get("TELECOM_WED_LUCKY_ACT") or CONFIG.get("ACT_LUCKY", "A2025011413413484352835699495179")
                 res_lucky = run_lucky_lottery(sess, lucky_act, "权益商城幸运抽奖", session_key, phone)
                 bullets.append(f"• 权益商城幸运抽奖: {res_lucky}")
+
+            # 任务 4: 权益包自动领取 (v1.6.0 新增，manualReceiveEquity 真实领券入账)
+            if CONFIG.get("ENABLE_AUTO_CLAIM", True):
+                claim_res = run_auto_claim(sess, phone, session_key)
+                if claim_res:
+                    bullets.append(f"• 权益包自动领取: {claim_res}")
 
             # 资产回显: 真实权益币余额
             balance = query_equity_coin_balance(sess, phone, session_key)
