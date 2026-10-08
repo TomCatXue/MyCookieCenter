@@ -1592,20 +1592,15 @@ def run_lucky_lottery(sess: requests.Session, act_id: str, act_title: str, sessi
         'viewActivity': '浏览活动页',
     }
     PENDING_TASKS = [c for c in task_codes if c not in ('orderMallMember',)]
-    # 精简任务提示：仅列任务名，不重复冗长说明（详细指引见 README）
     task_desc = "、".join(TASK_LABELS.get(c, c) for c in PENDING_TASKS)
 
     draw_res = run_wednesday_lottery(sess, lottery_act_no, f"{act_title}·抽奖引擎", session_key, phone,
                                      closed_hint="权益商城抽奖活动未开放或已结束")
 
-    no_lottery = ('未产生抽奖' in draw_res or '今日已抽完' in draw_res or '暂无历史中奖记录' in draw_res
-                  or '需 SessionKey' in draw_res)
-    if task_desc and no_lottery:
-        res_str = f"{draw_res} | 待办: {task_desc}"
-    elif task_desc:
-        res_str = f"{draw_res} | 待办: {task_desc}"
-    else:
-        res_str = draw_res
+    # 任务清单仅写入日志（供排查），不再占用通知行
+    if task_desc:
+        log(f"[{act_title}] 待办任务(需小程序内完成): {task_desc}")
+    res_str = draw_res
 
     set_today_reward(phone, act_id, res_str)
     return res_str
@@ -1722,21 +1717,42 @@ def post_encrypted_api(sess: requests.Session, crypto_inst: ImCrypto, token: str
 
 
 def refresh_sso_token(sess: requests.Session, ticket: str) -> Optional[str]:
-    """电信 Ticket → 爱音乐 JWT 换票 (必须同时注入 user118100cn Cookie)"""
+    """
+    电信 Ticket → 爱音乐 JWT 换票。
+
+    ★ 关键（AGENTS.md 已记录）：换票响应必须提取 user118100cn Cookie 并注入 session，
+      否则后续 /au/ 与 /hapi/en/api 网关一律报「Token授权验证失败」，
+      表现为点数/券码全部查不到（恒为 0）。
+    """
     try:
-        res = sess.post(
+        r = sess.post(
             "https://ai.imusic.cn/vapi/vue_login/sso_login_v2",
-            json={"portal": "45", "channelId": CHANNEL_ID, "ticket": ticket, "user118100cn": "user118100cn"},
+            json={"portal": "45", "channelId": CHANNEL_ID, "ticket": ticket},
             headers={"Content-Type": "application/json", "Referer": ACTIVITY_H5_URL},
             timeout=15
-        ).json()
+        )
+        res = r.json()
         tok = res.get("token")
-        if tok:
-            sess.cookies.set('loginState', 'true', domain='ai.imusic.cn')
-            sess.cookies.set('cc', CHANNEL_ID, domain='ai.imusic.cn')
-            sess.cookies.set('imusic', f'118100{int(time.time() * 1000)}', domain='ai.imusic.cn')
+        if not tok:
+            log(f"ℹ️ [AI奇遇] SSO 换票未返回 token: {json.dumps(res, ensure_ascii=False)[:200]}")
+            return None
+
+        # ★ 提取 user118100cn（跨 ai.imusic.cn 与 .imusic.cn 双域注入）
+        u_cookie = r.cookies.get('user118100cn') or sess.cookies.get('user118100cn')
+        if u_cookie:
+            sess.cookies.set('user118100cn', u_cookie, domain='ai.imusic.cn')
+            sess.cookies.set('user118100cn', u_cookie, domain='.imusic.cn')
+            log("[AI奇遇] 已注入 user118100cn Cookie")
+        else:
+            log("ℹ️ [AI奇遇] 换票响应未带 user118100cn Cookie（可能影响后续鉴权）")
+
+        sess.cookies.set('loginState', 'true', domain='ai.imusic.cn')
+        sess.cookies.set('cc', CHANNEL_ID, domain='ai.imusic.cn')
+        sess.cookies.set('imusic', f'118100{int(time.time() * 1000)}', domain='ai.imusic.cn')
+        log("[AI奇遇] 爱音乐 SSO 换票成功")
         return tok
-    except Exception:
+    except Exception as e:
+        log(f"ℹ️ [AI奇遇] SSO 换票异常: {str(e)[:120]}")
         return None
 
 
@@ -1749,7 +1765,7 @@ def warmup_session(sess: requests.Session, crypto_inst: ImCrypto, token: str, mo
             headers=h, data="", timeout=10)
         auth1 = r1.headers.get("authorization") or r1.headers.get("Authorization")
         if auth1:
-            token = auth1.replace
+            token = auth1.replace("Bearer ", "").strip()
 
         r2 = sess.post(
             f"https://ai.imusic.cn/vapi/vrbt/check_user_state?mobile={mobile}&is4G=1&is5G=1&isDX=1&channelId={CHANNEL_ID}&portal=45",
@@ -1757,8 +1773,8 @@ def warmup_session(sess: requests.Session, crypto_inst: ImCrypto, token: str, mo
         auth2 = r2.headers.get("authorization") or r2.headers.get("Authorization")
         if auth2:
             token = auth2.replace("Bearer ", "").strip()
-    except Exception:
-        pass
+    except Exception as e:
+        log(f"ℹ️ [{mask(mobile)}] 会话预热异常: {str(e)[:100]}")
     time.sleep(0.3)
     return token
 
@@ -1777,8 +1793,11 @@ def query_make_pkg_info(sess: requests.Session, crypto_inst: ImCrypto, token: st
             d = json.loads(dec)
             if d.get("code") == "0000":
                 return d.get("data", {}), token
-    except Exception:
-        pass
+            log(f"ℹ️ [{mask(mobile)}] queryAiMakePkgInfo 非0000: {dec[:200]}")
+        else:
+            log(f"ℹ️ [{mask(mobile)}] queryAiMakePkgInfo 响应非JSON: {str(dec)[:200]}")
+    except Exception as e:
+        log(f"ℹ️ [{mask(mobile)}] queryAiMakePkgInfo 异常: {str(e)[:100]}")
     return None, token
 
 
@@ -1961,11 +1980,16 @@ def query_my_tickets(sess: requests.Session, crypto_inst: ImCrypto, token: str, 
             "channelId": CHANNEL_ID,
             "portal": "45"
         })
-        d_tick = json.loads(crypto_inst.decrypt(r_tick.text)).get("data", {})
+        dec_tick = crypto_inst.decrypt(r_tick.text)
+        if not dec_tick.startswith('{'):
+            log(f"ℹ️ [{mask(phone)}] getOperationMyTickets 响应非JSON: {str(dec_tick)[:200]}")
+            return "0"
+        d_tick = json.loads(dec_tick).get("data", {}) or {}
         if d_tick.get("total") is not None:
             return str(d_tick.get("total"))
-    except Exception:
-        pass
+        log(f"ℹ️ [{mask(phone)}] getOperationMyTickets 无 total 字段: {dec_tick[:200]}")
+    except Exception as e:
+        log(f"ℹ️ [{mask(phone)}] getOperationMyTickets 异常: {str(e)[:100]}")
     return "0"
 
 
@@ -2161,6 +2185,9 @@ def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
 
     bullets.append(f"• 话费兑换状态: {redeem_status_msg}")
     bullets.append(f"• 账户当前点数: 剩余 {remaining_score} 点数 (累计总点数: {total_score})")
+    # 诊断汇总（仅日志）：点数/券码均为 0 时便于快速定位是鉴权还是字段问题
+    log(f"[AI奇遇] {m_phone} 汇总: 点数={remaining_score}/{total_score} 券码={ticket_count} "
+        f"本期点数={stage_ai_score} 可用次数={available_chances} 制作成功={total_make_success}")
     return bullets
 
 
