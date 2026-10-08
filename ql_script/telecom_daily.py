@@ -1783,6 +1783,7 @@ def query_make_pkg_info(sess: requests.Session, crypto_inst: ImCrypto, token: st
 
 
 def query_server_score(sess: requests.Session, crypto_inst: ImCrypto, token: str, mobile: str) -> Tuple[str, int, str]:
+    """查询点数资产。返回 (累计总点数, 剩余点数, token)。失败时打日志便于定位。"""
     total_score = "0"
     remaining_score = 0
     try:
@@ -1798,8 +1799,10 @@ def query_server_score(sess: requests.Session, crypto_inst: ImCrypto, token: str
             s_data = json.loads(dec_score).get("data") or {}
             total_score = str(s_data.get("totalScore", "0"))
             remaining_score = int(s_data.get("remainingScore", 0) or 0)
-    except Exception:
-        pass
+        else:
+            log(f"ℹ️ [{mask(mobile)}] 点数接口响应非 JSON: {str(dec_score)[:150]}")
+    except Exception as e:
+        log(f"ℹ️ [{mask(mobile)}] 点数查询异常: {str(e)[:80]}")
     return total_score, remaining_score, token
 
 
@@ -1877,12 +1880,110 @@ def query_template_meta(sess: requests.Session, token: str, stage_id: str = DEFA
     return {}
 
 
+def send_stat_message(sess: requests.Session, crypto_inst: ImCrypto, token: str,
+                      mobile: str, actname: str, actparam: str) -> Tuple[requests.Response, str]:
+    """上报埋点消息（部分业务接口要求先有埋点）"""
+    payload = {
+        "channelId": CHANNEL_ID,
+        "portal": "45",
+        "mobile": mobile,
+        "actname": actname,
+        "actparam": actparam,
+        "sid": ""
+    }
+    return post_encrypted_api(sess, crypto_inst, token, "/vapi/vue_stat/sendMessage", payload)
+
+
+def premake_prepare(sess: requests.Session, crypto_inst: ImCrypto, token: str,
+                    mobile: str, template_meta: dict) -> str:
+    """制作前预热：拉取制作包信息并上报必要埋点"""
+    active_token = token
+    try:
+        t_id = template_meta.get("templateId", TEMPLATE_ID)
+        t_conf = template_meta.get("templateConfId", "")
+        _, active_token = post_encrypted_api(sess, crypto_inst, active_token, "/hapi/en/api", {
+            "channelId": CHANNEL_ID,
+            "portal": "45",
+            "mobile": mobile,
+            "templateId": t_id,
+            "aid": ACTIVITY_ID,
+            "apiName": "ismp/IsmpApi/queryAiMakePkgInfo"
+        })
+        stat_events = [
+            ("page_vring_index", f"玩转AI赢手机_activityID_{ACTIVITY_ID}_entrance_{CHANNEL_ID}"),
+            ("activity_vring_make_1.9", f"_activityID_{ACTIVITY_ID}_templateID_{t_id}_entrance_{CHANNEL_ID}_templateconfID_{t_conf}"),
+            ("activity_2603AI-meet_25.1", f"activityID_{ACTIVITY_ID}_undefined_templateID_{t_id}_entrance_{CHANNEL_ID}_templateconfID_{t_conf}"),
+            ("page_2511AI-makeonekey_9", f"activityID_{ACTIVITY_ID}_templateID_{t_id}_entrance_{CHANNEL_ID}_templateConfID_{t_conf}"),
+            ("page_2511AI-makeonekey_3", f"activityID_{ACTIVITY_ID}_templateID_{t_id}_entrance_{CHANNEL_ID}_templateConfID_{t_conf}"),
+        ]
+        for actname, actparam in stat_events:
+            _, active_token = send_stat_message(sess, crypto_inst, active_token, mobile, actname, actparam)
+            time.sleep(0.05)
+    except Exception:
+        pass
+    return active_token
+
+
+def query_stage_ai_points(sess: requests.Session, crypto_inst: ImCrypto, token: str,
+                          mobile: str, stage_id: str) -> int:
+    """查询本期通过 AI 制作已获得的点数（每期上限 340 点）"""
+    try:
+        r, _ = post_encrypted_api(sess, crypto_inst, token, "/hapi/en/api", {
+            "activityId": ACTIVITY_ID,
+            "mobile": mobile,
+            "pageNo": 1,
+            "pageSize": 50,
+            "apiName": "act/LaborApi/getOperationRecordList",
+            "channelId": CHANNEL_ID,
+            "portal": "45"
+        })
+        res = crypto_inst.decrypt(r.text)
+        if res.startswith('{'):
+            items = json.loads(res).get("data", {}).get("list", []) or []
+            return sum(int(it.get("score", 0) or 0) for it in items
+                       if it.get("stage") == stage_id
+                       and str(it.get("scoreType")) == "1"
+                       and it.get("scoreDesc") == "AI创作获得")
+    except Exception:
+        pass
+    return 0
+
+
+def query_my_tickets(sess: requests.Session, crypto_inst: ImCrypto, token: str, phone: str) -> str:
+    """查询已持有的 Pad 抽奖券码数量"""
+    try:
+        r_tick, _ = post_encrypted_api(sess, crypto_inst, token, "/hapi/en/api", {
+            "activityId": ACTIVITY_ID,
+            "mobile": phone,
+            "pageNo": 1,
+            "pageSize": 1,
+            "apiName": "act/LaborApi/getOperationMyTickets",
+            "channelId": CHANNEL_ID,
+            "portal": "45"
+        })
+        d_tick = json.loads(crypto_inst.decrypt(r_tick.text)).get("data", {})
+        if d_tick.get("total") is not None:
+            return str(d_tick.get("total"))
+    except Exception:
+        pass
+    return "0"
+
+
 def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
     """
-    AI奇遇赢Pad 总入口：SSO 换票 → 会话预热 → 查询制作券与点数 → 循环制作 → 满千兑换话费。
-    返回微信读书 Bullet 排版的结果行。
+    AI奇遇赢Pad 总入口（完整还原旧 telecom_ai_pad.py 业务逻辑）：
+
+    流程：SSO 换票 → 会话预热 → 查询制作包/点数 → 本期制作（优先赚点，每期上限 340 点）
+          → 满 1000 点兑换 10 元话费 → 券码核验 → 输出 5 行微信读书 Bullet 通知。
+
+    通知行（对齐旧脚本）：
+      • 一键做同款: ...
+      • Pad抽奖券码: ... 已持有 N 张券码 (...)
+      • 话费兑换状态: ...
+      • 账户当前点数: 剩余 N 点数 (累计总点数: M)
     """
-    m_phone = mask(user['phoneNbr'])
+    phone = user['phoneNbr']
+    m_phone = mask(phone)
     bullets = []
 
     crypto = ImCrypto()
@@ -1891,69 +1992,175 @@ def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
         log(f"[AI奇遇] {m_phone} 爱音乐 SSO 换票失败，跳过该业务")
         return ["• AI奇遇赢Pad: 爱音乐鉴权未通过"]
 
-    token = warmup_session(sess, crypto, token, user['phoneNbr'])
-    pkg, token = query_make_pkg_info(sess, crypto, token, user['phoneNbr'])
-    total_score, remaining, token = query_server_score(sess, crypto, token, user['phoneNbr'])
+    token = warmup_session(sess, crypto, token, phone)
 
-    left_num = 0
-    if isinstance(pkg, dict):
-        try:
-            left_num = int(pkg.get("privilegeVrbtAIVideoLeftNum") or 0)
-        except Exception:
-            left_num = 0
-
-    # 点数展示：query_server_score 失败时 total_score 为 "0"，需与真实 0 区分
-    score_known = isinstance(pkg, dict) or total_score not in (None, '', '0')
-    score_txt = f"点数 {total_score}" if score_known else "点数暂未取到"
-
-    log(f"[AI奇遇] {m_phone} 可用制作券: {left_num} 张，{score_txt}")
-
-    if left_num <= 0:
-        bullets.append(f"• AI奇遇赢Pad: 暂无制作券 · {score_txt}")
-        return bullets
-
-    tpl = query_template_meta(sess, token)
-    made = 0
-    for i in range(left_num):
-        rand_name = f"AI视频{rd_str(6)}"
-        resp, token = post_make_request(sess, crypto, token, user['phoneNbr'], tpl, rand_name)
-        if '"code":"0000"' in resp:
-            made += 1
-            log(f"[AI奇遇] {m_phone} 第 {made} 次制作成功")
-        else:
-            log(f"[AI奇遇] {m_phone} 制作未成功: {resp[:120]}")
-            break
-        time.sleep(1)
-
-    _, new_total, token = query_server_score(sess, crypto, token, user['phoneNbr'])
-    if made > 0:
-        bullets.append(f"• AI奇遇赢Pad: 制作 {made} 次 · 点数 {new_total}")
-    else:
-        bullets.append(f"• AI奇遇赢Pad: 制作未成功 · 点数 {new_total}")
-
-    # 满千兑换话费
+    # 动态期数（严禁写死，跨期自动适配）
+    issue_number = DEFAULT_STAGE_ID
+    issue_name = "本期"
     try:
-        cur = int(new_total)
+        operate = sess.post(
+            f"https://ai.imusic.cn/vapi/vue_activity/get_operate_info?aid={ACTIVITY_ID}&channelId={CHANNEL_ID}&portal=45",
+            headers={"Content-Type": "application/json", "Referer": ACTIVITY_H5_URL},
+            timeout=15
+        ).json()
+        cur_issue = (operate.get("data") or {}).get("currentIssue") or {}
+        if cur_issue.get("stageId"):
+            issue_number = cur_issue["stageId"]
+        if cur_issue.get("stageName"):
+            issue_name = cur_issue["stageName"]
     except Exception:
-        cur = 0
-    if cur >= REDEEM_COST_SCORE:
-        log(f"[AI奇遇] {m_phone} 点数达 {cur}，执行话费兑换")
+        pass
+    log(f"[AI奇遇] {m_phone} 当前期数: {issue_number} ({issue_name})")
+
+    tpl_meta = query_template_meta(sess, token, issue_number)
+    if not tpl_meta.get("templateId"):
+        tpl_meta = {"templateId": TEMPLATE_ID, "templateConfId": DEFAULT_TEMPLATE_CONF_ID,
+                    "arrangeId": DEFAULT_ARRANGE_ID, "userWords": "", "background": ""}
+    # 视频名默认值兜底（旧脚本用 tpl_meta['videoName']）
+    tpl_meta.setdefault("videoName", "AI视频")
+
+    # 查询可用制作次数（多字段取最大）
+    pkg_data, token = query_make_pkg_info(sess, crypto, token, phone)
+    available_chances = 0
+    if pkg_data is not None:
+        initial_tip = pkg_data.get("balanceMakeTimesTip", "")
+        exp_work_num = int(pkg_data.get("aiMakeExperienceWorkNum", 0)
+                           or pkg_data.get("privilegeVrbtAIMakeExperienceLeftNum", 0) or 0)
+        vrbt_left_num = int(pkg_data.get("privilegeVrbtAIVideoLeftNum", 0) or 0)
+        aid_daily_num = int(pkg_data.get("aidDailyNum", 0) or 0)
+        available_chances = max(vrbt_left_num, exp_work_num, aid_daily_num)
+        if available_chances == 0 and initial_tip:
+            m_digit = re.search(r'(\d+)', initial_tip)
+            if m_digit:
+                available_chances = int(m_digit.group(1))
+
+    # 查询当前点数资产（跨期累计，以官方接口为准）
+    total_score, remaining_score, token = query_server_score(sess, crypto, token, phone)
+    log(f"[{m_phone}] 当前点数: {remaining_score} (累计总点数: {total_score})")
+
+    # 本期已获点数与剩余可制作次数
+    stage_ai_score = query_stage_ai_points(sess, crypto, token, phone, issue_number)
+    stage_remaining_score = max(0, STAGE_AI_SCORE_LIMIT - stage_ai_score)
+    max_make_times_allowed = stage_remaining_score // 20
+
+    total_make_success = 0
+    if stage_remaining_score <= 0:
+        log(f"[{m_phone}] 本期AI制作点数已达上限：{STAGE_AI_SCORE_LIMIT}点")
+    elif available_chances <= 0:
+        log(f"[{m_phone}] 当前暂无可用AI制作次数，跳过制作环节 (本期已获 {stage_ai_score}/{STAGE_AI_SCORE_LIMIT} 点)")
+    else:
+        actual_runs = min(available_chances, max_make_times_allowed)
+        attempt_count = 0
+        while attempt_count < actual_runs:
+            attempt_count += 1
+            token = premake_prepare(sess, crypto, token, phone, tpl_meta)
+            rand_name = f"{tpl_meta['videoName']}{random.randint(100000, 999999)}"
+
+            score_before = remaining_score
+            try:
+                dec_resp, token = post_make_request(sess, crypto, token, phone, tpl_meta, rand_name)
+            except Exception as e:
+                log(f"[{m_phone}] AI制作网络异常: {str(e)}")
+                break
+
+            if '"code":"0000"' in dec_resp:
+                time.sleep(0.5)
+                total_score, remaining_score, token = query_server_score(sess, crypto, token, phone)
+                earned = remaining_score - score_before
+                if earned > 0:
+                    total_make_success += 1
+                    stage_ai_score += earned
+                    log(f"[{m_phone}] AI制作：成功 +{earned}点")
+                    if stage_ai_score >= STAGE_AI_SCORE_LIMIT:
+                        log(f"[{m_phone}] 本期AI制作点数已达上限：{STAGE_AI_SCORE_LIMIT}点")
+                        break
+                else:
+                    log(f"[{m_phone}] AI制作：作品生成成功 (当前点数: {remaining_score})")
+                time.sleep(1.5)
+            elif any(k in dec_resp for k in ["10014", "10007", "次数已用完", "免费次数已用完", "机会已用", "火爆", "不足"]):
+                log(f"[{m_phone}] 当前可用AI制作次数已耗尽")
+                break
+            else:
+                break
+
+    # 兑换前重新查询真实点数，绝不凭空推演
+    total_score, remaining_score, token = query_server_score(sess, crypto, token, phone)
+    log(f"[{m_phone}] 当前点数: {remaining_score}")
+
+    redeem_status_msg = ""
+    if remaining_score >= REDEEM_COST_SCORE:
+        log(f"[{m_phone}] 达到{REDEEM_COST_SCORE}点，开始兑换10元话费")
+        send_stat_message(sess, crypto, token, phone, "activity_2603AI-meet_1.12",
+                          f"activityID_{ACTIVITY_ID}_entrance_{CHANNEL_ID}")
+        time.sleep(0.1)
         try:
-            r_ex, token = post_encrypted_api(sess, crypto, token, "/hapi/en/api", {
+            r_rdm, token = post_encrypted_api(sess, crypto, token, "/hapi/en/api", {
                 "activityId": ACTIVITY_ID,
-                "mobile": user['phoneNbr'],
-                "apiName": "act/LaborApi/exchangeScore",
+                "mobile": phone,
+                "apiName": "act/LaborApi/operationIntegralRedeemPrize",
                 "channelId": CHANNEL_ID,
                 "portal": "45"
             })
-            dec_ex = crypto.decrypt(r_ex.text)
-            if '"code":"0000"' in dec_ex:
-                bullets.append(f"• 话费兑换: 成功兑换 10 元话费 (消耗 {REDEEM_COST_SCORE} 点)")
-            else:
-                bullets.append(f"• 话费兑换: 兑换未成功 ({dec_ex[:80]})")
+            dec_rdm = crypto.decrypt(r_rdm.text)
         except Exception as e:
-            bullets.append(f"• 话费兑换: 兑换异常 ({str(e)[:60]})")
+            dec_rdm = f'{{"code":"9999","desc":"网络超时: {str(e)}"}}'
 
+        if dec_rdm.startswith('{'):
+            try:
+                rdm_obj = json.loads(dec_rdm)
+                rdm_code = str(rdm_obj.get("code") or "")
+                rdm_desc = rdm_obj.get("desc") or rdm_obj.get("message") or ""
+                if rdm_code == "0000":
+                    log(f"[{m_phone}] 10元话费兑换成功")
+                    redeem_status_msg = "10元话费兑换成功 (已自动入账)"
+                    time.sleep(1)
+                    total_score, remaining_score, token = query_server_score(sess, crypto, token, phone)
+                elif any(k in rdm_desc for k in ["库存不足", "已兑完", "限量", "不足"]):
+                    redeem_status_msg = "兑换失败 (库存不足)"
+                elif "结束" in rdm_desc:
+                    redeem_status_msg = "兑换失败 (活动已结束)"
+                else:
+                    redeem_status_msg = f"兑换未通过 ({rdm_desc or rdm_code})"
+            except Exception:
+                redeem_status_msg = "兑换结果待确认"
+        else:
+            redeem_status_msg = "兑换结果待确认"
+    else:
+        redeem_status_msg = f"跨期累计中 (还差 {REDEEM_COST_SCORE - remaining_score} 点)"
+
+    # 券码核验
+    ticket_count = query_my_tickets(sess, crypto, token, phone)
+
+    # 开奖日期
+    draw_date_str = ""
+    try:
+        act_info = sess.post(
+            f"https://ai.imusic.cn/vapi/vue_activity/get_operate_info?aid={ACTIVITY_ID}&channelId={CHANNEL_ID}&portal=45",
+            headers={"Content-Type": "application/json", "Referer": ACTIVITY_H5_URL},
+            timeout=15
+        ).json()
+        cur_issue = (act_info.get("data") or {}).get("currentIssue") or {}
+        raw_date = cur_issue.get("drawDate") or cur_issue.get("awardDate") or ""
+        if raw_date:
+            draw_date_str = str(raw_date)[:10]
+    except Exception:
+        pass
+
+    # ---- 微信读书 Bullet 通知（5 行，对齐旧脚本） ----
+    if total_make_success > 0:
+        bullets.append(f"• 一键做同款: 完成 {total_make_success} 次制作 (获得 {total_make_success * 20}点数与券码)")
+    elif stage_ai_score >= STAGE_AI_SCORE_LIMIT:
+        bullets.append(f"• 一键做同款: 本期AI制作点数已达上限 ({STAGE_AI_SCORE_LIMIT}点已满)")
+    else:
+        bullets.append("• 一键做同款: 当期制作机会已用完 (每3天赠送3次免费机会)")
+
+    if draw_date_str:
+        bullets.append(f"• Pad抽奖券码: {issue_name}已持有 {ticket_count} 张券码 ({draw_date_str} 11:00自动开奖)")
+    else:
+        bullets.append(f"• Pad抽奖券码: {issue_name}已持有 {ticket_count} 张券码 (每期送iPad·自动开奖)")
+
+    bullets.append(f"• 话费兑换状态: {redeem_status_msg}")
+    bullets.append(f"• 账户当前点数: 剩余 {remaining_score} 点数 (累计总点数: {total_score})")
     return bullets
 
 
