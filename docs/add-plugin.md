@@ -11,10 +11,10 @@
 
 新增功能插件需改动 **1 个脚本目录 + 1 个 .plugin 文件 + 2 处索引**：
 
-1. `plugins/<插件名>/<插件名>.js` —— 新建脚本
-2. `plugins/<插件名>/README.md` —— 该插件的详细文档
+1. `scripts/tools/<插件名>/<插件名>.js` —— 新建脚本
+2. `scripts/tools/<插件名>/README.md` —— 该插件的详细文档
 3. `loon/<Name>.plugin` —— 对应的 Loon 插件文件（PascalCase 命名）
-4. `plugins/README.md` —— 在插件清单表格追加一行
+4. `scripts/tools/README.md` —— 在插件清单表格追加一行
 5. 根目录 `README.md` —— 在"特殊功能插件"章节追加一行
 
 > **命名例外**：PascalCase 约定适用于本仓库自维护的插件。`loon/camscanner.plugin` 为外部依赖入口（脚本与图标指向上游仓库 [MaYIHEI/paperclip](https://github.com/MaYIHEI/paperclip) / [MaYIHEI/pin](https://github.com/MaYIHEI/pin)），为与上游一致保留小写命名，不在此规范约束内。
@@ -24,12 +24,12 @@
 ## 第 1 步：创建脚本目录
 
 ```bash
-mkdir plugins/myplugin
+mkdir scripts/tools/myplugin
 ```
 
 ## 第 2 步：编写脚本
 
-在 `plugins/myplugin/myplugin.js` 中编写请求/响应改写逻辑：
+在 `scripts/tools/myplugin/myplugin.js` 中编写请求/响应改写逻辑：
 
 - `http-request` 脚本：通过 `$request.headers` / `$request.body` 读取请求数据，`$done({})` 返回修改后的请求
 - `http-response` 脚本：通过 `$response.body` 读取响应，`$done({ body })` 返回修改后的响应
@@ -38,7 +38,7 @@ mkdir plugins/myplugin
 
 ## 第 3 步：编写 README
 
-在 `plugins/myplugin/README.md` 中写明功能说明、使用方式、各平台配置。
+在 `scripts/tools/myplugin/README.md` 中写明功能说明、使用方式、各平台配置。
 
 ## 第 4 步：创建 Loon 插件文件
 
@@ -58,12 +58,12 @@ mkdir plugins/myplugin
 hostname = 目标域名
 
 [Script]
-http-request <匹配正则> tag=插件名, script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/plugins/myplugin/myplugin.js, requires-body=false, enable={myplugin_switch}
+http-request <匹配正则> tag=插件名, script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/myplugin/myplugin.js, requires-body=false, enable={myplugin_switch}
 ```
 
 ## 第 5 步：更新索引
 
-- 在 `plugins/README.md` 插件清单表格追加一行
+- 在 `scripts/tools/README.md` 插件清单表格追加一行
 - 在 `loon/README.md` 独立功能表格追加一行
 - 在根目录 `README.md` 的"特殊功能插件"章节追加一行
 

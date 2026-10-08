@@ -2,46 +2,51 @@
 
 本目录存放所有 Loon 专用的 `.plugin` 文件，按功能分两类：
 
-- **统一签到 / 权益插件** — `CookieCenter.plugin`，整合微信读书、山西电信与中国电信等级权益的凭据捕获与后台定时任务
-- **独立功能插件** — 对应 `plugins/` 下的解锁/净化脚本，各自独立开关
+- **统一签到 / 权益插件** — `CookieCenter.plugin`，整合「微信读书」与「中国电信」全系业务的凭据捕获与后台定时任务
+- **独立功能插件** — 对应 `scripts/tools/` 下的解锁 / 净化脚本，各自独立开关
 
-> `CookieCenter.plugin` 内置了 Loon 后台 cron 任务开关；[BoxJS 订阅](../boxjs/README.md)负责 Cookie 持久化与参数面板配置。
+> `CookieCenter.plugin` 内置了 Loon 极简双主控开关与后台 cron 任务；[BoxJS 订阅](../boxjs/README.md) 统一提供凭据持久化、参数配置与手动测试入口。
 
 ---
 
 ## 插件清单
 
-### CookieCenter（统一签到 / 权益）
+### CookieCenter（统一签到 / 权益中心）
 
-| 文件 | 说明 | 脚本来源 |
+| 文件 | 说明 | 整合业务与脚本来源 |
 |---|---|---|
-| [`CookieCenter.plugin`](./CookieCenter.plugin) | 微信读书 / 山西电信 / 电信等级权益的凭据捕获 + 后台定时任务 | [`app/weread_claim/`](../app/weread_claim/)、[`plugins/sx_ai_benefit/`](../plugins/sx_ai_benefit/)、[`plugins/telecom_rights/`](../plugins/telecom_rights/) |
+| [`CookieCenter.plugin`](./CookieCenter.plugin) | 微信读书 / 中国电信全系业务的一站式凭据捕获 + 后台定时任务 | **微信读书**：[`scripts/weread/`](../scripts/weread/)<br>**中国电信**：[`scripts/telecom/`](../scripts/telecom/)（周三双抽奖+幸运抽奖、0 点秒杀话费、山西福利） |
 
-### 独立功能
+### 独立功能（解锁 / 净化类）
 
 | 文件 | 说明 | 类型 |
 |---|---|---|
 | [`QzoneAdBlock.plugin`](./QzoneAdBlock.plugin) | QQ空间·清净 — 广告退散，空间清净 | 规则型（无脚本） |
-| [`BilibiliFix.plugin`](./BilibiliFix.plugin) | 哔哩哔哩·增强版 𝕏 — 空降助手、分区修复、扫码登录、画质解锁 | 脚本型 · [`plugins/bilibili/`](../plugins/bilibili/) |
-| [`WeReadEnhance.plugin`](./WeReadEnhance.plugin) | 微信读书·优雅收录 — 轻触订阅人数，好书即刻入架 | 脚本型 · [`plugins/wxread/`](../plugins/wxread/) |
-| [`GitHubPushTime.plugin`](./GitHubPushTime.plugin) | GitHub·星标推送时间 — 在 GitHub App 星标列表语言后显示最近推送时间 | 脚本型 · [`plugins/github_push_time/`](../plugins/github_push_time/) |
-| [`PixivNovelTranslate.plugin`](./PixivNovelTranslate.plugin) | Pixiv·小说翻译 — 小说阅读页一键翻译，支持 Google 免费接口 / 微软 / 百度 | 脚本型 · [`plugins/pixiv_novel_translate/`](../plugins/pixiv_novel_translate/) |
-| [`camscanner.plugin`](./camscanner.plugin) | 扫描全能王·签到 — 抓取 Cookie + 每日签到 | 脚本型 · 抓取内化 [`plugins/camscanner/`](../plugins/camscanner/) / 签到外部 |
-
-> `camscanner.plugin` 的**抓取脚本**已内化至 [`plugins/camscanner/`](../plugins/camscanner/)（静默版：进 App 不弹通知，失效由签到通知）；**签到脚本**与图标仍引用外部仓库（[MaYIHEI/paperclip](https://github.com/MaYIHEI/paperclip)、[MaYIHEI/pin](https://github.com/MaYIHEI/pin)）。
+| [`BilibiliFix.plugin`](./BilibiliFix.plugin) | 哔哩哔哩·增强版 𝕏 — 空降助手、分区修复、扫码登录、画质解锁 | 脚本型 · [`scripts/tools/bilibili/`](../scripts/tools/bilibili/) |
+| [`WeReadEnhance.plugin`](./WeReadEnhance.plugin) | 微信读书·防强更去广告 — 屏蔽升级弹窗、强更通知与去广告精简，锁定老版本免费 AI 听书 | 脚本型 · [`scripts/tools/wxread_enhance/`](../scripts/tools/wxread_enhance/) |
+| [`GitHubPushTime.plugin`](./GitHubPushTime.plugin) | GitHub·星标推送时间 — 在 GitHub App 星标列表语言后显示最近推送时间 | 脚本型 · [`scripts/tools/github/`](../scripts/tools/github/) |
+| [`PixivEnhanced.plugin`](./PixivEnhanced.plugin) | Pixiv·全域增强翻译 — 全页面日文深度汉化 · AI 视觉多模态漫翻 · 内置设置中心 | 脚本型 · [`scripts/tools/pixiv/`](../scripts/tools/pixiv/) |
+| [`camscanner.plugin`](./camscanner.plugin) | 扫描全能王·签到 — 抓取 Cookie + 每日签到 | 脚本型 · 抓取内化 [`scripts/tools/camscanner/`](../scripts/tools/camscanner/) / 签到外部 |
 
 ---
 
 ## 使用方式
 
 1. 在 Loon 中选择「插件」→ 右上角「+」→ URL 导入
-2. 粘贴对应 `.plugin` 的 Raw 地址，例如：
+2. 粘贴 `CookieCenter.plugin` 的 Raw 地址：
 
    ```text
    https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/loon/CookieCenter.plugin
    ```
 
-3. 导入后可在插件设置中按需调整开关（捕获与 cron 默认开启）
-4. **凭据捕获**：打开对应 App 开关 → 进入 App 触发接口 → 收到通知即成功 → 捕获完成后可关闭对应开关减少 MITM
-5. **参数面板 / 手动运行**：通过 [BoxJS 订阅](../boxjs/README.md) 查看与配置 Cookie 和偏好
+3. 导入后可在插件设置中按需调整开关（`weread`（微信读书）、`telecom`（中国电信））；
+4. **参数面板 / 手动运行**：通过 [BoxJS 订阅](../boxjs/README.md) 查看与配置 Cookie、手机号和运行测试。
 
+---
+
+## ⚠️ 插件版本与时分日期规范
+
+仓库内所有 `.plugin` 插件已全面推行**高精度版本时间戳规范**：
+- **版本号标识**：每个插件必须显式携带 `#!version = x.y.z`；
+- **更新时间戳**：`#!date` 必须**精确到分钟**（`YYYY-MM-DD HH:mm`，如 `2026-09-17 11:50`）；
+- **版本更新核对**：每次维护更新时，日期时分随之刷新。用户在 Loon 客户端插件详情页查看更新时间，即可 100% 确认是否已成功更新并穿透本地缓存。
