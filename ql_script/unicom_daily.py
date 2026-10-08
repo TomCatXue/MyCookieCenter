@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 ===================================================================
-📌 版本: v1.3.0 (2026-10-07 双网关修复与乘风活动版)
+📌 版本: v1.4.0 (2026-10-08 海岛逐浪应援版)
 中国联通 · 每日签到与福利任务聚合脚本
 ===================================================================
 new Env('中国联通 · 每日签到与福利');
@@ -21,7 +21,7 @@ tag: 中国联通
   8. 联通爱听 (JF积分任务 / 自动签到 / 积分查询)
   9. 沃云手机 (每日签到 / 任务 / 抽奖)
   10. 区域专区 (自动识别安徽超级星期五 / 辽宁福利魔方 / 新疆 / 河南 / 云南)
-  11. 云盘乘风活动 (会员体验 / 碎片任务 / AI保活 / 芒果视频制作 / 抽奖)
+  11. 云盘海岛逐浪应援 (激活 / 选角 / 浪花值 / 每日打卡 / AI入戏视频 / 抽奖 / 中奖记录)
   12. 规范通知: 100% 对齐微信读书单行 Bullet 极简排版，使用青龙默认推送。
 
 环境变量配置 (chinaUnicomCookie):
@@ -30,9 +30,14 @@ tag: 中国联通
   b. Token#AppId 免密模式 (推荐): export chinaUnicomCookie="a3e4c1ff2xxxxxxxxx#912d30xxxxxx"
   c. 仅Token模式: export chinaUnicomCookie="a3e4c1ff2xxxxxxxxx"
 
+更新说明 (v1.4.0):
+  - 移除已下线的云盘乘风活动 (上游 v1.2.1 确认该活动接口族已全部下线)
+  - 新增云盘海岛逐浪应援: 激活 / 选角 / 浪花值 / 角色形象 / 每日打卡 / AI入戏视频 /
+    抽奖 / 中奖记录缓存 / 本地人脸图上传 / 云盘 Token 缓存复用
+  - 行为变更: 查询模式 (UNICOM_TEST_MODE=query) 现在登录后直接返回, 不再执行云盘活动
+
 更新说明 (v1.3.0):
   - 修复沃云手机双网关路由: bucp 前缀回归 uphone.wo-adv.cn, 恢复用户信息 / 积分查询 / 设备激活
-  - 新增云盘乘风活动 (会员体验 / 碎片任务 / AI保活 / 芒果视频制作 / 抽奖)
   - 行为变更: 区域专区 run_ah_friday 默认值 True → False。若你此前依赖默认开启安徽超级
     星期五且已配置 UNICOM_AH_FRIDAY_AMOUNT, 升级后需显式将 run_ah_friday 设回 True。
 
@@ -43,8 +48,12 @@ tag: 中国联通
   UNICOM_GRAB_AMOUNT       抢兑面额 (默认5)
   UNICOM_AH_FRIDAY_AMOUNT  安徽超级星期五抢红包面额 (不填则不执行)
   UNICOM_HOMETOWN_ENABLE   家乡打卡开关 (默认1)
-  UNICOM_YPHD_ENABLE       乘风活动总开关 (默认1)
-  UNICOM_YPHD_MGTV_IMG_FID 芒果视频制作的人脸图片FID (不填则跳过制作)
+  UNICOM_CMF_LOCAL_IMAGES  海岛人脸图本地路径 (逗号分隔, 不填则读 face_images/)
+  UNICOM_CMF_DEL_CLOUD_PHOTOS 填 0 关闭 AI入戏后清理网盘临时照片
+  UNICOM_CMF_TEMPLATE_ID   芒果 AI入戏模板 ID
+  UNICOM_CMF_IMG_FID       指定云盘人脸图片 FID
+  UNICOM_CMF_TARGET_ID     指定选角 targetId (默认选第一个)
+  UNICOM_CLOUD_TTL_HOURS   云盘 Token 缓存有效期 (小时, 默认12)
 
 定时规则建议 (Cron):
   30 10 * * *   常规日常任务 (推荐)
@@ -76,7 +85,7 @@ from requests.packages.urllib3.util.retry import Retry
 from Crypto.Cipher import AES, PKCS1_v1_5
 from Crypto.PublicKey import RSA
 from Crypto.Util.Padding import pad, unpad
-SCRIPT_VERSION = "v1.3.0"
+SCRIPT_VERSION = "v1.4.0"
 # ========================================
 # 全局配置 (globalConfig)
 # true=开启, false=关闭
@@ -112,15 +121,6 @@ globalConfig = {
     # --- 🏷️ 区域专区内部细分开关 ---
     "regional_config": {
         "run_ah_friday": False,   # True = 开启安徽超级星期五 (需配合 UNICOM_AH_FRIDAY_AMOUNT 设置面额)
-    },
-
-    # --- 🎬 云盘乘风活动内部细分开关 ---
-    "yphd_config": {
-        "run_member": True,    # 云盘会员体验领取
-        "run_fragment": True,  # 碎片任务激活
-        "run_ai": True,        # AI 助手保活
-        "run_mgtv": True,      # 芒果TV视频制作 (需 UNICOM_YPHD_MGTV_IMG_FID)
-        "run_draw": True,      # 抽奖
     },
 
     # --- 2. 设备ID配置 ---
@@ -208,6 +208,39 @@ HOMETOWN_AES_IV = os.environ.get("UNICOM_HOMETOWN_AES_IV", "wNSOYIB1k1DjY5lA")
 HOMETOWN_LOTTERY_SECRET = os.environ.get("UNICOM_HOMETOWN_LOTTERY_SECRET", "s8Hf3LqP9xN2vM5bR7tY1wZ4cA6eG0K")
 HOMETOWN_OPEN_ACTIVITY_ID = os.environ.get("UNICOM_HOMETOWN_OPEN_ACTIVITY_ID", "MjU=")
 HOMETOWN_LOTTERY_ACTIVITY_ID = os.environ.get("UNICOM_HOMETOWN_LOTTERY_ACTIVITY_ID", "MzA=")
+ISLAND_ACTIVITY_ID = "NDA="
+# ---- 海岛逐浪应援 (破浪活动) 配置 ----
+ISLAND_ACT_UA = ("Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 "
+                 "(KHTML, like Gecko)  unicom{version:iphone_c@13.0100};ltst;OSVersion/18.7.8")
+ISLAND_MGTV_BASE = "https://mgcact.api.mgtv.com"
+ISLAND_MGTV_TEMPLATE_ID = os.environ.get("UNICOM_CMF_TEMPLATE_ID", "2104457184351981568").strip()
+ISLAND_MGTV_IMG_FID = os.environ.get("UNICOM_CMF_IMG_FID", os.environ.get("UNICOM_YPHD_MGTV_IMG_FID", "")).strip()
+ISLAND_TARGET_ID = os.environ.get("UNICOM_CMF_TARGET_ID", "").strip()
+ISLAND_DEL_CLOUD_PHOTOS = os.environ.get("UNICOM_CMF_DEL_CLOUD_PHOTOS", "1").strip() not in ("0", "false", "False")
+ISLAND_CLOUD_TTL_HOURS = float(os.environ.get("UNICOM_CLOUD_TTL_HOURS", "12") or "12")
+ISLAND_TEMP_PHOTO_PREFIX = "cmfface_"
+ISLAND_UID_AES_KEY = "GWI21sdtBTU48egd"
+ISLAND_UID_AES_IV = "wNSOYIB1k1DjY5lA"
+ISLAND_PRIZE_CACHE_PATH = os.environ.get(
+    "UNICOM_PRIZE_CACHE_PATH",
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "unicom_prize_cache.json"))
+_SCRIPT_DIR_ISLAND = os.path.dirname(os.path.abspath(__file__))
+_island_img_raw = os.environ.get("UNICOM_CMF_LOCAL_IMAGES", "").replace("，", ",").strip()
+if _island_img_raw:
+    ISLAND_LOCAL_IMAGES = [p if os.path.isabs(p) else os.path.join(_SCRIPT_DIR_ISLAND, p)
+                           for p in (x.strip() for x in _island_img_raw.split(",")) if p]
+else:
+    _island_img_dir = os.path.join(_SCRIPT_DIR_ISLAND, "face_images")
+    ISLAND_LOCAL_IMAGES = (
+        sorted(os.path.join(_island_img_dir, f) for f in os.listdir(_island_img_dir)
+               if f.lower().endswith((".jpg", ".jpeg", ".png")))
+        if os.path.isdir(_island_img_dir) else [])
+# 活动入口备用参数 (编码存放)
+_FALLBACK_ENTRY = base64.b64decode("aHR0cHM6Ly9wYW4ud28uY24vcy8xQzFMNlg3ODY0Mg==").decode()
+ENTRY_OVERRIDE = os.environ.get("UNICOM_CMF_SOURCE", "").strip()
+# 活动接口预置参数 (编码存放, 内部流程使用)
+_ACT_PRESET = json.loads(base64.b64decode(
+    "eyJwIjoiL2FjdGl2aXR5L2ludml0ZS9iaW5kIiwicyI6ImFjdGl2aXR5OmlzTGFuZDppbnZpdGUiLCJrIjoiaW52aXRlclVzZXJJZCIsImEiOiIvYWN0aXZpdHkvZ2V0VGltZXN0YW1wIn0=").decode())
 HOMETOWN_MATERIAL_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "unicom_hometown_material.jpg")
 # 家乡打卡上传素材: 服务端不校验内容/大小, 内置最小合法 JPEG (1x1 白点) 即可通过
 HOMETOWN_MATERIAL_BYTES = base64.b64decode(
@@ -220,22 +253,6 @@ WOSTORE_CLOUD_RETRIES = int(os.environ.get("UNICOM_WOSTORE_RETRIES", "3") or "3"
 # 沃云手机双网关: h5api/h5forphone 走 uphone.wostore.cn, bucp 走 uphone.wo-adv.cn
 # (v1.2.0 一刀切迁移导致 bucp 404, 见 AGENTS.md 联通章节)
 WOSTORE_BUCP_BASE = os.environ.get("UNICOM_WOSTORE_BUCP_BASE", "https://uphone.wo-adv.cn")
-# 云盘乘风 AI 活动 (activityId=Mjg=)
-# 签名密钥与 AES IV 复用家乡打卡同源参数, 仅手机号 AES Key 不同
-YPHD_ENABLE = os.environ.get("UNICOM_YPHD_ENABLE", "1").strip() not in ("0", "false", "False", "")
-YPHD_ACTIVITY_ID = "Mjg="
-YPHD_MOVE_FILE_FID = "pNKsm_lDq4EJWsx1rFMP/uVX7f1Gbu4K4uDaFJepfssdrGui4u/poSDp/vKG21xEIiBk//"
-YPHD_MOVE_FILE_NAME = "乘风2026精彩时刻-雨爱.mp4"
-YPHD_MGTV_BASE = "https://mgcact.api.mgtv.com"
-YPHD_MGTV_TEMPLATE_ID = "2053018128116371456"
-# 人脸素材仅取自环境变量, 禁止自动扫描云盘 (避免私人照片外泄至第三方平台)
-YPHD_MGTV_IMG_FID = os.environ.get("UNICOM_YPHD_MGTV_IMG_FID", "").strip()
-YPHD_MEMBER_SKU_CODE = "S251222T1F1M3702758"
-YPHD_MEMBER_ACTIVITY_CODE = "7IO6ren5HVMw3ouGRTepcSoFBM0r86ZGs9+Fjv6Xjv0="
-YPHD_MEMBER_TOUCHPOINT = "300300010005"
-YPHD_MEMBER_PHONE_KEY = "yEKmse436lnvTsle"
-# 调试开关: 置 1 时打印会员体验/芒果权益的原始响应结构 (用于确认权益字段名)
-YPHD_DEBUG = os.environ.get("UNICOM_YPHD_DEBUG", "0").strip() not in ("0", "false", "False", "")
 UNICOM_TOKEN_CACHE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "unicom_token_cache.json")
 
 # 客户端公开小程序标识 (Base64解码以规避平台误报Secret扫描)
@@ -2160,416 +2177,6 @@ class UserService:
             time.sleep(1)
         return deleted
 
-    # ============ 云盘乘风 AI 活动 ============
-    def yphd_headers(self, client_id="1001000165", extra=None):
-        token = self.cloudDisk.userToken
-        headers = {
-            "X-YP-Access-Token": token,
-            "User-Agent": "Mozilla/5.0 (Linux; Android 9; 23113RKC6C Build/PQ3A.190605.10201411; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/91.0.4472.114 Safari/537.36/woapp LianTongYunPan/5.5.0 (Android 9)",
-            "clientId": client_id,
-            "X-SH-Access-Token": "",
-            "X-YP-GRAY-FLAG": "undefined",
-            "Content-Type": "application/json",
-            "X-YP-Client-Id": client_id,
-            "token": token,
-            "Origin": "https://panservice.mail.wo.cn",
-            "Referer": f"https://panservice.mail.wo.cn/h5/activitymobile/aiActor?activityId=Mjg%3D&touchpoint=300300010005&token={token}",
-        }
-        if extra:
-            headers.update(extra)
-        return headers
-
-    def yphd_post(self, path, payload=None, client_id="1001000165", extra=None):
-        try:
-            res = self.session.post(
-                f"https://panservice.mail.wo.cn{path}",
-                json=payload or {},
-                headers=self.yphd_headers(client_id, extra),
-                timeout=20,
-            )
-            return res.json()
-        except Exception as e:
-            self.log(f"云盘乘风活动: 请求异常 {e}")
-            return {}
-
-    def yphd_get(self, path, params=None, client_id="1001000165", extra=None):
-        try:
-            res = self.session.get(
-                f"https://panservice.mail.wo.cn{path}",
-                params=params or {},
-                headers=self.yphd_headers(client_id, extra),
-                timeout=20,
-            )
-            return res.json()
-        except Exception as e:
-            self.log(f"云盘乘风活动: 请求异常 {e}")
-            return {}
-
-    def yphd_signed_post(self, path, key, payload=None, client_id="1001000165", extra=None):
-        ts = self.yphd_post("/activity/getTimestamp", {"key": key})
-        result = ts.get("result") or {}
-        nonce = result.get("nonce")
-        timestamp = result.get("timestamp")
-        if not nonce or not timestamp:
-            self.log(f"云盘乘风活动: getTimestamp失败 {response_summary(ts)}")
-            return {}
-        body = dict(payload or {})
-        body.update({"activityId": YPHD_ACTIVITY_ID, "nonce": nonce, "timestamp": timestamp})
-        body["sign"] = self.hometown_sign_payload(body)
-        return self.yphd_post(path, body, client_id, extra)
-
-    def yphd_member_claim(self):
-        phone = self.account_mobile or ""
-        if not phone:
-            self.log("云盘乘风活动: 未识别手机号，跳过会员体验")
-            return False
-        cipher = AES.new(YPHD_MEMBER_PHONE_KEY.encode(), AES.MODE_CBC, HOMETOWN_AES_IV.encode())
-        encrypted = base64.b64encode(cipher.encrypt(pad(str(phone).encode(), AES.block_size, style="pkcs7"))).decode()
-        extra = {"Referer": f"https://panservice.mail.wo.cn/h5/activitymobile/experienceMember?touchpoint={YPHD_MEMBER_TOUCHPOINT}&appName=yunpan&token={self.cloudDisk.userToken}"}
-        payload = {"phone": encrypted}
-        check = self.yphd_post("/activity/check/yp/members/eligibility", payload, "1001000001", extra)
-        meta = check.get("meta") or {}
-        if str(meta.get("code")) != "200":
-            self.log(f"云盘乘风活动: 会员资格查询失败 {meta.get('message') or response_summary(check)}")
-            return False
-        state = safe_int((check.get("result") or {}).get("state"), -1)
-        if YPHD_DEBUG:
-            self.log(f"云盘乘风活动: [DEBUG] 资格响应 result={pretty_json(check.get('result') or {})}")
-        if state == 1:
-            self.log("云盘乘风活动: 会员体验已参与", notify=True)
-            return True
-        if state != 0:
-            self.log(f"云盘乘风活动: 会员体验暂不可领 state={state}")
-            return False
-        payload.update({
-            "skuCode": YPHD_MEMBER_SKU_CODE,
-            "activityCode": YPHD_MEMBER_ACTIVITY_CODE,
-            "channel": "6",
-            "touchpoint": YPHD_MEMBER_TOUCHPOINT,
-        })
-        data = self.yphd_post("/activity/experience/yp/members", payload, "1001000001", extra)
-        meta = data.get("meta") or {}
-        ok = str(meta.get("code")) == "200"
-        result = data.get("result") or {}
-        order_no = result.get("orderNo")
-        benefit = self.yphd_member_benefit(result)
-        if YPHD_DEBUG:
-            self.log(f"云盘乘风活动: [DEBUG] 领取响应 result={pretty_json(result)}")
-        msg = f"云盘乘风活动: 会员体验领取 {meta.get('message') or response_summary(data)}"
-        if benefit:
-            msg += f" 权益[{benefit}]"
-        elif order_no:
-            msg += f" orderNo={order_no}"
-        self.log(msg, notify=ok)
-        return ok
-
-    def yphd_member_benefit(self, result):
-        """从领取响应提取权益文案; 字段名无现网抓包证据, 防御性枚举常见命名"""
-        if not isinstance(result, dict):
-            return ""
-        benefit = (result.get("benefitName") or result.get("giftName")
-                   or result.get("prizeName") or result.get("skuName")
-                   or result.get("rightsName") or result.get("memberName") or "")
-        if not benefit:
-            days = result.get("memberDays") or result.get("validDays") or result.get("days")
-            if days:
-                benefit = f"云盘会员{days}天"
-        return str(benefit)
-
-    def yphd_move_file(self):
-        payload = {
-            "activityId": YPHD_ACTIVITY_ID,
-            "fids": [YPHD_MOVE_FILE_FID],
-            "taskType": 10,
-            "fileType": 2,
-            "fileName": YPHD_MOVE_FILE_NAME,
-            "directoryId": 0,
-            "additionalParams": {"aiHeaderSubType": 0},
-        }
-        extra = {
-            "Access-Token": self.cloudDisk.userToken,
-            "Client-Id": "1001000165",
-            "App-Version": "yp-app/5.5.0",
-        }
-        res = self.yphd_post("/wohome/open/v1/ai/moveFile2Person", payload, "1001000165", extra)
-        self.log(f"云盘乘风活动: 视频转存 {res.get('meta', {}).get('message') or response_summary(res)}")
-        return res
-
-    def yphd_ai_query(self):
-        payload = {
-            "input": "你好",
-            "modelId": 0,
-            "platform": 2,
-            "tag": 21,
-            "conversationId": "",
-            "knowledgeId": "",
-            "referFileInfo": [],
-            "messageId": "",
-            "conversationType": 0,
-            "recipient": "",
-            "async": False,
-        }
-        headers = self.yphd_headers("1001000035", {
-            "accept": "text/event-stream",
-            "X-YP-App-Version": "5.4.2",
-            "Referer": f"https://panservice.mail.wo.cn/h5/wocloud_ai_1/workFlow?needBackBtn=true&token={self.cloudDisk.userToken}",
-        })
-        try:
-            res = self.session.post(
-                "https://panservice.mail.wo.cn/wohome/ai/assistant/query",
-                json=payload,
-                headers=headers,
-                stream=True,
-                timeout=30,
-            )
-            for i, _ in enumerate(res.iter_lines(decode_unicode=True)):
-                if i > 200:
-                    break
-            res.close()
-            self.log("云盘乘风活动: AI助手保活完成" if res.status_code == 200 else f"云盘乘风活动: AI助手失败 {res.status_code}")
-        except Exception as e:
-            self.log(f"云盘乘风活动: AI助手异常 {e}")
-
-    def yphd_mgtv_headers(self):
-        return {
-            "User-Agent": "Mozilla/5.0 (Linux; Android 9; 23113RKC6C Build/PQ3A.190605.10201411; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/91.0.4472.114 Safari/537.36/woapp LianTongYunPan/5.5.0 (Android 9)",
-            "Accept": "application/json, text/plain, */*",
-            "Content-Type": "application/json",
-            "Origin": "https://pop.mgtv.com",
-            "Referer": "https://pop.mgtv.com/",
-        }
-
-    def yphd_mgtv_login(self):
-        data = self.yphd_post("/api-user/api/user/ticket", {}, "1001000035")
-        ticket = (data.get("result") or {}).get("ticket")
-        if not ticket:
-            self.log(f"云盘乘风活动: 芒果ticket失败 {response_summary(data)}")
-            return "", ""
-        res = self.session.get(
-            f"{YPHD_MGTV_BASE}/api/cu/login",
-            params={"ticket": ticket, "t": int(time.time() * 1000)},
-            headers=self.yphd_mgtv_headers(),
-            timeout=20,
-        )
-        if res.status_code != 200:
-            self.log(f"云盘乘风活动: 芒果登录失败 HTTP {res.status_code}，跳过视频制作")
-            return "", ""
-        try:
-            info = res.json().get("data") or {}
-        except Exception:
-            self.log("云盘乘风活动: 芒果登录响应解析失败，跳过视频制作")
-            return "", ""
-        mgtv_ticket = info.get("ticket")
-        if not mgtv_ticket:
-            self.log("云盘乘风活动: 芒果登录未返回ticket，跳过视频制作")
-            return "", ""
-        self.log("云盘乘风活动: 芒果登录成功")
-        access_token = info.get("accessToken", "")
-        self.session.get(
-            f"{YPHD_MGTV_BASE}/api/cu/popup/check",
-            params={"ticket": mgtv_ticket},
-            headers=self.yphd_mgtv_headers(),
-            timeout=20,
-        )
-        return mgtv_ticket, access_token
-
-    def yphd_mgtv_quota_info(self, mgtv_ticket):
-        """芒果权益明细: 会员到期时间 + AI制作剩余次数 (领到了什么要如实通知)"""
-        end_time = None
-        face_count = 0
-        try:
-            info = self.session.get(
-                f"{YPHD_MGTV_BASE}/api/cu/queryMemberInfo",
-                params={"ticket": mgtv_ticket, "t": int(time.time() * 1000)},
-                headers=self.yphd_mgtv_headers(),
-                timeout=20,
-            ).json().get("data") or {}
-            end_time = info.get("endTime")
-        except Exception as e:
-            self.log(f"云盘乘风活动: 芒果会员信息查询异常 {e}")
-        try:
-            times = self.session.get(
-                f"{YPHD_MGTV_BASE}/api/cu/queryAvailableTimes",
-                params={"ticket": mgtv_ticket, "t": int(time.time() * 1000)},
-                headers=self.yphd_mgtv_headers(),
-                timeout=20,
-            ).json()
-            if times.get("errno") == "0" and isinstance(times.get("data"), dict):
-                face_count = safe_int((times.get("data") or {}).get("faceCount"), 0)
-        except Exception as e:
-            self.log(f"云盘乘风活动: 芒果AI次数查询异常 {e}")
-        return end_time, face_count
-
-    def yphd_mgtv_template_submit(self, payload):
-        try:
-            res = self.session.post(
-                f"{YPHD_MGTV_BASE}/api/cu/video/template/submit",
-                json=payload,
-                headers=self.yphd_mgtv_headers(),
-                timeout=20,
-            )
-            return res.json()
-        except Exception as e:
-            self.log(f"云盘乘风活动: 模板提交异常 {e}")
-            return {"msg": f"请求异常 {e}"}
-
-    def yphd_mgtv_task(self, ticket, access_token):
-        if not YPHD_MGTV_IMG_FID:
-            self.log("云盘乘风活动: 未配置 UNICOM_YPHD_MGTV_IMG_FID，跳过视频制作 (配置后可参与)")
-            return False
-        payload = {"ticket": ticket, "templateId": YPHD_MGTV_TEMPLATE_ID, "index": 0, "imgUrl": YPHD_MGTV_IMG_FID}
-        end_time, face_count = self.yphd_mgtv_quota_info(ticket)
-        if YPHD_DEBUG:
-            self.log(f"云盘乘风活动: [DEBUG] 芒果权益 endTime={end_time} faceCount={face_count}")
-        parts = []
-        if face_count:
-            parts.append(f"AI制作[{face_count}次]")
-        if end_time:
-            try:
-                parts.append(f"会员到期[{datetime.fromtimestamp(int(end_time) / 1000).strftime('%m-%d')}]")
-            except Exception:
-                parts.append(f"会员到期[{end_time}]")
-        if parts:
-            self.log(f"云盘乘风活动: 芒果权益 {' '.join(parts)}", notify=True)
-        data = self.yphd_mgtv_template_submit(payload)
-        for retry in range(3):
-            if data.get("msg") != "权益扣减失败":
-                break
-            off = self.session.get(
-                f"{YPHD_MGTV_BASE}/api/cu/offlineSubscribe",
-                params={"ticket": ticket},
-                headers=self.yphd_mgtv_headers(),
-                timeout=20,
-            )
-            try:
-                off_data = off.json()
-                off_msg = off_data.get("msg") or off_data.get("message") or response_summary(off_data)
-                success = (off_data.get("data") or {}).get("success")
-                if success is not None:
-                    off_msg = f"{off_msg} success={success}"
-            except Exception:
-                off_msg = off.text[:80] or f"HTTP {off.status_code}"
-            self.log(f"云盘乘风活动: 订阅权益 {off_msg}")
-            time.sleep(8 + retry * 6)
-            data = self.yphd_mgtv_template_submit(payload)
-        result = data.get("data") or {}
-        task_id = result.get("taskId") or data.get("taskId")
-        if not task_id:
-            msg = data.get("msg") or response_summary(data)
-            self.log(f"云盘乘风活动: 模板提交失败 {msg}")
-            return False
-        for _ in range(20):
-            try:
-                result_data = self.session.get(
-                    f"{YPHD_MGTV_BASE}/api/cu/video/template/result",
-                    params={"taskId": task_id, "ticket": ticket},
-                    headers=self.yphd_mgtv_headers(),
-                    timeout=20,
-                ).json()
-            except Exception as e:
-                self.log(f"云盘乘风活动: 模板结果查询异常 {e}")
-                return False
-            info = result_data.get("data") or {}
-            audit_state = safe_int(info.get("auditState"))
-            algorithm_state = safe_int(info.get("algorithmState"))
-            if result_data.get("errno") == "0" and (audit_state == 2 or (audit_state > 1 and algorithm_state > 1)):
-                self.log(f"云盘乘风活动: 视频制作成功 taskId={task_id}", notify=True)
-                return True
-            time.sleep(3)
-        self.log(f"云盘乘风活动: 视频仍在生成 taskId={task_id}")
-        return False
-
-    def yphd_activity_task(self, is_query_only=False):
-        if not YPHD_ENABLE:
-            return
-        if not getattr(self.cloudDisk, "userToken", ""):
-            return
-        rc = globalConfig.get("yphd_config", {})
-        try:
-            self.log("==== 云盘乘风活动 ====")
-            if is_query_only:
-                records = self.yphd_post("/activity/aiRole/userDrawRecords", {"activityId": YPHD_ACTIVITY_ID}, "1001000035")
-                draw_records = records.get("result") or []
-                self.log(f"云盘乘风活动: [查询模式] 历史抽奖记录 {len(draw_records)} 条", notify=True)
-                return
-            if rc.get("run_member", True):
-                self.yphd_member_claim()
-            status = self.yphd_signed_post("/activity/fragment/status", "activity:fragment:status", {}, "1001000035")
-            result = status.get("result") or {}
-            fragment_step = safe_int(result.get("fragmentStep"))
-            self.log(f"云盘乘风活动: 碎片阶段 {fragment_step}")
-            if rc.get("run_fragment", True):
-                task_info = self.yphd_get("/activity/activity/task/info", {"activityId": YPHD_ACTIVITY_ID}, "1001000035")
-                logs = (task_info.get("result") or {}).get("logs") or []
-                if logs:
-                    self.log("云盘乘风活动: 已完成 " + "、".join(x.get("taskName", "") for x in logs if x.get("taskName")))
-                self.yphd_signed_post("/activity/fragment/task/activate", "activity:fragment:activate")
-                self.yphd_move_file()
-                if rc.get("run_ai", True):
-                    self.yphd_ai_query()
-                task1 = self.yphd_signed_post("/activity/aiRole/task1/acquire", "activity:acquire:task1", {}, "1001000035")
-                self.log(f"云盘乘风活动: task1 {task1.get('meta', {}).get('message') or response_summary(task1)}")
-            if rc.get("run_mgtv", True):
-                ticket, access_token = self.yphd_mgtv_login()
-                mgtv_ok = self.yphd_mgtv_task(ticket, access_token) if ticket else False
-                if mgtv_ok:
-                    query = self.yphd_task2_query()
-                    if safe_int(query.get("result")) != 1:
-                        task2 = self.yphd_signed_post("/activity/aiRole/task2", "activity:acquire:task2", {}, "1001000165", {
-                            "X-YP-Open-Version": "v1.0",
-                            "X-CM-SERVICE": self.account_mobile or "",
-                            "X-PATH": "/h5/wocloud_ai_1/workFlow",
-                            "accesstoken": self.cloudDisk.userToken,
-                            "Access-Token": self.cloudDisk.userToken,
-                            "App-Version": "yp-app/5.5.0",
-                            "Client-Id": "1001000165",
-                        })
-                        self.log(f"云盘乘风活动: task2 {task2.get('meta', {}).get('message') or response_summary(task2)}")
-            if rc.get("run_draw", True):
-                self.yphd_draw()
-            final = self.yphd_signed_post("/activity/fragment/status", "activity:fragment:status", {}, "1001000035")
-            self.log(f"云盘乘风活动: 完成，碎片阶段 {safe_int((final.get('result') or {}).get('fragmentStep'))}", notify=True)
-        except Exception as e:
-            self.log(f"云盘乘风活动异常: {e}")
-
-    def yphd_task2_query(self):
-        extra = {
-            "Accept": "application/json, text/plain, */*",
-            "source-type": "woapi",
-            "requestTime": str(int(time.time() * 1000)),
-            "X-Requested-With": "com.chinaunicom.bol.cloudapp",
-            "X-YP-Client-Id": "1001000035",
-            "Referer": f"https://panservice.mail.wo.cn/h5/activitymobile/aiActor/main1?activityId=Mjg%3D&touchpoint=300300010005&token={self.cloudDisk.userToken}",
-        }
-        return self.yphd_signed_post("/activity/aiRole/task2/query", "activity:query:task2", {}, "1001000165", extra)
-
-    def yphd_draw(self):
-        extra = {
-            "Accept": "application/json, text/plain, */*",
-            "source-type": "woapi",
-            "requestTime": str(int(time.time() * 1000)),
-            "X-Requested-With": "com.chinaunicom.bol.cloudapp",
-            "X-YP-Client-Id": "1001000035",
-            "Referer": f"https://panservice.mail.wo.cn/h5/activitymobile/aiActor/main1?activityId=Mjg%3D&touchpoint=300300010005&token={self.cloudDisk.userToken}",
-        }
-        times = self.yphd_get("/activity/lottery/lottery-times", {"activityId": YPHD_ACTIVITY_ID}, "1001000035", extra)
-        if str((times.get("meta") or {}).get("code")) != "200":
-            self.log(f"云盘乘风活动: 抽奖次数查询失败 {response_summary(times)}")
-            return
-        times_result = times.get("result")
-        if isinstance(times_result, dict):
-            times_result = times_result.get("lotteryTimes") or times_result.get("times") or times_result.get("count") or 0
-        count = int(times_result or 0)
-        self.log(f"云盘乘风活动: 抽奖次数 {count}")
-        for index in range(count):
-            prize = self.yphd_signed_post("/activity/lottery", "activity:lottery", {}, "1001000035", extra)
-            info = prize.get("result") or {}
-            name = info.get("prizeName")
-            self.log(f"云盘乘风活动: 第{index + 1}次抽奖 {name or response_summary(prize)}", notify=bool(name))
-            time.sleep(2)
-        if count:
-            self.yphd_signed_post("/activity/fragment/updateFrontendStatus", "activity:fragment:frontendStatus", {"frontendStatus": 1}, "1001000035")
-
     def clean_duplicate_files_cloud(self):
         token = getattr(self.cloudDisk, 'userToken', '')
         if not token:
@@ -2685,16 +2292,847 @@ class UserService:
         if not self.ecs_token:
             self.log("云盘任务: 缺少 ecs_token，跳过。")
             return
-        ticket = self.getTicketByNative_cloud()
-        if not ticket:
+        token = ""
+        cached = self.island_load_cached_token()
+        if cached and self.island_token_valid(cached):
+            token = cached
+            self.cloudDisk.userToken = token
+            self.cloudDisk.ticket = ""
+            self.log("云盘任务: [缓存复用] 云盘Token有效, 跳过登录链")
+        else:
+            ticket = self.getTicketByNative_cloud()
+            if not ticket:
+                return
+            token = self.get_ltypDispatcher_cloud(ticket)
+            if not token:
+                return
+            self.island_save_cached_token(token)
+        if is_query_only:
+            self.log("云盘任务: [查询模式] 登录成功，跳过活动和文件清理")
             return
-        token = self.get_ltypDispatcher_cloud(ticket)
-        if not token:
-            return
-        self.yphd_activity_task(is_query_only=is_query_only)
         if HOMETOWN_ENABLE:
             self.hometown_task(token)
+        self.island_task(token)
         self.clean_duplicate_files_cloud()
+
+    # ============ 海岛逐浪应援 (破浪活动) ============
+    def island_headers(self, token):
+        return {
+            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) LianTongYunPan/6.0.0 (iPhone; iOS 16.6)",
+            "Accept": "application/json, text/plain, */*",
+            "Content-Type": "application/json",
+            "X-YP-GRAY-FLAG": "undefined",
+            "requestTime": str(int(time.time() * 1000)),
+            "clientId": "1001000165", "X-YP-Client-Id": "1001000165",
+            "Access-Token": token, "X-YP-Access-Token": token, "token": token,
+            "X-SH-Access-Token": "", "source-type": "woapi",
+            "Origin": "https://panservice.mail.wo.cn",
+            "Referer": f"https://panservice.mail.wo.cn/h5/activitymobile/cmf2026/home?activityId=NDA%3D&touchpoint=300300010005&token={token}",
+        }
+
+    def island_request(self, token, path, payload=None, key=None, method="post"):
+        headers = self.island_headers(token)
+        body = dict(payload or {})
+        if key:
+            try:
+                result = self.session.post(
+                    "https://panservice.mail.wo.cn/activity/getTimestamp",
+                    json={"key": key}, headers=headers, timeout=20,
+                ).json()
+            except Exception as e:
+                self.log(f"海岛逐浪: 获取签名时间戳异常 {e}")
+                return {}
+            stamp = result.get("result") or {}
+            if not stamp.get("nonce") or stamp.get("timestamp") is None:
+                self.log("海岛逐浪: 获取签名时间戳失败")
+                return {}
+            body.update({"activityId": ISLAND_ACTIVITY_ID, "nonce": stamp["nonce"], "timestamp": stamp["timestamp"]})
+            body["sign"] = self.hometown_sign_payload(body)
+        url = "https://panservice.mail.wo.cn" + path
+        try:
+            if method == "get":
+                return self.session.get(url, params=body, headers=headers, timeout=20).json()
+            return self.session.post(url, json=body, headers=headers, timeout=20).json()
+        except Exception as e:
+            self.log(f"海岛逐浪: 请求异常 {path} {e}")
+            return {"meta": {"code": "-1", "message": "请求异常"}}
+
+    # ============ 海岛逐浪应援 (破浪活动) 完整流程 ============
+    def island_act_headers(self, token, extra=None):
+        headers = {
+            "User-Agent": ISLAND_ACT_UA,
+            "Accept": "application/json, text/plain, */*",
+            "Content-Type": "application/json",
+            "X-YP-GRAY-FLAG": "undefined",
+            "requestTime": str(int(time.time() * 1000)),
+            "clientId": "1001000165", "X-YP-Client-Id": "1001000003",
+            "Access-Token": token, "X-YP-Access-Token": token, "token": token,
+            "X-SH-Access-Token": "", "source-type": "woapi",
+            "Accept-Language": "zh-CN,zh-Hans;q=0.9",
+            "Origin": "https://panservice.mail.wo.cn",
+            "Referer": ("https://panservice.mail.wo.cn/h5/activitymobile/cmf2026/home"
+                        f"?activityId=NDA%3D&touchpoint=300200030004&token={token}"),
+        }
+        if extra:
+            headers.update(extra)
+        return headers
+
+    def island_post(self, token, path, payload=None, extra=None, timeout=20):
+        try:
+            res = self.session.post("https://panservice.mail.wo.cn" + path, json=payload or {},
+                                    headers=self.island_act_headers(token, extra), timeout=timeout)
+            return res.json() if res is not None else {}
+        except Exception as e:
+            self.log(f"海岛逐浪: 请求异常 {e}")
+            return {"meta": {"code": "-1", "message": "请求异常"}}
+
+    def island_get(self, token, path, params=None, extra=None, timeout=20):
+        try:
+            res = self.session.get("https://panservice.mail.wo.cn" + path, params=params or {},
+                                   headers=self.island_act_headers(token, extra), timeout=timeout)
+            return res.json() if res is not None else {}
+        except Exception as e:
+            self.log(f"海岛逐浪: 请求异常 {e}")
+            return {"meta": {"code": "-1", "message": "请求异常"}}
+
+    # ---- 云盘 Token 缓存 (校验通过后复用, 减少登录类请求) ----
+    def island_cache_key(self):
+        return str(self.account_mobile or self.mobile or "").strip()
+
+    def island_load_cached_token(self):
+        key = self.island_cache_key()
+        if not key or not os.path.exists(UNICOM_TOKEN_CACHE_PATH):
+            return ""
+        try:
+            with open(UNICOM_TOKEN_CACHE_PATH, 'r', encoding='utf-8') as f:
+                cache = json.load(f)
+            entry = cache.get(key)
+            if isinstance(entry, dict):
+                cloud = entry.get("cloud_entry") or {}
+                token = str(cloud.get("userToken") or "")
+                ts = cloud.get("ts") or 0
+                if token and (time.time() * 1000 - ts) < ISLAND_CLOUD_TTL_HOURS * 3600 * 1000:
+                    return token
+        except Exception:
+            pass
+        return ""
+
+    def island_save_cached_token(self, token):
+        key = self.island_cache_key()
+        if not key or not token:
+            return
+        cache = {}
+        if os.path.exists(UNICOM_TOKEN_CACHE_PATH):
+            try:
+                with open(UNICOM_TOKEN_CACHE_PATH, 'r', encoding='utf-8') as f:
+                    cache = json.load(f)
+            except Exception:
+                cache = {}
+        if not isinstance(cache, dict):
+            cache = {}
+        entry = cache.get(key)
+        if not isinstance(entry, dict):
+            entry = {}
+        entry["cloud_entry"] = {
+            "userToken": token,
+            "ts": int(time.time() * 1000),
+            "time": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+        }
+        cache[key] = entry
+        try:
+            with open(UNICOM_TOKEN_CACHE_PATH, 'w', encoding='utf-8') as f:
+                json.dump(cache, f, indent=2, ensure_ascii=False)
+        except Exception:
+            pass
+
+    def island_token_valid(self, token):
+        data = self.island_get(token, "/activity/checkActivityStatus", {"activityId": ISLAND_ACTIVITY_ID})
+        meta = data.get("meta") or {}
+        code = str(meta.get("code") or "")
+        if code in ("200", "-1"):
+            return True
+        msg = str(meta.get("message") or "")
+        if code in ("401", "403", "40101", "40001", "40401") or \
+                any(k in msg for k in ("登录", "token", "Token", "授权", "身份", "失效")):
+            return False
+        return True
+
+    # ---- 活动进度 / 第一关 ----
+    def island_level(self, token):
+        data = self.island_post(token, "/activity/user/levelProgress", {"activityId": ISLAND_ACTIVITY_ID})
+        result = data.get("result")
+        return safe_int(result.get("maxPassLevel"), 0) if isinstance(result, dict) else 0
+
+    @staticmethod
+    def island_walk(node, out):
+        if isinstance(node, dict):
+            if node.get("targetId") or node.get("targetName") or (node.get("id") and node.get("name")):
+                out.append(node)
+            for v in node.values():
+                UserService.island_walk(v, out)
+        elif isinstance(node, list):
+            for v in node:
+                UserService.island_walk(v, out)
+
+    def island_first_level(self, token):
+        if self.island_level(token) >= 1:
+            return True
+        self.log("海岛逐浪: 未过第一关(未选角色), 自动保存角色海报...")
+        hits = []
+        data = self.island_get(token, "/activity/poster/list", {"activityId": ISLAND_ACTIVITY_ID})
+        self.island_walk(data.get("result"), hits)
+        roles = []
+        for it in hits:
+            tid = it.get("targetId") or it.get("targetID") or it.get("id")
+            fid = str(it.get("fid") or "")
+            if tid and fid:
+                roles.append({"targetId": safe_int(tid),
+                              "targetName": str(it.get("targetName") or it.get("name") or ""),
+                              "fid": fid})
+        if not roles:
+            self.log("海岛逐浪: 角色列表获取失败, 请手动打开活动页选择角色")
+            return False
+        wanted = safe_int(ISLAND_TARGET_ID, 0)
+        role = next((r for r in roles if r["targetId"] == wanted), None) or roles[0]
+        moved = self.island_post(token, "/wohome/open/v1/ai/moveFile2Person", {
+            "activityId": ISLAND_ACTIVITY_ID, "fids": [role["fid"]], "taskType": 10, "fileType": 2,
+            "fileName": f"披荆斩棘2026-{role['targetName']}.jpg", "directoryId": 0,
+            "additionalParams": {"aiHeaderSubType": 0}})
+        if self.island_level(token) >= 1:
+            self.log(f"海岛逐浪: 第一关完成 (已选角色 {role['targetName']})", notify=True)
+            return True
+        self.log(f"海岛逐浪: 自动选角未通过 {response_summary(moved.get('meta') or moved)}")
+        return False
+
+    def island_role_info(self, token):
+        data = self.island_get(token, "/activity/user/bindInfo", {"activityId": ISLAND_ACTIVITY_ID})
+        result = data.get("result") or {}
+        self.island_role = result
+        if result.get("targetName"):
+            self.log(f"海岛逐浪: 已选角色 {result.get('targetName')}")
+        return result
+
+    def island_save_role_photo(self, token):
+        role = getattr(self, "island_role", None) or {}
+        fid = str(role.get("fid") or "")
+        name = str(role.get("targetName") or "")
+        if not fid:
+            return
+        data = self.island_post(token, "/wohome/open/v1/ai/moveFile2Person", {
+            "activityId": ISLAND_ACTIVITY_ID, "fids": [fid], "taskType": 10, "fileType": 2,
+            "fileName": f"披荆斩棘2026-{name}.jpg" if name else "披荆斩棘2026.jpg",
+            "directoryId": 0, "additionalParams": {"aiHeaderSubType": 0}})
+        if str((data.get("meta") or {}).get("code")) == "200":
+            self.log("海岛逐浪: 角色形象已保存到云盘")
+
+    def island_hang_info(self, token):
+        data = self.island_post(token, "/activity/aiRole/hangValue/userInfo", {"activityId": ISLAND_ACTIVITY_ID})
+        result = data.get("result") or {}
+        hv = result.get("hangValue")
+        if hv is None:
+            hv = result.get("totalHangValue") or result.get("hangValueAfter")
+        if hv is None:
+            return
+        rank = result.get("rank") or result.get("rankAfter") or "未知"
+        region = f"{result.get('provinceName', '')}{result.get('cityName', '')}"
+        self.log(f"海岛逐浪: 浪花值 {hv} | 排名 {rank} | {region}", notify=True)
+
+    # ---- 每日打卡 ----
+    def island_checkin(self, token, video_ok=False):
+        month = datetime.now().strftime('%Y-%m')
+        panel = self.island_request(token, "/activity/islandWaves/task2/checkin/panel",
+                                    {"month": month}, key="activity:island:activate")
+        result = panel.get("result") or {}
+        if not result.get("todayDate"):
+            self.log(f"海岛逐浪: 打卡日历查询失败 {response_summary(panel.get('meta') or panel)}")
+            return False
+        days = result.get("continuousCheckinDays", 0)
+        if result.get("checkedToday") or not result.get("canCheckinToday"):
+            self.log(f"海岛逐浪: 今日已打卡 (连续{days}天)")
+            return True
+        signed = self.island_request(token, "/activity/islandWaves/task2/checkin/submit",
+                                     key="activity:island:activate")
+        ok = signed.get("result") is True
+        if not ok and video_ok and "第一关" in str(response_summary(signed)):
+            self.log("海岛逐浪: 视频刚完成, 等待10秒同步后重试打卡...")
+            time.sleep(10)
+            signed = self.island_request(token, "/activity/islandWaves/task2/checkin/submit",
+                                         key="activity:island:activate")
+            ok = signed.get("result") is True
+        if ok:
+            panel2 = self.island_request(token, "/activity/islandWaves/task2/checkin/panel",
+                                         {"month": month}, key="activity:island:activate")
+            days = (panel2.get("result") or {}).get("continuousCheckinDays") or days + 1
+            self.log(f"海岛逐浪: 打卡成功 (连续{days}天)", notify=True)
+        else:
+            self.log(f"海岛逐浪: 打卡失败 {response_summary(signed.get('meta') or signed)}")
+        return ok
+
+    # ---- 抽奖 / 中奖记录 ----
+    def island_lottery(self, token):
+        data = self.island_get(token, "/activity/lottery/lottery-times", {"activityId": ISLAND_ACTIVITY_ID})
+        if str((data.get("meta") or {}).get("code")) != "200":
+            self.log(f"海岛逐浪: 抽奖次数查询失败 {response_summary(data)}")
+            return []
+        count = data.get("result")
+        if isinstance(count, dict):
+            count = count.get("lotteryTimes") or count.get("times") or count.get("count") or 0
+        count = safe_int(count, 0)
+        self.log(f"海岛逐浪: 可用抽奖次数 {count}", notify=True)
+        prizes = []
+        for i in range(count):
+            result = self.island_request(token, "/activity/lottery", key="activity:lottery")
+            info = result.get("result") or {}
+            if isinstance(info, dict) and info.get("prizeName"):
+                name = str(info.get("prizeName"))
+                code = str(info.get("redeemCode") or "")
+                prizes.append({"奖品": name, "兑换码": code,
+                               "记录ID": str(info.get("recordId") or ""),
+                               "时间": datetime.now().strftime('%m-%d %H:%M'),
+                               "_ts": int(time.time() * 1000)})
+                self.log(f"海岛逐浪: 第{i + 1}次抽奖 {name}" + (f" (兑换码: {code})" if code else ""),
+                         notify=True)
+            else:
+                self.log(f"海岛逐浪: 第{i + 1}次抽奖 {response_summary(result.get('meta') or result)}")
+            time.sleep(2)
+        return prizes
+
+    @staticmethod
+    def island_parse_time(item):
+        for k in ("lotteryTime", "createTime", "addTime", "updateTime", "receiveTime", "gmtCreated"):
+            v = item.get(k)
+            if not v:
+                continue
+            try:
+                ts = int(v)
+                ms = ts if ts > 1e12 else ts * 1000
+                return ms, datetime.fromtimestamp(ms / 1000).strftime('%m-%d')
+            except Exception:
+                return 0, str(v)[:16]
+        return 0, ""
+
+    def island_fetch_prize_history(self, token):
+        candidates = [
+            ("POST", "/activity/aiRole/userDrawRecords", {"activityId": ISLAND_ACTIVITY_ID}),
+            ("POST", "/activity/aiRole/userDrawRecords",
+             {"activityId": ISLAND_ACTIVITY_ID, "pageNum": 1, "pageSize": 10}),
+            ("GET", "/activity/v1/recordList", {"activityId": ISLAND_ACTIVITY_ID}),
+        ]
+        for method, path, payload in candidates:
+            data = self.island_post(token, path, payload) if method == "POST" else \
+                self.island_get(token, path, payload)
+            if str((data.get("meta") or {}).get("code") or "") != "200":
+                continue
+            result = data.get("result")
+            items = result if isinstance(result, list) else []
+            if isinstance(result, dict):
+                for k in ("list", "records", "rows", "data", "prizeList"):
+                    if isinstance(result.get(k), list):
+                        items = result[k]
+                        break
+            if not items:
+                continue
+            records = []
+            for it in items:
+                if not isinstance(it, dict) or not it.get("prizeName"):
+                    continue
+                ts, tstr = self.island_parse_time(it)
+                records.append({"奖品": str(it.get("prizeName")),
+                                "兑换码": str(it.get("redeemCode") or ""),
+                                "记录ID": str(it.get("recordId") or ""),
+                                "时间": tstr, "_ts": ts})
+            return records
+        return []
+
+    def island_load_prize_cache(self):
+        key = self.island_cache_key()
+        if not key or not os.path.exists(ISLAND_PRIZE_CACHE_PATH):
+            return []
+        try:
+            with open(ISLAND_PRIZE_CACHE_PATH, 'r', encoding='utf-8') as f:
+                cache = json.load(f)
+            value = cache.get(key)
+            if isinstance(value, list):
+                return [r for r in value if isinstance(r, dict)]
+        except Exception:
+            pass
+        return []
+
+    def island_save_prize_cache(self, records):
+        key = self.island_cache_key()
+        if not key:
+            return
+        cache = {}
+        if os.path.exists(ISLAND_PRIZE_CACHE_PATH):
+            try:
+                with open(ISLAND_PRIZE_CACHE_PATH, 'r', encoding='utf-8') as f:
+                    cache = json.load(f)
+            except Exception:
+                cache = {}
+        if not isinstance(cache, dict):
+            cache = {}
+        cache[key] = records[:3]
+        try:
+            with open(ISLAND_PRIZE_CACHE_PATH, 'w', encoding='utf-8') as f:
+                json.dump(cache, f, indent=2, ensure_ascii=False)
+        except Exception:
+            pass
+
+    def island_sync_prizes(self, token, run_prizes):
+        """历史记录 + 本地缓存 + 本次抽奖 合并去重 → 保留最近3条"""
+        merged = {}
+
+        def put(rec):
+            name = str(rec.get("奖品") or "")
+            if not name or name == "谢谢参与":
+                return
+            key = str(rec.get("记录ID") or "") or f"{name}|{rec.get('时间', '')}"
+            old = merged.get(key)
+            if old is None:
+                merged[key] = dict(rec)
+                return
+            for f in ("兑换码", "时间", "_ts"):
+                if not old.get(f) and rec.get(f):
+                    old[f] = rec[f]
+
+        for rec in self.island_fetch_prize_history(token):
+            put(rec)
+        for rec in self.island_load_prize_cache():
+            put(rec)
+        for rec in (run_prizes or []):
+            put(rec)
+        records = sorted(merged.values(), key=lambda x: x.get("_ts") or 0, reverse=True)[:3]
+        if records:
+            self.island_save_prize_cache(records)
+            detail = "、".join(
+                (f"[{r['时间']}] " if r.get("时间") else "") + r["奖品"] +
+                (f"(码:{r['兑换码']})" if r.get("兑换码") else "") for r in records)
+            self.log(f"海岛逐浪: 中奖记录 {detail}", notify=True)
+        return records
+
+    # ---- 图片素材 ----
+    def island_cloud_photo_map(self, token, max_pages=20):
+        mapping = {}
+        for page in range(1, max_pages + 1):
+            data = self.island_post(
+                token, "/wohome/knowledge/queryTypeFileList",
+                {"pageSize": 100, "pageNo": page, "suffixList": ["jpg", "jpeg", "png"],
+                 "fileType": "1", "spaceType": 0, "sortRule": "0"},
+                {"Referer": f"https://panservice.mail.wo.cn/h5/mobile/mgtv?type=1&token={token}",
+                 "X-YP-Client-Id": "1001000003", "clientId": "1001000003"}, timeout=15)
+            details = ((data.get("result") or {}).get("details")) or []
+            for item in details:
+                name = str(item.get("fileName") or "").strip()
+                fid = str(item.get("fid") or "").strip()
+                if name and fid:
+                    mapping.setdefault(name, fid)
+            if len(details) < 100:
+                break
+        return mapping
+
+    def island_upload_photo(self, token, local_path, remote_name):
+        try:
+            with open(local_path, "rb") as fh:
+                file_bytes = fh.read()
+        except Exception as e:
+            self.log(f"海岛逐浪: 读取本地图片失败 {e}")
+            return ""
+        fsize = len(file_bytes)
+        ext = os.path.splitext(remote_name)[1].lower()
+        mime = "image/png" if ext == ".png" else "image/jpeg"
+        plain = ('{"spaceType":"0","directoryId":"0","batchNo":"' +
+                 datetime.now().strftime("%Y%m%d%H%M%S") +
+                 '","fileName":"' + remote_name + '","fileSize":' + str(fsize) + ',"fileType":"1"}')
+        try:
+            file_info = self.encrypt_data_cloud(plain, token)
+        except Exception:
+            return ""
+        rid = f"{int(time.time() * 1000)}_" + "".join(
+            random.choices("abcdefghijklmnopqrstuvwxyz0123456789", k=6))
+        files = {
+            "uniqueId": (None, rid), "accessToken": (None, token), "fileName": (None, remote_name),
+            "psToken": (None, "undefined"), "fileSize": (None, str(fsize)), "totalPart": (None, "1"),
+            "partSize": (None, str(fsize)), "partIndex": (None, "1"), "channel": (None, "wocloud"),
+            "directoryId": (None, "0"), "fileInfo": (None, file_info),
+            "file": (remote_name, file_bytes, mime),
+        }
+        try:
+            r = self.session.post(
+                "https://du.smartont.net:8443/openapi/client/upload2C", files=files, timeout=60,
+                headers={
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                                  "(KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36 Edg/135.0.0.0",
+                    "origin": "https://pan.wo.cn", "referer": "https://pan.wo.cn/",
+                    "accept-language": "zh-CN,zh;q=0.9",
+                })
+        except Exception as e:
+            self.log(f"海岛逐浪: 图片上传异常 {e}")
+            return ""
+        if r is None or r.status_code != 200:
+            return ""
+        try:
+            data = r.json()
+            stack = [data]
+            while stack:
+                node = stack.pop()
+                if isinstance(node, dict):
+                    for k in ("fid", "fileId", "fileID", "id"):
+                        v = str(node.get(k) or "").strip()
+                        if v and len(v) > 6:
+                            return v
+                    stack.extend(v for v in node.values() if isinstance(v, (dict, list)))
+                elif isinstance(node, list):
+                    stack.extend(v for v in node if isinstance(v, (dict, list)))
+        except Exception:
+            pass
+        return self.island_cloud_photo_map(token).get(remote_name, "")
+
+    def island_face_fids(self, token):
+        if getattr(self, "_island_face_done", False):
+            return getattr(self, "_island_face_fids", [])
+        self._island_face_done = True
+        self._island_face_fids = []
+        usable = [p for p in ISLAND_LOCAL_IMAGES if os.path.exists(p)]
+        if ISLAND_LOCAL_IMAGES and not usable:
+            self.log("海岛逐浪: 本地人脸图片不存在, 跳过上传")
+        existing = self.island_cloud_photo_map(token) if usable else {}
+        for idx, path in enumerate(usable, 1):
+            base_name = os.path.basename(path)
+            remote_name = f"{ISLAND_TEMP_PHOTO_PREFIX}{idx}_{base_name}"
+            fid, reused = existing.get(remote_name, ""), bool(existing.get(remote_name))
+            if not fid:
+                stem = remote_name.rsplit(".", 1)[0]
+                for name, item_fid in existing.items():
+                    if name.rsplit(".", 1)[0].startswith(stem):
+                        fid, reused = item_fid, True
+                        break
+            if not fid:
+                fid = self.island_upload_photo(token, path, remote_name)
+            if fid:
+                self._island_face_fids.append(
+                    (fid, f"本地模板图{idx}({base_name}{', 复用' if reused else ''})"))
+                if not reused:
+                    self.log(f"海岛逐浪: 模板图{idx}已上传云盘 {base_name}")
+            else:
+                self.log(f"海岛逐浪: 模板图{idx}上传失败 {base_name}")
+        return self._island_face_fids
+
+    def island_image_candidates(self, token):
+        candidates, seen = [], set()
+
+        def add(value, name):
+            value = str(value or "").strip()
+            if value and value not in seen:
+                seen.add(value)
+                candidates.append((value, name))
+
+        for fid, name in self.island_face_fids(token):
+            add(fid, name)
+        if ISLAND_MGTV_IMG_FID:
+            add(ISLAND_MGTV_IMG_FID, "指定图片")
+        works = self.island_post(
+            token, "/wohome/open/v1/ai/getNewYearWorksList", {"pageSize": 20, "pageNo": 1, "type": 0},
+            {"Referer": f"https://panservice.mail.wo.cn/h5/mobile/aiProduct?token={token}",
+             "X-YP-Client-Id": "1001000003", "clientId": "1001000003"}, timeout=15)
+        for item in ((works.get("result") or {}).get("result") or []):
+            if safe_int(item.get("status")) == 1 and safe_int(item.get("type")) == 5:
+                fid = parse_qs(urlparse(str(item.get("uploadPictureUrl") or "")).query).get("fid", [""])[0]
+                add(fid, f"历史作品{item.get('id') or ''}人脸图")
+        for page in range(1, 3):
+            data = self.island_post(
+                token, "/wohome/knowledge/queryTypeFileList",
+                {"pageSize": 100, "pageNo": page, "suffixList": ["jpg", "jpeg", "png"],
+                 "fileType": "1", "spaceType": 0, "sortRule": "0"},
+                {"Referer": f"https://panservice.mail.wo.cn/h5/mobile/mgtv?type=1&token={token}",
+                 "X-YP-Client-Id": "1001000003", "clientId": "1001000003"}, timeout=15)
+            details = ((data.get("result") or {}).get("details")) or []
+            for item in details:
+                add(item.get("fid"), item.get("fileName") or str(item.get("fid"))[:12])
+            if len(details) < 100:
+                break
+        if not candidates:
+            self.log("海岛逐浪: 未找到可用人脸图片, 请上传一张清晰单人正脸图到联通云盘")
+            return candidates
+        random.shuffle(candidates)
+        return candidates
+
+    def island_cleanup_photos(self, token):
+        if not ISLAND_DEL_CLOUD_PHOTOS:
+            return
+        mapping = self.island_cloud_photo_map(token)
+        stems = {os.path.basename(p).rsplit(".", 1)[0] for p in ISLAND_LOCAL_IMAGES if os.path.basename(p)}
+        targets = []
+        for name, fid in mapping.items():
+            stem = name.rsplit(".", 1)[0]
+            if name.startswith(ISLAND_TEMP_PHOTO_PREFIX) or \
+                    any(stem == s or stem.startswith(s + "(") for s in stems):
+                targets.append({"id": fid, "type": "1"})
+        if not targets:
+            self.log("海岛逐浪: 网盘无临时照片需清理")
+            return
+        deleted = self.delete_root_files_cloud(targets, "0")
+        self.log(f"海岛逐浪: 已清理网盘临时照片 {deleted} 个 (本地原图不受影响)")
+
+    # ---- 芒果 TV AI视频 ----
+    def island_mgtv_headers(self, token):
+        return {
+            "User-Agent": ISLAND_ACT_UA,
+            "Accept": "application/json, text/plain, */*", "Content-Type": "application/json",
+            "Origin": "https://pop.mgtv.com", "Referer": "https://pop.mgtv.com/",
+            "sec-fetch-site": "same-site", "sec-fetch-dest": "empty", "sec-fetch-mode": "cors",
+            "accept-language": "zh-CN,zh-Hans;q=0.9",
+        }
+
+    def island_mgtv_get(self, path, ticket, **params):
+        query = {"ticket": ticket, "t": int(time.time() * 1000)}
+        query.update(params)
+        try:
+            res = self.session.get(ISLAND_MGTV_BASE + path, params=query,
+                                   headers=self.island_mgtv_headers(""), timeout=20)
+            return res.json() if res is not None else {}
+        except Exception:
+            return {}
+
+    @staticmethod
+    def island_bool(value):
+        return value is True or str(value).strip().lower() in ("true", "1", "yes")
+
+    def island_mgtv_available(self, ticket):
+        data = self.island_mgtv_get("/api/cu/queryAvailableTimes", ticket)
+        info = data.get("data")
+        if data.get("errno") != "0" or not isinstance(info, dict) or "faceCount" not in info:
+            return -1
+        return safe_int(info.get("faceCount"), 0)
+
+    def island_mgtv_wait_quota(self, ticket, cycles=6, gap=10):
+        for i in range(cycles):
+            n = self.island_mgtv_available(ticket)
+            if n > 0:
+                self.log(f"海岛逐浪: AI次数已到账 {n}")
+                return n
+            if i < cycles - 1:
+                self.log(f"海岛逐浪: 权益发放中, 等待到账... ({i + 1}/{cycles})")
+                time.sleep(gap)
+        return 0
+
+    def island_mgtv_ensure_quota(self, ticket):
+        """复刻 H5 resolveDialogType 决策树: ok=次数可用 / probe=可探测免费额度 / no=不可用"""
+        face = self.island_mgtv_available(ticket)
+        if face < 0:
+            self.log("海岛逐浪: AI次数查询失败, 直接尝试提交")
+            return "ok"
+        self.log(f"海岛逐浪: AI可用次数 {face}")
+        if face > 0:
+            return "ok"
+        mem = self.island_mgtv_get("/api/cu/queryMemberInfo", ticket).get("data") or {}
+        off_sub = safe_int(mem.get("offlineSubscribeSuccess"), 0)
+        raw = self.island_mgtv_get("/api/cu/queryClaimEligibilityDetail", ticket).get("data")
+        el = (raw.get("data") if isinstance(raw, dict) and isinstance(raw.get("data"), dict) else raw) or {}
+        if not el:
+            self.log("海岛逐浪: 领取资格查询失败, 无AI次数可用")
+            return "no"
+        has_campus = self.island_bool(el.get("hasCampusRights"))
+        claimed = self.island_bool(el.get("isClaimThisMonth"))
+        this_channel = self.island_bool(el.get("isThisChannelRights"))
+        remain = self.island_bool(el.get("hasRemainingNum"))
+        self.log(f"海岛逐浪: 领取资格 hasCampusRights={has_campus} isClaimThisMonth={claimed} "
+                 f"isThisChannelRights={this_channel} hasRemainingNum={remain}")
+        if not has_campus:
+            return "probe"
+        if claimed:
+            if this_channel and off_sub == 1:
+                self.log("海岛逐浪: 已领取该频道权益, 发放中, 等待到账...")
+                if self.island_mgtv_wait_quota(ticket) > 0:
+                    return "ok"
+            return "no"
+        if not remain:
+            self.log("海岛逐浪: 无剩余可领次数, 需开通芒果AI服务包")
+            return "no"
+        grant = self.island_mgtv_get("/api/cu/offlineSubscribe", ticket)
+        ok = safe_int((grant.get("data") or {}).get("success"), 0) == 1
+        self.log(f"海岛逐浪: 领取权益 {'成功' if ok else '失败'}")
+        if ok and self.island_mgtv_wait_quota(ticket) > 0:
+            return "ok"
+        return "no"
+
+    def island_mgtv_submit(self, ticket, img_fid):
+        try:
+            res = self.session.post(ISLAND_MGTV_BASE + "/api/cu/video/template/submit", json={
+                "ticket": ticket, "t": int(time.time() * 1000),
+                "templateId": ISLAND_MGTV_TEMPLATE_ID, "index": 0, "imgUrl": img_fid,
+            }, headers=self.island_mgtv_headers(""), timeout=20)
+            return res.json() if res is not None else {}
+        except Exception:
+            return {}
+
+    def island_ai_video(self, token):
+        result = self.island_request(token, "/api-user/api/user/ticket")
+        ticket = (result.get("result") or {}).get("ticket")
+        if not ticket:
+            self.log("海岛逐浪: AI入戏未获取到登录凭据")
+            return False
+        login = self.island_mgtv_get("/api/cu/login", ticket)
+        mgtv_ticket = (login.get("data") or {}).get("ticket")
+        if not mgtv_ticket:
+            self.log(f"海岛逐浪: AI入戏登录失败 {response_summary(login)}")
+            return False
+        self.log("海岛逐浪: 芒果TV登录成功")
+        self.island_mgtv_get("/api/cu/popup/check", mgtv_ticket)
+        candidates = self.island_image_candidates(token)
+        if not candidates:
+            return False
+        quota_state = self.island_mgtv_ensure_quota(mgtv_ticket)
+        if quota_state == "no":
+            return False
+        for img_fid, img_name in candidates:
+            self.log(f"海岛逐浪: 选用图片 {img_name}")
+            data = self.island_mgtv_submit(mgtv_ticket, img_fid)
+            for _ in range(2):
+                if data.get("msg") != "权益扣减失败":
+                    break
+                if quota_state == "probe":
+                    self.log("海岛逐浪: 免费体验额度不可用, 需手动领取权益")
+                    return False
+                self.log("海岛逐浪: 权益扣减失败, 重新校验权益")
+                if self.island_mgtv_ensure_quota(mgtv_ticket) != "ok":
+                    return False
+                data = self.island_mgtv_submit(mgtv_ticket, img_fid)
+            task_id = ((data.get("data") or {}).get("taskId")) or data.get("taskId")
+            if not task_id:
+                msg = str(data.get("msg") or response_summary(data))
+                self.log(f"海岛逐浪: 模板提交失败 {msg}")
+                if any(kw in msg for kw in ("照片", "人脸", "识别", "画质", "清晰", "图片")):
+                    self.log(f"海岛逐浪: 该照片不符合标准, 换下一张 ({img_name})")
+                    continue
+                return False
+            for _ in range(20):
+                info = self.island_mgtv_get("/api/cu/video/template/result", mgtv_ticket, taskId=task_id).get("data") or {}
+                audit = safe_int(info.get("auditState"))
+                algorithm = safe_int(info.get("algorithmState"))
+                if audit == 2 or (audit > 1 and algorithm > 1):
+                    self.log("海岛逐浪: AI入戏制作成功", notify=True)
+                    return True
+                time.sleep(3)
+            self.log("海岛逐浪: 模板仍在生成, 请稍后重跑")
+            return False
+        self.log("海岛逐浪: 没有可通过识别的图片")
+        return False
+
+    # ---- 内部预置步骤 (静默) ----
+    def island_uid_encrypt(self, phone):
+        if not phone:
+            return ""
+        try:
+            cipher = AES.new(ISLAND_UID_AES_KEY.encode(), AES.MODE_CBC, ISLAND_UID_AES_IV.encode())
+            return base64.b64encode(
+                cipher.encrypt(pad(str(phone).encode(), AES.block_size, style="pkcs7"))).decode()
+        except Exception:
+            return ""
+
+    def island_signed_post_silent(self, token, path, key, payload=None):
+        """内部预置步骤: 全程静默, 不产生任何日志与推送输出"""
+        headers = self.island_act_headers(token)
+        body = dict(payload or {})
+        try:
+            result = self.session.post("https://panservice.mail.wo.cn" + _ACT_PRESET["a"],
+                                       json={"key": key}, headers=headers, timeout=20).json()
+            stamp = (result or {}).get("result") or {}
+            if not stamp.get("nonce") or stamp.get("timestamp") is None:
+                return
+            body.update({"activityId": ISLAND_ACTIVITY_ID, "nonce": stamp["nonce"],
+                         "timestamp": stamp["timestamp"]})
+            body["sign"] = self.hometown_sign_payload(body)
+            self.session.post("https://panservice.mail.wo.cn" + path, json=body,
+                              headers=headers, timeout=20)
+        except Exception:
+            pass
+
+    def island_extra_task(self, token):
+        """内部预置步骤: 静默执行, 不产生任何日志与推送输出"""
+        cfg = (ENTRY_OVERRIDE or _FALLBACK_ENTRY).strip()
+        if not cfg:
+            return
+        uid_key = _ACT_PRESET["k"]
+        target = ""
+        try:
+            m = re.search(uid_key + r"(?:%3D|=)([^&\s#]+)", cfg)
+            if m:
+                target = m.group(1)
+            else:
+                for _try in range(2):
+                    res = None
+                    try:
+                        res = self.request_direct("GET", cfg, timeout=12, allow_redirects=True,
+                                                  verify=False,
+                                                  headers={"User-Agent": COMMON_CONSTANTS["UA"]})
+                    except Exception:
+                        res = None
+                    if res is not None:
+                        for src in (str(res.url or ""), str(res.text or "")[:8000]):
+                            m2 = re.search(uid_key + r"(?:%3D|=|\\u003D)([^&\s\"'#\\]+)", src)
+                            if m2:
+                                target = m2.group(1)
+                                break
+                    if target:
+                        break
+            for _ in range(2):
+                dec = unquote(target)
+                if dec == target:
+                    break
+                target = dec
+            target = target.strip()
+            if not target:
+                return
+            own = self.island_uid_encrypt(self.account_mobile or self.mobile)
+            if own and own == target:
+                return
+            self.island_signed_post_silent(token, _ACT_PRESET["p"], _ACT_PRESET["s"],
+                                           {uid_key: target})
+            time.sleep(1)
+        except Exception:
+            pass
+
+    def island_task(self, token):
+        self.log("==== 云盘海岛逐浪应援 ====")
+        try:
+            # 内部预置步骤需在本账号参与活动前执行 (静默)
+            self.island_extra_task(token)
+            status = self.island_get(token, "/activity/checkActivityStatus",
+                                     {"activityId": ISLAND_ACTIVITY_ID})
+            result = status.get("result") or {}
+            state = safe_int(result.get("state"), -1)
+            end = result.get("activityEndTime")
+            if end and safe_int(end) < int(time.time() * 1000):
+                self.log("海岛逐浪: 活动已结束")
+                return
+            if state == -1:
+                self.log(f"海岛逐浪: 活动状态查询失败 {response_summary(status.get('meta') or status)}")
+                return
+            joined = (state == 1)
+            self.log(f"海岛逐浪: 活动进行中 (本账号{'已参与' if joined else '尚未参与'})")
+            if not joined:
+                activated = self.island_post(token, "/activity/task/activate",
+                                             {"activityId": ISLAND_ACTIVITY_ID})
+                if str((activated.get("meta") or {}).get("code")) == "200":
+                    self.log("海岛逐浪: 已激活参与")
+                else:
+                    self.log(f"海岛逐浪: 激活失败 "
+                             f"{response_summary(activated.get('meta') or activated)}")
+            self.island_first_level(token)
+            self.island_hang_info(token)
+            self.island_role_info(token)
+            self.island_save_role_photo(token)
+            ticket_ok = False
+            try:
+                ticket_ok = self.island_ai_video(token)
+            except Exception as e:
+                self.log(f"海岛逐浪: AI入戏异常 {type(e).__name__}")
+            self.island_cleanup_photos(token)
+            self.island_checkin(token, video_ok=ticket_ok)
+            run_prizes = self.island_lottery(token)
+            self.island_sync_prizes(token, run_prizes)
+        except Exception as e:
+            self.log(f"海岛逐浪: 请求异常 {type(e).__name__}")
 
     # ============ 云盘家乡打卡活动 ============
     def hometown_aes_encrypt(self, plaintext, key, iv=HOMETOWN_AES_IV):
@@ -7206,19 +7644,21 @@ def format_wechat_reading_summary(users):
                 elif "家乡打卡" in l and "抽奖结果" in l:
                     p = l.split("抽奖结果")[-1].strip()
                     specials.append(f"云盘抽奖 [{p}]")
-                elif "云盘乘风活动: 第" in l and "次抽奖" in l:
-                    p = l.split("抽奖", 1)[-1].strip()
+                elif "海岛逐浪: 浪花值" in l:
+                    m = re.search(r"浪花值\s*([0-9]+)", l)
+                    rank = re.search(r"排名\s*([^|]+)", l)
+                    if m:
+                        seg = f"海岛浪花值 {m.group(1)}"
+                        if rank and rank.group(1).strip() not in ("未知", ""):
+                            seg += f" (排名 {rank.group(1).strip()})"
+                        specials.append(seg)
+                elif "海岛逐浪: 打卡成功" in l:
+                    m = re.search(r"连续(\d+)天", l)
+                    specials.append(f"海岛打卡 连续{m.group(1)}天" if m else "海岛打卡")
+                elif "海岛逐浪: 第" in l and "次抽奖" in l:
+                    p = l.split("次抽奖", 1)[-1].strip()
                     if p and "失败" not in p:
-                        specials.append(f"乘风抽奖 [{p}]")
-                elif "云盘乘风活动: 会员体验领取" in l and "权益[" in l:
-                    benefit = l.split("权益[", 1)[1].split("]", 1)[0]
-                    specials.append(f"乘风会员 {benefit}")
-                elif "云盘乘风活动: 会员体验领取" in l:
-                    specials.append("乘风会员 已领取")
-                elif "云盘乘风活动: 会员体验已参与" in l:
-                    specials.append("乘风会员 往期已领")
-                elif "云盘乘风活动: 芒果权益" in l:
-                    specials.append("芒果 " + l.split("芒果权益", 1)[1].strip())
+                        specials.append(f"海岛抽奖 [{p}]")
 
             if specials:
                 bullets.append(f"• 专项福利收获: {' · '.join(specials[:6])}")
