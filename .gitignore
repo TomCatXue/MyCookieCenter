@@ -12,6 +12,10 @@ keys.local.json
 project.md
 notes/
 
+# 本地开发文档与回归测试（个人存档，不进公开仓库）
+docs/
+tests/
+
 # 依赖
 node_modules/
 

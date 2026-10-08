@@ -147,7 +147,6 @@ MyCookieCenter/
 │   ├── telecom/                    # 中国电信专区（周三抽奖 + 话费秒杀 + 山西福利）
 │   ├── tools/                      # 独立功能与页面净化工具（B站、Pixiv、GitHub等）
 │   └── example/                    # 脚本开发模板
-├── docs/                           # 开发规范与使用指南
 └── icons/                          # 插件图标资源
 ```
 
@@ -157,7 +156,6 @@ MyCookieCenter/
 | [`scripts/`](./scripts/) | 所有执行脚本源码（按业务聚合为 weread、telecom、tools） | [查看](./scripts/README.md) |
 | [`loon/`](./loon/) | Loon 插件规则配置 | [查看](./loon/README.md) |
 | [`boxjs/`](./boxjs/) | BoxJS 统一订阅配置 | [查看](./boxjs/README.md) |
-| [`docs/`](./docs/) | 详细使用教程与架构规范 | [查看](./docs/) |
 
 ## ⚠️ 免责声明
 
