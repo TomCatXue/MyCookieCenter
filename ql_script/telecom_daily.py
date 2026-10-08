@@ -788,49 +788,63 @@ def calc_today_coin_delta(coin_info: dict) -> Optional[int]:
     return total
 
 
+# 金豆网关候选主机（按验证程度排序）
+#   wapact.189.cn:9001 —— queryTurnTable 长期实测可用，同一 /gateway/golden/api/ 前缀
+#   waphub.189.cn      —— JinDouMall_luckDraw.html 所在域（window.location.origin）
+#   wappark.189.cn     —— 签到域，兜底
+GOLDEN_API_HOSTS = (
+    'https://wapact.189.cn:9001',
+    'https://waphub.189.cn',
+    'https://wappark.189.cn',
+)
+
+
 def query_jindou_balance(sess: requests.Session, user: dict) -> Optional[int]:
     """
     查询账户金豆余额（真实总数）。
 
     接口依据（2026-10-08 HAR 抓包 + JinDouMall_luckDraw.html 内联 JS 逆向）：
-      GET https://wappark.189.cn/gateway/golden/api/queryInfo
-      Headers: Authorization: Bearer <token> (来自 /unified/user/login)
-               dzqd-version, fcode: p201041201, methodCode: I00004
-      响应: {code: 0, biz: {amountTotal: <金豆总数>, amountList: [...], userType, provinceCode}}
+      GET <host>/gateway/golden/api/queryInfo
+      Headers: Authorization: Bearer <token>（来自 /unified/user/login）
+      响应: {code: 0, biz: {amountTotal: <金豆总数>, amountList: [...]}}
       其中 amountList 里 type==3 为失效金豆数。
 
-    返回金豆总数（int）；失败返回 None。
+    主机不确定（页面在 waphub，而同类接口 queryTurnTable 实测走 wapact:9001），
+    故按 GOLDEN_API_HOSTS 逐个尝试，取首个成功者。
+
+    返回金豆总数（int）；全部失败返回 None。
     """
     auth = user.get('Authorization')
     if not auth:
         return None
     m = mask(user.get('phoneNbr', ''))
-    try:
-        res = api_req(
-            sess,
-            'https://wappark.189.cn/gateway/golden/api/queryInfo',
-            method='GET',
-            headers={
-                'Authorization': auth,
-                # HAR 实测该接口使用 CtClient 专用 UA（与签到接口的浏览器 UA 不同）
-                'User-Agent': 'CtClient;13.2.0;iOS;26.7;iPhone 16e;',
-                'dzqd-version': str(user.get('version') or '13.2.0'),
-                'fcode': 'p201041201',
-                'methodCode': 'I00004',
-                'Content-Type': 'application/json;charset=utf-8',
-            }
-        )
-        if isinstance(res, dict) and res.get('code') == 0:
-            biz = res.get('biz') if isinstance(res.get('biz'), dict) else {}
-            total = biz.get('amountTotal')
-            if total is not None:
-                try:
-                    return int(float(str(total)))
-                except (ValueError, TypeError):
-                    return None
-        log(f"ℹ️ [{m}] queryInfo 未返回余额: {json.dumps(res, ensure_ascii=False)[:200] if isinstance(res, dict) else res}")
-    except Exception as e:
-        log(f"ℹ️ [{m}] queryInfo 异常: {str(e)[:80]}")
+
+    for host in GOLDEN_API_HOSTS:
+        url = f'{host}/gateway/golden/api/queryInfo'
+        try:
+            # 头部对齐已验证可用的 queryTurnTable：仅带 Authorization
+            res = api_req(sess, url, method='GET', headers={'Authorization': auth})
+            if isinstance(res, dict) and res.get('code') == 0:
+                biz = res.get('biz') if isinstance(res.get('biz'), dict) else {}
+                total = biz.get('amountTotal')
+                if total is not None:
+                    log(f"✅ [{m}] 金豆余额取自 {host}")
+                    try:
+                        return int(float(str(total)))
+                    except (ValueError, TypeError):
+                        return None
+                log(f"ℹ️ [{m}] {host} code=0 但无 amountTotal: "
+                    f"{json.dumps(res, ensure_ascii=False)[:200]}")
+                return None
+
+            # JSON 解析失败或空响应：抓原始文本定位（可能是 404 HTML / 需登录跳转）
+            raw = api_req(sess, url, method='GET', headers={'Authorization': auth}, raw=True)
+            snippet = str(raw)[:200].replace('\n', ' ') if raw else '(空)'
+            log(f"ℹ️ [{m}] {host} 原始响应: {snippet}")
+        except Exception as e:
+            log(f"ℹ️ [{m}] {host} 异常: {str(e)[:60]}")
+
+    log(f"ℹ️ [{m}] 所有金豆网关主机均未返回余额，已降级为流水汇总")
     return None
 
 
