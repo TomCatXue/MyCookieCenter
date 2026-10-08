@@ -622,6 +622,12 @@ def _extract_number(d: dict, keys) -> int:
 
 
 # 金豆余额候选字段（覆盖多路接口的不同命名）
+#
+# 说明：截至 2026-10-08 抓包实测，已确认的电信接口中【没有】直接返回金豆余额的端点 ——
+# userStatusInfo 仅返回签到状态，queryTurnTable 仅返回奖品池配置，homepage 仅返回任务列表。
+# 唯一可用的是 getCoinInfo（收支明细流水，见 query_coin_info / calc_today_coin_delta），
+# 由明细可算出「今日净收益」，但无法得出账户余额总数。
+# 下方提取器暂无调用点，保留以便日后发现余额接口时直接复用。
 BEAN_BALANCE_KEYS = (
     'goldCoin', 'totalGoldCoin', 'totalCoin', 'coin', 'userCoin', 'gold',
     'userGold', 'beanNum', 'bean', 'score', 'userScore', 'totalScore',
@@ -631,7 +637,7 @@ BEAN_BALANCE_KEYS = (
 
 def _extract_bean_balance(res: dict) -> Optional[int]:
     """
-    多路提取金豆余额：递归搜索常见字段名。
+    多路提取金豆余额：递归搜索常见字段名（当前无调用点，见上方说明）。
 
     接口层级不确定（可能在 data / data.biz / biz 下），故对这几个层级逐一尝试，
     同时做浅层递归兜底，尽最大可能取到真实数值。
@@ -639,7 +645,6 @@ def _extract_bean_balance(res: dict) -> Optional[int]:
     if not isinstance(res, dict):
         return None
 
-    # 候选层级：从最可能到最兜底
     layers = [
         safe_get(res, 'data', 'biz'),
         safe_get(res, 'data'),
@@ -653,7 +658,6 @@ def _extract_bean_balance(res: dict) -> Optional[int]:
         if v > 0:
             return v
 
-    # 浅层递归兜底：遍历 data 下所有 dict 值找金豆字段
     for root in (safe_get(res, 'data'), res):
         if not isinstance(root, dict):
             continue
@@ -718,6 +722,70 @@ def _parse_draw_prize(draw_res) -> dict:
     if bean > 0:
         return {'label': f"{name} (+{bean} 金豆)", 'bean': bean, 'raw': raw}
     return {'label': name, 'bean': 0, 'raw': raw}
+
+
+def query_coin_info(sess: requests.Session, phone: str, sign_header: dict, page_size: int = 20) -> Optional[dict]:
+    """
+    查询金豆收支明细。
+
+    接口依据（2026-10-08 HAR 抓包 + 前端 bundle 逆向，recordsNew.js）：
+      url:  POST https://wappark.189.cn/jt-sign/webSign/getCoinInfo
+      data: {"para": bdEncrptyUtil.encode(JSON.stringify({pageNo, pageSize, type}))}
+      响应: {"results": {"YYYY-MM-DD": [{taskName, type, amount}, ...]}, ...}
+            type == 2 表示支出(-)，其余为收入(+)
+
+    返回原始响应 dict；失败返回 None。
+    """
+    try:
+        para = encrypt_rsa({"pageNo": 1, "pageSize": page_size, "type": "1"}, KEYS['data_rsa'], 'hex')
+        res = api_req(
+            sess,
+            'https://wappark.189.cn/jt-sign/webSign/getCoinInfo',
+            json={"para": para},
+            headers=sign_header
+        )
+        if isinstance(res, dict) and str(res.get('code', '0')) not in ('401', '403'):
+            return res
+        if isinstance(res, dict):
+            log(f"ℹ️ [{mask(phone)}] getCoinInfo 返回: {json.dumps(res, ensure_ascii=False)[:150]}")
+    except Exception as e:
+        log(f"ℹ️ [{mask(phone)}] getCoinInfo 异常: {str(e)[:80]}")
+    return None
+
+
+def calc_today_coin_delta(coin_info: dict) -> Optional[int]:
+    """
+    从 getCoinInfo 的按日分组流水中，汇总「今日净收益」（收入 - 支出）。
+
+    响应结构：{"results": {"2026-10-08": [{"taskName": "签到", "type": 1, "amount": "10"}, ...]}}
+    """
+    if not isinstance(coin_info, dict):
+        return None
+    results = coin_info.get('results')
+    if not isinstance(results, dict):
+        return None
+
+    today = datetime.now().strftime('%Y-%m-%d')
+    # 日期键可能形如 "2026-10-08" 或 "2026-10-08 00:00:00"，做前缀匹配
+    day_items = None
+    for k, v in results.items():
+        if str(k).startswith(today):
+            day_items = v
+            break
+    if not isinstance(day_items, list):
+        return None
+
+    total = 0
+    for it in day_items:
+        if not isinstance(it, dict):
+            continue
+        try:
+            amt = int(float(str(it.get('amount') or 0)))
+        except (ValueError, TypeError):
+            continue
+        # type == 2 为支出，其余为收入
+        total += -amt if str(it.get('type')) == '2' else amt
+    return total
 
 
 def sign_tasks(sess: requests.Session, user: dict) -> List[str]:
@@ -785,20 +853,8 @@ def sign_tasks(sess: requests.Session, user: dict) -> List[str]:
                 headers=sign_header
             )
 
-    total_bean_balance = None
     try:
-        cont_res = api_req(
-            sess,
-            'https://wappark.189.cn/jt-sign/api/home/userStatusInfo',
-            json={"para": encrypt_rsa({"phone": phone}, KEYS['data_rsa'], 'hex')},
-            headers=sign_header
-        )
-        if isinstance(cont_res, dict):
-            # userStatusInfo 仅返回签到状态(signDay/isSign)，不含金豆余额，
-            # 实测响应: {"resoultCode":0,"data":{"signDay":7,"isSign":1,"isSeven":false}}
-            # 故此处不提取金豆，避免无意义的「字段未命中」告警。
-            pass
-
+        # userStatusInfo 仅返回签到状态(signDay/isSign)，不含金豆余额，仅用于连签领奖校验
         check_and_award('api/home/userStatusInfo', 'signDay', ['7'], '连签')
         check_and_award('webSign/continueSignDays', 'continueSignDays', ['15', '28'], '累签')
     except Exception:
@@ -816,11 +872,7 @@ def sign_tasks(sess: requests.Session, user: dict) -> List[str]:
             headers={'Authorization': user['Authorization']}
         )
         if isinstance(tab, dict) and tab.get('code') == 0:
-            if total_bean_balance is None:
-                total_bean_balance = _extract_bean_balance(tab)
-                if total_bean_balance is None:
-                    log(f"ℹ️ [{m}] queryTurnTable 金豆字段未命中，原始: "
-                        f"{json.dumps(tab, ensure_ascii=False)[:300]}")
+            # queryTurnTable 仅返回奖品池配置(turntableList)，不含金豆余额，故不在此提取。
             act_id = safe_get(tab, 'biz', 'wzTurntable', 'code')
             if act_id:
                 chk = api_req(
@@ -871,14 +923,6 @@ def sign_tasks(sess: requests.Session, user: dict) -> List[str]:
     task_done = 0
     task_beans = 0
     if isinstance(tasks_res, dict):
-        bal = _extract_bean_balance(tasks_res)
-        if bal is not None:
-            total_bean_balance = bal
-        else:
-            # 金豆余额接口尚未确认（homepage 实测仅返回任务列表），
-            # 打印原始响应供校正字段名（仅日志，不进通知）。
-            log(f"ℹ️ [{m}] homepage 金豆字段未命中，原始: "
-                f"{json.dumps(tasks_res, ensure_ascii=False)[:500]}")
         ad_items = safe_get(tasks_res, 'data', 'biz', 'adItems') or []
         log(f"[任务列表] {m} 待完成任务总数：{len(ad_items)}个")
         for t in ad_items:
@@ -930,15 +974,19 @@ def sign_tasks(sess: requests.Session, user: dict) -> List[str]:
     else:
         bullets.append("• 宠物乐园喂食: 今日投喂已达上限")
 
-    # 5. 账户金豆总资产回显（具体数值 + 今日累计）
+    # 5. 金豆收支：走 getCoinInfo 明细接口（唯一确认可用的金豆数据源）
     today_gained = draw_beans + task_beans
-    today_hint = f" (今日共领取 {today_gained} 颗)" if today_gained > 0 else ""
-    if total_bean_balance is not None:
-        bullets.append(f"• 账户当前金豆: {total_bean_balance:,} 颗{today_hint}")
+    coin_info = query_coin_info(sess, phone, sign_header)
+    coin_delta = calc_today_coin_delta(coin_info)
+
+    if coin_delta is not None:
+        # 明细接口可算出今日净收益（收入-支出），这是服务端权威数据
+        sign = '+' if coin_delta >= 0 else ''
+        bullets.append(f"• 今日金豆收支: {sign}{coin_delta} 颗 (据服务端流水汇总)")
     elif today_gained > 0:
-        # 余额接口未取到但今日有产出：如实汇报产出，不谎报余额
-        bullets.append(f"• 账户当前金豆: 今日共领取 {today_gained} 颗 (余额接口待确认)")
-    # 余额与今日产出均为空时，不输出该行，避免无信息量的占位文案
+        # 明细未取到时，退回用本次运行统计的产出
+        bullets.append(f"• 今日金豆收支: +{today_gained} 颗 (本次运行统计)")
+    # 两者皆无时省略该行，不输出无信息量占位文案
 
     log(f"[任务全部完成] {m}")
     return bullets
