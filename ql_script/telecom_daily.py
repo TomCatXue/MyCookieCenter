@@ -788,6 +788,52 @@ def calc_today_coin_delta(coin_info: dict) -> Optional[int]:
     return total
 
 
+def query_jindou_balance(sess: requests.Session, user: dict) -> Optional[int]:
+    """
+    查询账户金豆余额（真实总数）。
+
+    接口依据（2026-10-08 HAR 抓包 + JinDouMall_luckDraw.html 内联 JS 逆向）：
+      GET https://wappark.189.cn/gateway/golden/api/queryInfo
+      Headers: Authorization: Bearer <token> (来自 /unified/user/login)
+               dzqd-version, fcode: p201041201, methodCode: I00004
+      响应: {code: 0, biz: {amountTotal: <金豆总数>, amountList: [...], userType, provinceCode}}
+      其中 amountList 里 type==3 为失效金豆数。
+
+    返回金豆总数（int）；失败返回 None。
+    """
+    auth = user.get('Authorization')
+    if not auth:
+        return None
+    m = mask(user.get('phoneNbr', ''))
+    try:
+        res = api_req(
+            sess,
+            'https://wappark.189.cn/gateway/golden/api/queryInfo',
+            method='GET',
+            headers={
+                'Authorization': auth,
+                # HAR 实测该接口使用 CtClient 专用 UA（与签到接口的浏览器 UA 不同）
+                'User-Agent': 'CtClient;13.2.0;iOS;26.7;iPhone 16e;',
+                'dzqd-version': str(user.get('version') or '13.2.0'),
+                'fcode': 'p201041201',
+                'methodCode': 'I00004',
+                'Content-Type': 'application/json;charset=utf-8',
+            }
+        )
+        if isinstance(res, dict) and res.get('code') == 0:
+            biz = res.get('biz') if isinstance(res.get('biz'), dict) else {}
+            total = biz.get('amountTotal')
+            if total is not None:
+                try:
+                    return int(float(str(total)))
+                except (ValueError, TypeError):
+                    return None
+        log(f"ℹ️ [{m}] queryInfo 未返回余额: {json.dumps(res, ensure_ascii=False)[:200] if isinstance(res, dict) else res}")
+    except Exception as e:
+        log(f"ℹ️ [{m}] queryInfo 异常: {str(e)[:80]}")
+    return None
+
+
 def sign_tasks(sess: requests.Session, user: dict) -> List[str]:
     """掌厅签到打卡、金豆转盘、浏览任务、宠物喂食与金豆核验"""
     phone = user['phoneNbr']
@@ -974,19 +1020,19 @@ def sign_tasks(sess: requests.Session, user: dict) -> List[str]:
     else:
         bullets.append("• 宠物乐园喂食: 今日投喂已达上限")
 
-    # 5. 金豆收支：走 getCoinInfo 明细接口（唯一确认可用的金豆数据源）
-    today_gained = draw_beans + task_beans
-    coin_info = query_coin_info(sess, phone, sign_header)
-    coin_delta = calc_today_coin_delta(coin_info)
-
-    if coin_delta is not None:
-        # 明细接口可算出今日净收益（收入-支出），这是服务端权威数据
-        sign = '+' if coin_delta >= 0 else ''
-        bullets.append(f"• 今日金豆收支: {sign}{coin_delta} 颗 (据服务端流水汇总)")
-    elif today_gained > 0:
-        # 明细未取到时，退回用本次运行统计的产出
-        bullets.append(f"• 今日金豆收支: +{today_gained} 颗 (本次运行统计)")
-    # 两者皆无时省略该行，不输出无信息量占位文案
+    # 5. 账户金豆余额（queryInfo 接口，服务端权威总数）
+    bean_total = query_jindou_balance(sess, user)
+    if bean_total is not None:
+        bullets.append(f"• 账户当前金豆: {bean_total:,} 颗")
+    else:
+        # 余额取不到时退回收支明细汇总，仍提供有价值的数字
+        coin_info = query_coin_info(sess, phone, sign_header)
+        coin_delta = calc_today_coin_delta(coin_info)
+        if coin_delta is not None:
+            sgn = '+' if coin_delta >= 0 else ''
+            bullets.append(f"• 今日金豆收支: {sgn}{coin_delta} 颗 (余额接口未响应，据流水汇总)")
+        elif (draw_beans + task_beans) > 0:
+            bullets.append(f"• 今日金豆收支: +{draw_beans + task_beans} 颗 (本次运行统计)")
 
     log(f"[任务全部完成] {m}")
     return bullets
