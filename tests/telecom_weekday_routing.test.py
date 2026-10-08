@@ -9,14 +9,19 @@
   3. 周五：心跳保活被调用 1 次，且通知不含「心跳」字样
   4. 通知全部为「• 」开头的单行 Bullet
 """
+import os
 import sys
 import types
-import importlib
+import importlib.util
 from datetime import datetime
 from unittest import mock
 
-sys.path.insert(0, '.')
-import telecom_daily as T
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+SRC_PATH = os.path.join(ROOT, "ql_script", "telecom_daily.py")
+
+spec = importlib.util.spec_from_file_location("telecom_daily", SRC_PATH)
+T = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(T)
 
 # ---------- 计数探针 ----------
 calls = {
