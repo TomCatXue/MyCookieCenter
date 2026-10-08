@@ -92,7 +92,7 @@ assert ud.globalConfig["regional_config"]["run_ah_friday"] is False, \
     "run_ah_friday must default to False"
 
 # 版本号
-assert ud.SCRIPT_VERSION == "v1.3.0", f"expected v1.3.0, got {ud.SCRIPT_VERSION}"
+assert ud.SCRIPT_VERSION == "v1.4.0", f"expected v1.4.0, got {ud.SCRIPT_VERSION}"
 
 # ---------- M 项: 乘风已移除 ----------
 

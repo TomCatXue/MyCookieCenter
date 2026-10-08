@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 ===================================================================
-📌 版本: v1.3.0 (2026-10-07 双网关修复与乘风活动版)
+📌 版本: v1.4.0 (2026-10-08 海岛逐浪应援版)
 中国联通 · 每日签到与福利任务聚合脚本
 ===================================================================
 new Env('中国联通 · 每日签到与福利');
@@ -21,7 +21,7 @@ tag: 中国联通
   8. 联通爱听 (JF积分任务 / 自动签到 / 积分查询)
   9. 沃云手机 (每日签到 / 任务 / 抽奖)
   10. 区域专区 (自动识别安徽超级星期五 / 辽宁福利魔方 / 新疆 / 河南 / 云南)
-  11. 云盘乘风活动 (会员体验 / 碎片任务 / AI保活 / 芒果视频制作 / 抽奖)
+  11. 云盘海岛逐浪应援 (激活 / 选角 / 浪花值 / 每日打卡 / AI入戏视频 / 抽奖 / 中奖记录)
   12. 规范通知: 100% 对齐微信读书单行 Bullet 极简排版，使用青龙默认推送。
 
 环境变量配置 (chinaUnicomCookie):
@@ -30,9 +30,14 @@ tag: 中国联通
   b. Token#AppId 免密模式 (推荐): export chinaUnicomCookie="a3e4c1ff2xxxxxxxxx#912d30xxxxxx"
   c. 仅Token模式: export chinaUnicomCookie="a3e4c1ff2xxxxxxxxx"
 
+更新说明 (v1.4.0):
+  - 移除已下线的云盘乘风活动 (上游 v1.2.1 确认该活动接口族已全部下线)
+  - 新增云盘海岛逐浪应援: 激活 / 选角 / 浪花值 / 角色形象 / 每日打卡 / AI入戏视频 /
+    抽奖 / 中奖记录缓存 / 本地人脸图上传 / 云盘 Token 缓存复用
+  - 行为变更: 查询模式 (UNICOM_TEST_MODE=query) 现在登录后直接返回, 不再执行云盘活动
+
 更新说明 (v1.3.0):
   - 修复沃云手机双网关路由: bucp 前缀回归 uphone.wo-adv.cn, 恢复用户信息 / 积分查询 / 设备激活
-  - 新增云盘乘风活动 (会员体验 / 碎片任务 / AI保活 / 芒果视频制作 / 抽奖)
   - 行为变更: 区域专区 run_ah_friday 默认值 True → False。若你此前依赖默认开启安徽超级
     星期五且已配置 UNICOM_AH_FRIDAY_AMOUNT, 升级后需显式将 run_ah_friday 设回 True。
 
@@ -43,8 +48,12 @@ tag: 中国联通
   UNICOM_GRAB_AMOUNT       抢兑面额 (默认5)
   UNICOM_AH_FRIDAY_AMOUNT  安徽超级星期五抢红包面额 (不填则不执行)
   UNICOM_HOMETOWN_ENABLE   家乡打卡开关 (默认1)
-  UNICOM_YPHD_ENABLE       乘风活动总开关 (默认1)
-  UNICOM_YPHD_MGTV_IMG_FID 芒果视频制作的人脸图片FID (不填则跳过制作)
+  UNICOM_CMF_LOCAL_IMAGES  海岛人脸图本地路径 (逗号分隔, 不填则读 face_images/)
+  UNICOM_CMF_DEL_CLOUD_PHOTOS 填 0 关闭 AI入戏后清理网盘临时照片
+  UNICOM_CMF_TEMPLATE_ID   芒果 AI入戏模板 ID
+  UNICOM_CMF_IMG_FID       指定云盘人脸图片 FID
+  UNICOM_CMF_TARGET_ID     指定选角 targetId (默认选第一个)
+  UNICOM_CLOUD_TTL_HOURS   云盘 Token 缓存有效期 (小时, 默认12)
 
 定时规则建议 (Cron):
   30 10 * * *   常规日常任务 (推荐)
@@ -76,7 +85,7 @@ from requests.packages.urllib3.util.retry import Retry
 from Crypto.Cipher import AES, PKCS1_v1_5
 from Crypto.PublicKey import RSA
 from Crypto.Util.Padding import pad, unpad
-SCRIPT_VERSION = "v1.3.0"
+SCRIPT_VERSION = "v1.4.0"
 # ========================================
 # 全局配置 (globalConfig)
 # true=开启, false=关闭
