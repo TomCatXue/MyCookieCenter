@@ -74,6 +74,20 @@ check("豆数提取",
       T._parse_draw_prize({'code': 0, 'biz': {'prizeName': 'x', 'beanNum': 30}})['bean'],
       30)
 
+# 10. 从奖品名解析豆数（实测真实数据：「金豆商城50金豆」）
+check("奖品名含豆数",
+      T._parse_draw_prize({'code': 0, 'biz': {'prizeName': '金豆商城50金豆'}})['bean'],
+      50)
+check("奖品名含豆数-文案",
+      T._parse_draw_prize({'code': 0, 'biz': {'prizeName': '金豆商城50金豆'}})['label'],
+      '金豆商城50金豆 (+50 金豆)')
+check("奖品名含豆-简写",
+      T._parse_draw_prize({'code': 0, 'biz': {'prizeName': '100豆'}})['bean'],
+      100)
+check("无豆数不误判",
+      T._parse_draw_prize({'code': 0, 'biz': {'prizeName': '美团88元神券券包'}})['bean'],
+      0)
+
 print()
 print("=" * 60)
 print("_extract_bean_balance 金豆余额多路提取")

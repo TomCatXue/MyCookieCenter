@@ -697,6 +697,16 @@ def _parse_draw_prize(draw_res) -> dict:
     if bean == 0:
         bean = _extract_number(draw_res, ('beanNum', 'goldCoin', 'coinNum', 'bean', 'gold'))
 
+    # 兜底：从奖品名中解析豆数。实测电信转盘奖品名形如「金豆商城50金豆」，
+    # 豆数直接写在名称里，接口不单独返回 beanNum 字段。
+    if bean == 0 and name:
+        m = re.search(r'(\d+)\s*(?:金豆|豆)', name)
+        if m:
+            try:
+                bean = int(m.group(1))
+            except ValueError:
+                bean = 0
+
     # 未中奖关键词
     THANKS = ('谢谢', '未中奖', '安慰', '很遗憾', '再接再厉')
     if name and any(t in name for t in THANKS):
@@ -784,10 +794,10 @@ def sign_tasks(sess: requests.Session, user: dict) -> List[str]:
             headers=sign_header
         )
         if isinstance(cont_res, dict):
-            total_bean_balance = _extract_bean_balance(cont_res)
-            if total_bean_balance is None:
-                log(f"ℹ️ [{m}] userStatusInfo 金豆字段未命中，原始: "
-                    f"{json.dumps(cont_res, ensure_ascii=False)[:300]}")
+            # userStatusInfo 仅返回签到状态(signDay/isSign)，不含金豆余额，
+            # 实测响应: {"resoultCode":0,"data":{"signDay":7,"isSign":1,"isSeven":false}}
+            # 故此处不提取金豆，避免无意义的「字段未命中」告警。
+            pass
 
         check_and_award('api/home/userStatusInfo', 'signDay', ['7'], '连签')
         check_and_award('webSign/continueSignDays', 'continueSignDays', ['15', '28'], '累签')
@@ -864,6 +874,11 @@ def sign_tasks(sess: requests.Session, user: dict) -> List[str]:
         bal = _extract_bean_balance(tasks_res)
         if bal is not None:
             total_bean_balance = bal
+        else:
+            # 金豆余额接口尚未确认（homepage 实测仅返回任务列表），
+            # 打印原始响应供校正字段名（仅日志，不进通知）。
+            log(f"ℹ️ [{m}] homepage 金豆字段未命中，原始: "
+                f"{json.dumps(tasks_res, ensure_ascii=False)[:500]}")
         ad_items = safe_get(tasks_res, 'data', 'biz', 'adItems') or []
         log(f"[任务列表] {m} 待完成任务总数：{len(ad_items)}个")
         for t in ad_items:
@@ -920,9 +935,10 @@ def sign_tasks(sess: requests.Session, user: dict) -> List[str]:
     today_hint = f" (今日共领取 {today_gained} 颗)" if today_gained > 0 else ""
     if total_bean_balance is not None:
         bullets.append(f"• 账户当前金豆: {total_bean_balance:,} 颗{today_hint}")
-    else:
-        # 未能取到余额时如实说明，不再用「资产已核验」掩盖缺失数据
-        bullets.append(f"• 账户当前金豆: 余额暂未取到{today_hint or ' (今日无新增)'}")
+    elif today_gained > 0:
+        # 余额接口未取到但今日有产出：如实汇报产出，不谎报余额
+        bullets.append(f"• 账户当前金豆: 今日共领取 {today_gained} 颗 (余额接口待确认)")
+    # 余额与今日产出均为空时，不输出该行，避免无信息量的占位文案
 
     log(f"[任务全部完成] {m}")
     return bullets
@@ -1421,14 +1437,15 @@ def query_equity_coin_balance(sess: requests.Session, phone: str, session_key: s
     DEAD_MARKERS = ('接口服务不存在', 'API500002', '不存在', 'not exist', '404')
 
     try:
-        res = request_c005(sess, f'{BESTPAY_H5_BASE}/gapi/equitymall/client/User/myCashPage', {
-            'sessionKey': session_key,
+        res = request_c005(sess, f'{BESTPAY_H5_BASE}/gapi/op-product-system/myCashPageService/myCashPage', {
+            'encyType': 'C005',
+            'appType': '94',
+            'fromchannelId': 'MINIPROG',
+            'fromChannelId': 'MINIPROG',
+            'traceLogId': f'trace_{int(time.time() * 1000)}',
             'productNo': phone,
-            'phoneNo': phone,
-            'fromChannelId': '5g_mini_program',
-            'fromchannelId': '5g_mini_program',
-            'encyType': 'C005'
-        }, phone, session_key, '5g_mini_program')
+            'sessionKey': session_key
+        }, phone, session_key, 'MINIPROG')
     except Exception as e:
         log(f"ℹ️ [{mask(phone)}] 权益币查询异常(已静默): {str(e)[:80]}")
         return None
@@ -1438,7 +1455,6 @@ def query_equity_coin_balance(sess: requests.Session, phone: str, session_key: s
 
     if not res.get('success'):
         err = str(res.get('errorMsg') or res.get('errorCode') or '')
-        # 失效废弃接口 → 静默；其余真实错误才提示
         if any(m in err for m in DEAD_MARKERS):
             log(f"ℹ️ [{mask(phone)}] 权益币接口已失效({err})，静默降级不再输出")
             return None
@@ -1446,13 +1462,13 @@ def query_equity_coin_balance(sess: requests.Session, phone: str, session_key: s
         return None
 
     result = res.get('result') if isinstance(res.get('result'), dict) else {}
-    for k in ('balance', 'coinBalance', 'equityCoin', 'totalCoin', 'availableCoin',
-              'userCoin', 'coin', 'cashBalance', 'amount'):
+    for k in ('availableShowValue', 'totalAvailableValue', 'availableAmount',
+              'availableQuota', 'availableValue', 'balance', 'coinBalance',
+              'equityCoin', 'totalCoin', 'availableCoin', 'userCoin', 'coin'):
         v = result.get(k)
         if v is not None and str(v).strip() != '':
             return f"{v} 权益币"
 
-    # 字段未命中：输出原始响应便于后续校正字段名（仅日志，不进通知）
     log(f"ℹ️ [{mask(phone)}] 权益币字段未命中，原始响应: {json.dumps(res, ensure_ascii=False)[:300]}")
     return None
 
