@@ -139,9 +139,7 @@ MyCookieCenter/
 │   └── CookieCenter.boxjs.json     # 微信读书 + 中国电信 统一配置面板
 ├── ql_script/                      # 青龙面板专用脚本目录（单文件聚合 + 内置标准 Cron + @tag 分类）
 │   ├── weread.js                   # 微信读书全功能聚合（内置纯 JS S-box 逆向签名，100% 脱机换票）
-│   ├── telecom_daily.py            # 中国电信 · 每日签到与金豆打卡
-│   ├── telecom_wednesday.py        # 中国电信 · 周三双抽奖与权益币
-│   ├── telecom_ai_pad.py           # 中国电信 · AI奇遇赢Pad（优先赚点·跨期累计·满千兑换话费）
+│   ├── telecom_daily.py            # 中国电信 · 每日任务聚合（签到金豆 + 周三双抽奖 + 幸运抽奖 + 权益包 + AI奇遇赢Pad，三合一）
 │   ├── telecom_midnight_equity.py  # 中国电信 · 0点等级会员权益自动抢兑
 │   └── unicom_daily.py             # 中国联通 · 每日签到与聚合福利
 ├── scripts/                        # 核心脚本源码（按业务生态清晰聚合）
