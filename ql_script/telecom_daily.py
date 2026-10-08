@@ -621,6 +621,19 @@ def _extract_number(d: dict, keys) -> int:
     return 0
 
 
+def _bean_from_text(text: str) -> int:
+    """从任务名中解析金豆数，如「观看短视频7s +5金豆」→ 5；无则返回 0"""
+    if not text:
+        return 0
+    m = re.search(r'\+?\s*(\d+)\s*(?:金豆|豆)', str(text))
+    if m:
+        try:
+            return int(m.group(1))
+        except ValueError:
+            return 0
+    return 0
+
+
 # 金豆余额候选字段（覆盖多路接口的不同命名）
 #
 # 说明：截至 2026-10-08 抓包实测，已确认的电信接口中【没有】直接返回金豆余额的端点 ——
@@ -848,6 +861,59 @@ def query_jindou_balance(sess: requests.Session, user: dict) -> Optional[int]:
     return None
 
 
+def _golden_today_result(sess: requests.Session, sign_header: dict, m: str) -> str:
+    """
+    转盘次数已用尽时，回显今日实际战果（而非仅报「次数已用尽」）。
+
+    数据源：getCoinInfo 今日流水（已实测可用），筛选转盘相关条目。
+    拿不到明细时如实说明，不编造。
+    """
+    try:
+        para = encrypt_rsa({"pageNo": 1, "pageSize": 20, "type": "1"}, KEYS['data_rsa'], 'hex')
+        res = api_req(
+            sess,
+            'https://wappark.189.cn/jt-sign/webSign/getCoinInfo',
+            json={"para": para},
+            headers=sign_header
+        )
+        results = res.get('results') if isinstance(res, dict) else None
+        if not isinstance(results, dict):
+            return "今日次数已用尽"
+
+        today = datetime.now().strftime('%Y-%m-%d')
+        items = None
+        for k, v in results.items():
+            if str(k).startswith(today) and isinstance(v, list):
+                items = v
+                break
+        if not items:
+            return "今日次数已用尽 (今日无转盘流水)"
+
+        # 筛选转盘/抽奖相关条目，汇总正收益
+        hit = [it for it in items if isinstance(it, dict)
+               and any(kw in str(it.get('taskName') or '') for kw in ('转盘', '抽奖', '金豆商城'))]
+        if not hit:
+            return "今日次数已用尽 (今日无转盘流水)"
+
+        total = 0
+        names = []
+        for it in hit:
+            try:
+                amt = int(float(str(it.get('amount') or 0)))
+            except (ValueError, TypeError):
+                amt = 0
+            if str(it.get('type')) != '2':
+                total += amt
+            nm = str(it.get('taskName') or '').strip()
+            if nm and nm not in names:
+                names.append(nm)
+        desc = "、".join(names[:3])
+        return f"今日次数已用尽 (今日战果: {desc}，+{total} 金豆)"
+    except Exception as e:
+        log(f"ℹ️ [{m}] 转盘今日战果查询异常: {str(e)[:60]}")
+        return "今日次数已用尽"
+
+
 def sign_tasks(sess: requests.Session, user: dict) -> List[str]:
     """掌厅签到打卡、金豆转盘、浏览任务、宠物喂食与金豆核验"""
     phone = user['phoneNbr']
@@ -963,13 +1029,14 @@ def sign_tasks(sess: requests.Session, user: dict) -> List[str]:
                         bean_hint = f" (累计 {draw_beans} 金豆)" if draw_beans > 0 else ""
                         bullets.append(f"• 掌厅金豆转盘: 抽 {len(prizes)} 次{bean_hint} — " + "；".join(prizes))
                     else:
-                        bullets.append("• 掌厅金豆转盘: 今日抽奖次数已用尽 (剩余 0 次)")
+                        # 次数已用尽：回显今日实际战果（而非只报"已用尽"）
+                        bullets.append(f"• 掌厅金豆转盘: {_golden_today_result(sess, sign_header, m)}")
                 else:
-                    bullets.append("• 掌厅金豆转盘: 今日抽奖次数已用尽 (剩余 0 次)")
+                    bullets.append(f"• 掌厅金豆转盘: {_golden_today_result(sess, sign_header, m)}")
             else:
                 bullets.append("• 掌厅金豆转盘: 今日无可用转盘")
         else:
-            bullets.append("• 掌厅金豆转盘: 今日抽奖已完成")
+            bullets.append(f"• 掌厅金豆转盘: {_golden_today_result(sess, sign_header, m)}")
     else:
         bullets.append("• 掌厅金豆转盘: 缺少抽奖授权凭证")
 
@@ -982,6 +1049,7 @@ def sign_tasks(sess: requests.Session, user: dict) -> List[str]:
     )
     task_done = 0
     task_beans = 0
+    task_titles = []
     if isinstance(tasks_res, dict):
         ad_items = safe_get(tasks_res, 'data', 'biz', 'adItems') or []
         log(f"[任务列表] {m} 待完成任务总数：{len(ad_items)}个")
@@ -1004,14 +1072,22 @@ def sign_tasks(sess: requests.Session, user: dict) -> List[str]:
                         got = _extract_number(poly_res, ('rewardCoin', 'goldCoin', 'coin', 'beanNum'))
                     task_beans += got
                     task_done += 1
+                    # 任务名形如「观看短视频7s +5金豆」，从中可解析出预期豆数
+                    if got == 0:
+                        got = _bean_from_text(task_title)
+                        task_beans += got
+                    task_titles.append(task_title)
                     log(f"[任务到账] {m} {task_title}: +{got} 豆")
                     time.sleep(2)
 
     if task_done > 0:
-        bean_hint = f" (+{task_beans} 豆)" if task_beans > 0 else ""
-        bullets.append(f"• 每日任务领豆: 完成 {task_done} 项浏览任务{bean_hint}")
+        bean_hint = f" +{task_beans} 豆" if task_beans > 0 else ""
+        # 列出实际完成的任务名（截取前 2 项），避免只报数量
+        name_hint = "、".join(task_titles[:2]) if task_titles else ""
+        detail = f" ({name_hint})" if name_hint else ""
+        bullets.append(f"• 每日任务领豆: 完成 {task_done} 项{bean_hint}{detail}")
     else:
-        bullets.append("• 每日任务领豆: 今日任务已做完 (+0 豆)")
+        bullets.append("• 每日任务领豆: 今日任务已全部完成")
 
     # 4. 宠物乐园喂食
     log(f"[喂食] {m} 开始宠物喂食")
@@ -1305,8 +1381,8 @@ def run_auto_claim(sess: requests.Session, phone: str, session_key: str) -> str:
     return auto_claim_equity_coupons(sess, phone, session_key, coupons)
 
 
-def query_recent_lottery_history(sess: requests.Session, phone: str, session_key: str, act_no: str, top_n: int = 3) -> str:
-    """查询指定活动最近中奖记录，今日已抽完时回显近 3 次日期与奖品"""
+def query_recent_lottery_history(sess: requests.Session, phone: str, session_key: str, act_no: str, top_n: int = 1) -> str:
+    """查询指定活动最近中奖记录，今日已抽完时回显最近 N 次（默认仅最近一次）"""
     try:
         res = request_c005(sess, 'https://mapi-h5.bestpay.com.cn/gapi/op-lottery-system/DrawService/queryLotteryRecord', {
             'activityNo': act_no,
@@ -1323,7 +1399,7 @@ def query_recent_lottery_history(sess: requests.Session, phone: str, session_key
 
         records = safe_get(res, 'result', 'queryLotteryRecordDTOList') or []
         if not records:
-            return "今日抽奖次数已用尽 (暂无历史中奖记录)"
+            return "今日已抽完 (暂无中奖记录)"
 
         items = []
         for r in records[:top_n]:
@@ -1332,7 +1408,7 @@ def query_recent_lottery_history(sess: requests.Session, phone: str, session_key
             date_short = t_str[5:10] if len(t_str) >= 10 else ''
             items.append(f"{date_short} {name}" if date_short else name)
 
-        return f"今日已抽完 (近{len(items)}次: {', '.join(items)})"
+        return f"今日已抽完 (最近: {items[0]})"
     except Exception:
         return "今日抽奖次数已用尽"
 
@@ -1516,6 +1592,7 @@ def run_lucky_lottery(sess: requests.Session, act_id: str, act_title: str, sessi
         'viewActivity': '浏览活动页',
     }
     PENDING_TASKS = [c for c in task_codes if c not in ('orderMallMember',)]
+    # 精简任务提示：仅列任务名，不重复冗长说明（详细指引见 README）
     task_desc = "、".join(TASK_LABELS.get(c, c) for c in PENDING_TASKS)
 
     draw_res = run_wednesday_lottery(sess, lottery_act_no, f"{act_title}·抽奖引擎", session_key, phone,
@@ -1524,9 +1601,9 @@ def run_lucky_lottery(sess: requests.Session, act_id: str, act_title: str, sessi
     no_lottery = ('未产生抽奖' in draw_res or '今日已抽完' in draw_res or '暂无历史中奖记录' in draw_res
                   or '需 SessionKey' in draw_res)
     if task_desc and no_lottery:
-        res_str = f"{draw_res}；待办任务(需在翼支付小程序内完成，脚本无法代办): {task_desc}；完成后本脚本会自动把机会抽完并回显奖品"
+        res_str = f"{draw_res} | 待办: {task_desc}"
     elif task_desc:
-        res_str = f"{draw_res}；其余任务(需小程序内完成): {task_desc}"
+        res_str = f"{draw_res} | 待办: {task_desc}"
     else:
         res_str = draw_res
 
@@ -1825,10 +1902,14 @@ def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
         except Exception:
             left_num = 0
 
-    log(f"[AI奇遇] {m_phone} 可用制作券: {left_num} 张，当前点数: {total_score}")
+    # 点数展示：query_server_score 失败时 total_score 为 "0"，需与真实 0 区分
+    score_known = isinstance(pkg, dict) or total_score not in (None, '', '0')
+    score_txt = f"点数 {total_score}" if score_known else "点数暂未取到"
+
+    log(f"[AI奇遇] {m_phone} 可用制作券: {left_num} 张，{score_txt}")
 
     if left_num <= 0:
-        bullets.append(f"• AI奇遇赢Pad: 暂无可用制作券 (当前点数 {total_score})")
+        bullets.append(f"• AI奇遇赢Pad: 暂无制作券 · {score_txt}")
         return bullets
 
     tpl = query_template_meta(sess, token)
@@ -1846,9 +1927,9 @@ def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
 
     _, new_total, token = query_server_score(sess, crypto, token, user['phoneNbr'])
     if made > 0:
-        bullets.append(f"• AI奇遇赢Pad: 完成 {made} 次制作 (当前点数 {new_total})")
+        bullets.append(f"• AI奇遇赢Pad: 制作 {made} 次 · 点数 {new_total}")
     else:
-        bullets.append(f"• AI奇遇赢Pad: 制作未成功 (当前点数 {new_total})")
+        bullets.append(f"• AI奇遇赢Pad: 制作未成功 · 点数 {new_total}")
 
     # 满千兑换话费
     try:
@@ -2020,8 +2101,10 @@ def main():
                 log(f"⚠️ [{m_phone}] 未能获取有效 SessionKey，翼支付业务已跳过")
                 bullets.append("• 翼支付业务: 未获取到有效 SessionKey，已跳过")
         else:
-            if ticket_source:
-                bullets.append(f"• 凭证来源: {ticket_source}")
+            # 凭证来源仅在「自动换票」这类自愈动作时才提示；
+            # 环境变量/本地缓存属正常默认，不占用通知行。
+            if ticket_source == "自动换票":
+                bullets.append("• 凭证自愈: 已自动换票续期")
 
             # 周三专属抽奖（★ 非周三不执行、不展示）
             if run_wed and CONFIG.get("ENABLE_WEDNESDAY", True):
