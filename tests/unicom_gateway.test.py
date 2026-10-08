@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""联通脚本 v1.3.0 双网关与乘风活动回归测试 (断言式, 无框架依赖)"""
+"""联通脚本 v1.4.0 双网关与海岛逐浪应援回归测试 (断言式, 无框架依赖)"""
+import base64 as _b64
 import importlib.util
 import os
+import re
 import sys
 import types
+import json
+from Crypto.Cipher import AES as _AES
+from Crypto.Util.Padding import unpad as _unpad
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC_PATH = os.path.join(ROOT, "ql_script", "unicom_daily.py")
@@ -88,5 +93,121 @@ assert ud.globalConfig["regional_config"]["run_ah_friday"] is False, \
 
 # 版本号
 assert ud.SCRIPT_VERSION == "v1.3.0", f"expected v1.3.0, got {ud.SCRIPT_VERSION}"
+
+# ---------- M 项: 乘风已移除 ----------
+
+# 方法/常量前缀 yphd_ 与已下线接口必须彻底移除。
+# 例外: UNICOM_YPHD_MGTV_IMG_FID 是上游刻意保留的向后兼容环境变量, 不算残留。
+for _token in ("yphd_", "aiActor", "experience/yp/members", "YPHD_ACTIVITY_ID",
+               "YPHD_MEMBER_", "YPHD_MGTV_BASE", "YPHD_MOVE_FILE", "yphd_config"):
+    assert _token not in SOURCE, \
+        "retired chengfeng activity must be fully removed, found: %s" % _token
+
+# ---------- N 项: 海岛逐浪应援 ----------
+
+for _m in ("def island_task", "def island_checkin", "def island_ai_video",
+           "def island_lottery", "def island_image_candidates",
+           "def island_load_cached_token", "def island_uid_encrypt"):
+    assert _m in SOURCE, "%s must exist" % _m
+
+
+def _method_body2(name):
+    marker = "def %s(" % name
+    start = SOURCE.find(marker)
+    assert start != -1, "method %s not found in SOURCE" % name
+    nxt = SOURCE.find("\n    def ", start + len(marker))
+    return SOURCE[start:nxt] if nxt != -1 else SOURCE[start:]
+
+
+# 调用顺序: 海岛必须在家乡打卡之后、云盘清理之前
+_ltyp2 = _method_body2("ltyp_task")
+assert "self.hometown_task(token)" in _ltyp2, "ltyp_task must invoke hometown_task"
+assert "self.island_task(token)" in _ltyp2, "ltyp_task must invoke island_task"
+assert "self.clean_duplicate_files_cloud()" in _ltyp2, "ltyp_task must invoke cloud cleanup"
+assert _ltyp2.index("self.hometown_task(token)") < _ltyp2.index("self.island_task(token)"), \
+    "island_task must run AFTER hometown_task"
+assert _ltyp2.index("self.island_task(token)") < _ltyp2.index("self.clean_duplicate_files_cloud()"), \
+    "island_task must run BEFORE cloud cleanup"
+
+# 错误隔离: 海岛异常只记日志, 绝不上抛
+_island_body = _method_body2("island_task")
+assert "raise" not in _island_body, \
+    "island_task must isolate failures (no raise; log-only)"
+
+# 查询模式: 提前 return, 不执行活动
+assert "if is_query_only:" in _ltyp2, "ltyp_task must branch on is_query_only"
+_q_idx = _ltyp2.index("if is_query_only:")
+assert "return" in _ltyp2[_q_idx:_q_idx + 200], \
+    "is_query_only branch must return early"
+
+# 签名复用: island_request 带 key 时调用既有签名器
+_island_req = _method_body2("island_request")
+assert "self.hometown_sign_payload(body)" in _island_req, \
+    "island_request must reuse hometown_sign_payload for signing"
+
+# 邀请脱敏: 明文邀请链接不得出现, 必须 base64 编码存放
+assert "pan.wo.cn/s/1C1L6X78642" not in SOURCE, \
+    "invite entry URL must stay base64-encoded (no plaintext leak)"
+
+# UID 加密往返 (用公开常量独立解密, 必须还原原文)
+_uid_phone = "13800138000"
+_uid_obj = object.__new__(ud.UserService)
+_uid_enc = ud.UserService.island_uid_encrypt(_uid_obj, _uid_phone)
+assert _uid_enc, "island_uid_encrypt must produce ciphertext"
+_uid_cipher = _AES.new(
+    ud.ISLAND_UID_AES_KEY.encode(), _AES.MODE_CBC, ud.ISLAND_UID_AES_IV.encode()
+)
+_uid_dec = _unpad(
+    _uid_cipher.decrypt(_b64.b64decode(_uid_enc)), _AES.block_size, style="pkcs7"
+).decode()
+assert _uid_dec == _uid_phone, \
+    "island uid AES round-trip mismatch (wrong key/IV?): %r" % (_uid_dec,)
+
+# Token 缓存往返
+_island_cache_obj = object.__new__(ud.UserService)
+_island_cache_obj.account_mobile = "13800138000"
+_island_cache_obj.mobile = ""
+ud.UserService.island_save_cached_token(_island_cache_obj, "tok-roundtrip")
+try:
+    assert ud.UserService.island_load_cached_token(_island_cache_obj) == "tok-roundtrip", \
+        "island token cache must round-trip"
+finally:
+    if os.path.exists(ud.UNICOM_TOKEN_CACHE_PATH):
+        try:
+            _c = json.load(open(ud.UNICOM_TOKEN_CACHE_PATH, encoding="utf-8"))
+            _c.pop("13800138000", None)
+            with open(ud.UNICOM_TOKEN_CACHE_PATH, "w", encoding="utf-8") as _f:
+                json.dump(_c, _f, ensure_ascii=False)
+        except Exception:
+            pass
+
+# 素材来源: 本地上传 + 环境变量 + 历史作品 + 云盘扫描 四路齐备
+_island_cand = _method_body2("island_image_candidates")
+assert "self.island_face_fids(token)" in _island_cand, "must include local upload source"
+assert "ISLAND_MGTV_IMG_FID" in _island_cand, "must include env-var FID source"
+assert "getNewYearWorksList" in _island_cand, "must include history works source"
+assert "queryTypeFileList" in _island_cand, "must include cloud scan source"
+
+# 通知提取器: 浪花值/打卡/抽奖 三类日志进 specials
+_island_stub = types.SimpleNamespace(
+    mobile="13800138000", account_mobile="13800138000",
+    index=1, token="stub-token",
+    notify_logs=[
+        "通通乡村: 登录成功，碳能量123g，生态值5",
+        "安全管家: 用户a积分变动：10 → 15 | 新增: 5",
+        "海岛逐浪: 浪花值 1200 | 排名 88 | 广东深圳",
+        "海岛逐浪: 打卡成功 (连续3天)",
+        "海岛逐浪: 第1次抽奖 一等奖",
+    ],
+)
+_, _island_body_txt = ud.format_wechat_reading_summary([_island_stub])
+assert "海岛浪花值 1200" in _island_body_txt, \
+    "island wave value must be surfaced: %r" % (_island_body_txt,)
+assert "排名 88" in _island_body_txt, \
+    "island rank must be surfaced: %r" % (_island_body_txt,)
+assert "海岛打卡 连续3天" in _island_body_txt, \
+    "island checkin must be surfaced: %r" % (_island_body_txt,)
+assert "海岛抽奖" in _island_body_txt and "一等奖" in _island_body_txt, \
+    "island lottery must be surfaced: %r" % (_island_body_txt,)
 
 print("unicom gateway & yphd: PASS")

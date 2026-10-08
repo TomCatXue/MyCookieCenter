@@ -2283,14 +2283,27 @@ class UserService:
         if not self.ecs_token:
             self.log("云盘任务: 缺少 ecs_token，跳过。")
             return
-        ticket = self.getTicketByNative_cloud()
-        if not ticket:
-            return
-        token = self.get_ltypDispatcher_cloud(ticket)
-        if not token:
+        token = ""
+        cached = self.island_load_cached_token()
+        if cached and self.island_token_valid(cached):
+            token = cached
+            self.cloudDisk.userToken = token
+            self.cloudDisk.ticket = ""
+            self.log("云盘任务: [缓存复用] 云盘Token有效, 跳过登录链")
+        else:
+            ticket = self.getTicketByNative_cloud()
+            if not ticket:
+                return
+            token = self.get_ltypDispatcher_cloud(ticket)
+            if not token:
+                return
+            self.island_save_cached_token(token)
+        if is_query_only:
+            self.log("云盘任务: [查询模式] 登录成功，跳过活动和文件清理")
             return
         if HOMETOWN_ENABLE:
             self.hometown_task(token)
+        self.island_task(token)
         self.clean_duplicate_files_cloud()
 
     # ============ 海岛逐浪应援 (破浪活动) ============
@@ -7622,6 +7635,21 @@ def format_wechat_reading_summary(users):
                 elif "家乡打卡" in l and "抽奖结果" in l:
                     p = l.split("抽奖结果")[-1].strip()
                     specials.append(f"云盘抽奖 [{p}]")
+                elif "海岛逐浪: 浪花值" in l:
+                    m = re.search(r"浪花值\s*([0-9]+)", l)
+                    rank = re.search(r"排名\s*([^|]+)", l)
+                    if m:
+                        seg = f"海岛浪花值 {m.group(1)}"
+                        if rank and rank.group(1).strip() not in ("未知", ""):
+                            seg += f" (排名 {rank.group(1).strip()})"
+                        specials.append(seg)
+                elif "海岛逐浪: 打卡成功" in l:
+                    m = re.search(r"连续(\d+)天", l)
+                    specials.append(f"海岛打卡 连续{m.group(1)}天" if m else "海岛打卡")
+                elif "海岛逐浪: 第" in l and "次抽奖" in l:
+                    p = l.split("次抽奖", 1)[-1].strip()
+                    if p and "失败" not in p:
+                        specials.append(f"海岛抽奖 [{p}]")
 
             if specials:
                 bullets.append(f"• 专项福利收获: {' · '.join(specials[:6])}")
