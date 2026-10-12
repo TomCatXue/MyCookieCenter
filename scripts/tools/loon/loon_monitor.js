@@ -21,10 +21,10 @@ function captureSubscription() {
       headers['subscription_userinfo'];
 
     if (subHeader) {
-      const upload = parseInt((subHeader.match(/upload\\s*=\\s*(\\d+)/i) || [])[1] || '0', 10);
-      const download = parseInt((subHeader.match(/download\\s*=\\s*(\\d+)/i) || [])[1] || '0', 10);
-      const total = parseInt((subHeader.match(/total\\s*=\\s*(\\d+)/i) || [])[1] || '0', 10);
-      const expire = parseInt((subHeader.match(/expire\\s*=\\s*(\\d+)/i) || [])[1] || '0', 10);
+      const upload = parseInt((subHeader.match(/upload\s*=\s*(\d+)/i) || [])[1] || '0', 10);
+      const download = parseInt((subHeader.match(/download\s*=\s*(\d+)/i) || [])[1] || '0', 10);
+      const total = parseInt((subHeader.match(/total\s*=\s*(\d+)/i) || [])[1] || '0', 10);
+      const expire = parseInt((subHeader.match(/expire\s*=\s*(\d+)/i) || [])[1] || '0', 10);
 
       const cached = {
         upload,

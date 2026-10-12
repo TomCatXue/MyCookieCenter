@@ -27,6 +27,7 @@
 | [`GitHubPushTime.plugin`](./GitHubPushTime.plugin) | GitHub·星标推送时间 — 在 GitHub App 星标列表语言后显示最近推送时间 | 脚本型 · [`scripts/tools/github/`](../scripts/tools/github/) |
 | [`PixivEnhanced.plugin`](./PixivEnhanced.plugin) | Pixiv·全域增强翻译 — 全页面日文深度汉化 · AI 视觉多模态漫翻 · 内置设置中心 | 脚本型 · [`scripts/tools/pixiv/`](../scripts/tools/pixiv/) |
 | [`camscanner.plugin`](./camscanner.plugin) | 扫描全能王·签到 — 抓取 Cookie + 每日签到 | 脚本型 · 抓取内化 [`scripts/tools/camscanner/`](../scripts/tools/camscanner/) / 签到外部 |
+| [LoonMonitor.plugin](./LoonMonitor.plugin) | Loon 监控·小组件数据提供与状态服务 — 专为 iOS 哑巴面板小组件打造，实时提供运行模式、策略组、VPN 出口 IP 与订阅流量 | 脚本型 · [scripts/tools/loon/](../scripts/tools/loon/) |
 
 ---
 
