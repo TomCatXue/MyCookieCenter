@@ -1,0 +1,22 @@
+#!name = LoonMonitor · 小组件数据提供与状态服务
+#!desc = 专为 iOS 哑巴面板 (MutePanel) 小组件打造的 Loon 本地监控数据服务。实时提供当前策略组、活跃节点、VPN 出口 IP/归属地、延迟、运行模式与订阅流量统计。
+#!author = TomCatXue
+#!homepage = https://github.com/TomCatXue/MyCookieCenter
+#!icon = https://raw.githubusercontent.com/luestr/IconResource/main/App_icon/120px/Loon.png
+#!tag = Loon, 监控, 小组件, VPN
+#!version = 1.0.0
+#!date = 2026-10-12 13:00
+
+# ===== 独立开关 =====
+
+[Argument]
+loon_monitor = switch,true,tag=小组件状态服务,desc=开启后拦截本地请求 http://loon.local/api/monitor 为桌面小组件提供实时状态与VPN出口IP
+
+# ===== 脚本规则 =====
+
+[Script]
+# 1. 订阅更新流量静默捕获 (当 Loon 刷新机场订阅时，自动捕获并持久化剩余流量配额)
+response if ${url} ~= /subscription|subscribe|token=/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/loon/loon_monitor.js?v=20261012") with enable=${loon_monitor}, tag="Loon监控·订阅流量捕获", requires_body=false
+
+# 2. 本地虚拟 API 请求拦截响应 (小组件直连，秒级响应且零外网开销)
+request if ${url} ~= /^https?:\/\/loon\.local\/api\/monitor/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/loon/loon_monitor.js?v=20261012") with enable=${loon_monitor}, tag="Loon监控·小组件数据服务", requires_body=false
