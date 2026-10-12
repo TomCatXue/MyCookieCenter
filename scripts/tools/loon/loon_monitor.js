@@ -233,6 +233,25 @@ function resolveNodeName(cfg) {
         } catch (e) {}
       }
     }
+
+    // 2.2 模糊匹配（支持带 emoji 或前后缀的策略组，如 "🚀 节点选择"、"🔰 Proxy"）
+    if (!nodeName || nodeName === "DIRECT" || nodeName === "REJECT") {
+      const fuzzyGroup = groups.find(function (g) {
+        if (/DIRECT|REJECT|广告|去广告|国内|直连|拦截/i.test(g)) return false;
+        const lower = g.toLowerCase();
+        return candidates.some(function (c) {
+          return lower.includes(c.toLowerCase());
+        });
+      });
+      if (fuzzyGroup) {
+        try {
+          const sel = $config.getSelectedPolicy(fuzzyGroup);
+          if (sel && sel !== "DIRECT" && sel !== "REJECT") {
+            nodeName = sel;
+          }
+        } catch (e) {}
+      }
+    }
   }
 
   // 3. 若仍未匹配，过滤掉辅助策略组后取首个策略组尝试
@@ -400,6 +419,7 @@ function serveMonitorData() {
       uploadBytes: uploadBytes,
       downloadBytes: downloadBytes,
       totalBytes: totalBytes,
+      hasTrafficData: subData !== null,
       resetDaysText: resetDaysText,
       updatedAt: new Date().toISOString(),
     };
@@ -458,6 +478,7 @@ function serveMonitorData() {
     if (ipDone && subDone) {
       finished = true;
       if (subResult) {
+        subData = subResult;
         uploadBytes = Number(subResult.upload) || 0;
         downloadBytes = Number(subResult.download) || 0;
         totalBytes = Number(subResult.total) || 0;
