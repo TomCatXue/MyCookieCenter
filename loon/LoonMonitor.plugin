@@ -1,32 +1,37 @@
 #!name = LoonMonitor · 小组件数据提供与状态服务
-#!desc = 专为 iOS 哑巴面板 (MutePanel) 小组件打造的 Loon 本地监控数据服务。实时提供当前策略组、活跃节点、VPN 出口 IP/归属地、延迟、运行模式与订阅流量统计。
+#!desc = 专为 iOS 哑巴面板 (MutePanel) 小组件打造的 Loon 本地监控数据服务。实时提供当前运行模式、策略组数量、活跃节点、VPN 出口 IP/归属地、延迟与订阅流量统计。
 #!author = TomCatXue
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://raw.githubusercontent.com/luestr/IconResource/main/App_icon/120px/Loon.png
 #!tag = Loon, 监控, 小组件, VPN
-#!version = 1.2.0
-#!date = 2026-10-12 15:30
+#!version = 1.3.0
+#!date = 2026-10-12 16:40
 
-# =================== 1. 本地回环解析 ===================
-# 避开 iOS Bonjour mDNS (.local) 局域网广播限制，将虚拟域名本地回环解析送入 Loon 内部引擎
+# =================== 1. 本地解析 ===================
+# 虚拟域名本身没有公网 DNS 记录，必须由 Loon 在本地解析，否则在 HTTP 代理
+# 模式下会在 DNS 阶段就失败、请求根本进不到 Loon 的 HTTP 引擎。
 [Host]
 loon.box = 127.0.0.1
 api.loon.box = 127.0.0.1
+loon.local = 127.0.0.1
 
-# =================== 2. 路由分流规则 ===================
-# 确保虚拟域名流量走本地直连回环
+# =================== 2. 路由规则 ===================
+# 兜底直连：即使脚本因故未命中，也不会被丢到远端节点上（历史上就是这样
+# 撞到 TLS EOF 的）。
 [Rule]
 DOMAIN,loon.box,DIRECT
 DOMAIN,api.loon.box,DIRECT
+DOMAIN,loon.local,DIRECT
 
 # =================== 3. 脚本拦截与服务 ===================
+# 采用与本仓库其它已验证插件（CookieCenter / GitHubPushTime）一致的
+# `request if ... then script(...) with ...` 写法，避免旧式 http-request
+# 行在部分 Loon 版本上解析失败导致脚本静默失效。
 [Script]
-# 1. 本地虚拟 API 请求拦截响应 (标准 http-request 语法，短路 Mock 返回 HTTP 200 JSON)
-http-request ^https?:\/\/(api\.)?loon\.box\/api\/monitor script-path=https://cdn.jsdelivr.net/gh/TomCatXue/MyCookieCenter@main/scripts/tools/loon/loon_monitor.js, timeout=10, tag=Loon监控·小组件数据服务
+# 1. 小组件数据服务：请求发出前直接短路返回 JSON（明文 HTTP，无需 MITM）
+request if ${url} ~= /^https?:\/\/(api\.)?loon\.(box|local)\/api\/monitor/i then script("https://cdn.jsdelivr.net/gh/TomCatXue/MyCookieCenter@main/scripts/tools/loon/loon_monitor.js?v=20261012b") with tag="Loon监控·小组件数据服务", timeout=10
 
-# 2. 订阅更新流量静默捕获 (当 Loon 刷新机场订阅时，自动捕获并持久化剩余流量配额)
-http-response /subscription|subscribe|token=/ script-path=https://cdn.jsdelivr.net/gh/TomCatXue/MyCookieCenter@main/scripts/tools/loon/loon_monitor.js, requires-body=false, tag=Loon监控·订阅流量捕获
-
-# =================== 4. MITM 解密域名 ===================
-[Mitm]
-hostname = loon.box, api.loon.box
+# 2. 订阅流量静默捕获：只在疑似订阅地址上运行。
+#    收窄匹配范围（路径段 subscription/subscribe，或带 token 查询参数），
+#    避免每一条正文里恰好含这些词的响应都触发一次脚本。
+response if ${url} ~= /\/(subscription|subscribe)|[?&]token=/i then script("https://cdn.jsdelivr.net/gh/TomCatXue/MyCookieCenter@main/scripts/tools/loon/loon_monitor.js?v=20261012b") with tag="Loon监控·订阅流量捕获", requires_body=false, timeout=10
