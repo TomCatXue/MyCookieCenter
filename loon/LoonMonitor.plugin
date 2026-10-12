@@ -5,7 +5,7 @@
 #!icon = https://raw.githubusercontent.com/luestr/IconResource/main/App_icon/120px/Loon.png
 #!tag = Loon, 监控, 小组件, VPN
 #!version = 1.3.0
-#!date = 2026-10-12 16:40
+#!date = 2026-10-12 17:05
 
 # =================== 1. 本地解析 ===================
 # 虚拟域名本身没有公网 DNS 记录，必须由 Loon 在本地解析，否则在 HTTP 代理
@@ -27,11 +27,16 @@ DOMAIN,loon.local,DIRECT
 # 采用与本仓库其它已验证插件（CookieCenter / GitHubPushTime）一致的
 # `request if ... then script(...) with ...` 写法，避免旧式 http-request
 # 行在部分 Loon 版本上解析失败导致脚本静默失效。
+#
+# 脚本地址固定到 commit（而不是 @main）：jsDelivr 的 @main 别名在各边缘节点
+# 上刷新不一致，实测会在数分钟内反复返回旧版脚本，导致「插件已更新但脚本
+# 还是坏的」。commit 地址不可变，保证手机拿到的脚本与本插件严格配对。
+# 以后升级脚本时，同步更新这里的 commit 与 #!version / #!date。
 [Script]
 # 1. 小组件数据服务：请求发出前直接短路返回 JSON（明文 HTTP，无需 MITM）
-request if ${url} ~= /^https?:\/\/(api\.)?loon\.(box|local)\/api\/monitor/i then script("https://cdn.jsdelivr.net/gh/TomCatXue/MyCookieCenter@main/scripts/tools/loon/loon_monitor.js?v=20261012b") with tag="Loon监控·小组件数据服务", timeout=10
+request if ${url} ~= /^https?:\/\/(api\.)?loon\.(box|local)\/api\/monitor/i then script("https://cdn.jsdelivr.net/gh/TomCatXue/MyCookieCenter@3d029f3/scripts/tools/loon/loon_monitor.js") with tag="Loon监控·小组件数据服务", timeout=10
 
 # 2. 订阅流量静默捕获：只在疑似订阅地址上运行。
 #    收窄匹配范围（路径段 subscription/subscribe，或带 token 查询参数），
 #    避免每一条正文里恰好含这些词的响应都触发一次脚本。
-response if ${url} ~= /\/(subscription|subscribe)|[?&]token=/i then script("https://cdn.jsdelivr.net/gh/TomCatXue/MyCookieCenter@main/scripts/tools/loon/loon_monitor.js?v=20261012b") with tag="Loon监控·订阅流量捕获", requires_body=false, timeout=10
+response if ${url} ~= /\/(subscription|subscribe)|[?&]token=/i then script("https://cdn.jsdelivr.net/gh/TomCatXue/MyCookieCenter@3d029f3/scripts/tools/loon/loon_monitor.js") with tag="Loon监控·订阅流量捕获", requires_body=false, timeout=10
