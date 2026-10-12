@@ -12,7 +12,7 @@
 ================================================================================
 @Name: 微信读书 · 全功能自动化任务（青龙面板专版）
 @Author: TomCatXue
-@Version: 1.4.2
+@Version: 1.4.3
 @Updated: 2026-10-12
 ================================================================================
 使用说明：
@@ -76,7 +76,7 @@ const CONFIG = {
 // 常量与系统配置
 // ================================================================================
 const SCRIPT_NAME = "微信读书 · 全功能任务";
-const SCRIPT_VERSION = "1.4.2";
+const SCRIPT_VERSION = "1.4.3";
 const AUTH_KEY = "weread_auth_v2";
 const CACHE_FILE = "./weread_session.json";
 const API = "https://i.weread.qq.com";
@@ -1576,7 +1576,7 @@ async function runFreeTask(auth, helperAuth) {
                     }
 
                     // 遇到配额限制（已帮其他用户解锁），说明该小号配额耗尽，轮换到下一个小号重试本书
-                    if (String(errMsg).includes("已帮其他用户") || String(errMsg).includes("解锁过")) {
+                    else if (String(errMsg).includes("已帮其他用户") || String(errMsg).includes("解锁过")) {
                         $.log(`[WeRead] ⚠️ 小号 [${maskH}] 本周助力配额已达上限(1本/周)`);
                         helperIdx++;
                         if (helperIdx < helperList.length) {
@@ -1585,13 +1585,17 @@ async function runFreeTask(auth, helperAuth) {
                         }
                     } else {
                         helperIdx++;
+                        if (helperIdx < helperList.length) {
+                            let nextMask = String(helperList[helperIdx].vid || helperList[helperIdx].wrVid || "").slice(0, 4) + "****";
+                            $.log(`[WeRead] 🔄 正在自动轮换至备用小号 [${nextMask}] 重新助力《${b.title}》...`);
+                        }
                     }
                 }
                 await new Promise(r => setTimeout(r, 1000));
             }
 
             if (!bookClaimed) {
-                if (helperIdx >= helperList.length && targetBooks.indexOf(b) > 0) {
+                if (helperIdx >= helperList.length && targetBooks.indexOf(b) === targetBooks.length - 1) {
                     $.log(`[WeRead] ℹ️ 助力小号已全部耗尽（微信读书规则：每个小号每周限助力 1 本）。`);
                     $.log(`[WeRead] 💡 如需每周 2 本全部全自动入架，请在青龙环境变量 WEREAD_HELPER_AUTH 中换行或用 & 添加第 2 个小号。`);
                 }
