@@ -12,8 +12,8 @@
 ================================================================================
 @Name: 微信读书 · 全功能自动化任务（青龙面板专版）
 @Author: TomCatXue
-@Version: 1.4.1
-@Updated: 2026-10-04
+@Version: 1.4.2
+@Updated: 2026-10-12
 ================================================================================
 使用说明：
 - 核心环境变量：
@@ -76,7 +76,7 @@ const CONFIG = {
 // 常量与系统配置
 // ================================================================================
 const SCRIPT_NAME = "微信读书 · 全功能任务";
-const SCRIPT_VERSION = "1.4.1";
+const SCRIPT_VERSION = "1.4.2";
 const AUTH_KEY = "weread_auth_v2";
 const CACHE_FILE = "./weread_session.json";
 const API = "https://i.weread.qq.com";
@@ -99,8 +99,13 @@ function Env(name) {
             if (fs.existsSync(CACHE_FILE)) {
                 try {
                     const cached = JSON.parse(fs.readFileSync(CACHE_FILE, "utf-8"));
-                    if (cached && (cached[k] || cached.vid)) {
-                        return cached[k] ? JSON.stringify(cached[k]) : JSON.stringify(cached);
+                    if (cached) {
+                        if (typeof cached[k] !== "undefined") {
+                            return typeof cached[k] === "string" ? cached[k] : JSON.stringify(cached[k]);
+                        }
+                        if ((k === AUTH_KEY || k === "WEREAD_AUTH" || k === "WEREAD_COOKIE") && cached.vid) {
+                            return JSON.stringify(cached);
+                        }
                     }
                 } catch (e) { }
             }
@@ -902,6 +907,25 @@ function getVolStartTime(volStr) {
 
 // 解析单条助力小号凭证 (支持 Cookie 串[含 wr_rt] / JSON / vid#skey / vid@skey 任意格式)
 function parseSingleHelper(raw) {
+    let h = _parseSingleHelperInternal(raw);
+    if (h && h.vid) {
+        try {
+            let cachedStr = $.getdata(`weread_helper_${h.vid}`);
+            if (cachedStr) {
+                let cachedObj = JSON.parse(cachedStr);
+                if (cachedObj && cachedObj.wrSkey) {
+                    h.wrSkey = cachedObj.wrSkey;
+                    h.skey = cachedObj.wrSkey;
+                    if (cachedObj.wrRt) h.wrRt = cachedObj.wrRt;
+                    if (cachedObj.rawCookie) h.rawCookie = cachedObj.rawCookie;
+                }
+            }
+        } catch (e) { }
+    }
+    return h;
+}
+
+function _parseSingleHelperInternal(raw) {
     if (!raw) return null;
     if (typeof raw === "object") {
         let vid = raw.vid || raw.wrVid || raw.wr_vid || "";
@@ -1078,6 +1102,10 @@ async function tryWebRenewal(helperAuth) {
                 if (newRt) helperAuth.rawCookie = helperAuth.rawCookie.replace(/wr_rt=[^;\s]+/, `wr_rt=${newRt}`);
             }
             $.log(`[WeRead] 🎉 小号 Web Cookie 自动续期成功！最新 skey: ${helperAuth.wrSkey?.slice(0, 4)}****`);
+            try {
+                let cacheData = { wrSkey: helperAuth.wrSkey, wrRt: helperAuth.wrRt || "", rawCookie: helperAuth.rawCookie || "" };
+                $.setdata(JSON.stringify(cacheData), `weread_helper_${wrVid}`);
+            } catch (e) { }
             return helperAuth;
         } else {
             $.log(`[WeRead] ⚠️ Web Cookie 自动续期响应: ${resData?.errMsg || ("HTTP " + res.status)}`);
@@ -1527,16 +1555,24 @@ async function runFreeTask(auth, helperAuth) {
                     let errMsg = actData?.errMsg || actData?.errmsg || ("HTTP " + actRes.status);
                     $.log(`[WeRead] ❌ 小号 [${maskH}] 助力领取《${b.title}》失败: ${errMsg}`);
 
-                    // 核心安全熔断：若官方返回 -2057，表明主账号本周领书次数已达上限 (2本)
+                    // 核心安全熔断与小号轮换：若官方返回 -2057
                     if (String(errMsg) === "-2057" || (actData && actData.errCode === -2057)) {
-                        $.log("[WeRead] ℹ️ 触发官方配额保护：主账号本周免费好书已达领取上限(2本)，停止后续助力请求并锁定结果");
-                        result.allClaimed = true;
-                        result.unclaimedBooks = [];
-                        if (result.addedBooks.length > 0) {
-                            result.details = `本周已领图书: ${result.addedBooks.join(", ")}`;
-                            $.setdata(JSON.stringify({ vol: currentVol, allClaimed: true, addedBooks: result.addedBooks, details: result.details }), cacheKey);
+                        let currentTotal = result.addedBooks.length + newlyClaimed.length;
+                        if (currentTotal >= 2) {
+                            $.log("[WeRead] ℹ️ 触发官方配额保护：主账号本周免费好书已达领取上限(2本)，停止后续助力请求并锁定结果");
+                            result.allClaimed = true;
+                            result.unclaimedBooks = [];
+                            result.details = `本周已领图书: ${result.addedBooks.concat(newlyClaimed).join(", ")}`;
+                            $.setdata(JSON.stringify({ vol: currentVol, allClaimed: true, addedBooks: result.addedBooks.concat(newlyClaimed), details: result.details }), cacheKey);
+                            return result;
+                        } else {
+                            $.log(`[WeRead] ⚠️ 小号 [${maskH}] 助力返回 -2057 (该小号助力配额已耗尽/受限)，轮换备用小号重试...`);
+                            helperIdx++;
+                            if (helperIdx < helperList.length) {
+                                let nextMask = String(helperList[helperIdx].vid || helperList[helperIdx].wrVid || "").slice(0, 4) + "****";
+                                $.log(`[WeRead] 🔄 正在自动轮换至备用小号 [${nextMask}] 重新助力《${b.title}》...`);
+                            }
                         }
-                        return result;
                     }
 
                     // 遇到配额限制（已帮其他用户解锁），说明该小号配额耗尽，轮换到下一个小号重试本书
@@ -1719,7 +1755,7 @@ async function main() {
             } else if (resFree.unclaimedBooks && resFree.unclaimedBooks.length > 0) {
                 freeText = "未自动入架，请在微信中点击链接一键直达领取:\n" + resFree.unclaimedBooks.map((b, idx) => `  ${idx + 1}. 《${b.title}》: ${b.url}`).join('\n');
             } else {
-                freeText = resFree.details || "本期限免图书已在书架中";
+                freeText = resFree.details || ((resFree.addedBooks && resFree.addedBooks.length > 0) ? `本周已领图书: ${resFree.addedBooks.join(", ")}` : "未能自动入架，请检查助力小号凭证状态");
             }
         } else {
             freeText = "未开启限免任务";
