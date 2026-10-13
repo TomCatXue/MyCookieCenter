@@ -292,7 +292,11 @@ function resolveNodeName(cfg) {
   return nodeName || cfg.global_proxy || cfg.final || "当前代理节点";
 }
 
-function probeOutboundIp(callback) {
+function probeOutboundIp(runningModel, callback) {
+  if (typeof runningModel === "function") {
+    callback = runningModel;
+    runningModel = 1;
+  }
   if (typeof $httpClient === "undefined" || typeof $httpClient.get !== "function") {
     callback({ ip: "--", loc: "未知归属", isp: "--", latencyMs: null });
     return;
@@ -324,6 +328,7 @@ function probeOutboundIp(callback) {
                 location: loc,
                 isp: isp,
                 latencyMs: rtt,
+                runningModel: runningModel,
                 timestamp: Date.now(),
               }),
               IP_CACHE_KEY
@@ -378,21 +383,32 @@ function serveMonitorData() {
   let cfg = null;
   try {
     if (typeof $config !== "undefined" && typeof $config.getConfig === "function") {
-      cfg = JSON.parse($config.getConfig());
-      const model = Number(cfg.running_model);
-      if (model === 0) {
+      const rawCfg = $config.getConfig();
+      cfg = typeof rawCfg === "string" ? JSON.parse(rawCfg) : rawCfg;
+
+      let model = -1;
+      if (cfg) {
+        if (cfg.running_model != null) model = Number(cfg.running_model);
+        else if (cfg.runningModel != null) model = Number(cfg.runningModel);
+        else if (cfg.flowmodel === "direct" || cfg.mode === "direct") model = 0;
+        else if (cfg.flowmodel === "proxy" || cfg.mode === "proxy") model = 2;
+        else if (cfg.flowmodel === "filter" || cfg.mode === "filter") model = 1;
+      }
+
+      if (model === 0 || /direct|直连/i.test(String((cfg && (cfg.mode || cfg.flowmodel)) || ""))) {
         runningMode = "全局直连";
         runningModel = 0;
-      } else if (model === 2) {
+      } else if (model === 2 || /proxy|全局代理/i.test(String((cfg && (cfg.mode || cfg.flowmodel)) || ""))) {
         runningMode = "全局代理";
         runningModel = 2;
       } else {
         runningMode = "规则分流";
         runningModel = 1;
       }
-      if (Array.isArray(cfg.all_policy_groups)) policyGroupCount = cfg.all_policy_groups.length;
-      finalPolicy = cfg.final || "";
-      globalProxy = cfg.global_proxy || "";
+
+      if (cfg && Array.isArray(cfg.all_policy_groups)) policyGroupCount = cfg.all_policy_groups.length;
+      finalPolicy = (cfg && cfg.final) || "";
+      globalProxy = (cfg && cfg.global_proxy) || "";
     }
   } catch (e) {
     log("读取 Loon 配置失败: " + (e && e.message ? e.message : e));
@@ -421,6 +437,7 @@ function serveMonitorData() {
       totalBytes: totalBytes,
       hasTrafficData: subData !== null,
       resetDaysText: resetDaysText,
+      scriptVersion: "v1.4.1",
       updatedAt: new Date().toISOString(),
     };
     if (typeof latencyMs === "number" && latencyMs >= 0) {
@@ -445,8 +462,10 @@ function serveMonitorData() {
   const cachedIp = readJson(IP_CACHE_KEY);
   const now = Date.now();
   const ipAge = cachedIp && cachedIp.timestamp ? now - Number(cachedIp.timestamp) : Infinity;
-  const hasValidIpCache = cachedIp && cachedIp.ip && ipAge < IP_CACHE_TTL_MS;
-  const hasStaleIpCache = cachedIp && cachedIp.ip && cachedIp.ip !== "--" && ipAge < IP_CACHE_STALE_MS;
+  // 模式切换（如分流切直连）时立即废弃旧模式 IP 缓存，重新探测真实出口
+  const sameMode = cachedIp && cachedIp.runningModel === runningModel;
+  const hasValidIpCache = sameMode && cachedIp.ip && ipAge < IP_CACHE_TTL_MS;
+  const hasStaleIpCache = sameMode && cachedIp.ip && cachedIp.ip !== "--" && ipAge < IP_CACHE_STALE_MS;
 
   // 检查订阅缓存是否缺失且有订阅链接可供拉取
   const needFetchSub = !subData && Boolean(subUrl);
@@ -500,7 +519,7 @@ function serveMonitorData() {
   }
 
   if (!ipDone) {
-    probeOutboundIp(function (res) {
+    probeOutboundIp(runningModel, function (res) {
       ipResult = res;
       ipDone = true;
       finish();
