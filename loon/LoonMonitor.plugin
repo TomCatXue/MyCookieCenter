@@ -4,8 +4,8 @@
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://raw.githubusercontent.com/luestr/IconResource/main/App_icon/120px/Loon.png
 #!tag = Loon, 监控, 小组件, VPN
-#!version = 1.4.1
-#!date = 2026-10-13 10:20
+#!version = 1.4.2
+#!date = 2026-10-13 13:20
 
 # =================== 0. 参数配置 ===================
 [Argument]
@@ -25,10 +25,9 @@ loon.local = 198.18.0.1
 # 兜底直连：即使脚本因故未命中，也不会被丢到远端节点上（历史上就是这样
 # 撞到 TLS EOF 的）。同时保障出口探测平稳走代理。
 [Rule]
-DOMAIN,loon.box,DIRECT
-DOMAIN,api.loon.box,DIRECT
-DOMAIN,loon.local,DIRECT
-IP-CIDR,198.18.0.1/32,DIRECT
+# 警示：严禁在 [Rule] 中将 198.18.0.1 或 loon.box 设为 DIRECT！
+# 设为 DIRECT 会绕过代理栈将原始 TCP 报文抛向物理网卡，导致局域网无应答死锁超时。
+# 不设 DIRECT 规则，流量才能正常进入 Loon 代理管线并由 [Script] 本地短路返回 JSON。
 DOMAIN-SUFFIX,ip-api.com,PROXY
 DOMAIN-SUFFIX,ip.sb,PROXY
 
@@ -43,7 +42,7 @@ DOMAIN-SUFFIX,ip.sb,PROXY
 # 以后升级脚本时，同步更新这里的 commit 与 #!version / #!date。
 [Script]
 # 1. 小组件数据服务：请求发出前直接短路返回 JSON（明文 HTTP，无需 MITM，支持 loon.box 与 198.18.0.1 直接访问）
-request if ${url} ~= /^https?:\/\/((api\.)?loon\.(box|local)|198\.18\.0\.1)(\/api)?\/monitor/i then script("https://cdn.jsdelivr.net/gh/TomCatXue/MyCookieCenter@1fdfcde/scripts/tools/loon/loon_monitor.js") with argument="${sub_url}", tag="Loon监控·小组件数据服务", timeout=10
+request if ${url} ~= /^https?:\/\/((api\.)?loon\.(box|local)|198\.18\.0\.1)(\/.*)?$/i then script("https://cdn.jsdelivr.net/gh/TomCatXue/MyCookieCenter@1fdfcde/scripts/tools/loon/loon_monitor.js") with argument="${sub_url}", tag="Loon监控·小组件数据服务", timeout=10
 
 # 2. 订阅流量静默捕获：只在疑似订阅地址上运行。
 #    覆盖常见订阅路径特征（subscription / subscribe / sub / link，或带 token / sid / auth 查询参数），

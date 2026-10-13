@@ -189,15 +189,39 @@ function fetchSubscriptionActive(subUrl, callback) {
   });
 }
 
-function resolveNodeName(cfg) {
-  if (!cfg) return "当前代理节点";
-
-  const runningModel = Number(cfg.running_model);
+function resolveNodeName(cfg, runningModel) {
   if (runningModel === 0) {
     return "全局直连";
   }
-  if (runningModel === 2 && cfg.global_proxy) {
+  if (!cfg) return "当前代理节点";
+
+  const model =
+    runningModel != null
+      ? runningModel
+      : Number(cfg.running_model != null ? cfg.running_model : cfg.runningModel);
+  if (model === 0) {
+    return "全局直连";
+  }
+  if (model === 2 && cfg.global_proxy) {
     return cfg.global_proxy;
+  }
+
+  // 0. 优先尝试从 Loon 的 policy_select 映射直接读取
+  if (cfg.policy_select && typeof cfg.policy_select === "object") {
+    if (cfg.final && cfg.policy_select[cfg.final]) {
+      const p = cfg.policy_select[cfg.final];
+      if (p && p !== "DIRECT" && p !== "REJECT") return p;
+    }
+    const candidates = [
+      "节点选择", "Proxy", "PROXY", "Proxies", "PROXIES", "代理节点",
+      "主力节点", "节点", "Select", "SELECT", "Auto", "AUTO",
+    ];
+    for (let i = 0; i < candidates.length; i++) {
+      if (cfg.policy_select[candidates[i]]) {
+        const p = cfg.policy_select[candidates[i]];
+        if (p && p !== "DIRECT" && p !== "REJECT") return p;
+      }
+    }
   }
 
   const groups = Array.isArray(cfg.all_policy_groups) ? cfg.all_policy_groups : [];
@@ -414,7 +438,7 @@ function serveMonitorData() {
     log("读取 Loon 配置失败: " + (e && e.message ? e.message : e));
   }
 
-  const nodeName = resolveNodeName(cfg);
+  const nodeName = resolveNodeName(cfg, runningModel);
 
   function reply(ip, loc, isp, latencyMs) {
     const payload = {
@@ -427,7 +451,7 @@ function serveMonitorData() {
       finalPolicy: finalPolicy,
       nodeName: nodeName,
       vpnIp: ip || "--",
-      vpnLocation: loc || "未知归属",
+      vpnLocation: loc || (runningModel === 0 ? "直连网络" : "未知归属"),
       isp: isp || "--",
       upload: uploadBytes,
       download: downloadBytes,
@@ -437,7 +461,7 @@ function serveMonitorData() {
       totalBytes: totalBytes,
       hasTrafficData: subData !== null,
       resetDaysText: resetDaysText,
-      scriptVersion: "v1.4.1",
+      scriptVersion: "v1.4.2",
       updatedAt: new Date().toISOString(),
     };
     if (typeof latencyMs === "number" && latencyMs >= 0) {
