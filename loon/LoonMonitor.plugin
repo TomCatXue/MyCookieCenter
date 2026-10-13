@@ -43,12 +43,12 @@ DOMAIN-SUFFIX,ip.sb,PROXY
 # 以后升级脚本时，同步更新这里的 commit 与 #!version / #!date。
 [Script]
 # 1. 小组件数据服务：请求发出前直接短路返回 JSON（明文 HTTP，无需 MITM，支持 loon.box 与 198.18.0.1 直接访问）
-request if ${url} ~= /^https?:\/\/((api\.)?loon\.(box|local)|198\.18\.0\.1)(\/api)?\/monitor/i then script("https://cdn.jsdelivr.net/gh/TomCatXue/MyCookieCenter@a3102b4/scripts/tools/loon/loon_monitor.js") with argument="${sub_url}", tag="Loon监控·小组件数据服务", timeout=10
+request if ${url} ~= /^https?:\/\/((api\.)?loon\.(box|local)|198\.18\.0\.1)(\/api)?\/monitor/i then script("https://cdn.jsdelivr.net/gh/TomCatXue/MyCookieCenter@1fdfcde/scripts/tools/loon/loon_monitor.js") with argument="${sub_url}", tag="Loon监控·小组件数据服务", timeout=10
 
 # 2. 订阅流量静默捕获：只在疑似订阅地址上运行。
 #    覆盖常见订阅路径特征（subscription / subscribe / sub / link，或带 token / sid / auth 查询参数），
 #    当 Loon 自身刷新机场订阅时自动截获并持久化剩余流量配额。
-response if ${url} ~= /\/(subscription|subscribe)|[?&]token=/i then script("https://cdn.jsdelivr.net/gh/TomCatXue/MyCookieCenter@a3102b4/scripts/tools/loon/loon_monitor.js") with tag="Loon监控·订阅流量捕获", requires_body=false, timeout=10
+response if ${url} ~= /\/(subscription|subscribe)|[?&]token=/i then script("https://cdn.jsdelivr.net/gh/TomCatXue/MyCookieCenter@1fdfcde/scripts/tools/loon/loon_monitor.js") with tag="Loon监控·订阅流量捕获", requires_body=false, timeout=10
 
 # 3. 后台定时预热：每 2 小时定时唤醒同步出口 IP 与订阅流量，保证小组件 0ms 极速响应
-cron "0 */2 * * *" then script("https://cdn.jsdelivr.net/gh/TomCatXue/MyCookieCenter@a3102b4/scripts/tools/loon/loon_monitor.js") with argument="${sub_url}", tag="Loon监控·定时同步", timeout=20
+cron "0 */2 * * *" then script("https://cdn.jsdelivr.net/gh/TomCatXue/MyCookieCenter@1fdfcde/scripts/tools/loon/loon_monitor.js") with argument="${sub_url}", tag="Loon监控·定时同步", timeout=20
