@@ -114,6 +114,10 @@ function getSubUrl() {
   }
 
   // 3. 从持久化读取历史保存的订阅地址
+  const directArg = storeRead("sub_url");
+  if (directArg && typeof directArg === "string" && /^https?:\/\//i.test(directArg.trim())) {
+    return directArg.trim();
+  }
   const saved = storeRead(SUB_URL_KEY);
   if (saved && typeof saved === "string" && /^https?:\/\//i.test(saved.trim())) {
     return saved.trim();
@@ -461,7 +465,7 @@ function serveMonitorData() {
       totalBytes: totalBytes,
       hasTrafficData: subData !== null,
       resetDaysText: resetDaysText,
-      scriptVersion: "v1.4.3",
+      scriptVersion: "v1.4.5",
       updatedAt: new Date().toISOString(),
     };
     if (typeof latencyMs === "number" && latencyMs >= 0) {
