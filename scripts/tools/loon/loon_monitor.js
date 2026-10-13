@@ -19,7 +19,8 @@ const IP_CACHE_KEY = "loon_monitor_ip_info";
 const IP_CACHE_TTL_MS = 5 * 60 * 1000;
 const IP_CACHE_STALE_MS = 60 * 60 * 1000;
 const IP_PROBE_TIMEOUT_MS = 2500;
-const SUB_PROBE_TIMEOUT_MS = 3000;
+const SUB_PROBE_TIMEOUT_MS = 3500;
+const WATCHDOG_TIMEOUT_MS = 4500;
 
 function log(msg) {
   try {
@@ -154,7 +155,7 @@ function fetchSubscriptionActive(subUrl, callback) {
   const req = {
     url: subUrl,
     headers: {
-      "User-Agent": "ClashMeta; Loon/3.2.0; QuantumultX",
+      "User-Agent": "ClashforWindows/0.20.39; ClashMeta; Loon/3.2.0",
       Accept: "*/*",
     },
     timeout: SUB_PROBE_TIMEOUT_MS,
@@ -465,7 +466,7 @@ function serveMonitorData() {
       totalBytes: totalBytes,
       hasTrafficData: subData !== null,
       resetDaysText: resetDaysText,
-      scriptVersion: "v1.4.5",
+      scriptVersion: "v1.4.6",
       updatedAt: new Date().toISOString(),
     };
     if (typeof latencyMs === "number" && latencyMs >= 0) {
@@ -575,7 +576,7 @@ function serveMonitorData() {
       subDone = true;
       finish();
     }
-  }, IP_PROBE_TIMEOUT_MS);
+  }, WATCHDOG_TIMEOUT_MS);
 }
 
 // ── 后台定时同步（Cron 任务调度）──────────────────────────────
