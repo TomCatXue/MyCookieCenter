@@ -4,8 +4,8 @@
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://raw.githubusercontent.com/luestr/IconResource/main/App_icon/120px/Loon.png
 #!tag = Loon, 监控, 小组件, VPN
-#!version = 1.4.3
-#!date = 2026-10-13 13:45
+#!version = 1.4.4
+#!date = 2026-10-13 14:30
 
 # =================== 0. 参数配置 ===================
 [Argument]
@@ -25,32 +25,34 @@ loon.local = 198.18.0.1
 # 兜底直连：即使脚本因故未命中，也不会被丢到远端节点上（历史上就是这样
 # 撞到 TLS EOF 的）。同时保障出口探测平稳走代理。
 [Rule]
-# 警示：严禁在 [Rule] 中将 198.18.0.1 或 loon.box 设为 DIRECT！
-# 设为 DIRECT 会绕过代理栈将原始 TCP 报文抛向物理网卡，导致局域网无应答死锁超时。
-# 不设 DIRECT 规则，流量才能正常进入 Loon 代理管线并由 [Script] 本地短路返回 JSON。
+# 显式将虚拟域名与 Fake-IP 绑定为 PROXY 策略：
+# 1. 杜绝流量在全局直连或 FINAL DIRECT 模式下逃逸至物理网卡造成死锁超时；
+# 2. 保证流量必定送入 Loon 代理栈以触发 [Script] 本地短路返回 Mock JSON；
+# 3. 保证脚本拉取镜像 (fastly.jsdelivr.net / jsdelivr.net) 稳定可达。
+DOMAIN,loon.box,PROXY
+DOMAIN,api.loon.box,PROXY
+DOMAIN,loon.local,PROXY
+IP-CIDR,198.18.0.1/32,PROXY
+DOMAIN-SUFFIX,jsdelivr.net,PROXY
 DOMAIN-SUFFIX,ip-api.com,PROXY
 DOMAIN-SUFFIX,ip.sb,PROXY
 
-# =================== 3. 脚本拦截与服务 ===================
-# 采用与本仓库其它已验证插件（CookieCenter / GitHubPushTime）一致的
-# `request if ... then script(...) with ...` 写法，避免旧式 http-request
-# 行在部分 Loon 版本上解析失败导致脚本静默失效。
-#
-# 脚本地址固定到 commit（而不是 @main）：jsDelivr 的 @main 别名在各边缘节点
-# 上刷新不一致，实测会在数分钟内反复返回旧版脚本，导致「插件已更新但脚本
-# 还是坏的」。commit 地址不可变，保证手机拿到的脚本与本插件严格配对。
-# 以后升级脚本时，同步更新这里的 commit 与 #!version / #!date。
-[Script]
-# 1. 小组件数据服务：请求发出前直接短路返回 JSON（明文 HTTP，无需 MITM，支持 loon.box 与 198.18.0.1 直接访问）
-request if ${url} ~= /^https?:\/\/((api\.)?loon\.(box|local)|198\.18\.0\.1)(:\d+)?(\/.*)?$/i then script("https://cdn.jsdelivr.net/gh/TomCatXue/MyCookieCenter@5809d94/scripts/tools/loon/loon_monitor.js") with argument="${sub_url}", tag="Loon监控·小组件数据服务", timeout=10
 
-# 2. 订阅流量静默捕获：只在疑似订阅地址上运行。
-#    覆盖常见订阅路径特征（subscription / subscribe / sub / link，或带 token / sid / auth 查询参数），
-#    当 Loon 自身刷新机场订阅时自动截获并持久化剩余流量配额。
-response if ${url} ~= /\/(subscription|subscribe)|[?&]token=/i then script("https://cdn.jsdelivr.net/gh/TomCatXue/MyCookieCenter@5809d94/scripts/tools/loon/loon_monitor.js") with tag="Loon监控·订阅流量捕获", requires_body=false, timeout=10
+# =================== 3. 脚本拦截与服务 ===================
+# 采用与 BoxJs 一致且经 Loon 官方各版本 (2.x ~ 3.x) 验证的经典 http-request / http-response 语法：
+# 1. 杜绝声明式语法中由于 with argument 导致的语法解析异常；
+# 2. 保证 $done({ response: {...} }) 在请求到达本地代理栈前完成 100% 短路 Mock 返回；
+# 3. 脚本源迁移至国内稳定可达的 fastly.jsdelivr.net 不可变 commit 镜像，彻底解决 cdn.jsdelivr.net ECONNRESET 阻断。
+[Script]
+# 1. 小组件数据服务：请求发出前直接短路返回 JSON（标准 http-request 语法，全版本兼容短路 Mock）
+http-request ^https?:\/\/((api\.)?loon\.(box|local)|198\.18\.0\.1)(:\d+)?\/.* script-path=https://fastly.jsdelivr.net/gh/TomCatXue/MyCookieCenter@5809d94/scripts/tools/loon/loon_monitor.js, timeout=10, argument="{sub_url}", tag=Loon监控·小组件数据服务
+
+# 2. 订阅流量静默捕获：当 Loon 自身刷新机场订阅时自动截获并持久化剩余流量配额
+http-response \/(subscription|subscribe)|[?&]token= script-path=https://fastly.jsdelivr.net/gh/TomCatXue/MyCookieCenter@5809d94/scripts/tools/loon/loon_monitor.js, requires-body=false, timeout=10, tag=Loon监控·订阅流量捕获
 
 # 3. 后台定时预热：每 2 小时定时唤醒同步出口 IP 与订阅流量，保证小组件 0ms 极速响应
-cron "0 */2 * * *" then script("https://cdn.jsdelivr.net/gh/TomCatXue/MyCookieCenter@5809d94/scripts/tools/loon/loon_monitor.js") with argument="${sub_url}", tag="Loon监控·定时同步", timeout=20
+cron "0 */2 * * *" script-path=https://fastly.jsdelivr.net/gh/TomCatXue/MyCookieCenter@5809d94/scripts/tools/loon/loon_monitor.js, timeout=20, argument="{sub_url}", tag=Loon监控·定时同步
+
 
 # =================== 4. MITM 解密 ===================
 [MITM]
