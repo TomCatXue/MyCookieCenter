@@ -461,7 +461,7 @@ function serveMonitorData() {
       totalBytes: totalBytes,
       hasTrafficData: subData !== null,
       resetDaysText: resetDaysText,
-      scriptVersion: "v1.4.2",
+      scriptVersion: "v1.4.3",
       updatedAt: new Date().toISOString(),
     };
     if (typeof latencyMs === "number" && latencyMs >= 0) {
@@ -480,6 +480,12 @@ function serveMonitorData() {
         body: JSON.stringify(payload),
       },
     });
+  }
+
+  // 极速路径 0：全局直连模式下直接秒回（避免海外探针在直连下超时挂起）
+  if (runningModel === 0) {
+    reply("直连网络", "本地直连", "国内网络", 1);
+    return;
   }
 
   // 检查 IP 缓存
