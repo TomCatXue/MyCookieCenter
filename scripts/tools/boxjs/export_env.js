@@ -1,17 +1,19 @@
 /**
- * MyCookieCenter · 凭据导出与管理脚本 (BoxJS 增强)
+ * MyCookieCenter · 凭据导出脚本 (BoxJS 增强)
  *
- * 核心功能：
- * 1. 【一键复制青龙变量】：从本地持久化提取凭据，按各青龙脚本真实读取的变量名格式化输出，便于全选复制。
- * 2. 【凭据完备度诊断】：针对微信读书检测 App 票据 / 脱机自愈 / 翻牌 Cookie 的完备度并给出补全指引。
- * 3. 【Paperclip 风格一键清除】：联动 BoxJS 各模块的 xxx_clear 开关，清空对应凭据后自动复位开关。
+ * 只做一件事：把本地已捕获的凭据，按各青龙脚本真实读取的变量名与格式打印到日志，
+ * 供用户在 BoxJS 弹出的日志面板中一键全选复制。
  *
- * 【重要】输出的变量名与格式严格对齐仓库内青龙脚本的真实读取逻辑，不做臆测：
- * - 微信读书  -> WEREAD_AUTH (JSON)
- * - 中国电信  -> dxlin (手机号#服务密码#AndroidID[#SessionKey]，兼容 dxqy/CHINA_TELECOM_AUTH)
+ * 【只读原则】本脚本不写入、不删除任何持久化数据。
+ * 需要清空凭据时，请使用 BoxJS 原生能力：应用卡片右上角 ⋮ ->「清除数据」，
+ * 或数据行右侧的 ✕ 图标。脚本不再重复实现清除逻辑。
+ *
+ * 输出变量名严格对齐仓库内青龙脚本的真实读取逻辑，不做臆测：
+ * - 微信读书 -> WEREAD_AUTH (JSON)
+ * - 中国电信 -> dxlin (手机号#服务密码#AndroidID[#SessionKey]，兼容 dxqy/CHINA_TELECOM_AUTH)
  *
  * @Author: TomCatXue
- * @Version: 1.1.0
+ * @Version: 1.2.0
  * @Date: 2026-10-15
  */
 
@@ -21,16 +23,11 @@ const $ = new Env("凭据导出中心");
 const ARG = (typeof globalThis.$argument !== "undefined" ? globalThis.$argument : "").trim().toLowerCase();
 
 (function main() {
-    if (handleClearActions()) {
-        $.done();
-        return;
-    }
-
     const lines = [];
     lines.push("====================================================");
     lines.push("📋 MyCookieCenter · 青龙环境变量导出");
     lines.push("====================================================");
-    lines.push("💡 复制指南：长按控制台输出区域，点击「全选」即可复制。");
+    lines.push("💡 复制指南：长按下方输出区域，点击「全选」即可复制。");
     lines.push("");
 
     let count = 0;
@@ -86,7 +83,7 @@ const ARG = (typeof globalThis.$argument !== "undefined" ? globalThis.$argument 
             lines.push("#");
             lines.push("# 👉 Loon 只能捕获 SessionKey，无法捕获服务密码/AndroidID。");
             lines.push("#    请按下述方式拼装 dxlin（SessionKey 为可选第 4 段）：");
-            lines.push("#    " + (phone || "手机号") + "#服务密码#" + "AndroidID"
+            lines.push("#    " + (phone || "手机号") + "#服务密码#AndroidID"
                 + (sessionKey ? "#" + sessionKey : ""));
             lines.push("#");
             lines.push("# ⚠️ 若第 4 段留空，青龙会在运行时自动完成 SSO Ticket → SessionKey 换票，");
@@ -98,7 +95,7 @@ const ARG = (typeof globalThis.$argument !== "undefined" ? globalThis.$argument 
         lines.push("");
     }
 
-    // 3. 山西福利 / 扫描全能王：本仓库暂无对应青龙脚本
+    // 3. 山西福利 / 扫描全能王：本仓库暂无对应青龙脚本，仅提示本地已有凭据
     if (!ARG || ARG === "telecom_benefit" || ARG === "camscanner" || ARG === "all") {
         const sxCookie = $.getdata("sx_benefit_cookie");
         const csData = $.getdata("camscanner_data");
@@ -107,10 +104,10 @@ const ARG = (typeof globalThis.$argument !== "undefined" ? globalThis.$argument 
             lines.push("# 【以下项目本仓库暂无对应青龙脚本，仅供本地查看】");
             lines.push("# --------------------------------------------------");
             if (sxCookie) {
-                lines.push("# 山西电信领福利 Cookie (时长: " + sxCookie.length + " 字符)");
+                lines.push("# 山西电信领福利 Cookie (" + sxCookie.length + " 字符)");
             }
             if (csData) {
-                lines.push("# 扫描全能王凭据 (时长: " + csData.length + " 字符)");
+                lines.push("# 扫描全能王凭据 (" + csData.length + " 字符)");
             }
             lines.push("");
         }
@@ -135,69 +132,12 @@ const ARG = (typeof globalThis.$argument !== "undefined" ? globalThis.$argument 
     $.done();
 })();
 
-/** Paperclip 风格：检测并执行 xxx_clear 开关 */
-function handleClearActions() {
-    let cleared = false;
-
-    if (isTruthy($.getdata("weread_clear"))) {
-        $.setdata("", "weread_auth_v2");
-        $.setdata("false", "weread_clear");
-        $.msg("微信读书", "🗑️ 凭据已清空", "weread_auth_v2 已重置，开关已复位。");
-        console.log("[RESET] 微信读书凭据已清空");
-        cleared = true;
-    }
-
-    if (isTruthy($.getdata("telecom_draw_clear"))) {
-        $.setdata("", "telecom_draw_session_key");
-        $.setdata("", "telecom_draw_product_no");
-        $.setdata("false", "telecom_draw_clear");
-        $.msg("电信·会员抽奖", "🗑️ 凭据已清空", "SessionKey 与手机号已重置，开关已复位。");
-        console.log("[RESET] 电信会员抽奖凭据已清空");
-        cleared = true;
-    }
-
-    if (isTruthy($.getdata("telecom_rights_clear"))) {
-        $.setdata("", "telecom_rights_auth");
-        $.setdata("false", "telecom_rights_clear");
-        $.msg("电信·等级权益", "🗑️ 凭据已清空", "等级权益凭据已重置，开关已复位。");
-        console.log("[RESET] 电信等级权益凭据已清空");
-        cleared = true;
-    }
-
-    if (isTruthy($.getdata("sx_benefit_clear"))) {
-        $.setdata("", "sx_benefit_cookie");
-        $.setdata("false", "sx_benefit_clear");
-        $.msg("电信·山西福利", "🗑️ 凭据已清空", "活动 Cookie 已重置，开关已复位。");
-        console.log("[RESET] 山西福利凭据已清空");
-        cleared = true;
-    }
-
-    if (isTruthy($.getdata("camscanner_clear"))) {
-        $.setdata("", "camscanner_data");
-        $.setdata("false", "camscanner_clear");
-        $.msg("扫描全能王", "🗑️ 凭据已清空", "camscanner_data 已重置，开关已复位。");
-        console.log("[RESET] 扫描全能王凭据已清空");
-        cleared = true;
-    }
-
-    return cleared;
-}
-
-function isTruthy(val) {
-    return val === true || val === "true" || val === 1 || val === "1";
-}
-
 function Env(name) {
     this.name = name;
     this.getdata = function (k) {
         if (typeof $persistentStore !== "undefined") return $persistentStore.read(k);
         if (typeof $prefs !== "undefined") return $prefs.valueForKey(k);
         return null;
-    };
-    this.setdata = function (v, k) {
-        if (typeof $persistentStore !== "undefined") return $persistentStore.write(v, k);
-        if (typeof $prefs !== "undefined") return $prefs.setValueForKey(v, k);
-        return false;
     };
     this.msg = function (t, s, b) {
         if (typeof $notification !== "undefined") $notification.post(t, s, b);

@@ -13,4 +13,4 @@
 | **[`github/`](./github/)** | GitHub·星标推送时间 | [`loon/GitHubPushTime.plugin`](../../loon/GitHubPushTime.plugin) | 在 GitHub App 星标列表语言后展示最近推送时间 |
 | **[`wxread_enhance/`](./wxread_enhance/)** | 微信读书·防强更净化 | [`loon/WeReadEnhance.plugin`](../../loon/WeReadEnhance.plugin) | 屏蔽升级弹窗与强更通知，锁定老版本免费 AI 听书 |
 | **[`camscanner/`](./camscanner/)** | 扫描全能王·签到 | [`loon/camscanner.plugin`](../../loon/camscanner.plugin) | 静默抓取 Cookie 并执行每日签到 |
-| **[`boxjs/`](./boxjs/)** | 凭据导出与重置 | [`boxjs/CookieCenter.boxjs.json`](../../boxjs/CookieCenter.boxjs.json) | BoxJS 一键导出青龙变量、凭据完备度诊断与 Cookie 清空重置 |
+| **[`boxjs/`](./boxjs/)** | 凭据导出 | [`boxjs/CookieCenter.boxjs.json`](../../boxjs/CookieCenter.boxjs.json) | BoxJS 一键导出青龙变量（WEREAD_AUTH / dxlin）与凭据完备度诊断 |

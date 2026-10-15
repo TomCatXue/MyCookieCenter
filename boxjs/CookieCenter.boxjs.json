@@ -14,7 +14,6 @@
       "name": "微信读书",
       "keys": [
         "weread_auth_v2",
-        "weread_clear",
         "prefer_coin"
       ],
       "author": "@TomCatXue",
@@ -31,13 +30,6 @@
         }
       ],
       "settings": [
-        {
-          "id": "weread_clear",
-          "name": "清除 Cookie",
-          "val": false,
-          "type": "boolean",
-          "desc": "设为开启后，点击上方导出脚本会安全重置已保存的微信读书凭证，完成后自动复位为关闭"
-        },
         {
           "id": "weread_auth_v2",
           "name": "📋【青龙 WEREAD_AUTH】微信读书 App 完整凭证",
@@ -68,7 +60,7 @@
       "descs_html": [
         "<span><b>💡 抓取黄金顺序：</b>建议先打开微信读书 App 进入<b>「我」</b>的页面（触发捕获 App 基础票据与脱机换票 token），再去打开<b>「周二翻牌」</b>活动页（自动补齐 Web 端 wr_vid / wr_skey）。两步结合即可自动合成最完整的满血凭据！</span>",
         "<span><b>📋 一键复制到青龙：</b>在上方【应用脚本】轻按 ▶️ 运行「导出微信读书青龙凭据」，界面将弹出日志抽屉层，轻触全选即可复制整行 <code>export WEREAD_AUTH='...'</code>。</span>",
-        "<span><b>🗑️ 重置凭据：</b>如需重新抓取，将上方「清除 Cookie」开关开启并运行一次导出脚本即可。</span>"
+        "<span><b>🗑️ 清空重抓：</b>如需重新抓取，点击卡片右上角 ⋮ ->「清除数据」即可（也可用数据行右侧的 ✕ 删除单项），随后重新进入 App 触发捕获。</span>"
       ]
     },
     {
@@ -76,8 +68,7 @@
       "name": "中国电信 · 5G会员抽奖",
       "keys": [
         "telecom_draw_session_key",
-        "telecom_draw_product_no",
-        "telecom_draw_clear"
+        "telecom_draw_product_no"
       ],
       "author": "@TomCatXue",
       "icon": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/189.png?v=20261015",
@@ -93,13 +84,6 @@
         }
       ],
       "settings": [
-        {
-          "id": "telecom_draw_clear",
-          "name": "清除 Cookie",
-          "val": false,
-          "type": "boolean",
-          "desc": "设为开启后，点击上方导出脚本会安全清空抽奖 SessionKey 与手机号，完成后自动复位为关闭"
-        },
         {
           "id": "telecom_draw_session_key",
           "name": "📋【dxlin 第4段】会员抽奖 SessionKey",
@@ -127,8 +111,7 @@
       "name": "中国电信 · 等级权益秒杀",
       "keys": [
         "telecom_rights_auth",
-        "telecom_rights_id",
-        "telecom_rights_clear"
+        "telecom_rights_id"
       ],
       "author": "@TomCatXue",
       "icon": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/189.png?v=20261015",
@@ -144,13 +127,6 @@
         }
       ],
       "settings": [
-        {
-          "id": "telecom_rights_clear",
-          "name": "清除 Cookie",
-          "val": false,
-          "type": "boolean",
-          "desc": "设为开启后，点击上方导出脚本会安全清空等级权益会话凭据，完成后自动复位为关闭"
-        },
         {
           "id": "telecom_rights_auth",
           "name": "等级权益会话凭据 (本地)",
@@ -178,8 +154,7 @@
       "name": "中国电信 · 山西领福利",
       "keys": [
         "sx_benefit_cookie",
-        "sx_prefer_benefit",
-        "sx_benefit_clear"
+        "sx_prefer_benefit"
       ],
       "author": "@TomCatXue",
       "icon": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/189.png?v=20261015",
@@ -195,13 +170,6 @@
         }
       ],
       "settings": [
-        {
-          "id": "sx_benefit_clear",
-          "name": "清除 Cookie",
-          "val": false,
-          "type": "boolean",
-          "desc": "设为开启后，点击上方导出脚本会安全清空活动 Cookie，完成后自动复位为关闭"
-        },
         {
           "id": "sx_benefit_cookie",
           "name": "山西领福利 Cookie (本地)",
@@ -241,8 +209,7 @@
       "id": "mycookiecenter.camscanner",
       "name": "扫描全能王",
       "keys": [
-        "camscanner_data",
-        "camscanner_clear"
+        "camscanner_data"
       ],
       "author": "@TomCatXue",
       "icon": "https://raw.githubusercontent.com/MaYIHEI/pin/refs/heads/main/app/camscanner.png",
@@ -258,13 +225,6 @@
         }
       ],
       "settings": [
-        {
-          "id": "camscanner_clear",
-          "name": "清除 Cookie",
-          "val": false,
-          "type": "boolean",
-          "desc": "设为开启后，点击上方导出脚本会安全清空已保存的扫描全能王凭据，完成后自动复位为关闭"
-        },
         {
           "id": "camscanner_data",
           "name": "📋【camscanner_data】用户属性凭据",
