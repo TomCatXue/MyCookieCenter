@@ -5785,24 +5785,8 @@ async function handleCapture() {
   const claimGate = $.read(STORAGE_KEYS.LAST_CLAIMED_DATE) || '';
 
   // 检查是否具备领取条件且今日未领取过
-  if (currentSession && currentPhone && claimGate !== todayStr && !isRunningLock) {
-    isRunningLock = true;
-    $.log(`[即时自动领] 检测到小程序活跃且今日尚未自动领取，立即后台启动全套抽奖...`);
-    // 异步执行抽奖流程，不阻塞当前请求通过
-    setTimeout(async () => {
-      try {
-        await executeAllLotteryTasks('小程序即时唤醒');
-      } catch (e) {
-        $.log(`[即时自动领] 异常: ${e.message || e}`);
-      } finally {
-        isRunningLock = false;
-      }
-    }, 1000);
-  } else if (!currentSession || !currentPhone) {
-    $.log(`[即时自动领] 凭据不完整 (session=${!!currentSession}, phone=${!!currentPhone})，本次仅捕获不执行`);
-  } else if (claimGate === todayStr) {
-    $.log(`[即时自动领] 今日已成功执行过且会话未更新，跳过重复执行`);
-  }
+  // 【架构规范】：捕获与执行彻底解耦，捕获阶段仅持久化凭据，默认不执行网络抽奖，执行已收归青龙面板
+  $.log("[凭据捕获] 凭据已写入持久化，执行调度已收归青龙面板");
 
   $.done();
 }

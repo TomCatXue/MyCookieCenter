@@ -44,8 +44,8 @@ async function handleCapture() {
           // 核心特性：检测到新凭据更换（新批次上线），不再只是发通知，立即自动发起领奖！
           if (code !== lastNotifiedCode) {
             $persistentStore.write(code, 'sx_capture_notified_code');
-            console.log(`[电信福利] 🚀 检测到新凭据/批次更换 [${code}]，立即自动触发抢兑流程...`);
-            await autoClaimBenefit(url, cookie, ua, code);
+            console.log(`[电信福利] 检测到新批次凭证 [${code}]，已更新保存至持久化。`);
+            $notification.post('山西电信领福利', `✅ 新批次凭据已更新 [${code}]`, '已存入本地持久化，可在 BoxJS 一键复制至青龙！');
           } else {
             console.log(`[电信福利] 凭证静默刷新成功（批次 [${code}] 处于当期，保持静默）。`);
           }

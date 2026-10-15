@@ -1,8 +1,8 @@
 # BoxJS 订阅
 
-本目录存放 BoxJS 面板订阅文件，负责**签到、羊毛等任务**的配置与管理——Cookie 持久化、偏好参数设置、任务查看与手动运行入口等。
+本目录存放 BoxJS 面板订阅文件，负责**凭据持久化、完备度诊断、一键复制到青龙与 Cookie 清除重置**等管理功能。
 
-> 架构遵循 Cookie 抓取与签到执行彻底分离模式：[`loon/CookieCenter.plugin`](../loon/CookieCenter.plugin) 专职负责 MITM 凭据捕获；本目录的 BoxJS 订阅统一提供 Cookie 持久化、偏好参数配置、各任务查看、手动一键执行与定时任务调度。
+> 架构遵循 Cookie 抓取与签到执行彻底分离模式：[`loon/CookieCenter.plugin`](../loon/CookieCenter.plugin) 专职负责真机 MITM 凭据捕获；本目录的 BoxJS 订阅统一提供凭据持久化回显、导出与一键复制青龙环境变量、以及 Paperclip 风格的 Cookie 清空重置，所有定时签到任务全面收归青龙面板调度。
 
 ---
 
@@ -10,7 +10,7 @@
 
 | 文件 | 说明 | 包含核心应用 |
 |---|---|---|
-| [`CookieCenter.boxjs.json`](./CookieCenter.boxjs.json) | 统一配置面板订阅 | **微信读书**（阅读奖励、翻牌抽奖、限免好书）<br>**中国电信**（周三会员日双抽奖、幸运抽奖、等级话费秒杀、山西领福利） |
+| [`CookieCenter.boxjs.json`](./CookieCenter.boxjs.json) | 统一凭据捕获与导出订阅 | **微信读书**（WEREAD_AUTH 完整凭证）<br>**中国电信**（5G会员抽奖 SessionKey、营业厅等级权益秒杀、山西福利）<br>**扫描全能王**（camscanner_data） |
 
 ---
 
@@ -26,5 +26,6 @@ https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/boxjs
 
 | 应用 | 覆盖模块 | 说明 |
 |---|---|---|
-| **微信读书** | 每日阅读奖励、周二翻牌抽奖、每周限免好书 | 自动脱机换票更新凭据，偏好设置灵活切换 |
-| **中国电信** | 周三双抽奖、幸运抽奖、等级话费抢兑、山西福利 | 整合中国电信全系业务，进小程序即时全自动秒领，内置 C005 混合加解密 |
+| **微信读书** | 微信读书 App 凭据与翻牌 H5 Cookie | 包含一键导出青龙环境变量脚本；支持「我」的页面 +「周二翻牌」双向自动补全；标配 `weread_clear` 清除重置 |
+| **中国电信** | 5G会员抽奖、营业厅等级权益秒杀、山西福利 | 拆分独立模块，提供一键全选复制青龙环境变量脚本；升级 textarea 自适应排版；标配一键清空开关 |
+| **扫描全能王** | 用户属性凭据 (token / client_id / cs_ept_d) | 专职捕获与导出青龙变量，支持一键清空重置 |

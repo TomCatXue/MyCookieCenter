@@ -15,7 +15,8 @@ scripts/
 │   ├── pixiv/          #   - Pixiv·小说阅读页一键翻译
 │   ├── github/         #   - GitHub·星标列表推送时间展示
 │   ├── wxread_enhance/ #   - 微信读书·防强更净化
-│   └── camscanner/     #   - 扫描全能王·静默签到
+│   ├── camscanner/     #   - 扫描全能王·静默签到
+│   └── boxjs/          #   - BoxJS 凭据导出与重置工具
 └── example/            # 💡 新脚本开发模板与示例
 ```
 

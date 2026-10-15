@@ -2,20 +2,20 @@
 
 本目录存放所有 Loon 专用的 `.plugin` 文件，按功能分两类：
 
-- **统一签到 / 权益插件** — `CookieCenter.plugin`，整合「微信读书」与「中国电信」全系业务的凭据捕获与后台定时任务
+- **统一 Cookie 抓取合集** — `CookieCenter.plugin`，参照 Paperclip 架构设计，集中管理全部业务的纯凭据捕获，每个业务配备独立开关（默认全关，按需开启），**100% 剥离定时签到执行**（签到任务由青龙面板负责）
 - **独立功能插件** — 对应 `scripts/tools/` 下的解锁 / 净化脚本，各自独立开关
 
-> `CookieCenter.plugin` 内置了 Loon 极简双主控开关与后台 cron 任务；[BoxJS 订阅](../boxjs/README.md) 统一提供凭据持久化、参数配置与手动测试入口。
+> [BoxJS 订阅](../boxjs/README.md) 统一提供凭据持久化查看、一键复制青龙环境变量、完备度诊断与 Cookie 清除重置入口。
 
 ---
 
 ## 插件清单
 
-### CookieCenter（统一签到 / 权益中心）
+### CookieCenter（统一 Cookie 抓取合集）
 
-| 文件 | 说明 | 整合业务与脚本来源 |
+| 文件 | 说明 | 包含业务与开关 |
 |---|---|---|
-| [`CookieCenter.plugin`](./CookieCenter.plugin) | 微信读书 / 中国电信全系业务的一站式凭据捕获 + 后台定时任务 | **微信读书**：[`scripts/weread/`](../scripts/weread/)<br>**中国电信**：[`scripts/telecom/`](../scripts/telecom/)（周三双抽奖+幸运抽奖、0 点秒杀话费、山西福利） |
+| [`CookieCenter.plugin`](./CookieCenter.plugin) | 集中抓取全系业务 Cookie（纯抓取、零 cron、默认全关） | **微信读书**（`weread`）<br>**电信·会员抽奖**（`telecom_draw`）<br>**电信·等级权益**（`telecom_rights`）<br>**电信·山西福利**（`telecom_benefit`）<br>**扫描全能王**（`camscanner`） |
 
 ### 独立功能（解锁 / 净化类）
 
@@ -40,14 +40,22 @@
    https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/loon/CookieCenter.plugin
    ```
 
-3. 导入后可在插件设置中按需调整开关（`weread`（微信读书）、`telecom`（中国电信））；
-4. **参数面板 / 手动运行**：通过 [BoxJS 订阅](../boxjs/README.md) 查看与配置 Cookie、手机号和运行测试。
+3. 导入后默认全部开关为关闭状态，**按需打开需要抓取的业务开关**（如 `weread` 或 `telecom_draw`）；
+4. 进入对应 App 或小程序触发抓取，收到系统通知提示即表示抓取成功；
+5. 打开 [BoxJS 订阅](../boxjs/README.md)，在对应应用中轻触 ▶️「导出青龙凭据」，在弹出的日志面板中**一键全选复制**并填入青龙面板。
+
+---
+
+## 💡 抓取黄金顺序与贴士
+
+- **微信读书**：强烈建议先打开微信读书 App 进入「我」的页面（触发 App 基础凭据与脱机换票 token 捕获），再去打开「周二翻牌」活动页（自动补齐 Web 端 wr_vid / wr_skey），两步即可合成最完整的满血凭据！
+- **凭据导出**：在 BoxJS 中每个模块均提供导出脚本，点击运行即可在控制台日志抽屉一键全选复制完整格式化的环境变量。
 
 ---
 
 ## ⚠️ 插件版本与时分日期规范
 
-仓库内所有 `.plugin` 插件已全面推行**高精度版本时间戳规范**：
+仓库内所有 `.plugin` 插件推行**高精度版本时间戳规范**：
 - **版本号标识**：每个插件必须显式携带 `#!version = x.y.z`；
-- **更新时间戳**：`#!date` 必须**精确到分钟**（`YYYY-MM-DD HH:mm`，如 `2026-09-17 11:50`）；
-- **版本更新核对**：每次维护更新时，日期时分随之刷新。用户在 Loon 客户端插件详情页查看更新时间，即可 100% 确认是否已成功更新并穿透本地缓存。
+- **更新时间戳**：`#!date` 必须**精确到分钟**（`YYYY-MM-DD HH:mm`）；
+- **版本更新核对**：每次维护更新时，日期时分随之刷新，确保用户客户端能穿透本地缓存。
