@@ -12,7 +12,7 @@
 ================================================================================
 @Name: 微信读书 · 全功能自动化任务（青龙面板专版）
 @Author: TomCatXue
-@Version: 1.4.4
+@Version: 1.4.5
 @Updated: 2026-10-15
 ================================================================================
 使用说明：
@@ -76,7 +76,7 @@ const CONFIG = {
 // 常量与系统配置
 // ================================================================================
 const SCRIPT_NAME = "微信读书 · 全功能任务";
-const SCRIPT_VERSION = "1.4.4";
+const SCRIPT_VERSION = "1.4.5";
 const AUTH_KEY = "weread_auth_v2";
 const CACHE_FILE = "./weread_session.json";
 const API = "https://i.weread.qq.com";
@@ -1147,12 +1147,16 @@ async function runFreeTask(auth, helperAuth) {
 
     // 0. 本地周度缓存锁定检测 (避免整周重复执行时书名漂移或发起冗余网络请求)
     let cachedAddedBooks = [];
+    let cachedUsedHelpers = [];
     try {
         let rawCache = $.getdata(cacheKey);
         if (rawCache) {
             let cachedInfo = JSON.parse(rawCache);
             if (cachedInfo && cachedInfo.vol === currentVol && Array.isArray(cachedInfo.addedBooks)) {
                 cachedAddedBooks = cachedInfo.addedBooks;
+                if (Array.isArray(cachedInfo.usedHelpers)) {
+                    cachedUsedHelpers = cachedInfo.usedHelpers;
+                }
                 if (cachedInfo.allClaimed && cachedInfo.addedBooks.length >= 2) {
                     $.log(`[WeRead] ℹ️ 本周(期数 ${currentVol})已成功领取固定图书(周度锁定): ${cachedInfo.addedBooks.join(", ")}`);
                     return cachedInfo;
@@ -1363,7 +1367,7 @@ async function runFreeTask(auth, helperAuth) {
         result.details = `本周已领图书: ${result.addedBooks.join(", ")}`;
         $.log(`[WeRead] ✅ ${result.details}`);
         // 写入周度缓存锁定
-        $.setdata(JSON.stringify({ vol: currentVol, allClaimed: true, addedBooks: result.addedBooks, details: result.details }), cacheKey);
+        $.setdata(JSON.stringify({ vol: currentVol, allClaimed: true, addedBooks: result.addedBooks, usedHelpers: cachedUsedHelpers, details: result.details }), cacheKey);
         return result;
     }
 
@@ -1512,19 +1516,55 @@ async function runFreeTask(auth, helperAuth) {
         }).join(", ");
         $.log(`[WeRead] 检测到 ${helperList.length} 个助力小号凭证 [${maskList}]，启动多小号轮替助力领书流程...`);
 
-        let newlyClaimed = [];
-        let helperIdx = 0; // 当前可用助力小号指针
+        // 构建已消耗小号映射 (vid -> bookTitle)
+        let usedHelperMap = new Map();
+        cachedUsedHelpers.forEach(u => {
+            if (u && u.vid) usedHelperMap.set(String(u.vid), u.bookTitle || "已领图书");
+        });
 
-        for (let b of targetBooks) {
-            let bookClaimed = false;
+        // 智能兼容旧缓存：若旧缓存未记录 usedHelpers，但已有已领图书（如《大而不倒》），按顺序推断前 N 个小号已消耗
+        if (usedHelperMap.size === 0 && cachedAddedBooks.length > 0) {
+            for (let i = 0; i < Math.min(cachedAddedBooks.length, helperList.length); i++) {
+                let hVid = String(helperList[i].vid || helperList[i].wrVid || "");
+                if (hVid) {
+                    let bookName = cachedAddedBooks[i] || `第${i + 1}本已领图书`;
+                    usedHelperMap.set(hVid, bookName);
+                    cachedUsedHelpers.push({ vid: hVid, bookTitle: bookName, time: Date.now() });
+                }
+            }
+        }
 
-            while (helperIdx < helperList.length && !bookClaimed) {
-                let curHelper = helperList[helperIdx];
+        let availableHelpers = [];
+        for (let h of helperList) {
+            let hVid = String(h.vid || h.wrVid || "");
+            let maskH = hVid.length > 4 ? hVid.slice(0, 4) + "****" : hVid;
+            if (usedHelperMap.has(hVid)) {
+                let bName = usedHelperMap.get(hVid);
+                let formattedName = bName.startsWith("《") ? bName : `《${bName}》`;
+                $.log(`[WeRead] ℹ️ 小号 [${maskH}] 本周已成功助力${formattedName}，已消耗周配额，自动跳过`);
+            } else {
+                availableHelpers.push(h);
+            }
+        }
+
+        if (availableHelpers.length === 0) {
+            $.log(`[WeRead] ℹ️ 所有配置的小号本周助力配额已全部消耗（微信读书官方规则：每个小号每周限助力 1 本）`);
+            if (helperList.length === 1 && result.addedBooks.length < 2) {
+                $.log(`[WeRead] 💡 如需每周 2 本全部全自动入架，请在青龙环境变量 WEREAD_HELPER_AUTH 中换行或用 & 添加第 2 个小号。`);
+            }
+        } else {
+            let newlyClaimed = [];
+            let helperIdx = 0; // 当前可用助力小号指针
+            let candidateIdx = 0; // 当前尝试的候选图书指针
+
+            while (helperIdx < availableHelpers.length && result.addedBooks.length < 2 && candidateIdx < candidates.length) {
+                let curHelper = availableHelpers[helperIdx];
                 let helperVid = String(curHelper.vid || curHelper.wrVid || "");
                 let helperSkey = curHelper.wrSkey || curHelper.accessToken || curHelper.skey || "";
                 let maskH = helperVid.length > 4 ? helperVid.slice(0, 4) + "****" : helperVid;
+                let b = candidates[candidateIdx];
 
-                $.log(`[WeRead] 正在使用小号 [${maskH}] (第 ${helperIdx + 1}/${helperList.length} 个) 助力领取《${b.title}》...`);
+                $.log(`[WeRead] 正在使用小号 [${maskH}] 尝试助力领取《${b.title}》...`);
 
                 if (!helperSkey && curHelper.refreshToken && curHelper.deviceId) {
                     let refreshedHelper = await tryRefreshLogin(curHelper, null);
@@ -1590,13 +1630,15 @@ async function runFreeTask(auth, helperAuth) {
                 }
 
                 if (isSuccess) {
-                    newlyClaimed.push(`《${b.title}》`);
-                    if (!result.addedBooks.includes(`《${b.title}》`)) {
-                        result.addedBooks.push(`《${b.title}》`);
+                    let bookTitleFormatted = `《${b.title}》`;
+                    newlyClaimed.push(bookTitleFormatted);
+                    if (!result.addedBooks.includes(bookTitleFormatted)) {
+                        result.addedBooks.push(bookTitleFormatted);
                     }
-                    $.log(`[WeRead] 🎉 小号 [${maskH}] 助力领取成功: 《${b.title}》 (售价: ${b.price.toFixed(1)}书币)`);
-                    bookClaimed = true;
-                    helperIdx++; // 该小号配额已消耗，切换到下一个小号！
+                    $.log(`[WeRead] 🎉 小号 [${maskH}] 助力领取成功: ${bookTitleFormatted} (售价: ${b.price.toFixed(1)}书币)`);
+                    cachedUsedHelpers.push({ vid: helperVid, bookTitle: bookTitleFormatted, time: Date.now() });
+                    helperIdx++; // 该小号配额已消耗，切换到下一个可用小号
+                    candidateIdx++; // 本书已入架，切换到下一本
 
                     // 内存与书架即时标记同步
                     shelfBookIds.add(String(b.bookId));
@@ -1611,58 +1653,52 @@ async function runFreeTask(auth, helperAuth) {
                         vol: currentVol,
                         allClaimed: isAllDone,
                         addedBooks: result.addedBooks,
+                        usedHelpers: cachedUsedHelpers,
                         details: `本周已领图书: ${result.addedBooks.join(", ")}`
                     }), cacheKey);
                 } else {
                     let fullErrMsg = errMsg || (errCode !== null ? `errCode: ${errCode}` : `HTTP ${actRes.status}`);
-                    $.log(`[WeRead] ❌ 小号 [${maskH}] 助力领取《${b.title}》失败: ${fullErrMsg}`);
+                    $.log(`[WeRead] ❌ 小号 [${maskH}] 助力领取《${b.title}》未成功: ${fullErrMsg}`);
 
-                    // 核心安全熔断与小号轮换：若官方返回 -2057
-                    if (String(fullErrMsg).includes("-2057") || errCode === -2057) {
-                        let currentTotal = result.addedBooks.length;
-                        if (currentTotal >= 2) {
-                            $.log("[WeRead] ℹ️ 触发官方配额保护：主账号本周免费好书已达领取上限(2本)，停止后续助力请求并锁定结果");
-                            result.allClaimed = true;
-                            result.unclaimedBooks = [];
-                            result.details = `本周已领图书: ${result.addedBooks.join(", ")}`;
-                            $.setdata(JSON.stringify({ vol: currentVol, allClaimed: true, addedBooks: result.addedBooks, details: result.details }), cacheKey);
-                            return result;
-                        } else {
-                            $.log(`[WeRead] ⚠️ 小号 [${maskH}] 助力返回 -2057 (该小号助力配额已耗尽/受限)，轮换备用小号重试...`);
-                            helperIdx++;
-                            if (helperIdx < helperList.length) {
-                                let nextMask = String(helperList[helperIdx].vid || helperList[helperIdx].wrVid || "").slice(0, 4) + "****";
-                                $.log(`[WeRead] 🔄 正在自动轮换至备用小号 [${nextMask}] 重新助力《${b.title}》...`);
-                            }
-                        }
+                    // 核心安全熔断：若官方返回 -2057 且当前已领满 2 本
+                    let currentTotal = result.addedBooks.length;
+                    if ((String(fullErrMsg).includes("-2057") || errCode === -2057) && currentTotal >= 2) {
+                        $.log("[WeRead] ℹ️ 触发官方配额保护：主账号本周免费好书已达领取上限(2本)，停止后续助力请求并锁定结果");
+                        result.allClaimed = true;
+                        result.unclaimedBooks = [];
+                        result.details = `本周已领图书: ${result.addedBooks.join(", ")}`;
+                        $.setdata(JSON.stringify({ vol: currentVol, allClaimed: true, addedBooks: result.addedBooks, usedHelpers: cachedUsedHelpers, details: result.details }), cacheKey);
+                        return result;
                     }
-                    // 遇到配额限制（已帮其他用户解锁），说明该小号配额耗尽，轮换到下一个小号重试本书
-                    else if (String(fullErrMsg).includes("已帮其他用户") || String(fullErrMsg).includes("解锁过") || String(fullErrMsg).includes("已达上限")) {
-                        $.log(`[WeRead] ⚠️ 小号 [${maskH}] 本周助力配额已达上限(1本/周)`);
-                        helperIdx++;
-                        if (helperIdx < helperList.length) {
-                            let nextMask = String(helperList[helperIdx].vid || helperList[helperIdx].wrVid || "").slice(0, 4) + "****";
-                            $.log(`[WeRead] 🔄 正在自动轮换至备用小号 [${nextMask}] 重新助力《${b.title}》...`);
-                        }
+
+                    // 多候选图书智能回退 (Fallback)：
+                    // 官方返回 -2057 或其他异常可能仅是当前单本书名额已抢空，允许该小号尝试下一本候选书
+                    if (!curHelper.failCount) curHelper.failCount = 0;
+                    curHelper.failCount++;
+
+                    if (curHelper.failCount < 2 && (candidateIdx + 1) < candidates.length) {
+                        candidateIdx++;
+                        let nextBook = candidates[candidateIdx];
+                        $.log(`[WeRead] 🔄 小号 [${maskH}] 助力《${b.title}》受阻，自动回退尝试候选池下一本《${nextBook.title}》...`);
                     } else {
+                        $.log(`[WeRead] ⚠️ 小号 [${maskH}] 连续助力受阻(返回 ${fullErrMsg})：该小号本周可能已助力过其他好友、或账号未在真机微信登录活跃`);
                         helperIdx++;
-                        if (helperIdx < helperList.length) {
-                            let nextMask = String(helperList[helperIdx].vid || helperList[helperIdx].wrVid || "").slice(0, 4) + "****";
-                            $.log(`[WeRead] 🔄 正在自动轮换至备用小号 [${nextMask}] 重新助力《${b.title}》...`);
-                        }
+                        candidateIdx++;
                     }
                 }
                 await new Promise(r => setTimeout(r, 1000));
             }
+        }
 
-            if (!bookClaimed) {
-                if (helperIdx >= helperList.length && targetBooks.indexOf(b) === targetBooks.length - 1) {
-                    $.log(`[WeRead] ℹ️ 助力小号已全部耗尽（微信读书规则：每个小号每周限助力 1 本）。`);
-                    $.log(`[WeRead] 💡 如需每周 2 本全部全自动入架，请在青龙环境变量 WEREAD_HELPER_AUTH 中换行或用 & 添加第 2 个小号。`);
-                }
+        // 未满 2 本时，为剩余名额收集官方真实签名的微信一键直达卡片链接
+        let remainingNeeded = Math.max(0, 2 - result.addedBooks.length);
+        if (remainingNeeded > 0) {
+            let unaddedCandidates = candidates.filter(c => !result.addedBooks.includes(`《${c.title}》`));
+            let unaddedToLink = unaddedCandidates.slice(0, remainingNeeded);
+            unaddedToLink.forEach(b => {
                 let link = `https://weread.qq.com/book-detail?type=1&senderVid=${auth.vid}&v=${b.v}&wtype=shareOneGetOne2&scene=freeBooks&timestamp=${freeTimestamp}&sn=${b.sn}&vol=${currentVol}`;
                 result.unclaimedBooks.push({ title: b.title, url: link });
-            }
+            });
         }
 
         if (result.addedBooks.length > 0) {
@@ -1671,7 +1707,7 @@ async function runFreeTask(auth, helperAuth) {
             result.details = `本周已领图书: ${result.addedBooks.join(", ")}`;
             $.log(`[WeRead] ✅ ${result.details}`);
             // 写入周度缓存锁定
-            $.setdata(JSON.stringify({ vol: currentVol, allClaimed: result.allClaimed, addedBooks: result.addedBooks, details: result.details }), cacheKey);
+            $.setdata(JSON.stringify({ vol: currentVol, allClaimed: result.allClaimed, addedBooks: result.addedBooks, usedHelpers: cachedUsedHelpers, details: result.details }), cacheKey);
             // 触发主号书架增量同步
             try {
                 await get(API + "/shelf/sync?album=1&onlyBookid=1", getHeaders(auth));
