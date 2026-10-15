@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 ===================================================================
-📌 版本: v2.0.1 (2026-10-15 三处缺陷修复：转盘奖品解析 + AI 制作次数闸门 + 抽奖自动领奖)
+📌 版本: v2.0.2 (2026-10-15 AI制作次数闭环：瞬时故障重试 + 实时次数刷新 + 到顶收敛)
 中国电信 · 每日任务聚合脚本 (单一脚本统一管理全系电信业务)
 ===================================================================
 new Env('中国电信 · 每日任务聚合');
@@ -30,6 +30,16 @@ v2.0.1 修复（2026-10-15）：
   3. 抽奖自动领奖：单号可能嵌套在 resultInfo / prizeInfo 内，旧实现只读顶层导致永不触发领取；
      现深度提取 orderNo（兼容 orderId / prizeOrderNo / recordId 等），缺失时回查中奖记录补齐，
      并识别领取接口的 FAIL / SUCCESS 状态字段。
+
+v2.0.2 修复（2026-10-15 AI制作次数闭环）：
+  1. 返回码分类：旧实现把 10007(系统繁忙) 与 10014(次数已用完) 混在同一分支直接 break，
+     一次服务端抖动就丢掉整轮剩余次数（表现为「已耗尽」却仍可继续制作并入账）；
+     现拆分为 OK / TERMINAL / TRANSIENT，瞬时故障有限重试而非放弃。
+  2. 次数实时刷新：旧实现只在启动时读一次次数并作为循环上界，通知回显的也是启动快照，
+     故日志长期显示「仍余 N 次」；现每次制作成功后重新核验服务端次数，归零才停止。
+  3. 到顶收敛：连续 MAKE_NO_GAIN_LIMIT 次「制作成功但不增点」即判定本期点数确实到顶并停止，
+     避免为已满额度继续消耗机会。
+  4. 核验失败与 0 次严格区分：次数核验异常时不再当作「暂无可用次数」，也不再谎报已耗尽。
 
 环境变量 (dxlin)：
   格式：手机号#服务密码#AndroidID[#SessionKey]
@@ -84,7 +94,7 @@ CONFIG = {
     "UA": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 MicroMessenger/8.0.38(0x1800262c) NetType/WIFI Language/zh_CN"
 }
 
-SCRIPT_VERSION = "v2.0.1"
+SCRIPT_VERSION = "v2.0.2"
 
 # ==================== 🌐 翼支付网关生产环境常量 ====================
 BESTPAY_H5_BASE = "https://mapi-h5.bestpay.com.cn"
@@ -98,6 +108,32 @@ STAGE_AI_SCORE_LIMIT = 340
 # 活动规则参考值（340 点 / 20 点每次 = 17 次），仅用于日志说明；
 # 实际执行次数一律以服务端 queryAiMakePkgInfo 返回的可用次数为准，禁止用它当停机闸门。
 STAGE_MAX_MAKE_COUNT = 17
+
+# ---- AI 制作返回码分类（严禁把瞬时故障当次数耗尽） ----
+# 终态：服务端明确表示次数已用尽，必须立即停机且不得重试（先于瞬时判定）
+MAKE_TERMINAL_KEYWORDS = ("10014", "次数已用完", "免费次数已用完", "机会已用", "次数不足", "库存不足")
+# 瞬时：服务端繁忙 / 网络抖动 / 限流，次数并未消耗，必须重试而非放弃剩余次数
+MAKE_TRANSIENT_KEYWORDS = ("10007", "9999", "系统繁忙", "火爆", "网络异常",
+                           "超时", "timeout", "请稍后", "稍后再试")
+MAKE_TRANSIENT_RETRY = 2   # 单次制作允许的瞬时故障重试次数（成功后重置）
+MAKE_NO_GAIN_LIMIT = 2     # 连续「制作成功但未增点」次数，用于判定本期点数确实到顶
+
+
+def _classify_make_response(dec_resp: str) -> str:
+    """把 AI 制作响应归类为 OK / TERMINAL / TRANSIENT / UNKNOWN。
+
+    顺序至关重要：先判成功，再判终态（次数已用尽），最后判瞬时故障。
+    旧实现把 10007（系统繁忙）与 10014（次数已用完）放在同一个分支里直接 break，
+    导致一次服务端抖动就丢掉整轮剩余次数。
+    """
+    text = str(dec_resp or '')
+    if '"code":"0000"' in text or '"code": "0000"' in text:
+        return 'OK'
+    if any(k in text for k in MAKE_TERMINAL_KEYWORDS):
+        return 'TERMINAL'
+    if any(k.lower() in text.lower() for k in MAKE_TRANSIENT_KEYWORDS):
+        return 'TRANSIENT'
+    return 'UNKNOWN'
 REDEEM_COST_SCORE = 1000
 LOTTERY_COST_SCORE = 20
 DEFAULT_STAGE_ID = "ai119_5"
@@ -1995,7 +2031,8 @@ def post_make_request(sess: requests.Session, crypto_inst: ImCrypto, token: str,
     except Exception as e:
         dec_resp = f'{{"code":"9999","desc":"网络异常: {str(e)}"}}'
 
-    if '"code":"0000"' in dec_resp or any(k in dec_resp for k in ["10014", "次数已用完", "免费次数已用完", "机会已用", "火爆", "不足"]):
+    # 成功或明确耗尽：直接返回，无需走备用通道
+    if _classify_make_response(dec_resp) in ('OK', 'TERMINAL'):
         return dec_resp, token
 
     # 备用免鉴权通道
@@ -2011,7 +2048,7 @@ def post_make_request(sess: requests.Session, crypto_inst: ImCrypto, token: str,
     try:
         r_fb, token = post_encrypted_api(sess, crypto_inst, token, "/hapi/en/api", fallback_payload)
         dec_fb = crypto_inst.decrypt(r_fb.text)
-        if '"code":"0000"' in dec_fb or any(k in dec_fb for k in ["10014", "次数已用完", "免费次数已用完", "机会已用", "火爆", "不足"]):
+        if _classify_make_response(dec_fb) in ('OK', 'TERMINAL'):
             return dec_fb, token
     except Exception:
         pass
@@ -2180,20 +2217,31 @@ def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
     # 视频名默认值兜底（旧脚本用 tpl_meta['videoName']）
     tpl_meta.setdefault("videoName", "AI视频")
 
-    # 查询可用制作次数（多字段取最大）
-    pkg_data, token = query_make_pkg_info(sess, crypto, token, phone)
-    available_chances = 0
-    if pkg_data is not None:
-        initial_tip = pkg_data.get("balanceMakeTimesTip", "")
+    def read_available_chances() -> Optional[int]:
+        """
+        实时读取服务端剩余可用制作次数。
+
+        返回 int 表示读取成功；返回 None 表示本次核验失败（网络/鉴权异常），
+        调用方必须区分「0 次」与「读取失败」，严禁把失败当成 0 次。
+        """
+        nonlocal token
+        pkg_data, token = query_make_pkg_info(sess, crypto, token, phone)
+        if pkg_data is None:
+            return None
         exp_work_num = int(pkg_data.get("aiMakeExperienceWorkNum", 0)
                            or pkg_data.get("privilegeVrbtAIMakeExperienceLeftNum", 0) or 0)
         vrbt_left_num = int(pkg_data.get("privilegeVrbtAIVideoLeftNum", 0) or 0)
         aid_daily_num = int(pkg_data.get("aidDailyNum", 0) or 0)
-        available_chances = max(vrbt_left_num, exp_work_num, aid_daily_num)
-        if available_chances == 0 and initial_tip:
-            m_digit = re.search(r'(\d+)', initial_tip)
-            if m_digit:
-                available_chances = int(m_digit.group(1))
+        chances = max(vrbt_left_num, exp_work_num, aid_daily_num)
+        if chances == 0:
+            initial_tip = pkg_data.get("balanceMakeTimesTip", "")
+            if initial_tip:
+                m_digit = re.search(r'(\d+)', initial_tip)
+                if m_digit:
+                    chances = int(m_digit.group(1))
+        return max(0, chances)
+
+    available_chances = read_available_chances()
 
     # 查询当前点数资产（跨期累计，以官方接口为准）
     total_score, remaining_score, token = query_server_score(sess, crypto, token, phone)
@@ -2202,21 +2250,30 @@ def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
     # 本期已获点数（仅用于日志与展示，绝不作为停机闸门）
     stage_ai_score = query_stage_ai_points(sess, crypto, token, phone, issue_number)
 
-    # ★ 2026-10-15 修正：340 点上限属于「本期AI制作最多入账点数」的活动规则提示，
-    #   不是「禁止继续制作」的闸门。旧实现用本地统计的 stage_ai_score 推算
-    #   max_make_times_allowed 并在其归零时直接跳过制作，导致服务端明明还有 11 次
-    #   可用次数却一次都不做。现改为完全以服务端返回的实际可用次数为准，
-    #   制作过程中由服务端返回（次数已用完 / 点数不再增长）自然收敛。
+    # ★ 2026-10-15 二次修正：单次运行必须把本期可用次数消耗到上限。
+    #   340 点仍只是规则提示，不作为停机闸门；真正的停机条件只有三个：
+    #     a) 服务端明确报「次数已用完」(TERMINAL)
+    #     b) 连续多次「制作成功但点数不再增长」(本期确实到顶)
+    #     c) 实时核验到的剩余次数已归零
+    #   瞬时故障（系统繁忙/网络抖动）只做有限重试，绝不放弃剩余次数。
     total_make_success = 0
-    if available_chances <= 0:
+    total_points_earned = 0    # 实际入账点数（作品成功但未增点时不虚报）
+    exhausted_by_server = False   # 服务端明确报「次数已用完」
+    capped_by_points = False      # 本期点数确实到顶（连续成功但不增点）
+    chances_query_failed = available_chances is None
+
+    if chances_query_failed:
+        log(f"[{m_phone}] 可用制作次数核验失败（非 0 次），本次跳过制作，不做误判 "
+            f"(本期已获 {stage_ai_score}/{STAGE_AI_SCORE_LIMIT} 点)")
+        available_chances = 0
+    elif available_chances <= 0:
         log(f"[{m_phone}] 当前暂无可用AI制作次数，跳过制作环节 (本期已获 {stage_ai_score}/{STAGE_AI_SCORE_LIMIT} 点)")
     else:
-        actual_runs = available_chances
-        log(f"[{m_phone}] 按服务端实际可用次数执行制作：{actual_runs} 次 "
+        log(f"[{m_phone}] 按服务端实际可用次数执行制作：{available_chances} 次 "
             f"(本期已获 {stage_ai_score}/{STAGE_AI_SCORE_LIMIT} 点，仅作规则提示)")
-        attempt_count = 0
-        while attempt_count < actual_runs:
-            attempt_count += 1
+        no_gain_streak = 0
+        transient_used = 0
+        while available_chances > 0:
             token = premake_prepare(sess, crypto, token, phone, tpl_meta)
             rand_name = f"{tpl_meta['videoName']}{random.randint(100000, 999999)}"
 
@@ -2224,25 +2281,64 @@ def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
             try:
                 dec_resp, token = post_make_request(sess, crypto, token, phone, tpl_meta, rand_name)
             except Exception as e:
-                log(f"[{m_phone}] AI制作网络异常: {str(e)}")
+                dec_resp = f'{{"code":"9999","desc":"网络异常: {str(e)}"}}'
+
+            verdict = _classify_make_response(dec_resp)
+
+            if verdict == 'TRANSIENT':
+                # 服务端繁忙 / 网络抖动：次数并未消耗，重试而不是丢掉剩余次数
+                transient_used += 1
+                if transient_used <= MAKE_TRANSIENT_RETRY:
+                    log(f"[{m_phone}] AI制作瞬时故障（第 {transient_used}/{MAKE_TRANSIENT_RETRY} 次），"
+                        f"重试剩余 {available_chances} 次机会 | 响应: {str(dec_resp)[:120]}")
+                    time.sleep(2)
+                    continue
+                log(f"[{m_phone}] AI制作连续瞬时故障 {transient_used} 次，本次停止 "
+                    f"(剩余 {available_chances} 次机会待下次运行)")
                 break
 
-            if '"code":"0000"' in dec_resp:
-                time.sleep(0.5)
-                total_score, remaining_score, token = query_server_score(sess, crypto, token, phone)
-                earned = remaining_score - score_before
-                if earned > 0:
-                    total_make_success += 1
-                    stage_ai_score += earned
-                    log(f"[{m_phone}] AI制作：成功 +{earned}点")
-                else:
-                    log(f"[{m_phone}] AI制作：作品生成成功 (当前点数: {remaining_score})")
-                time.sleep(1.5)
-            elif any(k in dec_resp for k in ["10014", "10007", "次数已用完", "免费次数已用完", "机会已用", "火爆", "不足"]):
-                log(f"[{m_phone}] 当前可用AI制作次数已耗尽")
+            if verdict == 'TERMINAL':
+                log(f"[{m_phone}] 服务端返回次数已用尽: {str(dec_resp)[:120]}")
+                exhausted_by_server = True
+                available_chances = 0
                 break
+
+            if verdict != 'OK':
+                log(f"[{m_phone}] AI制作未识别响应，本次停止 | 响应: {str(dec_resp)[:160]}")
+                break
+
+            # 制作接口返回成功：消耗一次机会，并以服务端点数为准确认是否真入账
+            transient_used = 0
+            time.sleep(0.5)
+            total_score, remaining_score, token = query_server_score(sess, crypto, token, phone)
+            earned = remaining_score - score_before
+            if earned > 0:
+                total_make_success += 1
+                total_points_earned += earned
+                stage_ai_score += earned
+                no_gain_streak = 0
+                log(f"[{m_phone}] AI制作：成功 +{earned}点 (本期 {stage_ai_score}/{STAGE_AI_SCORE_LIMIT} 点)")
             else:
+                total_make_success += 1
+                no_gain_streak += 1
+                log(f"[{m_phone}] AI制作：作品生成成功但本期未增点 "
+                    f"(连续 {no_gain_streak}/{MAKE_NO_GAIN_LIMIT} 次，当前点数: {remaining_score})")
+                if no_gain_streak >= MAKE_NO_GAIN_LIMIT:
+                    log(f"[{m_phone}] 本期AI制作点数已达上限，停止继续制作")
+                    capped_by_points = True
+                    break
+
+            # 每次成功都实时刷新剩余次数，绝不用启动快照推算
+            latest = read_available_chances()
+            if latest is None:
+                log(f"[{m_phone}] 制作后次数核验失败，保守停止 (本轮成功 {total_make_success} 次)")
                 break
+            if latest <= 0:
+                available_chances = 0
+                log(f"[{m_phone}] 服务端可用制作次数已归零，制作环节结束")
+                break
+            available_chances = latest
+            time.sleep(1.5)
 
     # 兑换前重新查询真实点数，绝不凭空推演
     total_score, remaining_score, token = query_server_score(sess, crypto, token, phone)
@@ -2309,12 +2405,20 @@ def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
 
     # ---- 微信读书 Bullet 通知（5 行，对齐旧脚本） ----
     if total_make_success > 0:
-        bullets.append(f"• 一键做同款: 完成 {total_make_success} 次制作 (获得 {total_make_success * 20}点数与券码)")
+        tail = " · 本期点数已达上限" if capped_by_points else ""
+        bullets.append(f"• 一键做同款: 完成 {total_make_success} 次制作 "
+                       f"(获得 {total_points_earned} 点数与券码{tail})")
+    elif capped_by_points:
+        bullets.append(f"• 一键做同款: 本期AI制作点数已达上限 ({STAGE_AI_SCORE_LIMIT}点已满)")
+    elif exhausted_by_server:
+        bullets.append("• 一键做同款: 当期制作机会已用完 (每3天赠送3次免费机会)")
+    elif chances_query_failed:
+        bullets.append("• 一键做同款: 制作次数核验失败，本次未执行 (下次运行自动重试)")
     elif available_chances <= 0:
         bullets.append("• 一键做同款: 当期制作机会已用完 (每3天赠送3次免费机会)")
     else:
-        # 仍有服务端可用次数但未产出：如实回显，不再用本地 340 点推算误报「已达上限」
-        bullets.append(f"• 一键做同款: 本次未产生制作 (服务端仍余 {available_chances} 次机会)")
+        # 仍有服务端可用次数但未产出：如实回显（多为连续瞬时故障）
+        bullets.append(f"• 一键做同款: 本次未完成制作 (服务端仍余 {available_chances} 次机会，下次运行继续)")
 
     if draw_date_str:
         bullets.append(f"• Pad抽奖券码: {issue_name}已持有 {ticket_count} 张券码 ({draw_date_str} 11:00自动开奖)")
@@ -2325,7 +2429,10 @@ def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
     bullets.append(f"• 账户当前点数: 剩余 {remaining_score} 点数 (累计总点数: {total_score})")
     # 诊断汇总（仅日志）：点数/券码均为 0 时便于快速定位是鉴权还是字段问题
     log(f"[AI奇遇] {m_phone} 汇总: 点数={remaining_score}/{total_score} 券码={ticket_count} "
-        f"本期点数={stage_ai_score} 可用次数={available_chances} 制作成功={total_make_success}")
+        f"本期点数={stage_ai_score} 可用次数={available_chances} 制作成功={total_make_success}"
+        + (" [服务端判定次数已用尽]" if exhausted_by_server else "")
+        + (" [本期点数已达上限]" if capped_by_points else "")
+        + (" [次数核验失败]" if chances_query_failed else ""))
     return bullets
 
 
