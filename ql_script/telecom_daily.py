@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 ===================================================================
-📌 版本: v2.0.0 (2026-10-08 三脚本整合版：签到金豆 + 翼支付抽奖 + AI奇遇赢Pad)
+📌 版本: v2.0.1 (2026-10-15 三处缺陷修复：转盘奖品解析 + AI 制作次数闸门 + 抽奖自动领奖)
 中国电信 · 每日任务聚合脚本 (单一脚本统一管理全系电信业务)
 ===================================================================
 new Env('中国电信 · 每日任务聚合');
@@ -21,6 +21,15 @@ tag: 中国电信
   3. 权益商城幸运抽奖：读取真实活动配置 + 走可达抽奖引擎真实抽奖并回显奖品
   4. 权益包自动领取：双通道扫描待领权益 → 真实领取 → 轮询确认到账
   5. AI奇遇赢Pad：AI 视频制作赚点数 + 满千兑换话费
+
+v2.0.1 修复（2026-10-15）：
+  1. 金豆转盘奖品解析：奖品名实际位于 biz.resultInfo.title，旧实现只扫顶层导致中奖被判「未中奖」，
+     现递归提取 resultInfo / prizeInfo / lotteryRecord 等嵌套容器，并同步提取嵌套豆数。
+  2. AI 制作次数闸门：340 点为本期入账上限提示而非停机条件，旧实现用本地统计推算次数并在归零时
+     跳过制作（服务端仍余 11 次却不做），现完全以服务端返回的实际可用次数执行，由服务端自然收敛。
+  3. 抽奖自动领奖：单号可能嵌套在 resultInfo / prizeInfo 内，旧实现只读顶层导致永不触发领取；
+     现深度提取 orderNo（兼容 orderId / prizeOrderNo / recordId 等），缺失时回查中奖记录补齐，
+     并识别领取接口的 FAIL / SUCCESS 状态字段。
 
 环境变量 (dxlin)：
   格式：手机号#服务密码#AndroidID[#SessionKey]
@@ -75,7 +84,7 @@ CONFIG = {
     "UA": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 MicroMessenger/8.0.38(0x1800262c) NetType/WIFI Language/zh_CN"
 }
 
-SCRIPT_VERSION = "v2.0.0"
+SCRIPT_VERSION = "v2.0.1"
 
 # ==================== 🌐 翼支付网关生产环境常量 ====================
 BESTPAY_H5_BASE = "https://mapi-h5.bestpay.com.cn"
@@ -86,6 +95,8 @@ TELECOM_MEMBER_AGREE_ID = "20200827030100038416476813657090"
 CHANNEL_ID = "156000009079"
 ACTIVITY_ID = "ai119"
 STAGE_AI_SCORE_LIMIT = 340
+# 活动规则参考值（340 点 / 20 点每次 = 17 次），仅用于日志说明；
+# 实际执行次数一律以服务端 queryAiMakePkgInfo 返回的可用次数为准，禁止用它当停机闸门。
 STAGE_MAX_MAKE_COUNT = 17
 REDEEM_COST_SCORE = 1000
 LOTTERY_COST_SCORE = 20
@@ -690,6 +701,10 @@ def _parse_draw_prize(draw_res) -> dict:
       奖品名：prizeName / prizeTitle / giftTitle / awardName / name
       金豆数：beanNum / goldCoin / coinNum / bean / gold / prizeValue
     未中奖（谢谢参与/安慰奖/未中奖）明确标注，绝不静默吞掉。
+
+    ★ 2026-10-15 实测修正：金豆转盘 /gateway/golden/api/lottery 的真实返回把奖品名放在
+      biz.resultInfo.title（如「清洁日用10元优惠券」「1元话费」），而非 biz 顶层，
+      旧实现只扫顶层导致所有中奖被判为「未中奖」，故增加 resultInfo 等嵌套容器递归提取。
     """
     if not isinstance(draw_res, dict):
         return {'label': '响应异常', 'bean': 0, 'raw': ''}
@@ -703,16 +718,32 @@ def _parse_draw_prize(draw_res) -> dict:
         msg = str(biz.get('resoultMsg') or biz.get('msg') or draw_res.get('msg') or '抽奖失败')
         return {'label': f"未成功({msg[:30]})", 'bean': 0, 'raw': raw}
 
+    # 奖品名 / 豆数候选容器：顶层 → biz → biz 内层（resultInfo / prizeInfo / lotteryRecord / data）
+    containers = [draw_res, biz]
+    for key in ('resultInfo', 'prizeInfo', 'lotteryRecord', 'prize', 'data'):
+        sub = biz.get(key)
+        if isinstance(sub, dict):
+            containers.append(sub)
+    for key in ('resultInfo', 'prizeInfo', 'lotteryRecord', 'prize', 'data'):
+        sub = draw_res.get(key)
+        if isinstance(sub, dict) and sub not in containers:
+            containers.append(sub)
+
     name = ''
-    for k in ('prizeName', 'prizeTitle', 'giftTitle', 'awardName', 'name', 'title'):
-        v = biz.get(k) or draw_res.get(k)
-        if v and str(v).strip():
-            name = str(v).strip()
+    for container in containers:
+        for k in ('prizeName', 'prizeTitle', 'giftTitle', 'awardName', 'title', 'name', 'prizeDesc'):
+            v = container.get(k)
+            if v and str(v).strip():
+                name = str(v).strip()
+                break
+        if name:
             break
 
-    bean = _extract_number(biz, ('beanNum', 'goldCoin', 'coinNum', 'bean', 'gold', 'prizeValue', 'value'))
-    if bean == 0:
-        bean = _extract_number(draw_res, ('beanNum', 'goldCoin', 'coinNum', 'bean', 'gold'))
+    bean = 0
+    for container in containers:
+        bean = _extract_number(container, ('beanNum', 'goldCoin', 'coinNum', 'bean', 'gold', 'prizeValue', 'value'))
+        if bean:
+            break
 
     # 兜底：从奖品名中解析豆数。实测电信转盘奖品名形如「金豆商城50金豆」，
     # 豆数直接写在名称里，接口不单独返回 beanNum 字段。
@@ -1413,6 +1444,96 @@ def query_recent_lottery_history(sess: requests.Session, phone: str, session_key
         return "今日抽奖次数已用尽"
 
 
+def _extract_prize_order_no(prize: Any) -> str:
+    """
+    从抽奖结果中深度提取领奖单号（orderNo）。
+
+    实测各活动返回结构不一，单号可能出现在：
+      顶层 / resultInfo / prizeInfo / lotteryRecord / prize / data 等容器内，
+      键名也可能是 orderNo / orderId / prizeOrderNo / recordId / lotteryRecordId。
+    取不到时返回空串（调用方回退到 queryLotteryRecord 回查）。
+    """
+    if not isinstance(prize, dict):
+        return ''
+
+    ORDER_KEYS = ('orderNo', 'orderId', 'prizeOrderNo', 'prizeOrderId',
+                  'recordId', 'lotteryRecordId', 'receiveOrderNo')
+    containers = [prize]
+    for key in ('resultInfo', 'prizeInfo', 'lotteryRecord', 'prize', 'data', 'record'):
+        sub = prize.get(key)
+        if isinstance(sub, dict):
+            containers.append(sub)
+
+    for container in containers:
+        for k in ORDER_KEYS:
+            v = container.get(k)
+            if v and str(v).strip():
+                return str(v).strip()
+    return ''
+
+
+def _extract_prize_name(prize: Any) -> str:
+    """
+    从抽奖结果中深度提取奖品名（与 _parse_draw_prize 同源逻辑，供领奖链路复用）。
+
+    实测结构差异较大：金豆转盘放在 biz.resultInfo.title，
+    op-lottery-system 放在 result.prizeName，部分活动嵌在 prizeInfo / lotteryRecord。
+    """
+    if not isinstance(prize, dict):
+        return ''
+    containers = [prize]
+    for key in ('resultInfo', 'prizeInfo', 'lotteryRecord', 'prize', 'data', 'record'):
+        sub = prize.get(key)
+        if isinstance(sub, dict):
+            containers.append(sub)
+
+    for container in containers:
+        for k in ('prizeName', 'prizeTitle', 'giftTitle', 'awardName', 'title', 'name', 'prizeDesc'):
+            v = container.get(k)
+            if v and str(v).strip():
+                return str(v).strip()
+    return ''
+
+
+def query_lottery_order_no(sess: requests.Session, phone: str, session_key: str,
+                           act_no: str, prize_name: str = '') -> str:
+    """
+    中奖记录回查：当抽奖响应未携带单号时，从 queryLotteryRecord 找到今日中奖记录的单号。
+    这是「抽中后自动到账」的兜底链路（历史抓包中领取请求始终携带 orderNo）。
+    """
+    try:
+        res = request_c005(sess, f'{BESTPAY_H5_BASE}/gapi/op-lottery-system/DrawService/queryLotteryRecord', {
+            'activityNo': act_no,
+            'sessionKey': session_key,
+            'productNo': phone,
+            'phoneNo': phone,
+            'pageNo': 1,
+            'pageSize': 10,
+            'appType': '94',
+            'fromChannelId': 'MINIPROG',
+            'fromchannelId': 'MINIPROG',
+            'encyType': 'C005'
+        }, phone, session_key, 'MINIPROG')
+
+        records = safe_get(res, 'result', 'queryLotteryRecordDTOList') or []
+        today = datetime.now().strftime('%Y-%m-%d')
+        for r in records:
+            if not isinstance(r, dict):
+                continue
+            t_str = str(r.get('prizeDistributeTime') or r.get('createTime') or '')
+            if t_str and not t_str.startswith(today):
+                continue
+            name = str(r.get('prizeName') or '').strip()
+            if prize_name and name and name != prize_name:
+                continue
+            order_no = _extract_prize_order_no(r)
+            if order_no:
+                return order_no
+    except Exception as e:
+        log(f"ℹ️ 中奖记录回查异常: {str(e)[:80]}")
+    return ''
+
+
 def receive_lottery_prize(sess: requests.Session, phone: str, session_key: str,
                           act_no: str, order_no: str, act_title: str) -> str:
     """抽奖中奖后自动领奖入账，返回 SUCCESS / PENDING / FAILED / UNKNOWN"""
@@ -1436,9 +1557,13 @@ def receive_lottery_prize(sess: requests.Session, phone: str, session_key: str,
         if res.get('success'):
             result = res.get('result') if isinstance(res.get('result'), dict) else {}
             msg = str(result.get('resoultMsg') or result.get('msg') or res.get('errorMsg') or '')
-            if '已领取' in msg or '重复' in msg:
+            status = str(result.get('status') or result.get('receiveStatus') or '').upper()
+            if '已领取' in msg or '重复' in msg or status in ('SUCCESS', 'RECEIVED', 'ALREADY_RECEIVED'):
                 log(f"ℹ️ [{act_title}] 该奖品已领取过，无需重复操作")
                 return 'SUCCESS'
+            if status in ('FAIL', 'FAILED', 'FAILURE'):
+                log(f"❌ [{act_title}] 领奖返回失败状态: {msg or status}")
+                return 'FAILED'
             log(f"✅ [{act_title}] 领奖成功入账 (orderNo={order_no})")
             return 'SUCCESS'
 
@@ -1522,11 +1647,21 @@ def run_wednesday_lottery(sess: requests.Session, act_no: str, act_title: str, s
         if isinstance(draw_res, dict) and draw_res.get('success') and isinstance(draw_res.get('result'), dict):
             count -= 1
             prize = draw_res['result']
-            prize_name = prize.get('prizeName') or '礼品'
-            order_no = prize.get('orderNo')
-            is_thanks = prize.get('prizeType') == 'THANKS_FOR_PARTICIPATE' or '谢谢' in prize_name
+            raw_prize_name = _extract_prize_name(prize)
+            prize_name = raw_prize_name or '礼品'
+            # 单号可能藏在 resultInfo / prizeInfo 等嵌套容器，先深度提取
+            order_no = _extract_prize_order_no(prize)
+            prize_type = str(prize.get('prizeType') or safe_get(prize, 'resultInfo', 'prizeType') or '').upper()
+            is_thanks = prize_type in ('THANKS_FOR_PARTICIPATE', 'THANK_FOR_PARTICIPATE', 'NO_PRIZE', 'EMPTY') \
+                or '谢谢' in prize_name or '未中奖' in prize_name
             log(f"🎉 [{act_title}] 抽奖成功: {prize_name}")
             prize_names.append(prize_name)
+
+            # 抽中但响应未带单号：回查中奖记录补齐（否则永远不触发领奖，用户需手动点按钮）
+            if not is_thanks and not order_no:
+                order_no = query_lottery_order_no(sess, phone, session_key, act_no, raw_prize_name)
+                if order_no:
+                    log(f"[{act_title}] 抽奖响应未带单号，已从中奖记录回查补齐 (orderNo={order_no})")
 
             if not is_thanks and order_no:
                 if CONFIG.get("ENABLE_AUTO_RECEIVE_PRIZE", True):
@@ -1535,6 +1670,8 @@ def run_wednesday_lottery(sess: requests.Session, act_no: str, act_title: str, s
                         log(f"⚠️ [{act_title}] 奖品「{prize_name}」领奖状态: {receive_result}")
                 else:
                     log(f"[{act_title}] 自动领奖已关闭，跳过 orderNo={order_no}")
+            elif not is_thanks:
+                log(f"⚠️ [{act_title}] 奖品「{prize_name}」未取到领奖单号，本次未能自动领取入账")
         else:
             err = draw_res.get('errorMsg', '抽奖未成功') if isinstance(draw_res, dict) else '响应异常'
             log(f"[{act_title}] 抽奖停止: {err}")
@@ -2062,18 +2199,21 @@ def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
     total_score, remaining_score, token = query_server_score(sess, crypto, token, phone)
     log(f"[{m_phone}] 当前点数: {remaining_score} (累计总点数: {total_score})")
 
-    # 本期已获点数与剩余可制作次数
+    # 本期已获点数（仅用于日志与展示，绝不作为停机闸门）
     stage_ai_score = query_stage_ai_points(sess, crypto, token, phone, issue_number)
-    stage_remaining_score = max(0, STAGE_AI_SCORE_LIMIT - stage_ai_score)
-    max_make_times_allowed = stage_remaining_score // 20
 
+    # ★ 2026-10-15 修正：340 点上限属于「本期AI制作最多入账点数」的活动规则提示，
+    #   不是「禁止继续制作」的闸门。旧实现用本地统计的 stage_ai_score 推算
+    #   max_make_times_allowed 并在其归零时直接跳过制作，导致服务端明明还有 11 次
+    #   可用次数却一次都不做。现改为完全以服务端返回的实际可用次数为准，
+    #   制作过程中由服务端返回（次数已用完 / 点数不再增长）自然收敛。
     total_make_success = 0
-    if stage_remaining_score <= 0:
-        log(f"[{m_phone}] 本期AI制作点数已达上限：{STAGE_AI_SCORE_LIMIT}点")
-    elif available_chances <= 0:
+    if available_chances <= 0:
         log(f"[{m_phone}] 当前暂无可用AI制作次数，跳过制作环节 (本期已获 {stage_ai_score}/{STAGE_AI_SCORE_LIMIT} 点)")
     else:
-        actual_runs = min(available_chances, max_make_times_allowed)
+        actual_runs = available_chances
+        log(f"[{m_phone}] 按服务端实际可用次数执行制作：{actual_runs} 次 "
+            f"(本期已获 {stage_ai_score}/{STAGE_AI_SCORE_LIMIT} 点，仅作规则提示)")
         attempt_count = 0
         while attempt_count < actual_runs:
             attempt_count += 1
@@ -2095,9 +2235,6 @@ def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
                     total_make_success += 1
                     stage_ai_score += earned
                     log(f"[{m_phone}] AI制作：成功 +{earned}点")
-                    if stage_ai_score >= STAGE_AI_SCORE_LIMIT:
-                        log(f"[{m_phone}] 本期AI制作点数已达上限：{STAGE_AI_SCORE_LIMIT}点")
-                        break
                 else:
                     log(f"[{m_phone}] AI制作：作品生成成功 (当前点数: {remaining_score})")
                 time.sleep(1.5)
@@ -2173,10 +2310,11 @@ def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
     # ---- 微信读书 Bullet 通知（5 行，对齐旧脚本） ----
     if total_make_success > 0:
         bullets.append(f"• 一键做同款: 完成 {total_make_success} 次制作 (获得 {total_make_success * 20}点数与券码)")
-    elif stage_ai_score >= STAGE_AI_SCORE_LIMIT:
-        bullets.append(f"• 一键做同款: 本期AI制作点数已达上限 ({STAGE_AI_SCORE_LIMIT}点已满)")
-    else:
+    elif available_chances <= 0:
         bullets.append("• 一键做同款: 当期制作机会已用完 (每3天赠送3次免费机会)")
+    else:
+        # 仍有服务端可用次数但未产出：如实回显，不再用本地 340 点推算误报「已达上限」
+        bullets.append(f"• 一键做同款: 本次未产生制作 (服务端仍余 {available_chances} 次机会)")
 
     if draw_date_str:
         bullets.append(f"• Pad抽奖券码: {issue_name}已持有 {ticket_count} 张券码 ({draw_date_str} 11:00自动开奖)")
