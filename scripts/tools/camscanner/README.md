@@ -30,7 +30,7 @@ cron 签到 → camscanner.js 读取 camscanner_data 签到
 
 ## 配套插件
 
-见 [`loon/camscanner.plugin`](../../loon/camscanner.plugin)。
+见 [`loon/camscanner.plugin`](../../../loon/camscanner.plugin)。
 
 > ⚠️ `loon/CookieCenter.plugin` 已包含同一条抓取规则。两个插件同时启用会各自触发一次抓取脚本，
 > 导致重复通知 —— 请只保留其中一个（推荐统一用 `CookieCenter.plugin`）。
