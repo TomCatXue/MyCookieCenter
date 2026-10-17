@@ -11,7 +11,10 @@
   <a href="./LICENSE"><img alt="license" src="https://img.shields.io/github/license/TomCatXue/MyCookieCenter?style=flat-square&color=4285dd" /></a>
 </p>
 
-自用的签到自动化、Cookie 抓取与代理增强脚本合集。**有需求、建议或问题直接提 [Issues](https://github.com/TomCatXue/MyCookieCenter/issues/new)**，觉得好用请点个 ⭐ 鼓励一下~
+把散落在各个 App 里的签到、领券和抓包配置收拢到一处：
+Loon 负责抓 Cookie，青龙负责跑任务，BoxJS 负责查看和复制凭据。
+
+遇到问题、想加新站点，欢迎提 [Issues](https://github.com/TomCatXue/MyCookieCenter/issues/new)；用着顺手的话，点个 ⭐ 就好。
 
 ## 脚本列表
 
@@ -47,3 +50,13 @@ ql repo https://github.com/TomCatXue/MyCookieCenter.git "ql_script" "" "README" 
 ## License
 
 [MIT](./LICENSE)
+
+## 免责声明
+
+本项目仅供**个人学习研究与自用自动化**，请勿用于商业用途、批量操作或违反平台服务条款的行为。
+
+脚本会接触你的账号凭据，但全部只保存在**你自己的设备与面板**中，本仓库不上传、不收集任何数据。
+
+使用所产生的账号异常、积分变动、服务受限等后果由使用者自行承担。部分脚本改编自社区开源项目，版权归原作者所有；如认为内容侵权，请提 Issue 联系删除。
+
+完整条款见 [DISCLAIMER.md](./DISCLAIMER.md)。
