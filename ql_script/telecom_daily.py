@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 ===================================================================
-📌 版本: v2.1.0 (2026-10-17 接入 YYB 微信协议换票 + C005 小程序登录闭环)
+📌 版本: v2.1.1 (2026-10-17 修复 C005 信封参数污染 + 完善 YYB 与 Ticket 换票诊断)
 中国电信 · 每日任务聚合脚本 (单一脚本统一管理全系电信业务)
 ===================================================================
 new Env('中国电信 · 每日任务聚合');
@@ -59,6 +59,11 @@ v2.1.0 升级（2026-10-17 接入 YYB 微信协议换票）：
   2. 闭环实现 getWetchatOpenId -> miniProgrameLoginEnc 换票全链路（C005加密 + 动态公钥 + 微信端点）。
   3. 凭据四级降级保护：环境变量 SessionKey -> 本地缓存 -> YYB微信换票 -> 电信Ticket备用换票。
   4. 修复 mapi.bestpay.com.cn 端点 Base64 响应解析与预登录匿名产品号防风控规则。
+
+v2.1.1 修复（2026-10-17 C005 信封隔离与换票自愈防护）：
+  1. request_c005 信封收敛：外层 payload['productNo'] 严格收敛为 1~5 位随机标识，杜绝 11 位手机号污染导致网关解密失败。
+  2. exchange_session_key_via_yyb 业务对齐：内层 productNo 填入真实手机号，并对未通过手机号授权的返回输出明确引导。
+  3. exchange_ticket_for_session_key 长度防护：增加 Ticket > 128 字符防御拦截与友好降级日志，显式隔离信封 productNo。
 
 环境变量 (dxlin)：
   格式：手机号#服务密码#AndroidID[#SessionKey]
@@ -124,7 +129,7 @@ CONFIG = {
     "UA": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 MicroMessenger/8.0.38(0x1800262c) NetType/WIFI Language/zh_CN"
 }
 
-SCRIPT_VERSION = "v2.1.0"
+SCRIPT_VERSION = "v2.1.1"
 
 # ==================== 🌐 翼支付网关生产环境常量 ====================
 BESTPAY_H5_BASE = "https://mapi-h5.bestpay.com.cn"
@@ -573,8 +578,9 @@ def decode_bestpay_resp(resp_text: Union[str, dict]) -> dict:
 def get_bestpay_nonce(sess: requests.Session, product_no: str, channel_id: str = '5g_mini_program') -> Optional[str]:
     cur_time = int(datetime.now().timestamp() * 1000)
     is_miniprog = (channel_id == 'MINIPROG')
+    safe_pno = str(product_no) if (product_no and len(str(product_no)) <= 5 and str(product_no).isdigit()) else str(random.randint(10000, 99999))
     req_body = {
-        'productNo': product_no or "80544",
+        'productNo': safe_pno,
         'requestType': 'H5',
         'callback': '',
         'appType': '94',
@@ -608,8 +614,8 @@ def get_bestpay_nonce(sess: requests.Session, product_no: str, channel_id: str =
 
 def request_c005(sess: requests.Session, url: str, biz_params: dict, phone: str,
                  session_key: str, channel_id: str = '5g_mini_program', payload_pno: str = "") -> dict:
-    nonce_pno = payload_pno or phone or "80544"
-    nonce = get_bestpay_nonce(sess, nonce_pno, channel_id)
+    envelope_pno = str(payload_pno) if (payload_pno and len(str(payload_pno)) <= 5 and str(payload_pno).isdigit()) else str(random.randint(10000, 99999))
+    nonce = get_bestpay_nonce(sess, envelope_pno, channel_id)
     if not nonce:
         return {'success': False, 'errorMsg': '获取 C005 加密公钥失败'}
 
@@ -624,7 +630,7 @@ def request_c005(sess: requests.Session, url: str, biz_params: dict, phone: str,
         'data': enc_data,
         'key': enc_key,
         'sign': sign,
-        'productNo': payload_pno or phone,
+        'productNo': envelope_pno,
         'encyType': 'C005',
         'fromChannelId': channel_id,
         'fromchannelId': channel_id
@@ -805,7 +811,7 @@ def exchange_session_key_via_yyb(sess: requests.Session, phone: str, acc_idx: in
     login_url = f"{BESTPAY_MAPI_BASE}/miniProgrameLoginEnc"
     login_biz = {
         'isExtension': True,
-        'productNo': '',
+        'productNo': phone,
         'appType': '94',
         'openId': open_id,
         'unionId': union_id,
@@ -826,7 +832,10 @@ def exchange_session_key_via_yyb(sess: requests.Session, phone: str, acc_idx: in
     result_login = res_login.get('result') or {}
     sk = str(result_login.get('sessionKey') or '').strip()
     if not sk:
-        err = res_login.get('errorMsg') or res_login.get('errorCode') or '未返回 sessionKey'
+        err = res_login.get('errorMsg') or res_login.get('errorCode')
+        if not err and (result_login.get('newCustomer') or not result_login.get('productNo')):
+            err = '翼支付要求微信手机号授权(getPhoneNumber)或短信验证'
+        err = err or '未返回 sessionKey'
         log(f"❌ [{m_phone}] 小程序登录换取 SessionKey 失败: {err}")
         return None
 
@@ -857,6 +866,10 @@ def exchange_ticket_for_session_key(sess: requests.Session, phone: str, ticket: 
         log(f"⚠️ [{m_phone}] Ticket 为空，跳过 SessionKey 换票")
         return None
 
+    if len(ticket) > 128:
+        log(f"⚠️ [{m_phone}] 电信 SSO Ticket 长度 ({len(ticket)}) 超过翼支付网关上限 (128字符)，无法直接免密换取 SessionKey")
+        return None
+
     log(f"🎫 [{m_phone}] 正在使用 SSO Ticket 自动换取 SessionKey...")
 
     url = f"{BESTPAY_H5_BASE}/gapi/quanyi/product/singleAuthorizedLogin"
@@ -874,7 +887,8 @@ def exchange_ticket_for_session_key(sess: requests.Session, phone: str, ticket: 
         'encyType': 'C005',
     }
 
-    res = request_c005(sess, url, biz, phone, '', 'XCX')
+    rnd_pno = str(random.randint(10000, 99999))
+    res = request_c005(sess, url, biz, phone, '', 'XCX', payload_pno=rnd_pno)
 
     if not isinstance(res, dict):
         log(f"❌ [{m_phone}] 换票响应异常（非 JSON 结构）")
