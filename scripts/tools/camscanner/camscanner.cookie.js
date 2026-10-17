@@ -1,23 +1,24 @@
 /**
- * 扫描全能王 · Cookie 抓取（静默版）
+ * 扫描全能王 · Cookie 抓取
  *
  * 行为：
- *   - 进 App 触发 get_user_attribute 时静默更新 Cookie，不弹通知
- *   - 数据未变 → 直接跳过；数据变化 → 静默写入，不弹"获取成功"
- *   - Cookie 失效的通知由签到脚本（cron camscanner.js）在签到失败时负责
+ *   - 进 App 触发 get_user_attribute 时更新 Cookie
+ *   - 数据未变 → 直接跳过，不打扰
+ *   - 数据变化 → 写入并通知一次「Cookie 获取成功」
  *
  * 基于 MaYIHEI/paperclip 原作改造，存放本仓库维护。
- * 原作每次数据变化都弹通知，本版按用户需求改为静默。
  *
- * @Author: MaYIHEI (原作) / TomCatXue (静默改造)
+ * @Author: MaYIHEI (原作) / TomCatXue
  * @Source: https://github.com/MaYIHEI/paperclip
- * @Updated: 2026-08-14
+ * @Updated: 2026-10-17
  */
 
 const $ = new Env("扫描全能王 [Cookie]");
 
 const CK_KEY = 'camscanner_data';
-const SCRIPT_VERSION = '2026-08-14-silent';
+const SCRIPT_VERSION = '2026-10-17-notify';
+const NOTIFY_TIME_KEY = 'camscanner_notify_time';
+const NOTIFY_GAP_MS = 10 * 1000;
 
 (function main() {
     if (typeof $request === "undefined") {
@@ -57,16 +58,26 @@ const SCRIPT_VERSION = '2026-08-14-silent';
             client_id: clientId || prev.client_id || '',
         };
 
-        // 数据未变 → 完全静默
-        if (prev.token === data.token && prev.cs_ept_d === data.cs_ept_d && prev.client_id === data.client_id) {
-            $.log('[INFO] 数据未变,跳过更新');
-            $.done();
-            return;
+        const unchanged = prev.token === data.token
+            && prev.cs_ept_d === data.cs_ept_d
+            && prev.client_id === data.client_id;
+
+        if (!unchanged) {
+            $.setdata(JSON.stringify(data), CK_KEY);
+            $.log(`[INFO] 已更新 token=${data.token.slice(0, 8)}… cs_ept_d=${data.cs_ept_d ? '有' : '无'} client_id=${data.client_id || '无'}`);
+        } else {
+            $.log('[INFO] 数据未变化，仅发送确认提示');
         }
 
-        // 数据变化 → 静默更新（不弹通知）；失效与否由签到脚本判定
-        $.setdata(JSON.stringify(data), CK_KEY);
-        $.log(`[INFO] 已更新 token=${data.token.slice(0, 8)}… cs_ept_d=${data.cs_ept_d ? '有' : '无'} client_id=${data.client_id || '无'}`);
+        // 无论是否变化都提示：变化时强制通知，未变化时 10 秒内去重
+        const lastNotify = Number($.getdata(NOTIFY_TIME_KEY) || 0);
+        if (!unchanged || Date.now() - lastNotify >= NOTIFY_GAP_MS) {
+            $.setdata(String(Date.now()), NOTIFY_TIME_KEY);
+            $.msg('扫描全能王', '✅ Cookie 获取成功',
+                `token: ${data.token.slice(0, 8)}…\ncs_ept_d: ${data.cs_ept_d ? '已捕获' : '缺失'}\nclient_id: ${data.client_id || '缺失'}`);
+        } else {
+            $.log('[INFO] 10 秒内重复触发，已去重');
+        }
     } catch (e) {
         $.log('[ERROR] cookie 抓取失败: ' + e);
     }
@@ -81,8 +92,11 @@ function Env(s) {
     this.isLoon = () => typeof $loon !== 'undefined' && !!$loon;
     this.log = (...a) => console.log(a.join('\n'));
     this.msg = (t = this.name, s = '', b = '') => {
-        if (this.isSurge() || this.isLoon()) $notification.post(t, s, b);
-        else if (this.isQuanX()) $notify(t, s, b);
+        if (typeof $notification !== 'undefined' && $notification && $notification.post) {
+            $notification.post(t, s, b);
+        } else if (this.isQuanX() && typeof $notify !== 'undefined') {
+            $notify(t, s, b);
+        }
         console.log(['', '====📣' + t + '====', s, b].filter(Boolean).join('\n'));
     };
     this.getdata = (k) => {

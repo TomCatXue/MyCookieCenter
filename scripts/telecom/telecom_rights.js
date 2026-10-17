@@ -31,6 +31,18 @@ function saveAuth(newAuth) {
     $.setdata(JSON.stringify(newAuth), AUTH_KEY);
 }
 
+// 10 秒内同源通知只弹一次，避免同一页面并发请求刷屏；
+// 超过窗口再进页面仍会提示，不会出现「抓到了但没反馈」。
+const NOTIFY_GAP_MS = 10 * 1000;
+const LAST_NOTIFY_KEY = "telecom_rights_last_notify_time";
+function notifyOnce(title, sub, body) {
+    let last = Number($.getdata(LAST_NOTIFY_KEY) || 0);
+    if (Date.now() - last < NOTIFY_GAP_MS) return false;
+    $.setdata(String(Date.now()), LAST_NOTIFY_KEY);
+    $.msg(title, sub, body);
+    return true;
+}
+
 // ============================================================
 // 1. 抓取与回填层 (进 App 自动预热锁定 sign 与话费权益 ID)
 // ============================================================
@@ -87,13 +99,10 @@ function handleRequest() {
         existing.updateTime = Date.now();
         saveAuth(existing);
 
-        // 防抖通知：5 分钟内最多弹 1 次
-        let lastNotify = existing.lastNotifyTime || 0;
-        if (Date.now() - lastNotify > 5 * 60 * 1000) {
-            existing.lastNotifyTime = Date.now();
-            saveAuth(existing);
-            $.msg($.name, "✅ 等级权益凭据已锁定", "sign: " + existing.sign.slice(0, 8) + "...\n今晚偷跑已就绪");
-        }
+        // 凭据发生变化：强制通知，不受窗口限制
+        $.setdata(String(Date.now()), LAST_NOTIFY_KEY);
+        $.msg($.name, "✅ 等级权益凭据已锁定",
+            "sign: " + existing.sign.slice(0, 8) + "...\nMFA 就绪，可在 BoxJS 查看复制");
         $.log("[电信权益] sign 凭据已更新: " + existing.sign.slice(0, 8) + "...");
     }
 
@@ -141,12 +150,10 @@ function handleResponse() {
         existing.updateTime = Date.now();
         saveAuth(existing);
 
-        let lastNotify = existing.lastNotifyTime || 0;
-        if (Date.now() - lastNotify > 5 * 60 * 1000) {
-            existing.lastNotifyTime = Date.now();
-            saveAuth(existing);
-            $.msg($.name, "✅ 等级权益会话已锁定", "accId 与 sign 已就绪，今晚准时抢兑");
-        }
+        // 会话发生变化：强制通知
+        $.setdata(String(Date.now()), LAST_NOTIFY_KEY);
+        $.msg($.name, "✅ 等级权益会话已锁定",
+            "accId: " + (existing.accId || "已记录") + "\nsign 与 Cookie 已就绪，可在 BoxJS 查看复制");
         $.log("[电信权益] ssoHomLogin 凭据已回填: accId=" + existing.accId);
     }
 

@@ -8,11 +8,14 @@
  * 4. 【核心规范】：纯捕获层，绝不发起任何网络抽奖或签到执行，执行全部由青龙面板负责。
  *
  * @Author: TomCatXue
- * @Version: 2.0.0 (纯抓取重构版)
+ * @Version: 2.1.0 (纯抓取 + 捕获通知)
  * @Date: 2026-10-15
  */
 
 const $ = new Env("中国电信 · 会员凭据捕获");
+
+// 同一页面会并发多个请求，10 秒内同源通知只弹一次；超过窗口再进入仍会提示
+const NOTIFY_GAP_MS = 10 * 1000;
 
 const STORAGE_KEYS = {
     SESSION_KEY: "telecom_draw_session_key",
@@ -21,7 +24,8 @@ const STORAGE_KEYS = {
     WEDNESDAY_ACT2: "telecom_draw_wednesday_act2",
     LUCKY_ACT: "telecom_draw_lucky_act",
     LAST_CAPTURE_TIME: "telecom_draw_last_capture_time",
-    NOTIFIED_SESSION_KEY: "telecom_draw_notified_session_key"
+    NOTIFIED_SESSION_KEY: "telecom_draw_notified_session_key",
+    LAST_NOTIFY_TIME: "telecom_draw_last_notify_time"
 };
 
 (function main() {
@@ -125,18 +129,33 @@ const STORAGE_KEYS = {
         const maskedPhone = rawPhone.replace(/(\d{3})\d{4}(\d{4})/, "$1****$2") || "已更新";
         const keySnippet = capturedSessionKey.slice(0, 8) + "...";
 
-        const lastNotifiedSession = $.getdata(STORAGE_KEYS.NOTIFIED_SESSION_KEY) || "";
-        if (capturedSessionKey !== lastNotifiedSession) {
-            $.setdata(capturedSessionKey, STORAGE_KEYS.NOTIFIED_SESSION_KEY);
-            $.msg("中国电信 · 会员凭据已就绪", "账号: " + maskedPhone, "SessionKey: " + keySnippet + "\n已存入本地持久化，可在 BoxJS 一键复制至青龙！");
-            $.log("[凭据捕获] 新凭据首次捕获，发送通知: phone=" + maskedPhone + ", sessionKey=" + keySnippet);
-        } else {
-            $.log("[凭据捕获] 会话已更新 (静默): phone=" + maskedPhone + ", sessionKey=" + keySnippet);
-        }
+        $.setdata(capturedSessionKey, STORAGE_KEYS.NOTIFIED_SESSION_KEY);
+        // 凭据确实变化：强制通知，不受 10 秒窗口限制
+        $.setdata(String(Date.now()), STORAGE_KEYS.LAST_NOTIFY_TIME);
+        $.msg("中国电信 · 会员凭据已就绪", "账号: " + maskedPhone,
+            "SessionKey: " + keySnippet + "\n已存入本地持久化，可在 BoxJS 查看复制");
+        $.log("[凭据捕获] 凭据已保存: phone=" + maskedPhone + ", sessionKey=" + keySnippet);
+    } else if (capturedSessionKey) {
+        // SessionKey 未变化也照常提示，避免用户误以为没抓到
+        const rawPhone2 = $.getdata(STORAGE_KEYS.PRODUCT_NO) || "";
+        const maskedPhone2 = rawPhone2.replace(/(\d{3})\d{4}(\d{4})/, "$1****$2") || "已记录";
+        notifyOnce("中国电信 · 会员凭据已就绪", "账号: " + maskedPhone2,
+            "SessionKey: " + capturedSessionKey.slice(0, 8) + "...\n凭据有效（未变化），可直接在 BoxJS 查看复制");
+        $.log("[凭据捕获] SessionKey 未变化，仍发送确认通知");
+    } else {
+        $.log("[凭据捕获] 本次请求未解析到有效 SessionKey: " + (url || "").split("?")[0]);
     }
 
     $.done();
 })();
+
+function notifyOnce(title, sub, body) {
+    const last = Number($.getdata(STORAGE_KEYS.LAST_NOTIFY_TIME) || 0);
+    if (Date.now() - last < NOTIFY_GAP_MS) return false;
+    $.setdata(String(Date.now()), STORAGE_KEYS.LAST_NOTIFY_TIME);
+    $.msg(title, sub, body);
+    return true;
+}
 
 function getQueryParam(url, key) {
     const match = (url || "").match(new RegExp("[?&]" + key + "=([^&#]*)", "i"));
