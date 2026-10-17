@@ -45,7 +45,7 @@ ql repo https://github.com/TomCatXue/MyCookieCenter.git "ql_script" "" "README" 
 | <img src="icons/189.png" height="16" /> | **中国电信 · 0 点** | 每日限量 102 份，毫秒级抢兑等级权益 | `59 23 * * *` · `dxlin` |
 | <img src="https://github.com/ChinaTelecomOperators/ChinaUnicom/releases/download/Prerelease-Alpha/icon.png" height="16" /> | **中国联通** | 签到红包 + 爱听积分 + 权益超市 + 云盘 | `30 10 * * *` · `chinaUnicom_data` |
 
-> `dxlin` 格式：`手机号#服务密码#AndroidID[#SessionKey]`，多账号换行或 `&` 分隔。
+> `dxlin` 格式：`手机号#服务密码#AndroidID#SessionKey`，SessionKey只用于翼支付相关脚本,多账号换行或 `&` 分隔。
 
 ## License
 

@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 ===================================================================
-📌 版本: v2.0.5 (2026-10-17 换票请求对齐小程序 + Ticket 先换 SessionKey)
+📌 版本: v2.1.0 (2026-10-17 接入 YYB 微信协议换票 + C005 小程序登录闭环)
 中国电信 · 每日任务聚合脚本 (单一脚本统一管理全系电信业务)
 ===================================================================
 new Env('中国电信 · 每日任务聚合');
@@ -54,14 +54,31 @@ v2.0.5 修复（2026-10-17 Ticket 消费顺序）：
   1. login_telecom 只完成密码登录与 Ticket 获取，不再提前消费 Ticket 换 Bearer。
   2. 主流程先换 SessionKey，再调用统一的 Bearer 登录，保证 Ticket 只被一个下游使用。
 
+v2.1.0 升级（2026-10-17 接入 YYB 微信协议换票）：
+  1. 集成 YYB-Go-Enhanced 协议网关（YYB_SERVER），自动获取小程序 wx.login code。
+  2. 闭环实现 getWetchatOpenId -> miniProgrameLoginEnc 换票全链路（C005加密 + 动态公钥 + 微信端点）。
+  3. 凭据四级降级保护：环境变量 SessionKey -> 本地缓存 -> YYB微信换票 -> 电信Ticket备用换票。
+  4. 修复 mapi.bestpay.com.cn 端点 Base64 响应解析与预登录匿名产品号防风控规则。
+
 环境变量 (dxlin)：
   格式：手机号#服务密码#AndroidID[#SessionKey]
   多账号换行或 & 分隔。第 4 段 SessionKey 可选，留空则走自动换票。
+
+环境变量 (YYB_SERVER - 可选):
+  格式：http://ip:port@ref 或 http://ip:port
+  多账号以换行、& 或逗号分隔。配合 YYB-Go-Enhanced 自动为翼支付获取与续期 SessionKey。
+  如启用 API 鉴权，支持配置 YYB_API_KEY 或 YYB_PROTOCOL_TOKEN。
 ===================================================================
 """
 
 import os
 import sys
+if sys.platform.startswith('win'):
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+        sys.stderr.reconfigure(encoding='utf-8')
+    except Exception:
+        pass
 import re
 import json
 import time
@@ -107,10 +124,13 @@ CONFIG = {
     "UA": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 MicroMessenger/8.0.38(0x1800262c) NetType/WIFI Language/zh_CN"
 }
 
-SCRIPT_VERSION = "v2.0.5"
+SCRIPT_VERSION = "v2.1.0"
 
 # ==================== 🌐 翼支付网关生产环境常量 ====================
 BESTPAY_H5_BASE = "https://mapi-h5.bestpay.com.cn"
+BESTPAY_MAPI_BASE = "https://mapi.bestpay.com.cn/mapi"
+BESTPAY_APPID = "wx77120a925cc97e10"
+BESTPAY_WX_SECRET = "aad694264fcb9411fdd887e0c988156b"
 EQUITY_MALL_AGREE_ID = "20211223030100213484984697094168"
 TELECOM_MEMBER_AGREE_ID = "20200827030100038416476813657090"
 AUTH_AGREE_ID = "20200914030100044906094048314418"
@@ -247,7 +267,15 @@ def api_req(sess: requests.Session, url: str, method: str = 'POST', raw: bool = 
         r = sess.request(method, url, timeout=15, **kwargs)
         if raw:
             return r.text
-        return r.json()
+        try:
+            return r.json()
+        except Exception:
+            try:
+                dec = base64.b64decode(r.text.strip()).decode('utf-8')
+                return json.loads(dec)
+            except Exception:
+                pass
+            raise
     except Exception as e:
         log(f"[网络异常] {str(e)}")
         return '' if raw else {}
@@ -519,8 +547,32 @@ def unified_login_for_bearer(sess: requests.Session, user: dict) -> Optional[str
 
 
 # ==================== 🌐 翼支付 C005 混合加密网关 ====================
+def decode_bestpay_resp(resp_text: Union[str, dict]) -> dict:
+    """解析翼支付网关响应，兼容明文 JSON 与 Base64 密文/JSON。"""
+    if not resp_text:
+        return {'success': False, 'errorMsg': '网络响应为空'}
+    if isinstance(resp_text, dict):
+        return resp_text
+    raw = str(resp_text).strip()
+    if raw.startswith('{') or raw.startswith('['):
+        try:
+            return json.loads(raw)
+        except Exception:
+            pass
+    try:
+        dec = base64.b64decode(raw).decode('utf-8')
+        return json.loads(dec)
+    except Exception:
+        pass
+    try:
+        return json.loads(raw)
+    except Exception:
+        return {'success': False, 'errorMsg': f'解析响应失败: {raw[:80]}', 'raw': raw}
+
+
 def get_bestpay_nonce(sess: requests.Session, product_no: str, channel_id: str = '5g_mini_program') -> Optional[str]:
     cur_time = int(datetime.now().timestamp() * 1000)
+    is_miniprog = (channel_id == 'MINIPROG')
     req_body = {
         'productNo': product_no or "80544",
         'requestType': 'H5',
@@ -534,12 +586,21 @@ def get_bestpay_nonce(sess: requests.Session, product_no: str, channel_id: str =
         'requestDate': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
         'traceLogId': f'trace_{cur_time}'
     }
-    headers = {
-        'content-type': 'application/json;charset=utf-8',
-        'user-agent': CONFIG["UA"],
-        'origin': 'https://activity.bestpay.cn',
-        'referer': 'https://activity.bestpay.cn/'
-    }
+    if is_miniprog:
+        req_body['xcxVersion'] = '2.0.26'
+        headers = {
+            'content-type': 'application/json;charset=utf-8',
+            'user-agent': CONFIG["UA"],
+            'origin': 'https://servicewechat.com',
+            'referer': f'https://servicewechat.com/{BESTPAY_APPID}/227/page-frame.html'
+        }
+    else:
+        headers = {
+            'content-type': 'application/json;charset=utf-8',
+            'user-agent': CONFIG["UA"],
+            'origin': 'https://activity.bestpay.cn',
+            'referer': 'https://activity.bestpay.cn/'
+        }
     res = api_req(sess, 'https://mapi-h5.bestpay.com.cn/gapi/mapi-gateway/applyLoginFactor',
                   json=req_body, headers=headers)
     return safe_get(res, 'result', 'nonce')
@@ -569,23 +630,215 @@ def request_c005(sess: requests.Session, url: str, biz_params: dict, phone: str,
         'fromchannelId': channel_id
     }
 
-    # Cookie 里的 productNo 必须是真实 11 位手机号，sessionKey 方可完成手机号鉴权绑定
-    cookie_parts = [f'productNo={phone}']
+    is_mapi = ("mapi.bestpay.com.cn" in url or "getWetchatOpenId" in url or "miniProgrameLoginEnc" in url)
+    cookie_parts = []
     if session_key:
-        cookie_parts.insert(0, f'sessionKey={session_key}')
+        cookie_parts.append(f'sessionKey={session_key}')
+    if phone and (session_key or not is_mapi):
+        cookie_parts.append(f'productNo={phone}')
+
+    if is_mapi:
+        referer = f'https://servicewechat.com/{BESTPAY_APPID}/227/page-frame.html'
+        origin = 'https://servicewechat.com'
+    else:
+        referer = 'https://h5.bestpay.cn/'
+        origin = 'https://h5.bestpay.cn'
 
     req_headers = {
         'content-type': 'application/json;charset=utf-8',
         'user-agent': CONFIG["UA"],
-        'origin': 'https://h5.bestpay.cn',
-        'referer': 'https://h5.bestpay.cn/',
-        'cookie': '; '.join(cookie_parts)
+        'origin': origin,
+        'referer': referer
     }
+    if cookie_parts:
+        req_headers['cookie'] = '; '.join(cookie_parts)
 
-    res = api_req(sess, url, json=payload, headers=req_headers)
+    res = api_req(sess, url, json=payload, headers=req_headers, raw=is_mapi)
+    if is_mapi:
+        return decode_bestpay_resp(res)
     if isinstance(res, dict):
         return res
     return {'success': False, 'errorMsg': '响应非 JSON 结构'}
+
+
+# ==================== 📱 YYB 微信协议网关适配 ====================
+def parse_yyb_servers() -> List[str]:
+    """解析环境变量中的 YYB_SERVER 服务配置列表。"""
+    raw_env = os.environ.get("YYB_SERVER", "").strip()
+    if not raw_env:
+        return []
+    parts = re.split(r'[\r\n&,]+', raw_env)
+    servers = []
+    for p in parts:
+        p = p.strip()
+        if p and p != "[object Object]":
+            servers.append(p)
+    return servers
+
+
+def get_yyb_server_for_account(acc_idx: int) -> Optional[Tuple[str, str]]:
+    """获取指定账号的 (endpoint, ref) 映射元组。"""
+    servers = parse_yyb_servers()
+    if not servers:
+        return None
+    if acc_idx < len(servers):
+        target = servers[acc_idx]
+    else:
+        target = servers[0]
+
+    if "@" in target:
+        endpoint, ref = target.rsplit("@", 1)
+    else:
+        endpoint = target
+        ref = str(acc_idx + 1)
+
+    endpoint = endpoint.strip().rstrip("/")
+    if not endpoint.startswith(("http://", "https://")):
+        endpoint = "http://" + endpoint
+    return endpoint, ref.strip()
+
+
+def get_yyb_headers() -> dict:
+    """构造访问 YYB 协议服务的请求头。"""
+    headers = {"Content-Type": "application/json"}
+    token = os.environ.get("YYB_API_KEY") or os.environ.get("YYB_PROTOCOL_TOKEN") or ""
+    token = token.strip()
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    return headers
+
+
+def _find_yyb_code(value: Any) -> Optional[str]:
+    """深度递归提取 YYB 响应中的真实 wx.login code。"""
+    if isinstance(value, dict):
+        for key in ("wx_code", "login_code"):
+            candidate = value.get(key)
+            if isinstance(candidate, str) and candidate and candidate not in {"invalid", "null"}:
+                return candidate
+        for child in value.values():
+            found = _find_yyb_code(child)
+            if found:
+                return found
+        candidate = value.get("code")
+        if isinstance(candidate, str) and candidate and candidate not in {"invalid", "null"}:
+            return candidate
+    elif isinstance(value, list):
+        for child in value:
+            found = _find_yyb_code(child)
+            if found:
+                return found
+    return None
+
+
+def get_yyb_code(endpoint: str, ref: str, app_id: str = BESTPAY_APPID) -> Optional[str]:
+    """调用 YYB 服务获取动态一次性 wx.login code。"""
+    payload = {"ref": ref, "app_id": app_id}
+    headers = get_yyb_headers()
+    timeout = float(os.environ.get("YYB_REQUEST_TIMEOUT", "30"))
+
+    for path in ["/wxapp/getCode", "/wx/code"]:
+        try:
+            r = requests.post(f"{endpoint}{path}", json=payload, headers=headers, timeout=timeout)
+            try:
+                body = r.json()
+            except Exception:
+                continue
+            code = _find_yyb_code(body)
+            if code:
+                return code
+            if r.status_code >= 400:
+                err_msg = body.get("message") or body.get("msg") or str(body)
+                log(f"⚠️ [YYB提示] {path} 状态码 {r.status_code}: {err_msg}")
+        except Exception as e:
+            log(f"⚠️ [YYB请求异常] {endpoint}{path}: {str(e)}")
+    return None
+
+
+def exchange_session_key_via_yyb(sess: requests.Session, phone: str, acc_idx: int) -> Optional[str]:
+    """
+    通过 YYB-Go-Enhanced 获取微信 wx.login code，换取翼支付 SessionKey。
+    完整链路：YYB /wxapp/getCode -> getWetchatOpenId -> miniProgrameLoginEnc -> sessionKey
+    """
+    m_phone = mask(phone)
+    yyb_target = get_yyb_server_for_account(acc_idx)
+    if not yyb_target:
+        return None
+
+    endpoint, ref = yyb_target
+    log(f"🎫 [{m_phone}] 正在通过 YYB-Go 服务 ({endpoint} ref={ref}) 获取微信 Code...")
+    code = get_yyb_code(endpoint, ref, BESTPAY_APPID)
+    if not code:
+        log(f"❌ [{m_phone}] YYB 未返回有效的 wx.login Code")
+        return None
+
+    log(f"✅ [{m_phone}] 成功获取微信 Code ({code[:6]}...)，正在换取 OpenID...")
+
+    # 步骤 1: getWetchatOpenId (不可带真实手机号和 Cookie，用 5 位随机数字)
+    rnd_pno = str(random.randint(10000, 99999))
+    openid_url = f"{BESTPAY_MAPI_BASE}/getWetchatOpenId"
+    openid_biz = {
+        'code': code,
+        'appId': BESTPAY_APPID,
+        'secret': BESTPAY_WX_SECRET,
+        'encyType': 'C005'
+    }
+
+    res_openid = request_c005(sess, openid_url, openid_biz, phone="", session_key="",
+                              channel_id="MINIPROG", payload_pno=rnd_pno)
+
+    if not isinstance(res_openid, dict):
+        log(f"❌ [{m_phone}] 换取 OpenID 响应非预期结构")
+        return None
+
+    result_openid = res_openid.get('result') or {}
+    open_id = result_openid.get('openId')
+    union_id = result_openid.get('unionId') or ""
+
+    if not open_id:
+        err = res_openid.get('errorMsg') or res_openid.get('errorCode') or '未返回 openId'
+        log(f"❌ [{m_phone}] 换取 OpenID 失败: {err}")
+        return None
+
+    log(f"✅ [{m_phone}] 成功换取 OpenID ({open_id[:8]}...)，正在换取 SessionKey...")
+
+    # 步骤 2: miniProgrameLoginEnc (完成小程序登录并获取 SessionKey)
+    login_url = f"{BESTPAY_MAPI_BASE}/miniProgrameLoginEnc"
+    login_biz = {
+        'isExtension': True,
+        'productNo': '',
+        'appType': '94',
+        'openId': open_id,
+        'unionId': union_id,
+        'secret': BESTPAY_WX_SECRET,
+        'appId': BESTPAY_APPID,
+        'iv': '',
+        'encryptedData': '',
+        'encyType': 'C005'
+    }
+
+    res_login = request_c005(sess, login_url, login_biz, phone="", session_key="",
+                             channel_id="MINIPROG", payload_pno=rnd_pno)
+
+    if not isinstance(res_login, dict):
+        log(f"❌ [{m_phone}] 换取 SessionKey 响应非预期结构")
+        return None
+
+    result_login = res_login.get('result') or {}
+    sk = str(result_login.get('sessionKey') or '').strip()
+    if not sk:
+        err = res_login.get('errorMsg') or res_login.get('errorCode') or '未返回 sessionKey'
+        log(f"❌ [{m_phone}] 小程序登录换取 SessionKey 失败: {err}")
+        return None
+
+    bound_pno = result_login.get('productNo') or phone
+    save_session_store(phone, sk, {
+        'productNo': bound_pno,
+        'operatorNo': result_login.get('operatorNo') or '',
+        'openId': open_id,
+        'source': 'yyb_wxapp'
+    })
+    log(f"🎉 [{m_phone}] YYB 协议换票成功！SessionKey 已就绪 ({sk[:8]}...) 绑定手机: {mask(bound_pno)}")
+    return sk
 
 
 # ==================== 🎫 自动换票：Ticket → SessionKey ====================
@@ -2596,6 +2849,14 @@ def main():
                 ticket_source = "本地缓存"
                 log(f"♻️ [{m_phone}] 命中本地 SessionKey 缓存且验活通过")
 
+        # 优先：YYB 微信协议换票 (调用 getCode -> getWetchatOpenId -> miniProgrameLoginEnc)
+        if not session_key and CONFIG.get("ENABLE_AUTO_TICKET", True):
+            yyb_sk = exchange_session_key_via_yyb(sess, phone, idx - 1)
+            if yyb_sk:
+                session_key = yyb_sk
+                ticket_source = "YYB换票"
+
+        # 降级：电信 SSO Ticket 换票
         if not session_key and CONFIG.get("ENABLE_AUTO_TICKET", True):
             exchanged = exchange_ticket_for_session_key(sess, phone, auth_ticket)
             if exchanged:
@@ -2625,7 +2886,9 @@ def main():
         else:
             # 凭证来源仅在「自动换票」这类自愈动作时才提示；
             # 环境变量/本地缓存属正常默认，不占用通知行。
-            if ticket_source == "自动换票":
+            if ticket_source == "YYB换票":
+                bullets.append("• 凭证自愈: YYB微信协议自动换票续期")
+            elif ticket_source == "自动换票":
                 bullets.append("• 凭证自愈: 已自动换票续期")
 
             # 周三专属抽奖（★ 非周三不执行、不展示）
