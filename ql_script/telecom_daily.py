@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 ===================================================================
-📌 版本: v2.0.2 (2026-10-15 AI制作次数闭环：瞬时故障重试 + 实时次数刷新 + 到顶收敛)
+📌 版本: v2.0.3 (2026-10-17 服务密码换票顺序修复：Ticket 防覆盖 + 先换 SessionKey)
 中国电信 · 每日任务聚合脚本 (单一脚本统一管理全系电信业务)
 ===================================================================
 new Env('中国电信 · 每日任务聚合');
@@ -40,6 +40,11 @@ v2.0.2 修复（2026-10-15 AI制作次数闭环）：
   3. 到顶收敛：连续 MAKE_NO_GAIN_LIMIT 次「制作成功但不增点」即判定本期点数确实到顶并停止，
      避免为已满额度继续消耗机会。
   4. 核验失败与 0 次严格区分：次数核验异常时不再当作「暂无可用次数」，也不再谎报已耗尽。
+
+v2.0.3 修复（2026-10-17 服务密码换票顺序）：
+  1. login_data 不再覆盖 clientXML 解析出的真实 Ticket。
+  2. SessionKey 换票提前到签到/AI 业务之前，避免 Ticket 被后续链路先消费。
+  3. 空 Ticket 直接跳过换票并输出明确日志。
 
 环境变量 (dxlin)：
   格式：手机号#服务密码#AndroidID[#SessionKey]
@@ -94,7 +99,7 @@ CONFIG = {
     "UA": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 MicroMessenger/8.0.38(0x1800262c) NetType/WIFI Language/zh_CN"
 }
 
-SCRIPT_VERSION = "v2.0.2"
+SCRIPT_VERSION = "v2.0.3"
 
 # ==================== 🌐 翼支付网关生产环境常量 ====================
 BESTPAY_H5_BASE = "https://mapi-h5.bestpay.com.cn"
@@ -461,13 +466,13 @@ def login_telecom(sess: requests.Session, phone: str, password: str, android_id:
         return None
 
     user_info = {
+        **login_data,
         'phone': phone,
         'phoneNbr': phone,
         'masked_phone': m_phone,
         'userId': user_id,
         'ticket': ticket,
         'uid': ticket,
-        **login_data,
     }
 
     # 统一登录获取 Bearer (原 daily 独有：金豆转盘抽奖的必需凭证)
@@ -570,6 +575,11 @@ def exchange_ticket_for_session_key(sess: requests.Session, phone: str, ticket: 
       3. 成功响应结构：{result:{sessionKey, operatorNo, productNo, isRegistedBestpayCustomer}, success:true}
     """
     m_phone = mask(phone)
+    ticket = str(ticket or '').strip()
+    if not ticket:
+        log(f"⚠️ [{m_phone}] Ticket 为空，跳过 SessionKey 换票")
+        return None
+
     log(f"🎫 [{m_phone}] 正在使用 SSO Ticket 自动换取 SessionKey...")
 
     url = f"{BESTPAY_H5_BASE}/gapi/quanyi/product/singleAuthorizedLogin"
@@ -2542,15 +2552,8 @@ def main():
             time.sleep(CONFIG.get("DELAY_SEC", 2))
             continue
 
-        # ---- 业务A：每日签到与金豆 ----
-        if CONFIG.get("ENABLE_DAILY_SIGN", True):
-            try:
-                bullets.extend(sign_tasks(sess, user))
-            except Exception as e:
-                log(f"⚠️ [{m_phone}] 签到业务异常: {str(e)}")
-                bullets.append(f"• 每日签到与金豆: 执行异常 ({str(e)[:40]})")
-
-        # ---- 翼支付 SessionKey 获取（三级降级链）----
+        # ---- 先换 SessionKey，避免签到/AI 链路提前消费 Ticket ----
+        auth_ticket = str(user.get('ticket') or '').strip()
         session_key = direct_sk
         ticket_source = "环境变量" if session_key else ""
 
@@ -2566,10 +2569,18 @@ def main():
                 log(f"♻️ [{m_phone}] 命中本地 SessionKey 缓存且验活通过")
 
         if not session_key and CONFIG.get("ENABLE_AUTO_TICKET", True):
-            exchanged = exchange_ticket_for_session_key(sess, phone, user.get('ticket', ''))
+            exchanged = exchange_ticket_for_session_key(sess, phone, auth_ticket)
             if exchanged:
                 session_key = exchanged
                 ticket_source = "自动换票"
+
+        # ---- 业务A：每日签到与金豆 ----
+        if CONFIG.get("ENABLE_DAILY_SIGN", True):
+            try:
+                bullets.extend(sign_tasks(sess, user))
+            except Exception as e:
+                log(f"⚠️ [{m_phone}] 签到业务异常: {str(e)}")
+                bullets.append(f"• 每日签到与金豆: 执行异常 ({str(e)[:40]})")
 
         # ---- 业务B：翼支付抽奖与权益 ----
         has_bestpay = CONFIG.get("ENABLE_LUCKY_DRAW", True) or CONFIG.get("ENABLE_AUTO_CLAIM", True) \
