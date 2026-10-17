@@ -35,14 +35,14 @@
 ql repo https://github.com/TomCatXue/MyCookieCenter.git "ql_script" "" "README" "main"
 ```
 
-| 任务 | 定时 | 功能 | 环境变量 |
-| :--- | :--- | :--- | :--- |
-| **微信读书 · 全功能** | `0 23 * * 0` | 阅读领卡 + 翻牌抽奖 + 限免入架，内置脱机换票 | `WEREAD_AUTH` |
-| **中国电信 · 每日聚合** | `0 9 * * *` | 签到金豆 + 周三双抽奖 + 幸运抽奖 + 权益包 + AI 赢 Pad | `dxlin` |
-| **中国电信 · 0 点权益** | `59 23 * * *` | 每日限量 102 份，毫秒级抢兑等级权益 | `dxlin` |
-| **中国联通 · 每日聚合** | `30 10 * * *` | 签到红包 + 爱听积分 + 权益超市 + 云盘 | `chinaUnicom_data` |
+|     | 任务 | 功能 | 定时 · 变量 |
+| :-: | :--- | :--- | :---: |
+| <img src="icons/weread.png" height="16" /> | **微信读书** | 阅读领卡 + 翻牌抽奖 + 限免入架，内置脱机换票 | `0 23 * * 0` · `WEREAD_AUTH` |
+| <img src="icons/189.png" height="16" /> | **中国电信 · 每日** | 签到金豆 + 周三双抽奖 + 幸运抽奖 + 权益包 + AI 赢 Pad | `0 9 * * *` · `dxlin` |
+| <img src="icons/189.png" height="16" /> | **中国电信 · 0 点** | 每日限量 102 份，毫秒级抢兑等级权益 | `59 23 * * *` · `dxlin` |
+| <img src="https://github.com/ChinaTelecomOperators/ChinaUnicom/releases/download/Prerelease-Alpha/icon.png" height="16" /> | **中国联通** | 签到红包 + 爱听积分 + 权益超市 + 云盘 | `30 10 * * *` · `chinaUnicom_data` |
 
-`dxlin` 格式：`手机号#服务密码#AndroidID[#SessionKey]`，多账号换行或 `&` 分隔。
+> `dxlin` 格式：`手机号#服务密码#AndroidID[#SessionKey]`，多账号换行或 `&` 分隔。
 
 ## License
 
