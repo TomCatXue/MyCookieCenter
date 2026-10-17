@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 ===================================================================
-📌 版本: v2.0.3 (2026-10-17 服务密码换票顺序修复：Ticket 防覆盖 + 先换 SessionKey)
+📌 版本: v2.0.5 (2026-10-17 换票请求对齐小程序 + Ticket 先换 SessionKey)
 中国电信 · 每日任务聚合脚本 (单一脚本统一管理全系电信业务)
 ===================================================================
 new Env('中国电信 · 每日任务聚合');
@@ -45,6 +45,14 @@ v2.0.3 修复（2026-10-17 服务密码换票顺序）：
   1. login_data 不再覆盖 clientXML 解析出的真实 Ticket。
   2. SessionKey 换票提前到签到/AI 业务之前，避免 Ticket 被后续链路先消费。
   3. 空 Ticket 直接跳过换票并输出明确日志。
+
+v2.0.4 修复（2026-10-17 换票字段对齐）：
+  1. 删除小程序不会发送的 systemType=None，避免服务端把 null 纳入要素校验。
+  2. 补齐 singleAuthorizedLogin 的 agreeId、frontendIp、traceLogId、xcxVersion。
+
+v2.0.5 修复（2026-10-17 Ticket 消费顺序）：
+  1. login_telecom 只完成密码登录与 Ticket 获取，不再提前消费 Ticket 换 Bearer。
+  2. 主流程先换 SessionKey，再调用统一的 Bearer 登录，保证 Ticket 只被一个下游使用。
 
 环境变量 (dxlin)：
   格式：手机号#服务密码#AndroidID[#SessionKey]
@@ -99,12 +107,13 @@ CONFIG = {
     "UA": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 MicroMessenger/8.0.38(0x1800262c) NetType/WIFI Language/zh_CN"
 }
 
-SCRIPT_VERSION = "v2.0.3"
+SCRIPT_VERSION = "v2.0.5"
 
 # ==================== 🌐 翼支付网关生产环境常量 ====================
 BESTPAY_H5_BASE = "https://mapi-h5.bestpay.com.cn"
 EQUITY_MALL_AGREE_ID = "20211223030100213484984697094168"
 TELECOM_MEMBER_AGREE_ID = "20200827030100038416476813657090"
+AUTH_AGREE_ID = "20200914030100044906094048314418"
 
 # ==================== 🤖 AI奇遇赢Pad 活动常量 ====================
 CHANNEL_ID = "156000009079"
@@ -475,7 +484,20 @@ def login_telecom(sess: requests.Session, phone: str, password: str, android_id:
         'uid': ticket,
     }
 
-    # 统一登录获取 Bearer (原 daily 独有：金豆转盘抽奖的必需凭证)
+    return user_info
+
+
+# ==================== 🎟️ 统一登录 Bearer ====================
+def unified_login_for_bearer(sess: requests.Session, user: dict) -> Optional[str]:
+    """用 Ticket 换取统一登录 Bearer（金豆转盘必需）。
+
+    该调用会消费 Ticket，因此必须在 SessionKey 换票完成后再执行。
+    """
+    ticket = str(user.get('ticket') or '').strip()
+    m_phone = mask(user.get('phoneNbr', ''))
+    if not ticket:
+        return None
+
     try:
         auth_body = encrypt_aes(
             {"ticket": ticket, "backUrl": "https%3A%2F%2Fwapact.189.cn%3A9001",
@@ -485,13 +507,15 @@ def login_telecom(sess: requests.Session, phone: str, password: str, android_id:
         auth_res = api_req(sess, 'https://wapact.189.cn:9001/unified/user/login',
                            data=auth_body, headers={'Content-Type': 'application/json'})
         if isinstance(auth_res, dict) and auth_res.get('code') == 0:
-            user_info['Authorization'] = f"Bearer {auth_res['biz']['token']}"
-        else:
-            log(f"ℹ️ [{m_phone}] 未获取 Bearer，金豆转盘功能不可用")
+            token = auth_res.get('biz', {}).get('token')
+            if token:
+                user['Authorization'] = f"Bearer {token}"
+                return user['Authorization']
+
+        log(f"ℹ️ [{m_phone}] 未获取 Bearer，金豆转盘功能不可用")
     except Exception as e:
         log(f"ℹ️ [{m_phone}] 统一登录异常: {str(e)}")
-
-    return user_info
+    return None
 
 
 # ==================== 🌐 翼支付 C005 混合加密网关 ====================
@@ -583,13 +607,17 @@ def exchange_ticket_for_session_key(sess: requests.Session, phone: str, ticket: 
     log(f"🎫 [{m_phone}] 正在使用 SSO Ticket 自动换取 SessionKey...")
 
     url = f"{BESTPAY_H5_BASE}/gapi/quanyi/product/singleAuthorizedLogin"
+    now = datetime.now()
     biz = {
         'ticket': ticket,
         'fromchannelId': 'XCX',
         'fromChannelId': 'XCX',
-        'systemType': None,
         'channel': 'XCX',
         'appType': '94',
+        'agreeId': AUTH_AGREE_ID,
+        'frontendIp': '%d.%d.%d.%d' % tuple(random.randint(0, 255) for _ in range(4)),
+        'traceLogId': now.strftime('%Y%m%d%H%M%S') + ''.join(random.choices(string.digits, k=5)),
+        'xcxVersion': '2.0.26',
         'encyType': 'C005',
     }
 
@@ -2573,6 +2601,10 @@ def main():
             if exchanged:
                 session_key = exchanged
                 ticket_source = "自动换票"
+
+        # ---- Ticket 只在 SessionKey 换票之后用于 Bearer，避免一次性票据提前被消费 ----
+        if not user.get('Authorization'):
+            unified_login_for_bearer(sess, user)
 
         # ---- 业务A：每日签到与金豆 ----
         if CONFIG.get("ENABLE_DAILY_SIGN", True):
