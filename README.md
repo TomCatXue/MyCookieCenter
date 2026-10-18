@@ -29,7 +29,7 @@ Loon 负责抓 Cookie，青龙负责跑任务，BoxJS 负责查看和复制凭�
 | <img src="https://raw.githubusercontent.com/luestr/IconResource/main/App_icon/120px/Loon.png" height="16" /> | **Loon 监控** | 为桌面小组件提供运行状态与流量数据 | **[安装](https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/loon/LoonMonitor.plugin)** / **[说明](./scripts/tools/loon/)** |
 | <img src="https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/26/ff/f2/26fff2c0-729b-5216-0c13-7d0499f10940/AppIconLite-0-0-1x_U007ephone-0-6-0-0-sRGB-85-220.png/64x64bb.jpg" height="16" /> | **扫描全能王 签到** | 抓取 Cookie + 每日签到 | **[安装](https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/loon/camscanner.plugin)** / **[说明](./scripts/tools/camscanner/)** |
 
-> `Cookie 抓取合集` 的开关默认全关，按需开启；微信读书要先打开「我」的页面，再打开「周二翻牌」页面才能捕获完整凭据。
+> `Cookie 抓取合集` 的开关默认开启，可单独关闭不需要的业务；微信读书要先打开「我」的页面，再打开「周二翻牌」页面才能捕获完整凭据。
 > `camscanner.plugin` 与 `CookieCenter.plugin` 含相同抓取规则，只保留一个即可。
 
 ## 青龙任务
@@ -40,7 +40,7 @@ ql repo https://github.com/TomCatXue/MyCookieCenter.git "ql_script" "" "README" 
 
 |     | 任务 | 功能 | 定时 · 变量 |
 | :-: | :--- | :--- | :---: |
-| <img src="icons/weread.png" height="16" /> | **微信读书** | 阅读领卡 + 翻牌抽奖 + 限免入架，内置脱机换票 | `0 23 * * 0` · `WEREAD_AUTH` |
+| <img src="icons/weread.png" height="16" /> | **微信读书** | 阅读领卡 + 翻牌抽奖 + 限免入架，内置脱机换票 | `0 23 * * *` · `WEREAD_AUTH` |
 | <img src="icons/189.png" height="16" /> | **中国电信 · 每日** | 签到金豆 + 周三双抽奖 + 幸运抽奖 + 权益包 + AI 赢 Pad | `0 9 * * *` · `dxlin` |
 | <img src="icons/189.png" height="16" /> | **中国电信 · 0 点** | 每日限量 102 份，毫秒级抢兑等级权益 | `59 23 * * *` · `dxlin` |
 | <img src="https://github.com/ChinaTelecomOperators/ChinaUnicom/releases/download/Prerelease-Alpha/icon.png" height="16" /> | **中国联通** | 签到红包 + 爱听积分 + 权益超市 + 云盘 | `30 10 * * *` · `chinaUnicom_data` |
