@@ -10,10 +10,7 @@ cron: 0 9 * * *
 tag: 中国电信
 # @tag 中国电信
 ===================================================================
-整合说明 (v2.0.0)：
-  原 telecom_daily.py (每日签到与金豆) + telecom_wednesday.py (周三抽奖与权益)
-  + telecom_ai_pad.py (AI奇遇赢Pad) 三脚本合并为单一脚本，统一登录、统一开关、
-  统一通知。电信 0 点等级权益秒杀 (telecom_midnight_equity.py) 仍独立，不参与整合。
+
 
 功能矩阵：
   1. 每日签到与金豆：掌厅打卡 + 阶梯连签奖励 + 金豆转盘 + 浏览任务 + 宠物喂食 + 金豆核验
@@ -22,48 +19,6 @@ tag: 中国电信
   4. 权益包自动领取：双通道扫描待领权益 → 真实领取 → 轮询确认到账
   5. AI奇遇赢Pad：AI 视频制作赚点数 + 满千兑换话费
 
-v2.0.1 修复（2026-10-15）：
-  1. 金豆转盘奖品解析：奖品名实际位于 biz.resultInfo.title，旧实现只扫顶层导致中奖被判「未中奖」，
-     现递归提取 resultInfo / prizeInfo / lotteryRecord 等嵌套容器，并同步提取嵌套豆数。
-  2. AI 制作次数闸门：340 点为本期入账上限提示而非停机条件，旧实现用本地统计推算次数并在归零时
-     跳过制作（服务端仍余 11 次却不做），现完全以服务端返回的实际可用次数执行，由服务端自然收敛。
-  3. 抽奖自动领奖：单号可能嵌套在 resultInfo / prizeInfo 内，旧实现只读顶层导致永不触发领取；
-     现深度提取 orderNo（兼容 orderId / prizeOrderNo / recordId 等），缺失时回查中奖记录补齐，
-     并识别领取接口的 FAIL / SUCCESS 状态字段。
-
-v2.0.2 修复（2026-10-15 AI制作次数闭环）：
-  1. 返回码分类：旧实现把 10007(系统繁忙) 与 10014(次数已用完) 混在同一分支直接 break，
-     一次服务端抖动就丢掉整轮剩余次数（表现为「已耗尽」却仍可继续制作并入账）；
-     现拆分为 OK / TERMINAL / TRANSIENT，瞬时故障有限重试而非放弃。
-  2. 次数实时刷新：旧实现只在启动时读一次次数并作为循环上界，通知回显的也是启动快照，
-     故日志长期显示「仍余 N 次」；现每次制作成功后重新核验服务端次数，归零才停止。
-  3. 到顶收敛：连续 MAKE_NO_GAIN_LIMIT 次「制作成功但不增点」即判定本期点数确实到顶并停止，
-     避免为已满额度继续消耗机会。
-  4. 核验失败与 0 次严格区分：次数核验异常时不再当作「暂无可用次数」，也不再谎报已耗尽。
-
-v2.0.3 修复（2026-10-17 服务密码换票顺序）：
-  1. login_data 不再覆盖 clientXML 解析出的真实 Ticket。
-  2. SessionKey 换票提前到签到/AI 业务之前，避免 Ticket 被后续链路先消费。
-  3. 空 Ticket 直接跳过换票并输出明确日志。
-
-v2.0.4 修复（2026-10-17 换票字段对齐）：
-  1. 删除小程序不会发送的 systemType=None，避免服务端把 null 纳入要素校验。
-  2. 补齐 singleAuthorizedLogin 的 agreeId、frontendIp、traceLogId、xcxVersion。
-
-v2.0.5 修复（2026-10-17 Ticket 消费顺序）：
-  1. login_telecom 只完成密码登录与 Ticket 获取，不再提前消费 Ticket 换 Bearer。
-  2. 主流程先换 SessionKey，再调用统一的 Bearer 登录，保证 Ticket 只被一个下游使用。
-
-v2.1.0 升级（2026-10-17 接入 YYB 微信协议换票）：
-  1. 集成 YYB-Go-Enhanced 协议网关（YYB_SERVER），自动获取小程序 wx.login code。
-  2. 闭环实现 getWetchatOpenId -> miniProgrameLoginEnc 换票全链路（C005加密 + 动态公钥 + 微信端点）。
-  3. 凭据四级降级保护：环境变量 SessionKey -> 本地缓存 -> YYB微信换票 -> 电信Ticket备用换票。
-  4. 修复 mapi.bestpay.com.cn 端点 Base64 响应解析与预登录匿名产品号防风控规则。
-
-v2.1.1 修复（2026-10-17 C005 信封隔离与换票自愈防护）：
-  1. request_c005 信封收敛：外层 payload['productNo'] 严格收敛为 1~5 位随机标识，杜绝 11 位手机号污染导致网关解密失败。
-  2. exchange_session_key_via_yyb 业务对齐：内层 productNo 填入真实手机号，并对未通过手机号授权的返回输出明确引导。
-  3. exchange_ticket_for_session_key 长度防护：增加 Ticket > 128 字符防御拦截与友好降级日志，显式隔离信封 productNo。
 
 环境变量 (dxlin)：
   格式：手机号#服务密码#AndroidID[#SessionKey]
