@@ -1,15 +1,11 @@
 #!name = LoonMonitor · 小组件数据提供与状态服务
-#!desc = 专为 iOS 哑巴面板 (MutePanel) 小组件打造的 Loon 本地监控数据服务。实时提供当前运行模式、策略组数量、活跃节点、VPN 出口 IP/归属地、延迟与订阅流量统计。
+#!desc = 专为 iOS 哑巴面板 (MutePanel) 小组件提供 Loon 运行状态。机场订阅流量由小组件直接请求用户填写的订阅链接，本插件只返回运行模式、策略组数量、活跃节点、出口 IP、归属地与延迟。
 #!author = TomCatXue
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://raw.githubusercontent.com/luestr/IconResource/main/App_icon/120px/Loon.png
 #!tag = Loon, 监控, 小组件, VPN
-#!version = 1.4.6
-#!date = 2026-10-13 16:00
-
-# =================== 0. 参数配置 ===================
-[Argument]
-sub_url = input,"",tag=机场订阅链接,desc=配置机场节点订阅链接（URL），插件将自动定时同步上下行与剩余流量
+#!version = 1.5.0
+#!date = 2026-10-18 11:25
 
 # =================== 1. 本地解析 ===================
 # 虚拟域名在本地解析至 Fake-IP 保留网段 (198.18.0.1)，保证流量进入 TUN 虚拟网卡触发本地脚本短路。
@@ -27,26 +23,18 @@ DOMAIN,loon.box,DIRECT
 DOMAIN,api.loon.box,DIRECT
 DOMAIN,loon.local,DIRECT
 IP-CIDR,198.18.0.1/32,DIRECT
-DOMAIN-KEYWORD,subscribe,DIRECT
-DOMAIN-KEYWORD,sub,DIRECT
 DOMAIN-SUFFIX,jsdelivr.net,PROXY
 DOMAIN-SUFFIX,ip-api.com,PROXY
 DOMAIN-SUFFIX,ip.sb,PROXY
 
 # =================== 3. 脚本拦截与服务 ===================
-# 遵循 BoxJs 工业级验证规范（经典 http-request 语法 + requires-body=true）：
-# 1. 彻底移除 argument="{sub_url}"，杜绝参数宏替换引发的语法分词解析崩溃；
-# 2. 脚本内部自动通过 $persistentStore 读取 Loon 插件配置参数 sub_url 与历史缓存；
-# 3. requires-body=true 确保在建立底层连接前完成 100% 短路 Mock，返回 HTTP 200 JSON；
-# 4. 正则优化放宽，精准匹配 loon.box、api.loon.box、loon.local、198.18.0.1 任意子路径。
+# 本插件只提供 Loon 运行状态，不监听、不缓存、不主动拉取任何机场订阅。
+# 订阅流量由哑巴面板直接请求用户填写的订阅链接，因此换机场无需修改本插件。
 [Script]
 # 1. 小组件数据服务：请求发出前直接短路返回 JSON（标准 http-request 语法，全版本兼容短路 Mock）
 http-request ^https?:\/\/(?:(?:api\.)?loon\.(?:box|local)|198\.18\.0\.1) script-path=https://fastly.jsdelivr.net/gh/TomCatXue/MyCookieCenter@071851d/scripts/tools/loon/loon_monitor.js, requires-body=true, timeout=10, tag=Loon监控·小组件数据服务
 
-# 2. 订阅流量静默捕获：当 Loon 自身刷新机场订阅时自动截获并持久化剩余流量配额
-http-response \/(subscription|subscribe)|[?&]token= script-path=https://fastly.jsdelivr.net/gh/TomCatXue/MyCookieCenter@071851d/scripts/tools/loon/loon_monitor.js, requires-body=false, timeout=10, tag=Loon监控·订阅流量捕获
-
-# 3. 后台定时预热：每 2 小时定时唤醒同步出口 IP 与订阅流量，保证小组件 0ms 极速响应
+# 2. 后台定时预热出口 IP，保证小组件读取时直接命中缓存
 cron "0 */2 * * *" script-path=https://fastly.jsdelivr.net/gh/TomCatXue/MyCookieCenter@071851d/scripts/tools/loon/loon_monitor.js, timeout=20, tag=Loon监控·定时同步
 
 # =================== 4. MITM 解密 ===================
