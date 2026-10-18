@@ -5,7 +5,7 @@
 #!icon = https://raw.githubusercontent.com/luestr/IconResource/main/App_icon/120px/Loon.png
 #!tag = Loon, 监控, 小组件, VPN
 #!version = 1.5.0
-#!date = 2026-10-18 11:25
+#!date = 2026-10-18 11:10
 
 # =================== 1. 本地解析 ===================
 # 虚拟域名在本地解析至 Fake-IP 保留网段 (198.18.0.1)，保证流量进入 TUN 虚拟网卡触发本地脚本短路。
@@ -32,10 +32,10 @@ DOMAIN-SUFFIX,ip.sb,PROXY
 # 订阅流量由哑巴面板直接请求用户填写的订阅链接，因此换机场无需修改本插件。
 [Script]
 # 1. 小组件数据服务：请求发出前直接短路返回 JSON（标准 http-request 语法，全版本兼容短路 Mock）
-http-request ^https?:\/\/(?:(?:api\.)?loon\.(?:box|local)|198\.18\.0\.1) script-path=https://fastly.jsdelivr.net/gh/TomCatXue/MyCookieCenter@071851d/scripts/tools/loon/loon_monitor.js, requires-body=true, timeout=10, tag=Loon监控·小组件数据服务
+http-request ^https?:\/\/(?:(?:api\.)?loon\.(?:box|local)|198\.18\.0\.1) script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/loon/loon_monitor.js, requires-body=true, timeout=10, tag=Loon监控·小组件数据服务
 
 # 2. 后台定时预热出口 IP，保证小组件读取时直接命中缓存
-cron "0 */2 * * *" script-path=https://fastly.jsdelivr.net/gh/TomCatXue/MyCookieCenter@071851d/scripts/tools/loon/loon_monitor.js, timeout=20, tag=Loon监控·定时同步
+cron "0 */2 * * *" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/loon/loon_monitor.js, timeout=20, tag=Loon监控·定时同步
 
 # =================== 4. MITM 解密 ===================
 [MITM]
