@@ -14,7 +14,7 @@ tag: 中国电信
 
 功能矩阵：
   1. 每日签到与金豆：掌厅打卡 + 阶梯连签奖励 + 金豆转盘 + 浏览任务 + 宠物喂食 + 金豆核验
-  2. 周三会员双抽奖：山西甄选周三会员日 (hd76690472) + 山西抽奖新-每周三次 (hd92859166)
+  2. 会员双抽奖：山西甄选周三会员日 (hd76690472, 仅周三) + 山西抽奖新-每周三次 (hd92859166, 全周有效)
   3. 权益商城幸运抽奖：读取真实活动配置 + 走可达抽奖引擎真实抽奖并回显奖品
   4. 权益包自动领取：双通道扫描待领权益 → 真实领取 → 轮询确认到账
   5. AI奇遇赢Pad：AI 视频制作赚点数 + 满千兑换话费
@@ -51,7 +51,17 @@ import certifi
 import requests
 from pathlib import Path
 from typing import Dict, Any, Union, Optional, List, Tuple
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
+try:
+    from zoneinfo import ZoneInfo
+    CN_TZ = ZoneInfo("Asia/Shanghai")
+except Exception:
+    CN_TZ = timezone(timedelta(hours=8))
+
+
+def now_cn() -> datetime:
+    """获取中国标准时间 (Asia/Shanghai)"""
+    return datetime.now(CN_TZ)
 from urllib3.util.ssl_ import create_urllib3_context
 from requests.adapters import HTTPAdapter
 from Crypto.PublicKey import RSA
@@ -62,7 +72,8 @@ from Crypto.Util.Padding import pad, unpad
 CONFIG = {
     # --- 业务总开关 ---
     "ENABLE_DAILY_SIGN": True,      # 每日签到与金豆 (每天执行)
-    "ENABLE_WEDNESDAY": True,       # 周三双抽奖 (★仅周三执行，非周三不执行且不展示)
+    "ENABLE_WEDNESDAY": True,       # 周三会员日抽奖 (★仅周三执行，非周三不执行且不展示)
+    "ENABLE_WEEKLY_THRICE": True,   # 每周三次抽奖 (★全周有效，按周累计3次机会)
     "ENABLE_LUCKY_DRAW": True,      # 权益商城幸运抽奖 (每天执行)
     "ENABLE_AUTO_CLAIM": True,      # 权益包自动领取 (每天执行)
     "ENABLE_AI_PAD": True,          # AI奇遇赢Pad (每天执行)
@@ -78,13 +89,13 @@ CONFIG = {
 
     # --- 活动代号 ---
     "ACT_COIN": "hd76690472",       # 周三会员抽权益币
-    "ACT_THRICE": "hd92859166",     # 周三会员抽三次
+    "ACT_THRICE": "hd92859166",     # 每周三次抽奖 (山西抽奖新-每周三次)
     "ACT_LUCKY": "A2025011413413484352835699495179",  # 权益商城幸运抽奖
 
     "UA": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 MicroMessenger/8.0.38(0x1800262c) NetType/WIFI Language/zh_CN"
 }
 
-SCRIPT_VERSION = "v2.1.1"
+SCRIPT_VERSION = "v2.1.2"
 
 # ==================== 🌐 翼支付网关生产环境常量 ====================
 BESTPAY_H5_BASE = "https://mapi-h5.bestpay.com.cn"
@@ -1742,29 +1753,54 @@ def query_recent_lottery_history(sess: requests.Session, phone: str, session_key
 
 def _extract_prize_order_no(prize: Any) -> str:
     """
-    从抽奖结果中深度提取领奖单号（orderNo）。
+    从抽奖结果或中奖记录中深度提取领奖单号（orderNo / recordNo 等）。
 
-    实测各活动返回结构不一，单号可能出现在：
-      顶层 / resultInfo / prizeInfo / lotteryRecord / prize / data 等容器内，
-      键名也可能是 orderNo / orderId / prizeOrderNo / recordId / lotteryRecordId。
-    取不到时返回空串（调用方回退到 queryLotteryRecord 回查）。
+    实测各活动返回结构差异较大：
+      - 周三会员抽奖常嵌在 resultInfo.orderNo 或 prizeInfo.orderNo
+      - 权益商城幸运盲盒抽奖（hd70226376）单号为 recordNo（形如 DRAW2026102000025161348475036）
+      - 部分活动使用 lotteryRecordNo / prizeOrderNo / recordId 等变体
+    采用多层广度优先遍历，确保能提取到任意合法单号。
     """
-    if not isinstance(prize, dict):
+    if not isinstance(prize, (dict, list)):
         return ''
 
-    ORDER_KEYS = ('orderNo', 'orderId', 'prizeOrderNo', 'prizeOrderId',
-                  'recordId', 'lotteryRecordId', 'receiveOrderNo')
-    containers = [prize]
-    for key in ('resultInfo', 'prizeInfo', 'lotteryRecord', 'prize', 'data', 'record'):
-        sub = prize.get(key)
-        if isinstance(sub, dict):
-            containers.append(sub)
+    ORDER_KEYS = (
+        'orderno', 'order_no', 'orderid', 'order_id',
+        'recordno', 'record_no', 'recordid', 'record_id',
+        'prizeorderno', 'prizeorderid', 'prizerecordno',
+        'lotteryrecordno', 'lotteryrecordid', 'lotteryorderno',
+        'drawrecordno', 'draworderno', 'winrecordno',
+        'receiveorderno', 'receiverecordno', 'businessno',
+        'userprizeid', 'userrecordid', 'awardorderno', 'awardrecordno'
+    )
 
-    for container in containers:
-        for k in ORDER_KEYS:
-            v = container.get(k)
-            if v and str(v).strip():
-                return str(v).strip()
+    queue = [prize]
+    visited = set()
+    depth = 0
+
+    while queue and depth < 5:
+        next_queue = []
+        for item in queue:
+            if id(item) in visited:
+                continue
+            visited.add(id(item))
+
+            if isinstance(item, dict):
+                for k, v in item.items():
+                    if k.lower() in ORDER_KEYS:
+                        val_str = str(v).strip()
+                        if val_str and val_str.lower() not in ('none', 'null', 'undefined', '0'):
+                            return val_str
+                for v in item.values():
+                    if isinstance(v, (dict, list)):
+                        next_queue.append(v)
+            elif isinstance(item, list):
+                for sub in item:
+                    if isinstance(sub, (dict, list)):
+                        next_queue.append(sub)
+        queue = next_queue
+        depth += 1
+
     return ''
 
 
@@ -1775,27 +1811,45 @@ def _extract_prize_name(prize: Any) -> str:
     实测结构差异较大：金豆转盘放在 biz.resultInfo.title，
     op-lottery-system 放在 result.prizeName，部分活动嵌在 prizeInfo / lotteryRecord。
     """
-    if not isinstance(prize, dict):
+    if not isinstance(prize, (dict, list)):
         return ''
-    containers = [prize]
-    for key in ('resultInfo', 'prizeInfo', 'lotteryRecord', 'prize', 'data', 'record'):
-        sub = prize.get(key)
-        if isinstance(sub, dict):
-            containers.append(sub)
 
-    for container in containers:
-        for k in ('prizeName', 'prizeTitle', 'giftTitle', 'awardName', 'title', 'name', 'prizeDesc'):
-            v = container.get(k)
-            if v and str(v).strip():
-                return str(v).strip()
+    PRIZE_KEYS = ('prizename', 'prizetitle', 'gifttitle', 'awardname', 'title', 'name', 'prizedesc', 'contentname')
+    queue = [prize]
+    visited = set()
+    depth = 0
+
+    while queue and depth < 5:
+        next_queue = []
+        for item in queue:
+            if id(item) in visited:
+                continue
+            visited.add(id(item))
+
+            if isinstance(item, dict):
+                for k, v in item.items():
+                    if k.lower() in PRIZE_KEYS:
+                        val_str = str(v).strip()
+                        if val_str and val_str.lower() not in ('none', 'null', 'undefined'):
+                            return val_str
+                for v in item.values():
+                    if isinstance(v, (dict, list)):
+                        next_queue.append(v)
+            elif isinstance(item, list):
+                for sub in item:
+                    if isinstance(sub, (dict, list)):
+                        next_queue.append(sub)
+        queue = next_queue
+        depth += 1
+
     return ''
 
 
 def query_lottery_order_no(sess: requests.Session, phone: str, session_key: str,
                            act_no: str, prize_name: str = '') -> str:
     """
-    中奖记录回查：当抽奖响应未携带单号时，从 queryLotteryRecord 找到今日中奖记录的单号。
-    这是「抽中后自动到账」的兜底链路（历史抓包中领取请求始终携带 orderNo）。
+    中奖记录回查：当抽奖响应未携带单号时，从 queryLotteryRecord 找到中奖记录的单号。
+    这是「抽中后自动到账」的兜底链路（历史抓包中领取请求始终携带 orderNo/recordNo）。
     """
     try:
         res = request_c005(sess, f'{BESTPAY_H5_BASE}/gapi/op-lottery-system/DrawService/queryLotteryRecord', {
@@ -1811,20 +1865,56 @@ def query_lottery_order_no(sess: requests.Session, phone: str, session_key: str,
             'encyType': 'C005'
         }, phone, session_key, 'MINIPROG')
 
-        records = safe_get(res, 'result', 'queryLotteryRecordDTOList') or []
-        today = datetime.now().strftime('%Y-%m-%d')
+        records = (safe_get(res, 'result', 'queryLotteryRecordDTOList') or
+                   safe_get(res, 'result', 'lotteryRecordDTOList') or
+                   safe_get(res, 'result', 'records') or
+                   safe_get(res, 'result', 'list') or
+                   (res.get('result') if isinstance(res.get('result'), list) else [])) or []
+
+        if not records:
+            return ''
+
+        today = now_cn().strftime('%Y-%m-%d')
+        candidate_order = ''
+
         for r in records:
             if not isinstance(r, dict):
                 continue
-            t_str = str(r.get('prizeDistributeTime') or r.get('createTime') or '')
-            if t_str and not t_str.startswith(today):
+            name = str(r.get('prizeName') or r.get('prizeTitle') or r.get('title') or '').strip()
+            # 奖品名模糊匹配（防止前缀/后缀微小差异）
+            match_name = True
+            if prize_name and name:
+                match_name = (name in prize_name) or (prize_name in name)
+            elif prize_name and not name:
+                match_name = False
+
+            if not match_name:
                 continue
-            name = str(r.get('prizeName') or '').strip()
-            if prize_name and name and name != prize_name:
-                continue
+
             order_no = _extract_prize_order_no(r)
-            if order_no:
+            if not order_no:
+                continue
+
+            # 检查时间：若是今天中奖的则直接命中
+            t_str = str(r.get('prizeDistributeTime') or r.get('createTime') or r.get('drawTime') or r.get('winTime') or '')
+            if t_str.isdigit():
+                try:
+                    ts = int(t_str)
+                    if ts > 1e11:  # 毫秒时间戳
+                        ts = ts / 1000
+                    dt = datetime.fromtimestamp(ts, tz=ZoneInfo("Asia/Shanghai"))
+                    t_str = dt.strftime('%Y-%m-%d')
+                except Exception:
+                    pass
+
+            if today in t_str or t_str.startswith(today) or today.replace('-', '') in t_str:
                 return order_no
+
+            # 暂存首条匹配奖品名的单号（防跨时区或时间格式不一致时漏领）
+            if not candidate_order:
+                candidate_order = order_no
+
+        return candidate_order
     except Exception as e:
         log(f"ℹ️ 中奖记录回查异常: {str(e)[:80]}")
     return ''
@@ -1840,6 +1930,7 @@ def receive_lottery_prize(sess: requests.Session, phone: str, session_key: str,
             'sessionKey': session_key,
             'productNo': phone,
             'orderNo': order_no,
+            'recordNo': order_no,
             'sourceChannel': 'APPLET',
             'appType': '94',
             'fromChannelId': 'MINIPROG',
@@ -1852,7 +1943,7 @@ def receive_lottery_prize(sess: requests.Session, phone: str, session_key: str,
 
         if res.get('success'):
             result = res.get('result') if isinstance(res.get('result'), dict) else {}
-            msg = str(result.get('resoultMsg') or result.get('msg') or res.get('errorMsg') or '')
+            msg = str(result.get('resoultMsg') or result.get('resultMsg') or result.get('msg') or res.get('errorMsg') or '')
             status = str(result.get('status') or result.get('receiveStatus') or '').upper()
             if '已领取' in msg or '重复' in msg or status in ('SUCCESS', 'RECEIVED', 'ALREADY_RECEIVED'):
                 log(f"ℹ️ [{act_title}] 该奖品已领取过，无需重复操作")
@@ -2756,7 +2847,7 @@ def main():
     print(f"  🎉 [{SCRIPT_VERSION}] 中国电信 · 每日任务聚合脚本 🎉  ")
     print("=" * 65)
 
-    now = datetime.now()
+    now = now_cn()
     is_wednesday = now.weekday() == 2  # 0=周一, 2=周三
     force_run = CONFIG.get("FORCE_RUN", False) or os.environ.get("FORCE_RUN", "").lower() in ["true", "1"]
     weekday_names = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
@@ -2765,7 +2856,8 @@ def main():
     # 是否执行周三专属抽奖：仅周三，或 FORCE_RUN 调试模式
     run_wed = is_wednesday or force_run
 
-    print(f"  📅 今天是 {today_name} | 周三专属抽奖: {'启用' if run_wed else '跳过(非周三)'}")
+    print(f"  📅 今天是 {today_name} | 周三会员日: {'启用' if run_wed else '跳过(非周三)'}"
+          f" | 每周三次: {'启用' if CONFIG.get('ENABLE_WEEKLY_THRICE', True) else '禁用'}")
     print(f"  📝 签到金豆: {'启用' if CONFIG.get('ENABLE_DAILY_SIGN', True) else '禁用'}"
           f" | 幸运抽奖: {'启用' if CONFIG.get('ENABLE_LUCKY_DRAW', True) else '禁用'}"
           f" | AI奇遇: {'启用' if CONFIG.get('ENABLE_AI_PAD', True) else '禁用'}")
@@ -2846,6 +2938,7 @@ def main():
 
         # ---- 业务B：翼支付抽奖与权益 ----
         has_bestpay = CONFIG.get("ENABLE_LUCKY_DRAW", True) or CONFIG.get("ENABLE_AUTO_CLAIM", True) \
+                      or CONFIG.get("ENABLE_WEEKLY_THRICE", True) \
                       or (run_wed and CONFIG.get("ENABLE_WEDNESDAY", True))
 
         if not session_key:
@@ -2860,7 +2953,7 @@ def main():
             elif ticket_source == "自动换票":
                 bullets.append("• 凭证自愈: 已自动换票续期")
 
-            # 周三专属抽奖（★ 非周三不执行、不展示）
+            # 周三专属抽奖（★ 仅周三执行、展示）
             if run_wed and CONFIG.get("ENABLE_WEDNESDAY", True):
                 try:
                     r1 = run_wednesday_lottery(sess, CONFIG.get("ACT_COIN", "hd76690472"),
@@ -2869,12 +2962,15 @@ def main():
                 except Exception as e:
                     bullets.append(f"• 周三会员抽权益币: 执行异常 ({str(e)[:40]})")
 
+            # 每周三次抽奖（★ 全周有效，按周累计3次机会）
+            if CONFIG.get("ENABLE_WEEKLY_THRICE", True):
                 try:
                     r2 = run_wednesday_lottery(sess, CONFIG.get("ACT_THRICE", "hd92859166"),
-                                               "周三会员抽三次", session_key, phone)
-                    bullets.append(f"• 周三会员抽三次: {r2}")
+                                               "每周抽三次", session_key, phone,
+                                               closed_hint="活动暂未开放或本周已抽完")
+                    bullets.append(f"• 每周抽三次: {r2}")
                 except Exception as e:
-                    bullets.append(f"• 周三会员抽三次: 执行异常 ({str(e)[:40]})")
+                    bullets.append(f"• 每周抽三次: 执行异常 ({str(e)[:40]})")
 
             # 权益商城幸运抽奖（每天执行）
             if CONFIG.get("ENABLE_LUCKY_DRAW", True):

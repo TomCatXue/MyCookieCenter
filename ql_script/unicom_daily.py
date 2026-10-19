@@ -26,7 +26,7 @@ tag: 中国联通
 
 环境变量配置 (chinaUnicomCookie):
   多账号换行或使用 & 分隔:
-  a. 账号密码自动获取Token (推荐): export chinaUnicomCookie="18600000000#123456"
+  a. 账号密码自动获取Token (推荐): export chinaUnicomCookie="138****0000#123456"
   b. Token#AppId 免密模式 (推荐): export chinaUnicomCookie="a3e4c1ff2xxxxxxxxx#912d30xxxxxx"
   c. 仅Token模式: export chinaUnicomCookie="a3e4c1ff2xxxxxxxxx"
 
@@ -3569,23 +3569,23 @@ class UserService:
         url = f"https://uca.wo116114.com/sjgj/woAssistant/umm/configs/v1/config?product_line=uasp&entry_point=h5&entry_point_id={_UASP_APP_ID}"
         self.sec_uca_post(url, {
             "productId": "91242950", "operationType": 1, "type": 1,
-            "contents": [{"checked": True, "configTime": None, "nickname": None, "contentTag": "疑似诈骗", "content": "13088330789"}]
+            "contents": [{"checked": True, "configTime": None, "nickname": None, "contentTag": "疑似诈骗", "content": "138****0000"}]
         })
         time.sleep(2)
         self.sec_uca_post(url, {
             "productId": "91242950", "blacklistSource": 0, "type": 1, "operationType": 0,
-            "contents": [{"contentTag": "疑似诈骗", "content": "13088330789"}]
+            "contents": [{"contentTag": "疑似诈骗", "content": "138****0000"}]
         })
 
     def markPhoneNumber_sec(self):
         url = f"https://uca.wo116114.com/sjgj/unicomAssistant/uasp/configs/v1/addressBook/saveTagPhone?product_line=uasp&entry_point=h5&entry_point_id={_UASP_APP_ID}"
-        self.sec_uca_post(url, {"productId": "91311616", "status": 0, "tagIds": [26], "tagPhoneNo": "13088330789"})
+        self.sec_uca_post(url, {"productId": "91311616", "status": 0, "tagIds": [26], "tagPhoneNo": "138****0000"})
 
     def syncAddressBook_sec(self):
         url = "https://uca.wo116114.com/sjgj/unicomAssistant/uasp/configs/v1/addressBookBatchConfig?product_line=uasp&entry_point=h5&entry_point_id=edop_unicom_3a6cc75a"
         self.sec_uca_post(url, {
             "opType": "1", "productId": "91311616",
-            "addressBookDTOList": [{"addressBookName": "可乐", "addressBookPhoneNo": "13105750575"}]
+            "addressBookDTOList": [{"addressBookName": "可乐", "addressBookPhoneNo": "139****1111"}]
         })
 
     def setInterceptionRules_sec(self):
@@ -7007,7 +7007,7 @@ class UserService:
                 self.log("阅读专区: 缺少 token_online，无法登录")
                 return False
             token_enc = self.woread_encrypt(self.token_online)
-            phone_str = self.account_mobile if self.account_mobile else "13800000000"
+            phone_str = self.account_mobile if self.account_mobile else "138****0000"
             phone_enc = self.woread_encrypt(phone_str)
             timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
             inner_json = json.dumps({

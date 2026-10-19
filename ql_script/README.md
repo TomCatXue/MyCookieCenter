@@ -47,7 +47,7 @@ ql repo https://github.com/TomCatXue/MyCookieCenter.git "ql_script" "" "README" 
 - **变量名称**：**`dxlin`**（亦向下兼容 `CHINA_TELECOM_AUTH` / `dxqy` / `TELECOM_WED_AUTH`）
 - **变量取值**：统一采用标准三段式格式：`手机号#服务密码#AndroidID`
   ```text
-  17612345678#123456#8a2c4e6f12345678
+  138****0000#123456#0123456789abcdef
   ```
 - **参数说明**：
   1. **手机号**：真实的中国电信手机号（支持携号转网号段）；
@@ -55,8 +55,8 @@ ql repo https://github.com/TomCatXue/MyCookieCenter.git "ql_script" "" "README" 
   3. **AndroidID**：安卓设备的 16 位硬件标识码（如使用四段式，第 4 段可附加周三专用 SessionKey，但非必需）。
 - **多账号配置**：多账号直接**换行**粘贴下一个账号，或使用 `&` 分隔：
   ```text
-  17612345678#123456#8a2c4e6f12345678
-  17787654321#654321#b3d5f7a198765432
+  138****0000#123456#0123456789abcdef
+  139****1111#654321#fedcba9876543210
   ```
 
 ---
