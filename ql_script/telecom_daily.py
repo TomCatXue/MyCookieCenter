@@ -95,7 +95,7 @@ CONFIG = {
     "UA": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 MicroMessenger/8.0.38(0x1800262c) NetType/WIFI Language/zh_CN"
 }
 
-SCRIPT_VERSION = "v2.1.2"
+SCRIPT_VERSION = "v2.1.3"
 
 # ==================== 🌐 翼支付网关生产环境常量 ====================
 BESTPAY_H5_BASE = "https://mapi-h5.bestpay.com.cn"
@@ -306,12 +306,12 @@ def save_rewards_cache(cache_data: dict):
 
 def get_today_reward(phone: str, act_no: str) -> str:
     cache = load_rewards_cache()
-    return cache.get(f"{phone}_{datetime.now().strftime('%Y-%m-%d')}_{act_no}", "")
+    return cache.get(f"{phone}_{now_cn().strftime('%Y-%m-%d')}_{act_no}", "")
 
 
 def set_today_reward(phone: str, act_no: str, result: str):
     cache = load_rewards_cache()
-    cache[f"{phone}_{datetime.now().strftime('%Y-%m-%d')}_{act_no}"] = result
+    cache[f"{phone}_{now_cn().strftime('%Y-%m-%d')}_{act_no}"] = result
     save_rewards_cache(cache)
 
 
@@ -1929,8 +1929,11 @@ def receive_lottery_prize(sess: requests.Session, phone: str, session_key: str,
             'activityNo': act_no,
             'sessionKey': session_key,
             'productNo': phone,
+            'phoneNo': phone,
+            'businessNo': order_no,
             'orderNo': order_no,
             'recordNo': order_no,
+            'lotteryRecordNo': order_no,
             'sourceChannel': 'APPLET',
             'appType': '94',
             'fromChannelId': 'MINIPROG',
@@ -1944,8 +1947,8 @@ def receive_lottery_prize(sess: requests.Session, phone: str, session_key: str,
         if res.get('success'):
             result = res.get('result') if isinstance(res.get('result'), dict) else {}
             msg = str(result.get('resoultMsg') or result.get('resultMsg') or result.get('msg') or res.get('errorMsg') or '')
-            status = str(result.get('status') or result.get('receiveStatus') or '').upper()
-            if '已领取' in msg or '重复' in msg or status in ('SUCCESS', 'RECEIVED', 'ALREADY_RECEIVED'):
+            status = str(result.get('status') or result.get('receiveStatus') or result.get('orderStatus') or '').upper()
+            if '已领取' in msg or '重复' in msg or status in ('SUCCESS', 'RECEIVED', 'ALREADY_RECEIVED', '1'):
                 log(f"ℹ️ [{act_title}] 该奖品已领取过，无需重复操作")
                 return 'SUCCESS'
             if status in ('FAIL', 'FAILED', 'FAILURE'):
@@ -1955,6 +1958,9 @@ def receive_lottery_prize(sess: requests.Session, phone: str, session_key: str,
             return 'SUCCESS'
 
         err = res.get('errorMsg') or res.get('errorCode') or '未返回明确状态'
+        if '已领取' in str(err) or '重复' in str(err):
+            log(f"ℹ️ [{act_title}] 该奖品已领取过，无需重复操作")
+            return 'SUCCESS'
         log(f"❌ [{act_title}] 领奖未成功: {err}")
         if '超时' in str(err) or 'TIMEOUT' in str(err).upper():
             return 'PENDING'
@@ -1962,6 +1968,83 @@ def receive_lottery_prize(sess: requests.Session, phone: str, session_key: str,
     except Exception as e:
         log(f"⚠️ [{act_title}] 领奖异常: {str(e)}")
         return 'UNKNOWN'
+
+
+def auto_claim_unreceived_records(sess: requests.Session, phone: str, session_key: str,
+                                  act_no: str, act_title: str) -> List[str]:
+    """
+    从中奖记录中扫描今日尚未成功领取的奖品，自动补领入账。
+    用于兜底修复因缺少流水号或网络瞬断导致的未领奖品。
+    返回成功补领的奖品名称列表。
+    """
+    if not CONFIG.get("ENABLE_AUTO_RECEIVE_PRIZE", True):
+        return []
+
+    try:
+        res = request_c005(sess, f'{BESTPAY_H5_BASE}/gapi/op-lottery-system/DrawService/queryLotteryRecord', {
+            'activityNo': act_no,
+            'sessionKey': session_key,
+            'productNo': phone,
+            'phoneNo': phone,
+            'pageNo': 1,
+            'pageSize': 10,
+            'appType': '94',
+            'fromChannelId': 'MINIPROG',
+            'fromchannelId': 'MINIPROG',
+            'encyType': 'C005'
+        }, phone, session_key, 'MINIPROG')
+
+        records = (safe_get(res, 'result', 'queryLotteryRecordDTOList') or
+                   safe_get(res, 'result', 'lotteryRecordDTOList') or
+                   safe_get(res, 'result', 'records') or
+                   safe_get(res, 'result', 'list') or
+                   (res.get('result') if isinstance(res.get('result'), list) else [])) or []
+
+        if not records:
+            return []
+
+        today = now_cn().strftime('%Y-%m-%d')
+        claimed_names: List[str] = []
+
+        for r in records[:5]:
+            if not isinstance(r, dict):
+                continue
+            name = (r.get('prizeName') or r.get('prizeTitle') or r.get('title') or '').strip()
+            is_thanks = '谢谢' in name or '未中奖' in name
+            if is_thanks or not name:
+                continue
+
+            order_no = _extract_prize_order_no(r)
+            if not order_no:
+                continue
+
+            status = str(r.get('receiveStatus') or r.get('status') or r.get('orderStatus') or '').upper()
+            if status in ('1', 'SUCCESS', 'RECEIVED', 'ALREADY_RECEIVED'):
+                continue
+
+            t_str = str(r.get('prizeDistributeTime') or r.get('createTime') or r.get('drawTime') or r.get('winTime') or '')
+            if t_str.isdigit():
+                try:
+                    ts = int(t_str)
+                    if ts > 1e11:
+                        ts = ts / 1000
+                    dt = datetime.fromtimestamp(ts, tz=CN_TZ)
+                    t_str = dt.strftime('%Y-%m-%d')
+                except Exception:
+                    pass
+
+            is_today = (today in t_str) or t_str.startswith(today) or (today.replace('-', '') in t_str)
+            if not t_str or is_today:
+                log(f"[{act_title}] 检测到今日中奖未领记录: 「{name}」 (orderNo={order_no})，尝试自动补领入账...")
+                rc = receive_lottery_prize(sess, phone, session_key, act_no, order_no, act_title)
+                if rc == 'SUCCESS':
+                    claimed_names.append(name)
+                time.sleep(CONFIG.get("DELAY_SEC", 2))
+
+        return claimed_names
+    except Exception as e:
+        log(f"ℹ️ [{act_title}] 自动补领异常: {str(e)[:80]}")
+        return []
 
 
 def run_wednesday_lottery(sess: requests.Session, act_no: str, act_title: str, session_key: str, phone: str,
@@ -1984,7 +2067,7 @@ def run_wednesday_lottery(sess: requests.Session, act_no: str, act_title: str, s
     if not isinstance(act_res, dict) or not act_res.get('success'):
         err_msg = act_res.get('errorMsg', '活动查询失败') if isinstance(act_res, dict) else '响应异常'
         log(f"[{act_title}] 活动校验未通过: {err_msg}")
-        now_weekday = datetime.now().weekday()
+        now_weekday = now_cn().weekday()
         if now_weekday != 2:
             return closed_hint
         if '登录' in err_msg or '100003' in err_msg or '100008' in err_msg:
@@ -2011,6 +2094,11 @@ def run_wednesday_lottery(sess: requests.Session, act_no: str, act_title: str, s
     log(f"[{act_title}] 剩余可用抽奖次数: {count}")
 
     if count <= 0:
+        claimed = auto_claim_unreceived_records(sess, phone, session_key, act_no, act_title)
+        if claimed:
+            res_str = f"今日已抽完 (成功补领: {', '.join(claimed)})"
+            set_today_reward(phone, act_no, res_str)
+            return res_str
         return query_recent_lottery_history(sess, phone, session_key, act_no, top_n=3)
 
     draw_count = 0
@@ -2065,6 +2153,12 @@ def run_wednesday_lottery(sess: requests.Session, act_no: str, act_title: str, s
             break
         time.sleep(CONFIG.get("DELAY_SEC", 2))
 
+    # 抽完后若有未能成功领取的奖品，尝试扫描补领一次
+    extra_claimed = auto_claim_unreceived_records(sess, phone, session_key, act_no, act_title)
+    for ec in extra_claimed:
+        if ec not in prize_names:
+            prize_names.append(f"{ec}(补领)")
+
     res_str = f"完成 {draw_count} 次，获得: [" + ", ".join(prize_names) + "]" if draw_count > 0 else "未产生抽奖"
     set_today_reward(phone, act_no, res_str)
     return res_str
@@ -2105,11 +2199,23 @@ def run_lucky_lottery(sess: requests.Session, act_id: str, act_title: str, sessi
     task_codes = module.get('taskList') or []
     task_status = module.get('taskLotteryStatus') or ''
     free_status = module.get('freeLotteryStatus') or ''
-    log(f"[{act_title}] 活动号: {lottery_act_no}，任务抽奖状态: {task_status or '未知'}，"
-        f"免费抽奖: {free_status or '未知'}，任务清单: {','.join(task_codes) or '无'}")
+    status_desc = []
+    if free_status == 'END':
+        status_desc.append("免费开盒: 已下线(END)")
+    elif free_status == 'VALID':
+        status_desc.append("免费开盒: 生效中(VALID)")
+    else:
+        status_desc.append(f"免费开盒: {free_status or '未知'}")
+
+    if task_status == 'VALID':
+        status_desc.append("任务开盒: 生效中(VALID)")
+    elif task_status == 'END':
+        status_desc.append("任务开盒: 已下线(END)")
+    else:
+        status_desc.append(f"任务开盒: {task_status or '未知'}")
 
     TASK_LABELS = {
-        'sharedToWeChat': '分享给微信好友',
+        'sharedToWeChat': '分享给微信好友 (+1次开盒)',
         'orderMallMember': '订购权益商城会员',
         'inviteFriends': '邀请好友助力',
         'pointsExchange': '积分兑换抽奖机会',
@@ -2118,12 +2224,15 @@ def run_lucky_lottery(sess: requests.Session, act_id: str, act_title: str, sessi
     PENDING_TASKS = [c for c in task_codes if c not in ('orderMallMember',)]
     task_desc = "、".join(TASK_LABELS.get(c, c) for c in PENDING_TASKS)
 
+    log(f"[{act_title}] 活动号: {lottery_act_no} | {' | '.join(status_desc)}")
+    if task_desc:
+        log(f"[{act_title}] 可参与任务: {task_desc}")
+
     draw_res = run_wednesday_lottery(sess, lottery_act_no, f"{act_title}·抽奖引擎", session_key, phone,
                                      closed_hint="权益商城抽奖活动未开放或已结束")
 
-    # 任务清单仅写入日志（供排查），不再占用通知行
     if task_desc:
-        log(f"[{act_title}] 待办任务(需小程序内完成): {task_desc}")
+        log(f"[{act_title}] 待办提醒: 因官方取消每日无门槛免费赠送，若次数为0，可前往微信小程序「权益商城」点击分享1次获取机会")
     res_str = draw_res
 
     set_today_reward(phone, act_id, res_str)
