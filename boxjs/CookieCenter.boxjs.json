@@ -1,7 +1,7 @@
 {
   "id": "mycookiecenter.app.sub",
-  "name": "MyCookieCenter 签到与权益中心",
-  "author": "@MyCookieCenter",
+  "name": "MyCookieCenter · 凭据捕获与导出中心",
+  "author": "@TomCatXue",
   "icon": "https://avatars.githubusercontent.com/u/138953496?v=4",
   "icons": [
     "https://avatars.githubusercontent.com/u/138953496?v=4",
@@ -10,207 +10,205 @@
   "repo": "https://github.com/TomCatXue/MyCookieCenter",
   "apps": [
     {
-      "id": "weread_claim",
+      "id": "mycookiecenter.weread",
       "name": "微信读书",
       "keys": [
         "weread_auth_v2",
-        "weread_flip_state_v1",
         "prefer_coin"
       ],
-      "author": "@Codex",
-      "icon": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/weread.png?v=20260903",
+      "author": "@TomCatXue",
+      "icon": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/weread.png?v=20261015",
       "icons": [
-        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/weread.png?v=20260903",
-        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/weread.png?v=20260903"
+        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/weread.png?v=20261015",
+        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/weread.png?v=20261015"
       ],
       "repo": "https://github.com/TomCatXue/MyCookieCenter",
       "settings": [
         {
+          "id": "weread_auth_v2",
+          "name": "📋【青龙 WEREAD_AUTH】微信读书 App 完整凭证",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 4,
+          "desc": "包含 vid、skey、refreshToken、deviceId 的 JSON 数据。捕获后自动回显，点击上方脚本可一键复制"
+        },
+        {
           "id": "prefer_coin",
-          "name": "奖励领取偏好",
+          "name": "阅读达标奖励偏好",
           "val": "2",
-          "type": "select",
+          "type": "selects",
           "items": [
             {
               "key": "1",
-              "label": "优先体验卡"
+              "label": "优先领体验卡"
             },
             {
               "key": "2",
-              "label": "优先书币 (推荐)"
+              "label": "优先领书币 (推荐)"
             }
           ],
-          "desc": "设置阅读时长达标奖励偏好。设为优先书币时自动转换书币。"
-        },
-        {
-          "id": "weread_auth_v2",
-          "name": "微信读书 App 全量凭据",
-          "val": "",
-          "type": "textarea",
-          "desc": "包含 vid、skey、refreshToken、deviceId 的 JSON 数据，由抓取插件自动捕获保存。"
-        }
-      ],
-      "scripts": [
-        {
-          "name": "领取阅读达标奖励",
-          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/weread/weread_claim.js"
-        },
-        {
-          "name": "周二翻牌抽奖游戏",
-          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/weread/weread_flip.js"
-        },
-        {
-          "name": "每周限免好书一键入架",
-          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/weread/weread_free.js"
-        }
-      ],
-      "tasks": [
-        {
-          "name": "每日阅读达标奖励自动领取",
-          "cron": "0 23 * * *",
-          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/weread/weread_claim.js"
-        },
-        {
-          "name": "每周二翻牌抽奖自动运行",
-          "cron": "0 20 * * 2",
-          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/weread/weread_flip.js"
-        },
-        {
-          "name": "每周限免好书自动入架",
-          "cron": "0 10 * * 5",
-          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/weread/weread_free.js"
+          "desc": "每周阅读时长达标奖励偏好。设为优先书币时自动转换书币"
         }
       ],
       "descs_html": [
-        "<span><b>架构分离：</b>遵循 Cookie 抓取与签到执行彻底分离模式。Loon 插件仅负责抓取凭据，本 BoxJS 订阅统一管理所有签到任务与手动执行。</span>",
-        "<span><b>自动更新鉴权：</b>任务执行脚本仅读取已存储的 Cookie/凭证。当凭证过期时，内置纯 JS 逆向签名算法自动脱机调用 /login 换票更新鉴权，无需手动干预。</span>",
-        "<span><b>每日签到：</b>每晚 23:00 自动检查阅读时长与天数，达标后自动领取书币或体验卡。</span>",
-        "<span><b>周二翻牌：</b>每周二晚 20:00 自动参与翻牌抽奖，若 Cookie 超时自动同步换票重试。</span>",
-        "<span><b>免费图书馆：</b>每周五 10:00 自动对接免费图书馆书单，精选好书批量入架。</span>"
+        "<span><b>💡 抓取黄金顺序：</b>建议先打开微信读书 App 进入<b>「我」</b>的页面（触发捕获 App 基础票据与脱机换票 token），再去打开<b>「周二翻牌」</b>活动页（自动补齐 Web 端 wr_vid / wr_skey）。两步结合即可自动合成最完整的满血凭据！</span>",
+        "<span><b>📋 复制到青龙：</b>在下方<b>「当前会话」</b>数据列表点击 <code>weread_auth_v2</code> 这一行，弹出的<b>数据查看器</b>中该值右侧有<b>复制</b>按钮，即可整段复制并粘贴到青龙环境变量 <code>WEREAD_AUTH</code>。</span>",
+        "<span><b>🗑️ 清空重抓：</b>如需重新抓取，点击卡片右上角 ⋮ ->「清除数据」即可（也可用数据行右侧的 ✕ 删除单项），随后重新进入 App 触发捕获。</span>"
       ]
     },
     {
-      "id": "chinatelecom",
-      "name": "中国电信",
+      "id": "mycookiecenter.telecom_draw",
+      "name": "中国电信 · 5G会员抽奖",
       "keys": [
         "telecom_draw_session_key",
-        "telecom_draw_product_no",
-        "telecom_draw_wednesday_act1",
-        "telecom_draw_wednesday_act2",
-        "telecom_draw_lucky_act",
-        "telecom_draw_last_capture_time",
-        "telecom_draw_claimed_date",
-        "telecom_rights_id",
-        "telecom_rights_auth",
-        "sx_prefer_benefit",
-        "sx_benefit_cookie",
-        "sx_benefit_url",
-        "sx_benefit_utm_scha",
-        "sx_monitor_current_code",
-        "sx_monitor_notified_month",
-        "sx_capture_notified_code"
+        "telecom_draw_product_no"
       ],
       "author": "@TomCatXue",
-      "icon": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/189.png?v=20260903",
+      "icon": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/189.png?v=20261015",
       "icons": [
-        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/189.png?v=20260903",
-        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/189.png?v=20260903"
+        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/189.png?v=20261015",
+        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/189.png?v=20261015"
       ],
       "repo": "https://github.com/TomCatXue/MyCookieCenter",
       "settings": [
         {
           "id": "telecom_draw_session_key",
-          "name": "【会员抽奖】会话凭证 (SessionKey)",
+          "name": "📋【dxlin 第4段】会员抽奖 SessionKey",
           "val": "",
-          "type": "text",
-          "desc": "进入微信小程序「中国电信5G会员」任意页面后自动捕获（100%静默无弹窗），亦支持手动配置。"
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 2,
+          "desc": "32位 Hex 字符。打开微信小程序「中国电信5G会员」或「权益商城」进任意页面即可静默捕获。注：青龙 telecom_daily.py 读取的变量是 dxlin（手机号#服务密码#AndroidID[#SessionKey]），本值对应其第4段。"
         },
         {
           "id": "telecom_draw_product_no",
-          "name": "【会员抽奖】电信手机号",
+          "name": "捕获的手机号",
           "val": "",
           "type": "text",
-          "desc": "当前绑定的 11 位中国电信手机号码。"
-        },
-        {
-          "id": "telecom_rights_id",
-          "name": "【等级话费】目标权益 ID (默认已锁定 LV5 3元话费)",
-          "val": "eae02aa850f607daa851910621d86200b10256cab2504e274ba6224e91254ea7",
-          "type": "text",
-          "desc": "基于你账号真实级别成功定位的 LV5 话费项目 ID，0 点免查直接开火秒杀。"
-        },
-        {
-          "id": "telecom_rights_auth",
-          "name": "【等级话费】营业厅 App 凭据 (sign/Cookie/accId)",
-          "val": "",
-          "type": "textarea",
-          "desc": "进入电信营业厅 App「我」->「签到」或「等级权益」页面后自动捕获并保存的会话凭证。"
-        },
-        {
-          "id": "sx_prefer_benefit",
-          "name": "【山西福利】月度权益目标选择",
-          "val": "tc_member",
-          "type": "select",
-          "items": [
-            {
-              "key": "tc_member",
-              "label": "腾讯视频 VIP 会员 31 天 (限量1000份·需短信)"
-            },
-            {
-              "key": "tc_flow",
-              "label": "3GB 国内流量包 (当月有效·免验证码秒到)"
-            },
-            {
-              "key": "tc_tele",
-              "label": "1~20 元随机话费满减券 (需翼支付实名)"
-            }
-          ],
-          "desc": "每人每月限领一项。推荐视频会员，亦可选择免验证的 3GB 流量。"
-        },
-        {
-          "id": "sx_benefit_cookie",
-          "name": "【山西福利】当前会话 Cookie",
-          "val": "",
-          "type": "text",
-          "desc": "进入活动页面后自动抓取，亦支持在此手动配置与更新。"
-        }
-      ],
-      "scripts": [
-        {
-          "name": "周三会员日双抽奖与幸运抽奖测试",
-          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/telecom/telecom_draw.js"
-        },
-        {
-          "name": "查询当月等级权益并执行一次话费秒杀测试",
-          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/telecom/telecom_rights.js?v=20260912"
-        },
-        {
-          "name": "山西电信体验AI领福利测试",
-          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/telecom/telecom_benefit.js?v=20260907"
-        }
-      ],
-      "tasks": [
-        {
-          "name": "周三会员日双抽奖 + 幸运抽奖 (每周三 09:00)",
-          "cron": "0 9 * * 3",
-          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/telecom/telecom_draw.js"
-        },
-        {
-          "name": "等级权益话费秒杀 (每日 23:59:00 唤醒 · 提前 250ms 偷跑)",
-          "cron": "59 23 * * *",
-          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/telecom/telecom_rights.js?v=20260912"
-        },
-        {
-          "name": "山西电信月初放水探针监控 (每月 1~8 号)",
-          "cron": "*/20 8-19 1-8 * *",
-          "script": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/telecom/telecom_benefit.js?v=20260907"
+          "desc": "当前绑定的 11 位有效中国电信手机号码，供拼装 dxlin 使用。"
         }
       ],
       "descs_html": [
-        "<span><b>中国电信一站式专区：</b>整合周三会员日双抽奖、权益商城幸运抽奖、营业厅等级话费秒杀、山西电信领福利三大业务模块。</span>",
-        "<span><b>进小程序即时秒领：</b>进入微信小程序「中国电信5G会员」任意页面即可自动触发抽奖与领奖入账，静默捕获零弹窗打扰。</span>",
-        "<span><b>毫秒级偷跑抢话费：</b>每日 23:59:00 唤醒，23:59:59.750 毫秒提前偷跑对冲空口延迟，4 枪阶梯并发秒杀等级话费券。</span>",
-        "<span><b>零依赖内置加密：</b>抽奖与秒杀脚本分别内置纯 JS 版 C005 (RSA+AES-128-CBC) 与 RSA 引擎，零外部依赖，极速稳定。</span>"
+        "<span><b>💡 抓取方法：</b>打开微信小程序「中国电信5G会员」或「权益商城」浏览任意页面，即自动静默提取 SessionKey 与手机号。</span>",
+        "<span><b>📋 复制到青龙：</b>点击「当前会话」中的 <code>telecom_draw_session_key</code> 行，在数据查看器里点该值的<b>复制</b>按钮。随后按下述格式拼装青龙变量 <code>dxlin</code>：<code>手机号#服务密码#AndroidID#SessionKey</code>（SessionKey 为可选第 4 段，留空则青龙运行时会自动换票）。</span>"
+      ]
+    },
+    {
+      "id": "mycookiecenter.telecom_rights",
+      "name": "中国电信 · 等级权益秒杀",
+      "keys": [
+        "telecom_rights_auth",
+        "telecom_rights_id"
+      ],
+      "author": "@TomCatXue",
+      "icon": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/189.png?v=20261015",
+      "icons": [
+        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/189.png?v=20261015",
+        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/189.png?v=20261015"
+      ],
+      "repo": "https://github.com/TomCatXue/MyCookieCenter",
+      "settings": [
+        {
+          "id": "telecom_rights_auth",
+          "name": "等级权益会话凭据 (本地)",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 3,
+          "desc": "打开电信营业厅 App 进「我」->「我的签到」或「等级权益」页面自动捕获 sign/Cookie/accId。注：青龙 telecom_midnight_equity.py 走 dxlin 自行登录，本项仅作本地留存与排障。"
+        },
+        {
+          "id": "telecom_rights_id",
+          "name": "目标抢兑权益ID (本地)",
+          "val": "eae02aa850f607daa851910621d86200b10256cab2504e274ba6224e91254ea7",
+          "type": "text",
+          "desc": "默认 LV5 3元话费券 ID，0点抢兑直发。"
+        }
+      ],
+      "descs_html": [
+        "<span><b>💡 抓取方法：</b>打开中国电信营业厅 App，进「我」->「我的签到」或「等级权益」页即可自动预热捕获 sign 与 Cookie。</span>",
+        "<span><b>📋 复制到青龙：</b>点击「当前会话」中的 <code>telecom_rights_auth</code> 行，在数据查看器里点该值的<b>复制</b>按钮。注：青龙 <code>telecom_midnight_equity.py</code> 读取的是 <code>dxlin</code> 并自行登录，本项主要供本地留存与排障。</span>"
+      ]
+    },
+    {
+      "id": "mycookiecenter.telecom_benefit",
+      "name": "中国电信 · 山西领福利",
+      "keys": [
+        "sx_benefit_cookie",
+        "sx_prefer_benefit"
+      ],
+      "author": "@TomCatXue",
+      "icon": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/189.png?v=20261015",
+      "icons": [
+        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/189.png?v=20261015",
+        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/189.png?v=20261015"
+      ],
+      "repo": "https://github.com/TomCatXue/MyCookieCenter",
+      "settings": [
+        {
+          "id": "sx_benefit_cookie",
+          "name": "山西领福利 Cookie (本地)",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 2,
+          "desc": "进入山西活动页面自动捕获。注：本仓库暂无对应青龙脚本，Loon 侧已不再自动执行领奖，仅作凭据留存。"
+        },
+        {
+          "id": "sx_prefer_benefit",
+          "name": "权益兑换目标偏好",
+          "val": "tc_member",
+          "type": "selects",
+          "items": [
+            {
+              "key": "tc_member",
+              "label": "腾讯视频 VIP 会员 31 天 (限量1000份·首选)"
+            },
+            {
+              "key": "tc_flow",
+              "label": "3GB 国内通用流量 (当月有效·保证能领到)"
+            },
+            {
+              "key": "tc_tele",
+              "label": "1~20 元翼支付立减券"
+            }
+          ],
+          "desc": "每月每号限领一项。推荐视频会员，次选 3GB 流量"
+        }
+      ],
+      "descs_html": [
+        "<span><b>💡 抓取方法：</b>打开山西电信公众号「体验AI领福利」活动页面即可自动捕获最新批次凭证。</span>",
+        "<span><b>📋 查看/复制：</b>点击「当前会话」中的 <code>sx_benefit_cookie</code> 行，在数据查看器中可复制。注：本仓库暂无对应青龙脚本。</span>"
+      ]
+    },
+    {
+      "id": "mycookiecenter.camscanner",
+      "name": "扫描全能王",
+      "keys": [
+        "camscanner_data"
+      ],
+      "author": "@TomCatXue",
+      "icon": "https://raw.githubusercontent.com/MaYIHEI/pin/refs/heads/main/app/camscanner.png",
+      "icons": [
+        "https://raw.githubusercontent.com/MaYIHEI/pin/refs/heads/main/app/camscanner.png",
+        "https://raw.githubusercontent.com/MaYIHEI/pin/refs/heads/main/app/camscanner.png"
+      ],
+      "repo": "https://github.com/TomCatXue/MyCookieCenter",
+      "settings": [
+        {
+          "id": "camscanner_data",
+          "name": "📋【camscanner_data】用户属性凭据",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 2,
+          "desc": "包含 token、client_id、cs_ept_d 的 JSON 数据。打开 App 个人中心静默更新；对应外部签到脚本 env 变量 camscanner_data。"
+        }
+      ],
+      "descs_html": [
+        "<span><b>💡 抓取方法：</b>打开扫描全能王 App 进入个人中心，即静默更新用户凭据。</span>",
+        "<span><b>📋 复制到青龙：</b>点击「当前会话」中的 <code>camscanner_data</code> 行，在数据查看器里点该值的<b>复制</b>按钮，粘贴到外部签到脚本的 <code>camscanner_data</code> 环境变量。</span>"
       ]
     }
   ]

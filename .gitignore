@@ -12,6 +12,10 @@ keys.local.json
 project.md
 notes/
 
+# 本地开发文档与回归测试（个人存档，不进公开仓库）
+docs/
+tests/
+
 # 依赖
 node_modules/
 
@@ -28,3 +32,8 @@ ql_script/*_cache.json
 # 本地Agent规范与私有备忘文档（不上传至公共仓库）
 AGENTS.md
 Agents.md
+
+# 本地逆向工作目录与临时产物（不属于本仓库内容）
+work/
+_doc.html
+_p.html

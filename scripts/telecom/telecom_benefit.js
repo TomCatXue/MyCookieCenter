@@ -41,15 +41,24 @@ async function handleCapture() {
           $persistentStore.write(code, 'sx_monitor_current_code');
           const lastNotifiedCode = $persistentStore.read('sx_capture_notified_code');
 
-          // 核心特性：检测到新凭据更换（新批次上线），不再只是发通知，立即自动发起领奖！
-          if (code !== lastNotifiedCode) {
+          // 新批次必通知；同批次仅在 10 秒内去重，再次进入仍会确认提示
+          const lastNotify = Number($persistentStore.read('sx_capture_notify_time') || 0);
+          const isNewCode = code !== lastNotifiedCode;
+          if (isNewCode || Date.now() - lastNotify >= 10000) {
+            $persistentStore.write(String(Date.now()), 'sx_capture_notify_time');
             $persistentStore.write(code, 'sx_capture_notified_code');
-            console.log(`[电信福利] 🚀 检测到新凭据/批次更换 [${code}]，立即自动触发抢兑流程...`);
-            await autoClaimBenefit(url, cookie, ua, code);
+            console.log(`[电信福利] 凭据已保存，批次 [${code}]${isNewCode ? '（新批次）' : ''}。`);
+            $notification.post('山西电信领福利',
+              isNewCode ? `✅ 新批次凭据已更新 [${code}]` : `✅ Cookie 获取成功 [${code}]`,
+              '已存入本地持久化，可在 BoxJS 查看复制');
           } else {
-            console.log(`[电信福利] 凭证静默刷新成功（批次 [${code}] 处于当期，保持静默）。`);
+            console.log(`[电信福利] 批次 [${code}] 10 秒内重复触发，已去重。`);
           }
+        } else {
+          console.log('[电信福利] 已捕获 Cookie 但 URL 中未识别到批次号: ' + url.split('?')[0]);
         }
+      } else {
+        console.log('[电信福利] 命中山西活动接口但请求头无 Cookie: ' + url.split('?')[0]);
       }
     }
   } catch (err) {

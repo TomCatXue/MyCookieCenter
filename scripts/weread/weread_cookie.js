@@ -3,6 +3,7 @@
 @Description: 微信读书 · Cookie 与凭据捕获专用脚本
 @Author: TomCatXue
 @Architecture: 参照 paperclip-cookie 架构设计，捕获与执行彻底解耦
+@Updated: 2026-10-17 (补齐捕获成功通知)
 ------------------------------------------
 支持捕获目标：
 1. 微信读书网页端 (weread.qq.com/web/) -> 捕获 wr_vid, wr_skey (供网页签到与API使用)
@@ -11,8 +12,9 @@
 4. 微信读书免费图书馆 -> 捕获免费图书领书凭证
 5. 微信读书翻牌游戏 -> 捕获翻牌 H5 Cookie (wr_vid, wr_skey)
 
-去重策略：所有捕获分支仅在鉴权数据「发生变化」时才写入存储/弹通知/打日志，
-否则直接空转返回。因此进页面虽会命中多次请求，实际只有首次（或登录态变化时）真正生效。
+去重策略：存储仅在鉴权数据「发生变化」时写入；
+通知则每次确认到凭据都会提示，并用 10 秒窗口去重同一页面的并发请求，
+因此不会出现「抓到了却完全没反馈」，也不会被多次命中刷屏。
 */
 
 const AUTH_KEY = "weread_auth_v2";
@@ -34,6 +36,18 @@ function getStoredAuth() {
 
 function saveAuth(newAuth) {
     $.setdata(JSON.stringify(newAuth), AUTH_KEY);
+}
+
+// 短时去重：同一页面往往并发多个请求，10 秒内同源通知只弹一次；
+// 超过窗口后再进页面仍会正常提示，避免出现「抓到了但没任何反馈」。
+const NOTIFY_GAP_MS = 10 * 1000;
+function notifyOnce(tag, title, sub, body) {
+    let key = "weread_notify_" + tag;
+    let last = Number($.getdata(key) || 0);
+    if (Date.now() - last < NOTIFY_GAP_MS) return false;
+    $.setdata(String(Date.now()), key);
+    $.msg(title, sub, body);
+    return true;
 }
 
 function decodeBody(str) {
@@ -86,7 +100,7 @@ function parseCookieStr(cookieStr) {
         if (cookie) {
             let c = parseCookieStr(cookie);
             if (c.wr_vid && c.wr_skey) {
-                // 去重：仅当鉴权变化才写存储/通知/打日志
+                // 存储仅在变化时写入，通知则每次确认到凭据都提示（10 秒内去重）
                 let changed = (existing.wrVid !== c.wr_vid || existing.wrSkey !== c.wr_skey);
                 if (changed) {
                     existing.wrVid = c.wr_vid;
@@ -95,9 +109,10 @@ function parseCookieStr(cookieStr) {
                     existing.flipUa = headers["user-agent"] || headers["User-Agent"] || existing.flipUa || "";
                     existing.flipTime = Date.now();
                     saveAuth(existing);
-                    $.msg("微信读书 · 翻牌游戏", "✅ Cookie 获取成功", "wr_vid: " + c.wr_vid + "\nwr_skey: " + c.wr_skey.slice(0, 8) + "...");
                     $.log("[WeRead] 翻牌游戏 Cookie 已捕获: wr_vid=" + c.wr_vid);
                 }
+                notifyOnce("flip", "微信读书 · 翻牌游戏", "✅ Cookie 获取成功",
+                    "wr_vid: " + c.wr_vid + "\nwr_skey: " + c.wr_skey.slice(0, 8) + "...");
             }
         }
         $done({});
@@ -147,7 +162,7 @@ function parseCookieStr(cookieStr) {
             let hasToken = Boolean(existing.refreshToken && existing.deviceId);
             let sub = hasToken ? "✅ 登录凭证获取成功 (已永久激活脱机换票)" : "✅ 登录凭证已记录";
             let body = "vid: " + (existing.vid || "已记录") + "\nrefreshToken: " + (existing.refreshToken ? "已捕获" : "待补全") + "\ndeviceId: " + (existing.deviceId ? "已捕获" : "待补全");
-            $.msg("微信读书 · App端", sub, body);
+            notifyOnce("login", "微信读书 · App端", sub, body);
             $.log("[WeRead] App /login 凭据已更新保存！hasToken=" + hasToken);
         }
 
@@ -181,6 +196,10 @@ function parseCookieStr(cookieStr) {
             existing.freeTime = Date.now();
             saveAuth(existing);
             $.log("[WeRead] 免费图书馆凭据已校验记录: vid=" + vid);
+        }
+        if (vid || skey) {
+            notifyOnce("free", "微信读书 · 免费图书馆", "✅ Cookie 获取成功",
+                "vid: " + (vid || existing.vid || "已记录") + "\nskey: " + (skey ? skey.slice(0, 8) + "..." : "已记录"));
         }
         $done({});
         return;
@@ -222,9 +241,13 @@ function parseCookieStr(cookieStr) {
             if (deviceId) existing.deviceId = deviceId;
             existing.authTime = Date.now();
             saveAuth(existing);
-            $.msg("微信读书 · App端", "✅ App 凭据获取成功", "vid: " + vid + "\nskey: " + skey.slice(0, 4) + "****");
             $.log("[WeRead] App 基础凭据已更新: vid=" + vid);
         }
+        notifyOnce("app", "微信读书 · App端", "✅ App 凭据获取成功",
+            "vid: " + vid + "\nskey: " + skey.slice(0, 4) + "****");
+    } else if (url.indexOf("i.weread.qq.com") !== -1) {
+        // 命中抓取规则但请求头不含 vid/skey（如部分 App 接口），明确提示而非静默
+        $.log("[WeRead] 本次请求未携带 vid/skey，未更新凭据: " + url.split("?")[0]);
     }
 
     $done({});

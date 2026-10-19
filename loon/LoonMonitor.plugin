@@ -1,0 +1,42 @@
+#!name = LoonMonitor · 小组件数据提供与状态服务
+#!desc = 专为 iOS 哑巴面板 (MutePanel) 小组件提供 Loon 运行状态。机场订阅流量由小组件直接请求用户填写的订阅链接，本插件只返回运行模式、策略组数量、活跃节点、出口 IP、归属地与延迟。
+#!author = TomCatXue
+#!homepage = https://github.com/TomCatXue/MyCookieCenter
+#!icon = https://raw.githubusercontent.com/luestr/IconResource/main/App_icon/120px/Loon.png
+#!tag = Loon, 监控, 小组件, VPN
+#!version = 1.5.0
+#!date = 2026-10-18 11:10
+
+# =================== 1. 本地解析 ===================
+# 虚拟域名在本地解析至 Fake-IP 保留网段 (198.18.0.1)，保证流量进入 TUN 虚拟网卡触发本地脚本短路。
+[Host]
+loon.box = 198.18.0.1
+api.loon.box = 198.18.0.1
+loon.local = 198.18.0.1
+
+# =================== 2. 路由规则 ===================
+# 兜底保护：
+# 1. 虚拟域名显式指定为 DIRECT，杜绝未命中短路时逃逸到远端机场节点导致上游返回 HTTP 400 Bad Request；
+# 2. 保证脚本拉取镜像 (fastly.jsdelivr.net / jsdelivr.net) 以及出口 IP 探测平稳走代理。
+[Rule]
+DOMAIN,loon.box,DIRECT
+DOMAIN,api.loon.box,DIRECT
+DOMAIN,loon.local,DIRECT
+IP-CIDR,198.18.0.1/32,DIRECT
+DOMAIN-SUFFIX,jsdelivr.net,PROXY
+DOMAIN-SUFFIX,ip-api.com,PROXY
+DOMAIN-SUFFIX,ip.sb,PROXY
+
+# =================== 3. 脚本拦截与服务 ===================
+# 本插件只提供 Loon 运行状态，不监听、不缓存、不主动拉取任何机场订阅。
+# 订阅流量由哑巴面板直接请求用户填写的订阅链接，因此换机场无需修改本插件。
+[Script]
+# 1. 小组件数据服务：请求发出前直接短路返回 JSON
+request if ${url} ~= /^https?:\/\/(?:(?:api\.)?loon\.(?:box|local)|198\.18\.0\.1)/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/loon/loon_monitor.js") with requires_body=true, timeout=10, tag="Loon监控·小组件数据服务"
+
+# 2. 后台定时预热出口 IP，保证小组件读取时直接命中缓存
+cron "0 */2 * * *" then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/loon/loon_monitor.js") with timeout=20, tag="Loon监控·定时同步"
+
+# =================== 4. MITM 解密 ===================
+[MITM]
+hostname = loon.box, *.loon.box, api.loon.box, loon.local, *.loon.local
