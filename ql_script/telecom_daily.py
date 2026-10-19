@@ -14,7 +14,7 @@ tag: 中国电信
 
 功能矩阵：
   1. 每日签到与金豆：掌厅打卡 + 阶梯连签奖励 + 金豆转盘 + 浏览任务 + 宠物喂食 + 金豆核验
-  2. 会员双抽奖：山西甄选周三会员日 (hd76690472, 仅周三) + 山西抽奖新-每周三次 (hd92859166, 全周有效)
+  2. 会员双抽奖：山西甄选周三会员日 (hd76690472, 全周检测) + 山西抽奖新-每周三次 (hd92859166, 全周有效)
   3. 权益商城幸运抽奖：读取真实活动配置 + 走可达抽奖引擎真实抽奖并回显奖品
   4. 权益包自动领取：双通道扫描待领权益 → 真实领取 → 轮询确认到账
   5. AI奇遇赢Pad：AI 视频制作赚点数 + 满千兑换话费
@@ -72,7 +72,7 @@ from Crypto.Util.Padding import pad, unpad
 CONFIG = {
     # --- 业务总开关 ---
     "ENABLE_DAILY_SIGN": True,      # 每日签到与金豆 (每天执行)
-    "ENABLE_WEDNESDAY": True,       # 周三会员日抽奖 (★仅周三执行，非周三不执行且不展示)
+    "ENABLE_WEDNESDAY": True,       # 周三会员日抽奖 (★全周检测抽奖机会与自动领奖)
     "ENABLE_WEEKLY_THRICE": True,   # 每周三次抽奖 (★全周有效，按周累计3次机会)
     "ENABLE_LUCKY_DRAW": True,      # 权益商城幸运抽奖 (每天执行)
     "ENABLE_AUTO_CLAIM": True,      # 权益包自动领取 (每天执行)
@@ -95,7 +95,7 @@ CONFIG = {
     "UA": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 MicroMessenger/8.0.38(0x1800262c) NetType/WIFI Language/zh_CN"
 }
 
-SCRIPT_VERSION = "v2.1.3"
+SCRIPT_VERSION = "v2.1.4"
 
 # ==================== 🌐 翼支付网关生产环境常量 ====================
 BESTPAY_H5_BASE = "https://mapi-h5.bestpay.com.cn"
@@ -2067,13 +2067,14 @@ def run_wednesday_lottery(sess: requests.Session, act_no: str, act_title: str, s
     if not isinstance(act_res, dict) or not act_res.get('success'):
         err_msg = act_res.get('errorMsg', '活动查询失败') if isinstance(act_res, dict) else '响应异常'
         log(f"[{act_title}] 活动校验未通过: {err_msg}")
-        now_weekday = now_cn().weekday()
-        if now_weekday != 2:
-            return closed_hint
         if '登录' in err_msg or '100003' in err_msg or '100008' in err_msg:
             return "SessionKey已失效，请进小程序刷新"
         cached = get_today_reward(phone, act_no)
-        return f"今日已抽完 (今日战果: {cached})" if cached else f"活动反馈: {err_msg}"
+        if cached:
+            return f"今日已抽完 (今日战果: {cached})"
+        if '未开始' in err_msg or '结束' in err_msg or '未开放' in err_msg or '不存在' in err_msg:
+            return closed_hint
+        return f"活动反馈: {err_msg}"
 
     act_name = safe_get(act_res, 'result', 'lotteryActivityConfigDTO', 'activityName') or act_title
     log(f"[{act_title}] 成功确认活动: {act_name}")
@@ -2962,10 +2963,9 @@ def main():
     weekday_names = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
     today_name = weekday_names[now.weekday()]
 
-    # 是否执行周三专属抽奖：仅周三，或 FORCE_RUN 调试模式
-    run_wed = is_wednesday or force_run
+    # 注意：周三会员日与每周三次现已支持全周检测可用抽奖机会与自动补领
 
-    print(f"  📅 今天是 {today_name} | 周三会员日: {'启用' if run_wed else '跳过(非周三)'}"
+    print(f"  📅 今天是 {today_name} | 周三会员日: {'启用' if CONFIG.get('ENABLE_WEDNESDAY', True) else '禁用'}"
           f" | 每周三次: {'启用' if CONFIG.get('ENABLE_WEEKLY_THRICE', True) else '禁用'}")
     print(f"  📝 签到金豆: {'启用' if CONFIG.get('ENABLE_DAILY_SIGN', True) else '禁用'}"
           f" | 幸运抽奖: {'启用' if CONFIG.get('ENABLE_LUCKY_DRAW', True) else '禁用'}"
@@ -3048,7 +3048,7 @@ def main():
         # ---- 业务B：翼支付抽奖与权益 ----
         has_bestpay = CONFIG.get("ENABLE_LUCKY_DRAW", True) or CONFIG.get("ENABLE_AUTO_CLAIM", True) \
                       or CONFIG.get("ENABLE_WEEKLY_THRICE", True) \
-                      or (run_wed and CONFIG.get("ENABLE_WEDNESDAY", True))
+                      or CONFIG.get("ENABLE_WEDNESDAY", True)
 
         if not session_key:
             if has_bestpay:
@@ -3062,11 +3062,12 @@ def main():
             elif ticket_source == "自动换票":
                 bullets.append("• 凭证自愈: 已自动换票续期")
 
-            # 周三专属抽奖（★ 仅周三执行、展示）
-            if run_wed and CONFIG.get("ENABLE_WEDNESDAY", True):
+            # 周三会员日抽奖（★ 全周检测抽奖机会与自动领奖）
+            if CONFIG.get("ENABLE_WEDNESDAY", True):
                 try:
                     r1 = run_wednesday_lottery(sess, CONFIG.get("ACT_COIN", "hd76690472"),
-                                               "周三会员抽权益币", session_key, phone)
+                                               "周三会员抽权益币", session_key, phone,
+                                               closed_hint="活动暂未开放或已抽完")
                     bullets.append(f"• 周三会员抽权益币: {r1}")
                 except Exception as e:
                     bullets.append(f"• 周三会员抽权益币: 执行异常 ({str(e)[:40]})")
