@@ -2,7 +2,7 @@
 
 <p align="center">
   <b>签到自动化 · Cookie 捕获 · 网络代理增强</b><br>
-  Loon / Surge / Quantumult X / Stash · 青龙面板
+  Loon / Surge / Quantumult X / Stash · 青龙 / 呆呆面板
 </p>
 
 <p align="center">
@@ -12,7 +12,7 @@
 </p>
 
 把散落在各个 App 里的签到、领券和抓包配置收拢到一处：
-Loon 负责抓 Cookie，青龙负责跑任务，BoxJS 负责查看和复制凭据。
+Loon 负责抓 Cookie，青龙 / 呆呆面板负责跑任务，BoxJS 负责查看、复制与同步凭据。
 
 遇到问题、想加新站点，欢迎提 [Issues](https://github.com/TomCatXue/MyCookieCenter/issues/new)；用着顺手的话，点个 ⭐ 就好。
 
@@ -20,7 +20,7 @@ Loon 负责抓 Cookie，青龙负责跑任务，BoxJS 负责查看和复制凭�
 
 |     | 名称 | 功能 | 安装 / 说明 |
 | :-: | :--- | :--- | :---: |
-| <img src="icons/icon.png" height="16" /> | **Cookie 抓取合集** | 微信读书 / 中国电信 / 扫描全能王 凭据捕获，抓到即通知 | **[安装](https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/loon/CookieCenter.plugin)** / **[说明](./loon/README.md)** |
+| <img src="icons/daidai.png" height="16" /> | **呆呆面板 · 凭据捕获与自动同步** | 微信读书 / 中国电信 / 扫描全能王 / 中国移动 凭据捕获并自动同步至呆呆面板 | **[安装](https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/loon/DaiDaiPanel.plugin)** / **[说明](./loon/README.md)** |
 | <img src="icons/weread.png" height="16" /> | **微信读书 增强** | 去广告、去更新弹窗、解除试听限制 | **[安装](https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/loon/WeReadEnhance.plugin)** / **[说明](./scripts/tools/wxread_enhance/)** |
 | <img src="icons/qq.png" height="16" /> | **QQ空间 清净** | 屏蔽空间广告与营销内容 | **[安装](https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/loon/QzoneAdBlock.plugin)** / **[说明](./loon/README.md)** |
 | <img src="https://github.githubassets.com/favicons/favicon.png" height="16" /> | **GitHub 星标时间** | 星标列表显示最近推送时间 | **[安装](https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/loon/GitHubPushTime.plugin)** / **[说明](./scripts/tools/github/)** |
@@ -29,8 +29,8 @@ Loon 负责抓 Cookie，青龙负责跑任务，BoxJS 负责查看和复制凭�
 | <img src="https://raw.githubusercontent.com/luestr/IconResource/main/App_icon/120px/Loon.png" height="16" /> | **Loon 监控** | 为桌面小组件提供运行状态与流量数据 | **[安装](https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/loon/LoonMonitor.plugin)** / **[说明](./scripts/tools/loon/)** |
 | <img src="https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/26/ff/f2/26fff2c0-729b-5216-0c13-7d0499f10940/AppIconLite-0-0-1x_U007ephone-0-6-0-0-sRGB-85-220.png/64x64bb.jpg" height="16" /> | **扫描全能王 签到** | 抓取 Cookie + 每日签到 | **[安装](https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/loon/camscanner.plugin)** / **[说明](./scripts/tools/camscanner/)** |
 
-> `Cookie 抓取合集` 的开关默认开启，可单独关闭不需要的业务；微信读书要先打开「我」的页面，再打开「周二翻牌」页面才能捕获完整凭据。
-> `camscanner.plugin` 与 `CookieCenter.plugin` 含相同抓取规则，只保留一个即可。
+> `DaiDaiPanel.plugin` 的开关默认开启，可单独关闭不需要的业务；微信读书要先打开「我」的页面，再打开「周二翻牌」页面才能捕获完整凭据。
+> `camscanner.plugin` 与 `DaiDaiPanel.plugin` 含相同抓取规则，只保留一个即可。
 
 ## 青龙任务
 

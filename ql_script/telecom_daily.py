@@ -1751,32 +1751,82 @@ def query_recent_lottery_history(sess: requests.Session, phone: str, session_key
         return "今日抽奖次数已用尽"
 
 
+def _is_prize_already_received(r: dict) -> bool:
+    """
+    判断中奖记录是否已经成功领取入账。
+    实测翼支付 records 字段结构：
+      - orderStatus 为 '1' 或 1 代表 ORDER_SUCCESS (已成功领取/到账)
+      - receiveStatus 为 '1' 或 1 或 'SUCCESS' 代表已领取
+      - prizeStatus / deliverStatus / awardStatus 等包含已领取相关标识
+      - orderNo 为 028... 开头代表已生成电商履约订单（已兑换完毕）
+      - isReceive / isReceived 为 1 或 True
+    注意：r.get('status') 通常为数据库记录状态 (如 'NORMAL' / 'VALID')，不能作为未领取的判断依据。
+    """
+    if not isinstance(r, dict):
+        return False
+
+    # 1. 检查订单/履约状态 (优先 orderStatus，翼支付前端: 1=ORDER_SUCCESS)
+    order_status = str(r.get('orderStatus') or '').strip().upper()
+    if order_status in ('1', 'SUCCESS', 'RECEIVED', 'ALREADY_RECEIVED', 'FINISHED', 'COMPLETED'):
+        return True
+
+    # 2. 检查领取状态
+    receive_status = str(r.get('receiveStatus') or '').strip().upper()
+    if receive_status in ('1', 'SUCCESS', 'RECEIVED', 'ALREADY_RECEIVED', 'FINISHED', 'COMPLETED'):
+        return True
+
+    # 3. 检查奖品/派发状态
+    for k in ('prizeStatus', 'deliverStatus', 'awardStatus', 'grantStatus'):
+        v = str(r.get(k) or '').strip().upper()
+        if v in ('1', 'SUCCESS', 'RECEIVED', 'ALREADY_RECEIVED', 'FINISHED', 'COMPLETED'):
+            return True
+
+    # 4. 检查布尔标识
+    for k in ('isReceive', 'isReceived', 'receiveFlag', 'hasReceived', 'isDeliver'):
+        if r.get(k) in (1, '1', True, 'true', 'TRUE'):
+            return True
+
+    # 5. 检查 status 显式标记
+    status_str = str(r.get('status') or '').strip().upper()
+    if status_str in ('RECEIVED', 'ALREADY_RECEIVED', 'FINISHED', 'COMPLETED'):
+        return True
+
+    # 6. 检查是否存在 028... 开头的电商/权益履约订单号 (已生成履约单号代表已领过)
+    order_no = str(r.get('orderNo') or r.get('order_no') or '').strip()
+    if order_no.startswith('028') and len(order_no) >= 20:
+        return True
+
+    return False
+
+
 def _extract_prize_order_no(prize: Any) -> str:
     """
-    从抽奖结果或中奖记录中深度提取领奖单号（orderNo / recordNo 等）。
-
-    实测各活动返回结构差异较大：
-      - 周三会员抽奖常嵌在 resultInfo.orderNo 或 prizeInfo.orderNo
-      - 权益商城幸运盲盒抽奖（hd70226376）单号为 recordNo（形如 DRAW2026102000025161348475036）
-      - 部分活动使用 lotteryRecordNo / prizeOrderNo / recordId 等变体
-    采用多层广度优先遍历，确保能提取到任意合法单号。
+    从抽奖结果或中奖记录中深度提取领奖流水号（DRAW... / recordNo 等）。
+    优先提取 DRAW 开头的抽奖记录号；过滤已履约生成的 028... 电商单号。
     """
     if not isinstance(prize, (dict, list)):
         return ''
 
+    # 1. 顶层优先匹配 DRAW 开头的抽奖流水号
+    if isinstance(prize, dict):
+        for k in ('recordNo', 'record_no', 'businessNo', 'orderNo', 'order_no', 'drawRecordNo', 'lotteryRecordNo'):
+            v = str(prize.get(k) or '').strip()
+            if v.upper().startswith('DRAW'):
+                return v
+
     ORDER_KEYS = (
+        'recordno', 'record_no', 'businessno', 'recordid', 'record_id',
+        'lotteryrecordno', 'lotteryrecordid', 'drawrecordno', 'draworderno',
         'orderno', 'order_no', 'orderid', 'order_id',
-        'recordno', 'record_no', 'recordid', 'record_id',
         'prizeorderno', 'prizeorderid', 'prizerecordno',
-        'lotteryrecordno', 'lotteryrecordid', 'lotteryorderno',
-        'drawrecordno', 'draworderno', 'winrecordno',
-        'receiveorderno', 'receiverecordno', 'businessno',
+        'lotteryorderno', 'winrecordno', 'receiveorderno', 'receiverecordno',
         'userprizeid', 'userrecordid', 'awardorderno', 'awardrecordno'
     )
 
     queue = [prize]
     visited = set()
     depth = 0
+    fallback = ''
 
     while queue and depth < 5:
         next_queue = []
@@ -1790,7 +1840,13 @@ def _extract_prize_order_no(prize: Any) -> str:
                     if k.lower() in ORDER_KEYS:
                         val_str = str(v).strip()
                         if val_str and val_str.lower() not in ('none', 'null', 'undefined', '0'):
-                            return val_str
+                            if val_str.upper().startswith('DRAW'):
+                                return val_str
+                            # 过滤 028... 电商单号
+                            if val_str.startswith('028') and len(val_str) >= 20:
+                                continue
+                            if not fallback:
+                                fallback = val_str
                 for v in item.values():
                     if isinstance(v, (dict, list)):
                         next_queue.append(v)
@@ -1801,7 +1857,7 @@ def _extract_prize_order_no(prize: Any) -> str:
         queue = next_queue
         depth += 1
 
-    return ''
+    return fallback
 
 
 def _extract_prize_name(prize: Any) -> str:
@@ -1957,9 +2013,12 @@ def receive_lottery_prize(sess: requests.Session, phone: str, session_key: str,
             log(f"✅ [{act_title}] 领奖成功入账 (orderNo={order_no})")
             return 'SUCCESS'
 
-        err = res.get('errorMsg') or res.get('errorCode') or '未返回明确状态'
-        if '已领取' in str(err) or '重复' in str(err):
-            log(f"ℹ️ [{act_title}] 该奖品已领取过，无需重复操作")
+        err = str(res.get('errorMsg') or res.get('errorCode') or '未返回明确状态')
+        if '已领取' in err or '重复' in err:
+            log(f"ℹ️ [{act_title}] 该奖品此前已领取入账，无需重复操作")
+            return 'SUCCESS'
+        if '记录不存在' in err or '不存在' in err:
+            log(f"ℹ️ [{act_title}] 领奖反馈: 该中奖记录已核销或已完成发放入账")
             return 'SUCCESS'
         log(f"❌ [{act_title}] 领奖未成功: {err}")
         if '超时' in str(err) or 'TIMEOUT' in str(err).upper():
@@ -2006,7 +2065,7 @@ def auto_claim_unreceived_records(sess: requests.Session, phone: str, session_ke
         today = now_cn().strftime('%Y-%m-%d')
         claimed_names: List[str] = []
 
-        for r in records[:5]:
+        for r in records[:10]:
             if not isinstance(r, dict):
                 continue
             name = (r.get('prizeName') or r.get('prizeTitle') or r.get('title') or '').strip()
@@ -2014,15 +2073,15 @@ def auto_claim_unreceived_records(sess: requests.Session, phone: str, session_ke
             if is_thanks or not name:
                 continue
 
+            # 过滤已领取的记录（状态为已领取或已生成履约单号）
+            if _is_prize_already_received(r):
+                continue
+
             order_no = _extract_prize_order_no(r)
-            if not order_no:
+            if not order_no or (order_no.startswith('028') and len(order_no) >= 20):
                 continue
 
-            status = str(r.get('receiveStatus') or r.get('status') or r.get('orderStatus') or '').upper()
-            if status in ('1', 'SUCCESS', 'RECEIVED', 'ALREADY_RECEIVED'):
-                continue
-
-            t_str = str(r.get('prizeDistributeTime') or r.get('createTime') or r.get('drawTime') or r.get('winTime') or '')
+            t_str = str(r.get('prizeDistributeTime') or r.get('createTime') or r.get('drawTime') or r.get('winTime') or r.get('orderTime') or '')
             if t_str.isdigit():
                 try:
                     ts = int(t_str)
@@ -2033,13 +2092,16 @@ def auto_claim_unreceived_records(sess: requests.Session, phone: str, session_ke
                 except Exception:
                     pass
 
-            is_today = (today in t_str) or t_str.startswith(today) or (today.replace('-', '') in t_str)
-            if not t_str or is_today:
-                log(f"[{act_title}] 检测到今日中奖未领记录: 「{name}」 (orderNo={order_no})，尝试自动补领入账...")
-                rc = receive_lottery_prize(sess, phone, session_key, act_no, order_no, act_title)
-                if rc == 'SUCCESS':
-                    claimed_names.append(name)
-                time.sleep(CONFIG.get("DELAY_SEC", 2))
+            # 严格校验：必须是今日产生的中奖记录
+            is_today = bool(t_str) and ((today in t_str) or t_str.startswith(today) or (today.replace('-', '') in t_str))
+            if not is_today:
+                continue
+
+            log(f"[{act_title}] 检测到今日中奖待领记录: 「{name}」 (单号={order_no})，尝试自动补领入账...")
+            rc = receive_lottery_prize(sess, phone, session_key, act_no, order_no, act_title)
+            if rc == 'SUCCESS':
+                claimed_names.append(name)
+            time.sleep(CONFIG.get("DELAY_SEC", 2))
 
         return claimed_names
     except Exception as e:
@@ -2104,6 +2166,7 @@ def run_wednesday_lottery(sess: requests.Session, act_no: str, act_title: str, s
 
     draw_count = 0
     prize_names = []
+    has_unclaimed = False
 
     while count > 0:
         draw_count += 1
@@ -2144,21 +2207,24 @@ def run_wednesday_lottery(sess: requests.Session, act_no: str, act_title: str, s
                     receive_result = receive_lottery_prize(sess, phone, session_key, act_no, order_no, act_title)
                     if receive_result != 'SUCCESS':
                         log(f"⚠️ [{act_title}] 奖品「{prize_name}」领奖状态: {receive_result}")
+                        has_unclaimed = True
                 else:
                     log(f"[{act_title}] 自动领奖已关闭，跳过 orderNo={order_no}")
             elif not is_thanks:
                 log(f"⚠️ [{act_title}] 奖品「{prize_name}」未取到领奖单号，本次未能自动领取入账")
+                has_unclaimed = True
         else:
             err = draw_res.get('errorMsg', '抽奖未成功') if isinstance(draw_res, dict) else '响应异常'
             log(f"[{act_title}] 抽奖停止: {err}")
             break
         time.sleep(CONFIG.get("DELAY_SEC", 2))
 
-    # 抽完后若有未能成功领取的奖品，尝试扫描补领一次
-    extra_claimed = auto_claim_unreceived_records(sess, phone, session_key, act_no, act_title)
-    for ec in extra_claimed:
-        if ec not in prize_names:
-            prize_names.append(f"{ec}(补领)")
+    # 抽完后若有未能在抽奖过程中成功领取的奖品，尝试扫描补领一次
+    if has_unclaimed:
+        extra_claimed = auto_claim_unreceived_records(sess, phone, session_key, act_no, act_title)
+        for ec in extra_claimed:
+            if ec not in prize_names:
+                prize_names.append(f"{ec}(补领)")
 
     res_str = f"完成 {draw_count} 次，获得: [" + ", ".join(prize_names) + "]" if draw_count > 0 else "未产生抽奖"
     set_today_reward(phone, act_no, res_str)
@@ -2197,43 +2263,15 @@ def run_lucky_lottery(sess: requests.Session, act_id: str, act_title: str, sessi
         return f"活动配置反馈: {detail}" + (f" (今日战果: {cached})" if cached else "")
 
     lottery_act_no = module.get('lotteryActivityNo') or 'hd70226376'
-    task_codes = module.get('taskList') or []
-    task_status = module.get('taskLotteryStatus') or ''
     free_status = module.get('freeLotteryStatus') or ''
-    status_desc = []
-    if free_status == 'END':
-        status_desc.append("免费开盒: 已下线(END)")
-    elif free_status == 'VALID':
-        status_desc.append("免费开盒: 生效中(VALID)")
-    else:
-        status_desc.append(f"免费开盒: {free_status or '未知'}")
 
-    if task_status == 'VALID':
-        status_desc.append("任务开盒: 生效中(VALID)")
-    elif task_status == 'END':
-        status_desc.append("任务开盒: 已下线(END)")
-    else:
-        status_desc.append(f"任务开盒: {task_status or '未知'}")
+    # 状态清晰说明：官方盲盒活动已取消每日无门槛免费赠送，加抽需在小程序端完成任务
+    # 彻底移除生硬英文代码(VALID/END)与误导性的“待办分享提醒”，保持日志干净极简
+    free_hint = '每日无门槛免费赠送已结束' if free_status == 'END' else ('每日免费机会开放中' if free_status == 'VALID' else (free_status or '正常'))
+    log(f'[{act_title}] 活动号: {lottery_act_no} (官方配置: {free_hint})')
 
-    TASK_LABELS = {
-        'sharedToWeChat': '分享给微信好友 (+1次开盒)',
-        'orderMallMember': '订购权益商城会员',
-        'inviteFriends': '邀请好友助力',
-        'pointsExchange': '积分兑换抽奖机会',
-        'viewActivity': '浏览活动页',
-    }
-    PENDING_TASKS = [c for c in task_codes if c not in ('orderMallMember',)]
-    task_desc = "、".join(TASK_LABELS.get(c, c) for c in PENDING_TASKS)
-
-    log(f"[{act_title}] 活动号: {lottery_act_no} | {' | '.join(status_desc)}")
-    if task_desc:
-        log(f"[{act_title}] 可参与任务: {task_desc}")
-
-    draw_res = run_wednesday_lottery(sess, lottery_act_no, f"{act_title}·抽奖引擎", session_key, phone,
-                                     closed_hint="权益商城抽奖活动未开放或已结束")
-
-    if task_desc:
-        log(f"[{act_title}] 待办提醒: 因官方取消每日无门槛免费赠送，若次数为0，可前往微信小程序「权益商城」点击分享1次获取机会")
+    draw_res = run_wednesday_lottery(sess, lottery_act_no, f'{act_title}·抽奖引擎', session_key, phone,
+                                     closed_hint='权益商城抽奖活动未开放或已结束')
     res_str = draw_res
 
     set_today_reward(phone, act_id, res_str)

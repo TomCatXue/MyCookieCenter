@@ -1,11 +1,11 @@
 {
   "id": "mycookiecenter.app.sub",
-  "name": "MyCookieCenter · 凭据捕获与导出中心",
+  "name": "DaiDaiPanel · 凭据捕获与自动同步中心",
   "author": "@TomCatXue",
-  "icon": "https://avatars.githubusercontent.com/u/138953496?v=4",
+  "icon": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/daidai.png",
   "icons": [
-    "https://avatars.githubusercontent.com/u/138953496?v=4",
-    "https://avatars.githubusercontent.com/u/138953496?v=4"
+    "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/daidai.png",
+    "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/daidai.png"
   ],
   "repo": "https://github.com/TomCatXue/MyCookieCenter",
   "apps": [
@@ -31,7 +31,7 @@
           "type": "textarea",
           "autoGrow": true,
           "rows": 4,
-          "desc": "包含 vid、skey、refreshToken、deviceId 的 JSON 数据。捕获后自动回显，点击上方脚本可一键复制"
+          "desc": "包含 vid、skey、refreshToken、deviceId 的 JSON 数据。捕获后自动回显并同步至呆呆面板 WEREAD_AUTH"
         },
         {
           "id": "prefer_coin",
@@ -203,12 +203,160 @@
           "type": "textarea",
           "autoGrow": true,
           "rows": 2,
-          "desc": "包含 token、client_id、cs_ept_d 的 JSON 数据。打开 App 个人中心静默更新；对应外部签到脚本 env 变量 camscanner_data。"
+          "desc": "包含 token、client_id、cs_ept_d 的 JSON 数据。打开 App 个人中心自动捕获并同步至呆呆面板 camscanner_data"
         }
       ],
       "descs_html": [
         "<span><b>💡 抓取方法：</b>打开扫描全能王 App 进入个人中心，即静默更新用户凭据。</span>",
         "<span><b>📋 复制到青龙：</b>点击「当前会话」中的 <code>camscanner_data</code> 行，在数据查看器里点该值的<b>复制</b>按钮，粘贴到外部签到脚本的 <code>camscanner_data</code> 环境变量。</span>"
+      ]
+    },
+    {
+      "id": "mycookiecenter.cmcc",
+      "name": "中国移动 · 每日签到",
+      "keys": [
+        "cmcc_auth",
+        "cmcc_mark_cookie"
+      ],
+      "author": "@TomCatXue",
+      "icon": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/10086.png?v=20261020",
+      "icons": [
+        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/10086.png?v=20261020",
+        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/10086.png?v=20261020"
+      ],
+      "repo": "https://github.com/TomCatXue/MyCookieCenter",
+      "settings": [
+        {
+          "id": "cmcc_auth",
+          "name": "📋【青龙 CMCC_AUTH】长期 app_token",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 3,
+          "desc": "JSON：app_token / phone / province_code / city_code。打开中国移动 App 自动捕获并同步至呆呆面板 CMCC_AUTH"
+        },
+        {
+          "id": "cmcc_mark_cookie",
+          "name": "短期 QWHD_SESSION_TOKEN（30分钟）",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 2,
+          "desc": "仅作本地留存与排障；日常运行请用上方 cmcc_auth（长期 app_token）。"
+        }
+      ],
+      "descs_html": [
+        "<span><b>💡 抓取方法：</b>打开中国移动 App 进入「我的」→「签到领流量」活动页即可，无需任何手动操作；脚本自动捕获 <code>appTokenLogin</code> 请求体中的长期 <code>app_token</code>。</span>",
+        "<span><b>📋 复制到青龙：</b>点击「当前会话」中的 <code>cmcc_auth</code> 行，在数据查看器里点该值的<b>复制</b>按钮，整段粘贴到青龙环境变量 <code>CMCC_AUTH</code>（多账号换行分隔）。</span>",
+        "<span><b>🕐 长期有效：</b>青龙 <code>cmcc_all.py</code> 会自动用服务端下发的 jwt 续期，只有同时提示「jwt 续期失败」和「登录失败」时才需要重新抓包。</span>"
+      ]
+    },
+    {
+      "id": "mycookiecenter.daidai",
+      "name": "呆呆面板 · 凭据自动同步",
+      "keys": [
+        "daidai_panel_host",
+        "daidai_panel_app_key",
+        "daidai_panel_app_secret",
+        "daidai_panel_group",
+        "daidai_sync_enabled",
+        "daidai_sync_notify",
+        "daidai_sync_map",
+        "daidai_sync_last_result"
+      ],
+      "author": "@TomCatXue",
+      "icon": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/daidai.png",
+      "icons": [
+        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/daidai.png",
+        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/daidai.png"
+      ],
+      "repo": "https://github.com/TomCatXue/MyCookieCenter",
+      "settings": [
+        {
+          "id": "daidai_panel_host",
+          "name": "呆呆面板地址",
+          "val": "",
+          "type": "text",
+          "desc": "例如 http://192.168.1.10:5700，不要填 /api；支持在 BoxJS 或 Loon 插件参数中配置（双向自动同步）"
+        },
+        {
+          "id": "daidai_panel_app_key",
+          "name": "Open API App Key",
+          "val": "",
+          "type": "text",
+          "desc": "在呆呆面板「Open API」创建应用后获得，至少勾选 envs（环境变量）权限"
+        },
+        {
+          "id": "daidai_panel_app_secret",
+          "name": "Open API App Secret",
+          "val": "",
+          "type": "text",
+          "desc": "仅保存在本机 BoxJS / 代理工具的持久化存储中；如曾在聊天或截图暴露，请立即在面板重置"
+        },
+        {
+          "id": "daidai_panel_group",
+          "name": "新建变量的分组名（可留空）",
+          "val": "MyCookieCenter",
+          "type": "text",
+          "desc": "只影响新建变量；留空时沿用映射表里的业务分组，不会清空已有变量的原分组"
+        },
+        {
+          "id": "daidai_sync_enabled",
+          "name": "自动同步总开关",
+          "val": "true",
+          "type": "selects",
+          "items": [
+            {
+              "key": "true",
+              "label": "开启（抓包后与每日兜底同步）"
+            },
+            {
+              "key": "false",
+              "label": "关闭（保留手动运行）"
+            }
+          ],
+          "desc": "开启后，App 内抓到 Cookie 时自动推送到呆呆面板，且每日 03:09 自动巡检"
+        },
+        {
+          "id": "daidai_sync_notify",
+          "name": "同步结果通知",
+          "val": "true",
+          "type": "selects",
+          "items": [
+            {
+              "key": "true",
+              "label": "开启"
+            },
+            {
+              "key": "false",
+              "label": "关闭"
+            }
+          ],
+          "desc": "关闭后仍会写入同步结果，可在“最近一次同步结果”查看"
+        },
+        {
+          "id": "daidai_sync_map",
+          "name": "BoxJS → 面板变量映射（高级）",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 10,
+          "desc": "留空使用内置映射。JSON 数组字段：key=BoxJS 数据键，name=面板环境变量名，group=新建分组，enabled=是否同步。同名多条时脚本会拒绝覆盖。"
+        },
+        {
+          "id": "daidai_sync_last_result",
+          "name": "最近一次同步结果",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 5,
+          "desc": "只读排障信息，由同步脚本自动写入；可点击数据行使用 BoxJS 原生复制按钮"
+        }
+      ],
+      "descs_html": [
+        "<span><b>💡 它做什么：</b>各应用开启抓包后，一旦捕获到最新凭据即就地<b>自动同步至呆呆面板环境变量</b>，同时支持每日 03:09 自动巡检兜底与一键手动全量同步。</span>",
+        "<span><b>⚙️ 双重配置方式：</b>可在本 BoxJS 卡片填入面板地址与密钥，亦可直接在 Loon 的 <code>DaiDaiPanel.plugin</code> 插件参数中填写，脚本运行时会自动双向识别并持久化同步，二选一即可。</span>",
+        "<span><b>🛡️ 多账号防误伤：</b>微信读书按 <code>vid</code>、中国移动按 <code>phone</code>、扫描全能王按 <code>client_id</code> 精准定位并更新对应变量；若面板存在多条同名变量且未匹配当前账号，将主动熔断拒绝覆盖，杜绝串号。</span>"
       ]
     }
   ]

@@ -1,28 +1,42 @@
-#!name = CookieCenter · Cookie 抓取合集
-#!desc = 一键抓取全部维护中业务的 Cookie 凭据（微信读书、中国电信全系、扫描全能王）。每个业务配备独立开关（默认开启，可单独关闭）。仅含「抓取」规则，不含任何定时签到执行——签到调度已全面收归青龙面板。
+#!name = 呆呆面板 · 凭据捕获与自动同步
+#!desc = 聚合应用凭据静默捕获与呆呆面板 (Dumb-Panel) 自动同步。各应用配备独立业务开关（开启即代表捕获并自动同步至呆呆面板环境变量）；支持一键手动全量同步与每日自动巡检。
 #!author = TomCatXue
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
-#!icon = https://avatars.githubusercontent.com/u/138953496?v=4
-#!tag = 签到, Cookie, 凭据捕获
-#!version = 5.2.0
-#!date = 2026-10-18 10:10
+#!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/daidai.png
+#!tag = 签到, Cookie, 凭据捕获, 呆呆面板, Dumb-Panel
+#!version = 5.6.0
+#!date = 2026-10-21 01:30
 
-# =================== 1. 独立开关 (默认开启，可单独关闭) ===================
+# =================== 1. 独立业务开关 (开启即代表抓取并自动同步) ===================
 
 [Argument]
-weread = switch,true,tag=微信读书,desc=抓取技巧：建议先进「我」的页面(抓App基础票据)，再去「周二翻牌」页(补齐Web完整票据)
-telecom_draw = switch,true,tag=电信·会员抽奖,desc=打开微信小程序「中国电信5G会员/权益商城」触发，自动抓取 SessionKey 与手机号
+weread = switch,true,tag=微信读书,desc=打开微信读书 App 进「我」或「翻牌/限免」自动触发抓取并同步至呆呆面板 WEREAD_AUTH
+cmcc_mark = switch,true,tag=移动·每日签到,desc=在中国移动 App 内打开「每日签到」活动页触发，自动抓取长期 app_token 并同步至呆呆面板 CMCC_AUTH
+camscanner = switch,true,tag=扫描全能王,desc=打开扫描全能王 App 进个人中心触发静默抓取并同步至呆呆面板 camscanner_data
+telecom_draw = switch,true,tag=电信·会员抽奖,desc=打开微信小程序「中国电信营业厅」进「签到有礼」或「会员日抽奖」页面触发抓取 SessionKey
 telecom_rights = switch,true,tag=电信·等级权益,desc=打开电信营业厅 App 进「我的签到」或「等级权益」页面触发抓取
 telecom_benefit = switch,true,tag=电信·山西福利,desc=打开山西电信体验AI领福利活动页面触发抓取最新批次凭证
-camscanner = switch,true,tag=扫描全能王,desc=打开扫描全能王 App 进个人中心触发静默更新
 
-# =================== 2. 纯抓取规则 (不含任何 cron 执行) ===================
+# --- 呆呆面板配置 (可选，若已在 BoxJS 配置则留空即可) ---
+daidai_url = input,"",tag=呆呆面板地址(可选),desc=填入例如 http://192.168.1.10:5700，若在 BoxJS 已配置则此项可留空
+daidai_key = input,"",tag=呆呆面板AppKey(可选),desc=填入 Open API App Key，若在 BoxJS 已配置则此项可留空
+daidai_secret = input,"",tag=呆呆面板AppSecret(可选),desc=填入 Open API App Secret，若在 BoxJS 已配置则此项可留空
+
+# =================== 2. 捕获与同步规则 ===================
 
 [Script]
-# --- 【微信读书】凭据捕获 (联动 weread 开关) ---
-request if ${url} ~= /^https?:\/\/(i\.)?weread\.qq\.com\/(flip-card-game|user\/|feature|free\/library|checkfreequalify)/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/weread/weread_cookie.js?v=20261017") with enable=${weread}, tag="微信读书·凭据捕获", img_url="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/weread.png"
-request if ${url} ~= /^https?:\/\/i\.weread\.qq\.com\/login/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/weread/weread_cookie.js?v=20261017") with enable=${weread}, tag="微信读书·登录请求", requires_body=true, img_url="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/weread.png"
-response if ${url} ~= /^https?:\/\/i\.weread\.qq\.com\/login/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/weread/weread_cookie.js?v=20261017") with enable=${weread}, tag="微信读书·登录响应", requires_body=true, img_url="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/weread.png"
+# --- 【微信读书】凭据捕获与自动同步 (联动 weread 开关) ---
+request if ${url} ~= /^https?:\/\/(i\.)?weread\.qq\.com\/(flip-card-game|user\/|feature|free\/library|checkfreequalify)/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/weread/weread_cookie.js?v=20261021", "daidai_url=${daidai_url}&daidai_key=${daidai_key}&daidai_secret=${daidai_secret}") with enable=${weread}, tag="微信读书·凭据捕获", img_url="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/weread.png"
+request if ${url} ~= /^https?:\/\/i\.weread\.qq\.com\/login/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/weread/weread_cookie.js?v=20261021", "daidai_url=${daidai_url}&daidai_key=${daidai_key}&daidai_secret=${daidai_secret}") with enable=${weread}, tag="微信读书·登录请求", requires_body=true, img_url="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/weread.png"
+response if ${url} ~= /^https?:\/\/i\.weread\.qq\.com\/login/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/weread/weread_cookie.js?v=20261021", "daidai_url=${daidai_url}&daidai_key=${daidai_key}&daidai_secret=${daidai_secret}") with enable=${weread}, tag="微信读书·登录响应", requires_body=true, img_url="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/weread.png"
+
+# --- 【中国移动·每日签到】会话凭据捕获与自动同步 (联动 cmcc_mark 开关) ---
+request if ${url} ~= /^https?:\/\/wx\.10086\.cn\/qwhdsso\/appTokenLogin/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/cmcc/cmcc_cookie.js?v=20261021", "daidai_url=${daidai_url}&daidai_key=${daidai_key}&daidai_secret=${daidai_secret}") with enable=${cmcc_mark}, tag="移动·长期 app_token 捕获", requires_body=true, img_url="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/10086.png"
+request if ${url} ~= /^https?:\/\/wx\.10086\.cn\/qwhdhub\/api\/mark\//i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/cmcc/cmcc_cookie.js?v=20261021", "daidai_url=${daidai_url}&daidai_key=${daidai_key}&daidai_secret=${daidai_secret}") with enable=${cmcc_mark}, tag="移动·签到接口票据", img_url="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/10086.png"
+response if ${url} ~= /^https?:\/\/wx\.10086\.cn\/qwhdhub\/(qwhdmark|qwhdsso)\//i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/cmcc/cmcc_cookie.js?v=20261021", "daidai_url=${daidai_url}&daidai_key=${daidai_key}&daidai_secret=${daidai_secret}") with enable=${cmcc_mark}, tag="移动·登录页票据回填", img_url="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/10086.png"
+
+# --- 【扫描全能王】用户凭据捕获与自动同步 (联动 camscanner 开关) ---
+request if ${url} ~= /^https:\/\/api-cs\.intsig\.net\/user\/cs\/get_user_attribute/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/camscanner/camscanner.cookie.js?v=20261021", "daidai_url=${daidai_url}&daidai_key=${daidai_key}&daidai_secret=${daidai_secret}") with enable=${camscanner}, tag="扫描全能王 Cookie", img_url="https://raw.githubusercontent.com/MaYIHEI/pin/refs/heads/main/app/camscanner.png"
 
 # --- 【中国电信·会员抽奖】凭据捕获 (联动 telecom_draw 开关) ---
 request if ${url} ~= /^https?:\/\/cdn\.bestpay\.cn\/marketing\/telecom\.member\.config\.json/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/telecom/telecom_cookie.js?v=20261017") with enable=${telecom_draw}, tag="电信·会员配置捕获", img_url="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/189.png"
@@ -34,12 +48,13 @@ request if ${url} ~= /^https?:\/\/(waphub|wappark)\.189\.cn\/(jt-sign|gateway|Ji
 response if ${url} ~= /^https?:\/\/(waphub|wappark)\.189\.cn\/(jt-sign|gateway)\//i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/telecom/telecom_rights.js?v=20261017") with enable=${telecom_rights}, tag="电信·等级权益会话回填", requires_body=true, img_url="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/189.png"
 
 # --- 【中国电信·山西福利】活动凭据捕获 (联动 telecom_benefit 开关) ---
-request if ${url} ~= /^https:\/\/wx\.sx\.189\.cn\/sx_ai_benefit\/h5\/HD/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/telecom/telecom_benefit.js?v=20261017") with enable=${telecom_benefit}, tag="电信·山西活动凭证捕获", img_url="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/189.png"
+request if ${url} ~= /^https:\/\/wx\.sx\.189\.cn\/sx_ai_benefit\/h5\/HD/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/telecom/telecom_benefit.js?v=20261017") with enable=${telecom_benefit}, tag="电信·山西活动凭据捕获", img_url="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/189.png"
 
-# --- 【扫描全能王】用户凭证捕获 (联动 camscanner 开关) ---
-request if ${url} ~= /^https:\/\/api-cs\.intsig\.net\/user\/cs\/get_user_attribute/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/camscanner/camscanner.cookie.js?v=20261017") with enable=${camscanner}, tag="扫描全能王 Cookie", img_url="https://raw.githubusercontent.com/MaYIHEI/pin/refs/heads/main/app/camscanner.png"
+# --- 【呆呆面板】手动全量同步与每日巡检 ---
+generic then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/daidai/sync.js?v=20261021", "manual&daidai_url=${daidai_url}&daidai_key=${daidai_key}&daidai_secret=${daidai_secret}") with tag="呆呆面板·手动一键同步", timeout=60
+cron "9 3 * * *" then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/daidai/sync.js?v=20261021", "daidai_url=${daidai_url}&daidai_key=${daidai_key}&daidai_secret=${daidai_secret}") with tag="呆呆面板·每日兜底同步", timeout=60
 
 # =================== 3. MITM 解密域名 ===================
 
 [MITM]
-hostname = weread.qq.com, i.weread.qq.com, waphub.189.cn, wappark.189.cn, wx.sx.189.cn, mapi.bestpay.com.cn, mapi-h5.bestpay.com.cn, cdn.bestpay.cn, spanner.bestpay.com.cn, activity.bestpay.cn, h5.bestpay.cn, api-cs.intsig.net
+hostname = weread.qq.com, i.weread.qq.com, waphub.189.cn, wappark.189.cn, wx.sx.189.cn, mapi.bestpay.com.cn, mapi-h5.bestpay.com.cn, cdn.bestpay.cn, spanner.bestpay.com.cn, activity.bestpay.cn, h5.bestpay.cn, api-cs.intsig.net, wx.10086.cn, qwhdcdn.cmcc-cs.cn

@@ -1,0 +1,363 @@
+{
+  "id": "daidaipanel.app.sub",
+  "name": "DaiDaiPanel · 凭据捕获与自动同步中心",
+  "author": "@TomCatXue",
+  "icon": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/daidai.png",
+  "icons": [
+    "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/daidai.png",
+    "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/daidai.png"
+  ],
+  "repo": "https://github.com/TomCatXue/MyCookieCenter",
+  "apps": [
+    {
+      "id": "mycookiecenter.weread",
+      "name": "微信读书",
+      "keys": [
+        "weread_auth_v2",
+        "prefer_coin"
+      ],
+      "author": "@TomCatXue",
+      "icon": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/weread.png?v=20261015",
+      "icons": [
+        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/weread.png?v=20261015",
+        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/weread.png?v=20261015"
+      ],
+      "repo": "https://github.com/TomCatXue/MyCookieCenter",
+      "settings": [
+        {
+          "id": "weread_auth_v2",
+          "name": "📋【青龙 WEREAD_AUTH】微信读书 App 完整凭证",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 4,
+          "desc": "包含 vid、skey、refreshToken、deviceId 的 JSON 数据。捕获后自动回显并同步至呆呆面板 WEREAD_AUTH"
+        },
+        {
+          "id": "prefer_coin",
+          "name": "阅读达标奖励偏好",
+          "val": "2",
+          "type": "selects",
+          "items": [
+            {
+              "key": "1",
+              "label": "优先领体验卡"
+            },
+            {
+              "key": "2",
+              "label": "优先领书币 (推荐)"
+            }
+          ],
+          "desc": "每周阅读时长达标奖励偏好。设为优先书币时自动转换书币"
+        }
+      ],
+      "descs_html": [
+        "<span><b>💡 抓取黄金顺序：</b>建议先打开微信读书 App 进入<b>「我」</b>的页面（触发捕获 App 基础票据与脱机换票 token），再去打开<b>「周二翻牌」</b>活动页（自动补齐 Web 端 wr_vid / wr_skey）。两步结合即可自动合成最完整的满血凭据！</span>",
+        "<span><b>📋 复制到青龙：</b>在下方<b>「当前会话」</b>数据列表点击 <code>weread_auth_v2</code> 这一行，弹出的<b>数据查看器</b>中该值右侧有<b>复制</b>按钮，即可整段复制并粘贴到青龙环境变量 <code>WEREAD_AUTH</code>。</span>",
+        "<span><b>🗑️ 清空重抓：</b>如需重新抓取，点击卡片右上角 ⋮ ->「清除数据」即可（也可用数据行右侧的 ✕ 删除单项），随后重新进入 App 触发捕获。</span>"
+      ]
+    },
+    {
+      "id": "mycookiecenter.telecom_draw",
+      "name": "中国电信 · 5G会员抽奖",
+      "keys": [
+        "telecom_draw_session_key",
+        "telecom_draw_product_no"
+      ],
+      "author": "@TomCatXue",
+      "icon": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/189.png?v=20261015",
+      "icons": [
+        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/189.png?v=20261015",
+        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/189.png?v=20261015"
+      ],
+      "repo": "https://github.com/TomCatXue/MyCookieCenter",
+      "settings": [
+        {
+          "id": "telecom_draw_session_key",
+          "name": "📋【dxlin 第4段】会员抽奖 SessionKey",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 2,
+          "desc": "32位 Hex 字符。打开微信小程序「中国电信5G会员」或「权益商城」进任意页面即可静默捕获。注：青龙 telecom_daily.py 读取的变量是 dxlin（手机号#服务密码#AndroidID[#SessionKey]），本值对应其第4段。"
+        },
+        {
+          "id": "telecom_draw_product_no",
+          "name": "捕获的手机号",
+          "val": "",
+          "type": "text",
+          "desc": "当前绑定的 11 位有效中国电信手机号码，供拼装 dxlin 使用。"
+        }
+      ],
+      "descs_html": [
+        "<span><b>💡 抓取方法：</b>打开微信小程序「中国电信5G会员」或「权益商城」浏览任意页面，即自动静默提取 SessionKey 与手机号。</span>",
+        "<span><b>📋 复制到青龙：</b>点击「当前会话」中的 <code>telecom_draw_session_key</code> 行，在数据查看器里点该值的<b>复制</b>按钮。随后按下述格式拼装青龙变量 <code>dxlin</code>：<code>手机号#服务密码#AndroidID#SessionKey</code>（SessionKey 为可选第 4 段，留空则青龙运行时会自动换票）。</span>"
+      ]
+    },
+    {
+      "id": "mycookiecenter.telecom_rights",
+      "name": "中国电信 · 等级权益秒杀",
+      "keys": [
+        "telecom_rights_auth",
+        "telecom_rights_id"
+      ],
+      "author": "@TomCatXue",
+      "icon": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/189.png?v=20261015",
+      "icons": [
+        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/189.png?v=20261015",
+        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/189.png?v=20261015"
+      ],
+      "repo": "https://github.com/TomCatXue/MyCookieCenter",
+      "settings": [
+        {
+          "id": "telecom_rights_auth",
+          "name": "等级权益会话凭据 (本地)",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 3,
+          "desc": "打开电信营业厅 App 进「我」->「我的签到」或「等级权益」页面自动捕获 sign/Cookie/accId。注：青龙 telecom_midnight_equity.py 走 dxlin 自行登录，本项仅作本地留存与排障。"
+        },
+        {
+          "id": "telecom_rights_id",
+          "name": "目标抢兑权益ID (本地)",
+          "val": "eae02aa850f607daa851910621d86200b10256cab2504e274ba6224e91254ea7",
+          "type": "text",
+          "desc": "默认 LV5 3元话费券 ID，0点抢兑直发。"
+        }
+      ],
+      "descs_html": [
+        "<span><b>💡 抓取方法：</b>打开中国电信营业厅 App，进「我」->「我的签到」或「等级权益」页即可自动预热捕获 sign 与 Cookie。</span>",
+        "<span><b>📋 复制到青龙：</b>点击「当前会话」中的 <code>telecom_rights_auth</code> 行，在数据查看器里点该值的<b>复制</b>按钮。注：青龙 <code>telecom_midnight_equity.py</code> 读取的是 <code>dxlin</code> 并自行登录，本项主要供本地留存与排障。</span>"
+      ]
+    },
+    {
+      "id": "mycookiecenter.telecom_benefit",
+      "name": "中国电信 · 山西领福利",
+      "keys": [
+        "sx_benefit_cookie",
+        "sx_prefer_benefit"
+      ],
+      "author": "@TomCatXue",
+      "icon": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/189.png?v=20261015",
+      "icons": [
+        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/189.png?v=20261015",
+        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/189.png?v=20261015"
+      ],
+      "repo": "https://github.com/TomCatXue/MyCookieCenter",
+      "settings": [
+        {
+          "id": "sx_benefit_cookie",
+          "name": "山西领福利 Cookie (本地)",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 2,
+          "desc": "进入山西活动页面自动捕获。注：本仓库暂无对应青龙脚本，Loon 侧已不再自动执行领奖，仅作凭据留存。"
+        },
+        {
+          "id": "sx_prefer_benefit",
+          "name": "权益兑换目标偏好",
+          "val": "tc_member",
+          "type": "selects",
+          "items": [
+            {
+              "key": "tc_member",
+              "label": "腾讯视频 VIP 会员 31 天 (限量1000份·首选)"
+            },
+            {
+              "key": "tc_flow",
+              "label": "3GB 国内通用流量 (当月有效·保证能领到)"
+            },
+            {
+              "key": "tc_tele",
+              "label": "1~20 元翼支付立减券"
+            }
+          ],
+          "desc": "每月每号限领一项。推荐视频会员，次选 3GB 流量"
+        }
+      ],
+      "descs_html": [
+        "<span><b>💡 抓取方法：</b>打开山西电信公众号「体验AI领福利」活动页面即可自动捕获最新批次凭证。</span>",
+        "<span><b>📋 查看/复制：</b>点击「当前会话」中的 <code>sx_benefit_cookie</code> 行，在数据查看器中可复制。注：本仓库暂无对应青龙脚本。</span>"
+      ]
+    },
+    {
+      "id": "mycookiecenter.camscanner",
+      "name": "扫描全能王",
+      "keys": [
+        "camscanner_data"
+      ],
+      "author": "@TomCatXue",
+      "icon": "https://raw.githubusercontent.com/MaYIHEI/pin/refs/heads/main/app/camscanner.png",
+      "icons": [
+        "https://raw.githubusercontent.com/MaYIHEI/pin/refs/heads/main/app/camscanner.png",
+        "https://raw.githubusercontent.com/MaYIHEI/pin/refs/heads/main/app/camscanner.png"
+      ],
+      "repo": "https://github.com/TomCatXue/MyCookieCenter",
+      "settings": [
+        {
+          "id": "camscanner_data",
+          "name": "📋【camscanner_data】用户属性凭据",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 2,
+          "desc": "包含 token、client_id、cs_ept_d 的 JSON 数据。打开 App 个人中心自动捕获并同步至呆呆面板 camscanner_data"
+        }
+      ],
+      "descs_html": [
+        "<span><b>💡 抓取方法：</b>打开扫描全能王 App 进入个人中心，即静默更新用户凭据。</span>",
+        "<span><b>📋 复制到青龙：</b>点击「当前会话」中的 <code>camscanner_data</code> 行，在数据查看器里点该值的<b>复制</b>按钮，粘贴到外部签到脚本的 <code>camscanner_data</code> 环境变量。</span>"
+      ]
+    },
+    {
+      "id": "mycookiecenter.cmcc",
+      "name": "中国移动 · 每日签到",
+      "keys": [
+        "cmcc_auth",
+        "cmcc_mark_cookie"
+      ],
+      "author": "@TomCatXue",
+      "icon": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/10086.png?v=20261020",
+      "icons": [
+        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/10086.png?v=20261020",
+        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/10086.png?v=20261020"
+      ],
+      "repo": "https://github.com/TomCatXue/MyCookieCenter",
+      "settings": [
+        {
+          "id": "cmcc_auth",
+          "name": "📋【青龙 CMCC_AUTH】长期 app_token",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 3,
+          "desc": "JSON：app_token / phone / province_code / city_code。打开中国移动 App 自动捕获并同步至呆呆面板 CMCC_AUTH"
+        },
+        {
+          "id": "cmcc_mark_cookie",
+          "name": "短期 QWHD_SESSION_TOKEN（30分钟）",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 2,
+          "desc": "仅作本地留存与排障；日常运行请用上方 cmcc_auth（长期 app_token）。"
+        }
+      ],
+      "descs_html": [
+        "<span><b>💡 抓取方法：</b>打开中国移动 App 进入「我的」→「签到领流量」活动页即可，无需任何手动操作；脚本自动捕获 <code>appTokenLogin</code> 请求体中的长期 <code>app_token</code>。</span>",
+        "<span><b>📋 复制到青龙：</b>点击「当前会话」中的 <code>cmcc_auth</code> 行，在数据查看器里点该值的<b>复制</b>按钮，整段粘贴到青龙环境变量 <code>CMCC_AUTH</code>（多账号换行分隔）。</span>",
+        "<span><b>🕐 长期有效：</b>青龙 <code>cmcc_all.py</code> 会自动用服务端下发的 jwt 续期，只有同时提示「jwt 续期失败」和「登录失败」时才需要重新抓包。</span>"
+      ]
+    },
+    {
+      "id": "mycookiecenter.daidai",
+      "name": "呆呆面板 · 凭据自动同步",
+      "keys": [
+        "daidai_panel_host",
+        "daidai_panel_app_key",
+        "daidai_panel_app_secret",
+        "daidai_panel_group",
+        "daidai_sync_enabled",
+        "daidai_sync_notify",
+        "daidai_sync_map",
+        "daidai_sync_last_result"
+      ],
+      "author": "@TomCatXue",
+      "icon": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/daidai.png",
+      "icons": [
+        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/daidai.png",
+        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/daidai.png"
+      ],
+      "repo": "https://github.com/TomCatXue/MyCookieCenter",
+      "settings": [
+        {
+          "id": "daidai_panel_host",
+          "name": "呆呆面板地址",
+          "val": "",
+          "type": "text",
+          "desc": "例如 http://192.168.1.10:5700，不要填 /api；支持在 BoxJS 或 Loon 插件参数中配置（双向自动同步）"
+        },
+        {
+          "id": "daidai_panel_app_key",
+          "name": "Open API App Key",
+          "val": "",
+          "type": "text",
+          "desc": "在呆呆面板「Open API」创建应用后获得，至少勾选 envs（环境变量）权限"
+        },
+        {
+          "id": "daidai_panel_app_secret",
+          "name": "Open API App Secret",
+          "val": "",
+          "type": "text",
+          "desc": "仅保存在本机 BoxJS / 代理工具的持久化存储中；如曾在聊天或截图暴露，请立即在面板重置"
+        },
+        {
+          "id": "daidai_panel_group",
+          "name": "新建变量的分组名（可留空）",
+          "val": "MyCookieCenter",
+          "type": "text",
+          "desc": "只影响新建变量；留空时沿用映射表里的业务分组，不会清空已有变量的原分组"
+        },
+        {
+          "id": "daidai_sync_enabled",
+          "name": "自动同步总开关",
+          "val": "true",
+          "type": "selects",
+          "items": [
+            {
+              "key": "true",
+              "label": "开启（抓包后与每日兜底同步）"
+            },
+            {
+              "key": "false",
+              "label": "关闭（保留手动运行）"
+            }
+          ],
+          "desc": "开启后，App 内抓到 Cookie 时自动推送到呆呆面板，且每日 03:09 自动巡检"
+        },
+        {
+          "id": "daidai_sync_notify",
+          "name": "同步结果通知",
+          "val": "true",
+          "type": "selects",
+          "items": [
+            {
+              "key": "true",
+              "label": "开启"
+            },
+            {
+              "key": "false",
+              "label": "关闭"
+            }
+          ],
+          "desc": "关闭后仍会写入同步结果，可在“最近一次同步结果”查看"
+        },
+        {
+          "id": "daidai_sync_map",
+          "name": "BoxJS → 面板变量映射（高级）",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 10,
+          "desc": "留空使用内置映射。JSON 数组字段：key=BoxJS 数据键，name=面板环境变量名，group=新建分组，enabled=是否同步。同名多条时脚本会拒绝覆盖。"
+        },
+        {
+          "id": "daidai_sync_last_result",
+          "name": "最近一次同步结果",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 5,
+          "desc": "只读排障信息，由同步脚本自动写入；可点击数据行使用 BoxJS 原生复制按钮"
+        }
+      ],
+      "descs_html": [
+        "<span><b>💡 它做什么：</b>各应用开启抓包后，一旦捕获到最新凭据即就地<b>自动同步至呆呆面板环境变量</b>，同时支持每日 03:09 自动巡检兜底与一键手动全量同步。</span>",
+        "<span><b>⚙️ 双重配置方式：</b>可在本 BoxJS 卡片填入面板地址与密钥，亦可直接在 Loon 的 <code>DaiDaiPanel.plugin</code> 插件参数中填写，脚本运行时会自动双向识别并持久化同步，二选一即可。</span>",
+        "<span><b>🛡️ 多账号防误伤：</b>微信读书按 <code>vid</code>、中国移动按 <code>phone</code>、扫描全能王按 <code>client_id</code> 精准定位并更新对应变量；若面板存在多条同名变量且未匹配当前账号，将主动熔断拒绝覆盖，杜绝串号。</span>"
+      ]
+    }
+  ]
+}
