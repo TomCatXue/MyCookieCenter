@@ -140,17 +140,25 @@ function parseAppTokenBody(body) {
         }
     }
 
-    // 2) AI 豆苗养成记 ticket：dev.coc.10086.cn/coc3/
+    // 2) AI 豆苗养成记 ticket (dev.coc.10086.cn)
     if (/dev\.coc\.10086\.cn/i.test(url)) {
+        $.log(`[CMCC] 命中 AI 豆苗域名: ${url.split("?")[0]}`);
         let ticket = "";
-        let m = url.match(/[?&](?:ticket|jsid)=([^&#]+)/i);
+        let m = url.match(/[?&](?:ticket|jsid|ssoTicket)=([^&#]+)/i);
         if (m) ticket = decodeURIComponent(m[1]);
         if (!ticket && isRequest && $request.body) {
             try {
-                let d = JSON.parse($request.body);
-                ticket = d.ticket || d.jsid || "";
+                let d = typeof $request.body === "string" ? JSON.parse($request.body) : $request.body;
+                ticket = d.ticket || d.jsid || d.ssoTicket || "";
             } catch (e) {}
         }
+        if (!ticket && isResponse && $response.body) {
+            try {
+                let d = typeof $response.body === "string" ? JSON.parse($response.body) : $response.body;
+                ticket = (d.data && d.data.ticket) || d.ticket || "";
+            } catch (e) {}
+        }
+
         if (ticket) {
             let cur = {};
             try { cur = JSON.parse($.getdata(AUTH_KEY) || "{}"); } catch (e) {}
@@ -160,13 +168,23 @@ function parseAppTokenBody(body) {
                 savedPayload = cur;
                 changedAuth = true;
                 authTypeDesc = "AI 豆苗 ticket (已自动并入 CMCC_AUTH)";
-                $.log(`[INFO] 已捕获并缝合 AI 豆苗 ticket: ${ticket.slice(0, 10)}...`);
+                $.log(`[INFO] 成功捕获并缝合 AI 豆苗 ticket: ${ticket.slice(0, 8)}...`);
+            } else {
+                $.log(`[INFO] AI 豆苗 ticket 未变化: ${ticket.slice(0, 8)}...`);
+                const last = Number($.getdata(NOTIFY_KEY) || 0);
+                if (Date.now() - last >= NOTIFY_GAP_MS) {
+                    $.setdata(String(Date.now()), NOTIFY_KEY);
+                    $.msg("中国移动 · AI豆苗", "✅ AI 豆苗凭据有效 (未变化)", `• ticket: ${ticket.slice(0, 8)}...\n• 已并入 CMCC_AUTH，青龙可正常打卡`);
+                }
             }
+        } else {
+            $.log(`[DEBUG] 本次 dev.coc 请求未携带 ticket: ${url}`);
         }
     }
 
-    // 3) 话费余额 session：touch.10086.cn
+    // 3) 话费余额 session (touch.10086.cn)
     if (/touch\.10086\.cn/i.test(url)) {
+        $.log(`[CMCC] 命中触屏版充值中心: ${url.split("?")[0]}`);
         let feeSession = "";
         if (isResponse) {
             let sc = getHeader($response.headers || {}, "set-cookie") || "";
@@ -178,6 +196,7 @@ function parseAppTokenBody(body) {
             let m = c.match(/jsessionid-cmcc=([^;]+)/i);
             if (m) feeSession = m[1];
         }
+
         if (feeSession) {
             let cur = {};
             try { cur = JSON.parse($.getdata(AUTH_KEY) || "{}"); } catch (e) {}
@@ -187,8 +206,17 @@ function parseAppTokenBody(body) {
                 savedPayload = cur;
                 changedAuth = true;
                 authTypeDesc = "话费余额 Session (已自动并入 CMCC_AUTH)";
-                $.log(`[INFO] 已捕获并缝合话费余额 session: ${feeSession.slice(0, 10)}...`);
+                $.log(`[INFO] 成功捕获并缝合话费余额 session: ${feeSession.slice(0, 8)}...`);
+            } else {
+                $.log(`[INFO] 话费余额 session 未变化: ${feeSession.slice(0, 8)}...`);
+                const last = Number($.getdata(NOTIFY_KEY) || 0);
+                if (Date.now() - last >= NOTIFY_GAP_MS) {
+                    $.setdata(String(Date.now()), NOTIFY_KEY);
+                    $.msg("中国移动 · 充值中心", "✅ 话费余额凭据有效 (未变化)", `• Session: ${feeSession.slice(0, 8)}...\n• 已并入 CMCC_AUTH，青龙可查询余额`);
+                }
             }
+        } else {
+            $.log(`[DEBUG] 本次 touch.10086 请求未携带 jsessionid-cmcc: ${url}`);
         }
     }
 
