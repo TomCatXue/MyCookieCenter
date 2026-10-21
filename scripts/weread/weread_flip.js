@@ -6,9 +6,9 @@
 #!icon=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/weread.png
 #!tag=微信读书,翻牌,抽奖
 
-配置由 loon/CookieCenter.plugin 或 loon/WeReadEnhance.plugin 提供：
+配置由 loon/DaiDaiPanel.plugin 或 loon/WeReadEnhance.plugin 提供：
 - 周二翻牌 cron -> 本文件（每周二 20:00）
-参数面板由 boxjs/CookieCenter.boxjs.json 订阅提供。
+参数面板由 boxjs/DaiDaiPanel.boxjs.json 订阅提供。
 */
 
 const AUTH_KEY = "weread_auth_v2";

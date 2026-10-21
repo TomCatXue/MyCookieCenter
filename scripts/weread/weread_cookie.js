@@ -34,11 +34,6 @@ function getStoredAuth() {
     try { return JSON.parse(raw); } catch (e) { return {}; }
 }
 
-function saveAuth(newAuth) {
-    $.setdata(JSON.stringify(newAuth), AUTH_KEY);
-    syncToDaidaiAsync(newAuth);
-}
-
 function getDaidaiConfig() {
     let hostRaw = $.getdata("daidai_panel_host");
     let appKey = String($.getdata("daidai_panel_app_key") || "").trim();
@@ -62,135 +57,190 @@ function getDaidaiConfig() {
             $.setdata(appSecret, "daidai_panel_app_secret");
         }
     }
-    let host = String(hostRaw || "").trim().replace(/\/+$/, "");
+    let host = String(hostRaw || "").trim();
+    host = host.replace(/\/+(api|envs)?\/?$/i, "").replace(/\/+$/, "");
     if (host && !/^https?:\/\//i.test(host)) host = "http://" + host;
     return { host, appKey, appSecret };
 }
 
-function syncToDaidaiAsync(auth) {
-    try {
-        const cfg = getDaidaiConfig();
-        const host = cfg.host;
-        const appKey = cfg.appKey;
-        const appSecret = cfg.appSecret;
-        if (!host || !appKey || !appSecret) return;
+function syncToDaidai({ name, value, ident, group }, cb) {
+    const cfg = getDaidaiConfig();
+    const host = cfg.host;
+    const appKey = cfg.appKey;
+    const appSecret = cfg.appSecret;
 
-        const syncEnabled = String($.getdata("daidai_sync_enabled") || "true").toLowerCase();
-        if (syncEnabled === "false") return;
+    if (!host || !appKey || !appSecret) {
+        if (cb) cb({ ok: false, reason: "呆呆面板未配置" });
+        return;
+    }
+    const syncEnabled = String($.getdata("daidai_sync_enabled") || "true").toLowerCase();
+    if (syncEnabled === "false") {
+        if (cb) cb({ ok: false, reason: "自动同步已关闭" });
+        return;
+    }
 
+    const panelGroup = String($.getdata("daidai_panel_group") || group || "MyCookieCenter").trim();
+    const valStr = typeof value === "string" ? value : JSON.stringify(value);
 
+    let called = false;
+    const safeCb = (res) => {
+        if (called) return;
+        called = true;
+        if (cb) cb(res);
+    };
 
-        const payload = Object.assign({}, auth || {});
-        const preferCoin = String($.getdata("prefer_coin") || "2").trim();
-        if (preferCoin) payload.prefer_coin = preferCoin;
-        const valStr = JSON.stringify(payload);
-        const vid = String(payload.vid || "");
+    setTimeout(() => {
+        safeCb({ ok: false, reason: "同步请求超时(3.5s)" });
+    }, 3500);
 
-        const cacheRaw = $.getdata("daidai_panel_token_cache");
-        let token = "";
+    const doRequest = (method, path, headers, body, next) => {
+        if (typeof $httpClient === "undefined" || !$httpClient) {
+            return next(new Error("无 $httpClient 环境"));
+        }
+        const opts = {
+            url: host + path,
+            method: method,
+            headers: Object.assign({ "Content-Type": "application/json", "Accept": "application/json" }, headers || {}),
+            timeout: 3000
+        };
+        if (body) opts.body = typeof body === "string" ? body : JSON.stringify(body);
+        $httpClient[method.toLowerCase()](opts, (err, resp, data) => {
+            if (err) return next(err);
+            let json = null;
+            try { json = typeof data === "string" ? JSON.parse(data) : data; } catch (e) {}
+            next(null, resp && (resp.statusCode || resp.status) || 0, json, data);
+        });
+    };
+
+    const fetchToken = (tCb) => {
         try {
-            const cache = JSON.parse(cacheRaw || "{}");
+            const cache = JSON.parse($.getdata("daidai_panel_token_cache") || "{}");
             if (cache.host === host && cache.appKey === appKey && cache.token && Number(cache.expiresAt || 0) > Date.now() + 60000) {
-                token = cache.token;
+                return tCb(null, cache.token);
             }
         } catch (e) {}
 
-        const doRequest = (method, path, headers, body, cb) => {
-            if (typeof $httpClient === "undefined" || !$httpClient) return;
-            const opts = {
-                url: host + path,
-                method: method,
-                headers: Object.assign({ "Content-Type": "application/json", "Accept": "application/json" }, headers || {}),
-                timeout: 3500
-            };
-            if (body) opts.body = typeof body === "string" ? body : JSON.stringify(body);
-            $httpClient[method.toLowerCase()](opts, cb);
-        };
+        doRequest("POST", "/api/open-api/token", {}, { app_key: appKey, app_secret: appSecret }, (err, status, json) => {
+            if (err || !json) return tCb(err || new Error("获取 Token 无响应"));
+            const d = json.data || json;
+            if (!d.access_token) return tCb(new Error("未返回 access_token"));
+            const exp = Date.now() + Number(d.expires_in || 86400) * 1000;
+            $.setdata(JSON.stringify({ host, appKey, token: d.access_token, expiresAt: exp }), "daidai_panel_token_cache");
+            tCb(null, d.access_token);
+        });
+    };
 
-        const postTokenAndSync = () => {
-            doRequest("POST", "/api/open-api/token", {}, { app_key: appKey, app_secret: appSecret }, (err, resp, data) => {
-                if (err || !data) {
-                    $.log("[WeRead -> 呆呆面板] 获取 Token 失败: " + (err || "无响应"));
-                    return;
-                }
-                try {
-                    const res = JSON.parse(data);
-                    const d = res.data || res;
-                    if (!d.access_token) return;
-                    token = d.access_token;
-                    const exp = Date.now() + Number(d.expires_in || 86400) * 1000;
-                    $.setdata(JSON.stringify({ host, appKey, token, expiresAt: exp }), "daidai_panel_token_cache");
-                    doSyncWithToken(token);
-                } catch (e) {
-                    $.log("[WeRead -> 呆呆面板] Token 解析异常: " + e);
-                }
-            });
-        };
+    fetchToken((tErr, token) => {
+        if (tErr) return safeCb({ ok: false, reason: "登录失败: " + (tErr.message || tErr) });
+        const authH = { Authorization: "Bearer " + token };
+        doRequest("GET", "/api/envs?names=" + encodeURIComponent(name) + "&all=1", authH, null, (gErr, status, gJson) => {
+            if (status === 401) {
+                $.setdata("", "daidai_panel_token_cache");
+                fetchToken((rErr, rToken) => {
+                    if (rErr) return safeCb({ ok: false, reason: "Token 重试刷新失败" });
+                    doSync(rToken);
+                });
+                return;
+            }
+            if (gErr || !gJson) return safeCb({ ok: false, reason: "查询变量无响应" });
+            doSync(token, gJson);
+        });
+    });
 
-        const doSyncWithToken = (tok) => {
-            const authHeader = { "Authorization": "Bearer " + tok };
-            doRequest("GET", "/api/envs?names=WEREAD_AUTH&all=1", authHeader, null, (err, resp, data) => {
-                if (resp && resp.statusCode === 401) {
-                    $.setdata("", "daidai_panel_token_cache");
-                    postTokenAndSync();
-                    return;
-                }
-                if (err || !data) {
-                    $.log("[WeRead -> 呆呆面板] 查询环境变量失败: " + (err || "无响应"));
-                    return;
-                }
-                try {
-                    const res = JSON.parse(data);
-                    const rows = (res.data || []).filter(item => item && item.name === "WEREAD_AUTH");
-                    let target = null;
-                    if (rows.length > 1) {
-                        for (const r of rows) {
-                            if (vid && (String(r.value || "").includes(vid) || String(r.remarks || "").includes(vid))) {
-                                target = r;
-                                break;
-                            }
+    const doSync = (tok, qJson) => {
+        const authH = { Authorization: "Bearer " + tok };
+        const proceed = (res) => {
+            const rows = (res && Array.isArray(res.data) ? res.data : []).filter(it => it && it.name === name);
+            let target = null;
+            if (rows.length > 1) {
+                if (ident && ident.val) {
+                    const tVal = String(ident.val).trim();
+                    for (const r of rows) {
+                        const vStr = String(r.value || "");
+                        const rStr = String(r.remarks || "");
+                        if (vStr.includes(tVal) || rStr.includes(tVal)) {
+                            target = r;
+                            break;
                         }
-                        if (!target) {
-                            $.log("[WeRead -> 呆呆面板] 发现 " + rows.length + " 条 WEREAD_AUTH 且未命中当前 vid=" + vid + "，为防误伤拒绝覆盖");
-                            return;
-                        }
-                    } else if (rows.length === 1) {
-                        target = rows[0];
                     }
-
-                    if (target) {
-                        if (String(target.value) === valStr && target.enabled !== false) {
-                            $.log("[WeRead -> 呆呆面板] WEREAD_AUTH 内容无变化，跳过更新");
-                            return;
-                        }
-                        doRequest("PUT", "/api/envs/" + target.id, authHeader, { value: valStr, enabled: true }, (uErr) => {
-                            if (!uErr) $.log("[WeRead -> 呆呆面板] 🎉 WEREAD_AUTH (ID: " + target.id + ") 已成功更新至呆呆面板！");
-                        });
-                    } else {
-                        const group = String($.getdata("daidai_panel_group") || "MyCookieCenter").trim();
-                        doRequest("POST", "/api/envs", authHeader, {
-                            name: "WEREAD_AUTH",
-                            value: valStr,
-                            group: group,
-                            remarks: vid ? "MyCookieCenter (vid:" + vid + ")" : "MyCookieCenter 自动同步"
-                        }, (cErr) => {
-                            if (!cErr) $.log("[WeRead -> 呆呆面板] 🎉 WEREAD_AUTH 已成功创建并同步至呆呆面板！");
-                        });
-                    }
-                } catch (e) {
-                    $.log("[WeRead -> 呆呆面板] 同步逻辑异常: " + e);
                 }
-            });
+                if (!target) {
+                    return safeCb({ ok: false, reason: `面板存在 ${rows.length} 条同名变量且未匹配到当前特征，防误伤已拒绝覆盖` });
+                }
+            } else if (rows.length === 1) {
+                target = rows[0];
+            }
+
+            if (target) {
+                if (String(target.value) === valStr && target.enabled !== false) {
+                    return safeCb({ ok: true, action: "unchanged", envId: target.id });
+                }
+                doRequest("PUT", "/api/envs/" + target.id, authH, { value: valStr, enabled: true }, (uErr) => {
+                    if (uErr) return safeCb({ ok: false, reason: "更新失败: " + uErr.message });
+                    safeCb({ ok: true, action: "updated", envId: target.id });
+                });
+            } else {
+                const remarks = ident && ident.val ? `MyCookieCenter (${ident.type}:${ident.val})` : "MyCookieCenter 自动同步";
+                doRequest("POST", "/api/envs", authH, { name, value: valStr, group: panelGroup, remarks }, (cErr, s, cJson) => {
+                    if (cErr) return safeCb({ ok: false, reason: "创建失败: " + cErr.message });
+                    const newId = cJson && cJson.data && cJson.data.id || "";
+                    safeCb({ ok: true, action: "created", envId: newId });
+                });
+            }
         };
 
-        if (token) {
-            doSyncWithToken(token);
+        if (qJson) {
+            proceed(qJson);
         } else {
-            postTokenAndSync();
+            doRequest("GET", "/api/envs?names=" + encodeURIComponent(name) + "&all=1", authH, null, (err, s, j) => {
+                if (err || !j) return safeCb({ ok: false, reason: "查询变量无响应" });
+                proceed(j);
+            });
         }
-    } catch (e) {
-        $.log("[WeRead -> 呆呆面板] 同步异常忽略: " + e);
+    };
+}
+
+function saveAuthAndNotify(auth, tag, title, defaultSub, detailLines) {
+    $.setdata(JSON.stringify(auth), AUTH_KEY);
+
+    const payload = Object.assign({}, auth || {});
+    const preferCoin = String($.getdata("prefer_coin") || "2").trim();
+    if (preferCoin) payload.prefer_coin = preferCoin;
+
+    // 凭据完整度诊断 (App脱机换票 + Web翻牌领卡)
+    const hasApp = Boolean(auth.refreshToken && auth.deviceId);
+    const hasWeb = Boolean(auth.wrVid && auth.wrSkey);
+    let integrity = "";
+    if (hasApp && hasWeb) {
+        integrity = "满血凭据 (已激活脱机换票与全功能任务)";
+    } else if (hasApp) {
+        integrity = "App基础凭据 (建议打开一次「周二翻牌」补齐Web票据)";
+    } else if (hasWeb) {
+        integrity = "Web基础凭据 (建议打开App进「我」激活脱机换票)";
+    } else {
+        integrity = "部分就绪";
     }
+
+    syncToDaidai({
+        name: "WEREAD_AUTH",
+        value: payload,
+        ident: { type: "vid", val: auth.vid },
+        group: "微信读书"
+    }, (res) => {
+        let sub = defaultSub;
+        let lines = [].concat(detailLines || []);
+        lines.push(`• 凭据状态: ${integrity}`);
+        if (res.ok) {
+            const actText = res.action === "created" ? "已新建入库" : (res.action === "updated" ? "已更新入库" : "无变化");
+            sub = "🎉 微信读书凭据已捕获并同步至呆呆面板";
+            lines.push(`• 呆呆面板: WEREAD_AUTH ${actText}${res.envId ? " (ID: " + res.envId + ")" : ""}`);
+        } else if (res.reason && res.reason !== "呆呆面板未配置" && res.reason !== "自动同步已关闭") {
+            sub = "⚠️ 微信读书凭据已获取 (呆呆面板同步失败)";
+            lines.push(`• 呆呆同步: ${res.reason}`);
+        }
+        notifyOnce(tag, title, sub, lines.join("\n"));
+        $.log(`[WeRead] ${sub}`);
+    });
 }
 
 // 短时去重：同一页面往往并发多个请求，10 秒内同源通知只弹一次；
@@ -263,11 +313,14 @@ function parseCookieStr(cookieStr) {
                     if (!existing.vid) existing.vid = c.wr_vid;
                     existing.flipUa = headers["user-agent"] || headers["User-Agent"] || existing.flipUa || "";
                     existing.flipTime = Date.now();
-                    saveAuth(existing);
-                    $.log("[WeRead] 翻牌游戏 Cookie 已捕获: wr_vid=" + c.wr_vid);
+                    saveAuthAndNotify(existing, "flip", "微信读书 · 翻牌游戏", "✅ 翻牌 Cookie 获取成功", [
+                        "• wr_vid: " + c.wr_vid,
+                        "• wr_skey: " + c.wr_skey.slice(0, 8) + "..."
+                    ]);
+                } else {
+                    notifyOnce("flip", "微信读书 · 翻牌游戏", "✅ 翻牌 Cookie 有效 (未变化)",
+                        "• wr_vid: " + c.wr_vid + "\n• wr_skey: " + c.wr_skey.slice(0, 8) + "...");
                 }
-                notifyOnce("flip", "微信读书 · 翻牌游戏", "✅ Cookie 获取成功",
-                    "wr_vid: " + c.wr_vid + "\nwr_skey: " + c.wr_skey.slice(0, 8) + "...");
             }
         }
         $done({});
@@ -313,12 +366,13 @@ function parseCookieStr(cookieStr) {
         }
 
         if (updated) {
-            saveAuth(existing);
             let hasToken = Boolean(existing.refreshToken && existing.deviceId);
-            let sub = hasToken ? "✅ 登录凭证获取成功 (已永久激活脱机换票)" : "✅ 登录凭证已记录";
-            let body = "vid: " + (existing.vid || "已记录") + "\nrefreshToken: " + (existing.refreshToken ? "已捕获" : "待补全") + "\ndeviceId: " + (existing.deviceId ? "已捕获" : "待补全");
-            notifyOnce("login", "微信读书 · App端", sub, body);
-            $.log("[WeRead] App /login 凭据已更新保存！hasToken=" + hasToken);
+            let sub = hasToken ? "✅ 登录凭证获取成功 (已激活脱机换票)" : "✅ 登录凭证已记录";
+            let lines = [
+                "• 账号 vid: " + (existing.vid || "已记录"),
+                "• 换票凭证: " + (hasToken ? "已激活 (含 refreshToken)" : "待补全")
+            ];
+            saveAuthAndNotify(existing, "login", "微信读书 · App端", sub, lines);
         }
 
         $done({});
@@ -349,12 +403,13 @@ function parseCookieStr(cookieStr) {
             if (channelid) existing.channelid = channelid;
             if (ua) existing.ua = ua;
             existing.freeTime = Date.now();
-            saveAuth(existing);
-            $.log("[WeRead] 免费图书馆凭据已校验记录: vid=" + vid);
-        }
-        if (vid || skey) {
-            notifyOnce("free", "微信读书 · 免费图书馆", "✅ Cookie 获取成功",
-                "vid: " + (vid || existing.vid || "已记录") + "\nskey: " + (skey ? skey.slice(0, 8) + "..." : "已记录"));
+            saveAuthAndNotify(existing, "free", "微信读书 · 免费图书馆", "✅ 凭据已更新", [
+                "• vid: " + (vid || existing.vid || "已记录"),
+                "• skey: " + (skey ? skey.slice(0, 8) + "..." : "已记录")
+            ]);
+        } else if (vid || skey) {
+            notifyOnce("free", "微信读书 · 免费图书馆", "✅ 凭据有效 (未变化)",
+                "• vid: " + (vid || existing.vid || "已记录") + "\n• skey: " + (skey ? skey.slice(0, 8) + "..." : "已记录"));
         }
         $done({});
         return;
@@ -395,11 +450,14 @@ function parseCookieStr(cookieStr) {
             if (ua) existing.ua = ua;
             if (deviceId) existing.deviceId = deviceId;
             existing.authTime = Date.now();
-            saveAuth(existing);
-            $.log("[WeRead] App 基础凭据已更新: vid=" + vid);
+            saveAuthAndNotify(existing, "app", "微信读书 · App端", "✅ App 凭据已更新", [
+                "• vid: " + vid,
+                "• skey: " + skey.slice(0, 4) + "****"
+            ]);
+        } else {
+            notifyOnce("app", "微信读书 · App端", "✅ App 凭据有效 (未变化)",
+                "• vid: " + vid + "\n• skey: " + skey.slice(0, 4) + "****");
         }
-        notifyOnce("app", "微信读书 · App端", "✅ App 凭据获取成功",
-            "vid: " + vid + "\nskey: " + skey.slice(0, 4) + "****");
     } else if (url.indexOf("i.weread.qq.com") !== -1) {
         // 命中抓取规则但请求头不含 vid/skey（如部分 App 接口），明确提示而非静默
         $.log("[WeRead] 本次请求未携带 vid/skey，未更新凭据: " + url.split("?")[0]);

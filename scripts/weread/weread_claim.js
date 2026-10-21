@@ -6,10 +6,10 @@
 #!icon=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/weread.png
 #!tag=微信读书,自动领取,阅读奖励
 
-配置由 loon/CookieCenter.plugin 或 loon/WeReadEnhance.plugin 提供：
+配置由 loon/DaiDaiPanel.plugin 或 loon/WeReadEnhance.plugin 提供：
 - 每日领取 cron -> 本文件（每日 23:00）
 - 凭据自动捕获 -> 本文件（打开微信读书 App 时自动保存）
-参数面板由 boxjs/CookieCenter.boxjs.json 订阅提供。
+参数面板由 boxjs/DaiDaiPanel.boxjs.json 订阅提供。
 */
 
 const AUTH_KEY = "weread_auth_v2";

@@ -114,26 +114,25 @@ function parseAppTokenBody(body) {
     const url = isRequest ? ($request.url || "") : ($response.url || "");
     const isHost = /^https?:\/\/wx\.10086\.cn\//i.test(url);
 
-    let captured = "", source = "", changedAuth = false;
+    let captured = "", source = "", changedAuth = false, savedPayload = null;
 
     // 1) 长期 app_token：POST appTokenLogin 请求体
     if (isRequest && /\/qwhdsso\/appTokenLogin/i.test(url)) {
         const body = $request.body || $request.bodyString || "";
         const parsed = parseAppTokenBody(body);
         if (parsed && parsed.token) {
-            const payload = {
+            savedPayload = {
                 app_token: parsed.token,
                 phone: parsed.phone || "",
                 province_code: String(parsed.province || ""),
                 city_code: String(parsed.city || ""),
             };
             const prev = $.getdata(AUTH_KEY) || "";
-            const next = JSON.stringify(payload);
+            const next = JSON.stringify(savedPayload);
             if (prev !== next) {
                 $.setdata(next, AUTH_KEY);
                 changedAuth = true;
                 $.log(`[INFO] 已更新长期 app_token，phone=${parsed.phone || "未知"}`);
-                syncToDaidaiAsync(payload);
             }
         }
     }
@@ -155,18 +154,45 @@ function parseAppTokenBody(body) {
         if (prev !== captured) $.setdata(captured, SHORT_KEY);
     }
 
-    // 通知（变化时强制，未变化走 10 秒去重）
-    const last = Number($.getdata(NOTIFY_KEY) || 0);
-    if (changedAuth || captured || Date.now() - last >= NOTIFY_GAP_MS) {
-        $.setdata(String(Date.now()), NOTIFY_KEY);
-        let msg = [];
-        if (changedAuth) msg.push("长期 app_token 已更新（供青龙 CMCC_AUTH）");
-        if (captured) {
+    if (changedAuth && savedPayload) {
+        $.done();
+        const phone = savedPayload.phone || "";
+        syncToDaidai({
+            name: "CMCC_AUTH",
+            value: savedPayload,
+            ident: { type: "phone", val: phone },
+            group: "中国移动"
+        }, (res) => {
+            let sub = res.ok
+                ? "🎉 移动长期凭据已捕获并同步至呆呆面板"
+                : (res.reason && res.reason !== "呆呆面板未配置" && res.reason !== "自动同步已关闭"
+                    ? "⚠️ 移动长期凭据已捕获 (呆呆面板同步失败)"
+                    : "✅ 移动长期凭据已捕获");
+            let lines = [
+                `• 手机号: ${phone ? String(phone).replace(/(\d{3})\d{4}(\d{4})/, "$1****$2") : "已记录"}`,
+                `• 凭据类型: 长期 app_token`
+            ];
+            if (res.ok) {
+                const actText = res.action === "created" ? "已新建入库" : (res.action === "updated" ? "已更新入库" : "无变化");
+                lines.push(`• 呆呆面板: CMCC_AUTH ${actText}${res.envId ? " (ID: " + res.envId + ")" : ""}`);
+            } else if (res.reason && res.reason !== "呆呆面板未配置" && res.reason !== "自动同步已关闭") {
+                lines.push(`• 呆呆同步: ${res.reason}`);
+            }
+            $.setdata(String(Date.now()), NOTIFY_KEY);
+            $.msg("中国移动 · 每日签到", sub, lines.join("\n"));
+            $.log(`[CMCC] ${sub}`);
+        });
+        return;
+    }
+
+    if (captured) {
+        const last = Number($.getdata(NOTIFY_KEY) || 0);
+        if (Date.now() - last >= NOTIFY_GAP_MS) {
+            $.setdata(String(Date.now()), NOTIFY_KEY);
             const tok = (captured.match(/QWHD_SESSION_TOKEN=([^;]+)/) || [])[1] || "";
             const shown = tok.length > 8 ? tok.replace(/^(.{4}).+(.{4})$/, "$1***$2") : "***";
-            msg.push(`短期会话：${shown}`);
+            $.msg("中国移动", "✅ 移动签到短期凭据已捕获", `• 短期会话: ${shown}\n• 长期凭据未变化`);
         }
-        if (msg.length) $.msg("中国移动", "✅ 移动签到凭据已捕获", msg.join("\n"));
     }
 
     $.done();
@@ -224,128 +250,145 @@ function getDaidaiConfig() {
             $.setdata(appSecret, "daidai_panel_app_secret");
         }
     }
-    let host = String(hostRaw || "").trim().replace(/\/+$/, "");
+    let host = String(hostRaw || "").trim();
+    host = host.replace(/\/+(api|envs)?\/?$/i, "").replace(/\/+$/, "");
     if (host && !/^https?:\/\//i.test(host)) host = "http://" + host;
     return { host, appKey, appSecret };
 }
 
-function syncToDaidaiAsync(payload) {
-    try {
-        const cfg = getDaidaiConfig();
-        const host = cfg.host;
-        const appKey = cfg.appKey;
-        const appSecret = cfg.appSecret;
-        if (!host || !appKey || !appSecret) return;
+function syncToDaidai({ name, value, ident, group }, cb) {
+    const cfg = getDaidaiConfig();
+    const host = cfg.host;
+    const appKey = cfg.appKey;
+    const appSecret = cfg.appSecret;
 
-        const syncEnabled = String($.getdata("daidai_sync_enabled") || "true").toLowerCase();
-        if (syncEnabled === "false") return;
+    if (!host || !appKey || !appSecret) {
+        if (cb) cb({ ok: false, reason: "呆呆面板未配置" });
+        return;
+    }
+    const syncEnabled = String($.getdata("daidai_sync_enabled") || "true").toLowerCase();
+    if (syncEnabled === "false") {
+        if (cb) cb({ ok: false, reason: "自动同步已关闭" });
+        return;
+    }
 
-        const valStr = JSON.stringify(payload);
-        const phone = String(payload.phone || "");
+    const panelGroup = String($.getdata("daidai_panel_group") || group || "MyCookieCenter").trim();
+    const valStr = typeof value === "string" ? value : JSON.stringify(value);
 
-        const cacheRaw = $.getdata("daidai_panel_token_cache");
-        let token = "";
+    let called = false;
+    const safeCb = (res) => {
+        if (called) return;
+        called = true;
+        if (cb) cb(res);
+    };
+
+    setTimeout(() => {
+        safeCb({ ok: false, reason: "同步请求超时(3.5s)" });
+    }, 3500);
+
+    const doRequest = (method, path, headers, body, next) => {
+        if (typeof $httpClient === "undefined" || !$httpClient) {
+            return next(new Error("无 $httpClient 环境"));
+        }
+        const opts = {
+            url: host + path,
+            method: method,
+            headers: Object.assign({ "Content-Type": "application/json", "Accept": "application/json" }, headers || {}),
+            timeout: 3000
+        };
+        if (body) opts.body = typeof body === "string" ? body : JSON.stringify(body);
+        $httpClient[method.toLowerCase()](opts, (err, resp, data) => {
+            if (err) return next(err);
+            let json = null;
+            try { json = typeof data === "string" ? JSON.parse(data) : data; } catch (e) {}
+            next(null, resp && (resp.statusCode || resp.status) || 0, json, data);
+        });
+    };
+
+    const fetchToken = (tCb) => {
         try {
-            const cache = JSON.parse(cacheRaw || "{}");
+            const cache = JSON.parse($.getdata("daidai_panel_token_cache") || "{}");
             if (cache.host === host && cache.appKey === appKey && cache.token && Number(cache.expiresAt || 0) > Date.now() + 60000) {
-                token = cache.token;
+                return tCb(null, cache.token);
             }
         } catch (e) {}
 
-        const doRequest = (method, path, headers, body, cb) => {
-            if (typeof $httpClient === "undefined" || !$httpClient) return;
-            const opts = {
-                url: host + path,
-                method: method,
-                headers: Object.assign({ "Content-Type": "application/json", "Accept": "application/json" }, headers || {}),
-                timeout: 3500
-            };
-            if (body) opts.body = typeof body === "string" ? body : JSON.stringify(body);
-            $httpClient[method.toLowerCase()](opts, cb);
-        };
+        doRequest("POST", "/api/open-api/token", {}, { app_key: appKey, app_secret: appSecret }, (err, status, json) => {
+            if (err || !json) return tCb(err || new Error("获取 Token 无响应"));
+            const d = json.data || json;
+            if (!d.access_token) return tCb(new Error("未返回 access_token"));
+            const exp = Date.now() + Number(d.expires_in || 86400) * 1000;
+            $.setdata(JSON.stringify({ host, appKey, token: d.access_token, expiresAt: exp }), "daidai_panel_token_cache");
+            tCb(null, d.access_token);
+        });
+    };
 
-        const postTokenAndSync = () => {
-            doRequest("POST", "/api/open-api/token", {}, { app_key: appKey, app_secret: appSecret }, (err, resp, data) => {
-                if (err || !data) {
-                    $.log("[CMCC -> 呆呆面板] 获取 Token 失败: " + (err || "无响应"));
-                    return;
-                }
-                try {
-                    const res = JSON.parse(data);
-                    const d = res.data || res;
-                    if (!d.access_token) return;
-                    token = d.access_token;
-                    const exp = Date.now() + Number(d.expires_in || 86400) * 1000;
-                    $.setdata(JSON.stringify({ host, appKey, token, expiresAt: exp }), "daidai_panel_token_cache");
-                    doSyncWithToken(token);
-                } catch (e) {
-                    $.log("[CMCC -> 呆呆面板] Token 解析异常: " + e);
-                }
-            });
-        };
+    fetchToken((tErr, token) => {
+        if (tErr) return safeCb({ ok: false, reason: "登录失败: " + (tErr.message || tErr) });
+        const authH = { Authorization: "Bearer " + token };
+        doRequest("GET", "/api/envs?names=" + encodeURIComponent(name) + "&all=1", authH, null, (gErr, status, gJson) => {
+            if (status === 401) {
+                $.setdata("", "daidai_panel_token_cache");
+                fetchToken((rErr, rToken) => {
+                    if (rErr) return safeCb({ ok: false, reason: "Token 重试刷新失败" });
+                    doSync(rToken);
+                });
+                return;
+            }
+            if (gErr || !gJson) return safeCb({ ok: false, reason: "查询变量无响应" });
+            doSync(token, gJson);
+        });
+    });
 
-        const doSyncWithToken = (tok) => {
-            const authHeader = { "Authorization": "Bearer " + tok };
-            doRequest("GET", "/api/envs?names=CMCC_AUTH&all=1", authHeader, null, (err, resp, data) => {
-                if (resp && resp.statusCode === 401) {
-                    $.setdata("", "daidai_panel_token_cache");
-                    postTokenAndSync();
-                    return;
-                }
-                if (err || !data) {
-                    $.log("[CMCC -> 呆呆面板] 查询环境变量失败: " + (err || "无响应"));
-                    return;
-                }
-                try {
-                    const res = JSON.parse(data);
-                    const rows = (res.data || []).filter(item => item && item.name === "CMCC_AUTH");
-                    let target = null;
-                    if (rows.length > 1) {
-                        for (const r of rows) {
-                            if (phone && (String(r.value || "").includes(phone) || String(r.remarks || "").includes(phone))) {
-                                target = r;
-                                break;
-                            }
+    const doSync = (tok, qJson) => {
+        const authH = { Authorization: "Bearer " + tok };
+        const proceed = (res) => {
+            const rows = (res && Array.isArray(res.data) ? res.data : []).filter(it => it && it.name === name);
+            let target = null;
+            if (rows.length > 1) {
+                if (ident && ident.val) {
+                    const tVal = String(ident.val).trim();
+                    for (const r of rows) {
+                        const vStr = String(r.value || "");
+                        const rStr = String(r.remarks || "");
+                        if (vStr.includes(tVal) || rStr.includes(tVal)) {
+                            target = r;
+                            break;
                         }
-                        if (!target) {
-                            $.log("[CMCC -> 呆呆面板] 发现 " + rows.length + " 条 CMCC_AUTH 且未命中当前手机号=" + phone + "，为防误伤拒绝覆盖");
-                            return;
-                        }
-                    } else if (rows.length === 1) {
-                        target = rows[0];
                     }
-
-                    if (target) {
-                        if (String(target.value) === valStr && target.enabled !== false) {
-                            $.log("[CMCC -> 呆呆面板] CMCC_AUTH 内容无变化，跳过更新");
-                            return;
-                        }
-                        doRequest("PUT", "/api/envs/" + target.id, authHeader, { value: valStr, enabled: true }, (uErr) => {
-                            if (!uErr) $.log("[CMCC -> 呆呆面板] 🎉 CMCC_AUTH (ID: " + target.id + ") 已成功更新至呆呆面板！");
-                        });
-                    } else {
-                        const group = String($.getdata("daidai_panel_group") || "MyCookieCenter").trim();
-                        doRequest("POST", "/api/envs", authHeader, {
-                            name: "CMCC_AUTH",
-                            value: valStr,
-                            group: group,
-                            remarks: phone ? "MyCookieCenter (phone:" + phone + ")" : "MyCookieCenter 自动同步"
-                        }, (cErr) => {
-                            if (!cErr) $.log("[CMCC -> 呆呆面板] 🎉 CMCC_AUTH 已成功创建并同步至呆呆面板！");
-                        });
-                    }
-                } catch (e) {
-                    $.log("[CMCC -> 呆呆面板] 同步逻辑异常: " + e);
                 }
-            });
+                if (!target) {
+                    return safeCb({ ok: false, reason: `面板存在 ${rows.length} 条同名变量且未匹配到当前特征，防误伤已拒绝覆盖` });
+                }
+            } else if (rows.length === 1) {
+                target = rows[0];
+            }
+
+            if (target) {
+                if (String(target.value) === valStr && target.enabled !== false) {
+                    return safeCb({ ok: true, action: "unchanged", envId: target.id });
+                }
+                doRequest("PUT", "/api/envs/" + target.id, authH, { value: valStr, enabled: true }, (uErr) => {
+                    if (uErr) return safeCb({ ok: false, reason: "更新失败: " + uErr.message });
+                    safeCb({ ok: true, action: "updated", envId: target.id });
+                });
+            } else {
+                const remarks = ident && ident.val ? `MyCookieCenter (${ident.type}:${ident.val})` : "MyCookieCenter 自动同步";
+                doRequest("POST", "/api/envs", authH, { name, value: valStr, group: panelGroup, remarks }, (cErr, s, cJson) => {
+                    if (cErr) return safeCb({ ok: false, reason: "创建失败: " + cErr.message });
+                    const newId = cJson && cJson.data && cJson.data.id || "";
+                    safeCb({ ok: true, action: "created", envId: newId });
+                });
+            }
         };
 
-        if (token) {
-            doSyncWithToken(token);
+        if (qJson) {
+            proceed(qJson);
         } else {
-            postTokenAndSync();
+            doRequest("GET", "/api/envs?names=" + encodeURIComponent(name) + "&all=1", authH, null, (err, s, j) => {
+                if (err || !j) return safeCb({ ok: false, reason: "查询变量无响应" });
+                proceed(j);
+            });
         }
-    } catch (e) {
-        $.log("[CMCC -> 呆呆面板] 同步异常忽略: " + e);
-    }
+    };
 }
