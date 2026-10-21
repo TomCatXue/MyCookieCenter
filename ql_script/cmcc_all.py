@@ -13,19 +13,18 @@ new Env('中国移动 · 每日聚合')
 cron: 20 8 * * *
 tag: 中国移动
 
-用法（可任意组合）：
-  python3 cmcc_all.py --dry-run           # 全量只读
-  python3 cmcc_all.py                     # 签到 + 累计连签领奖
-  python3 cmcc_all.py --tasks --gold      # AI豆任务 + 顶格兑换话费券
-  python3 cmcc_all.py --games --wed       # 拓展活动 + 周三充值日拼图
-  python3 cmcc_all.py --seed --fee        # AI豆苗养成记 + 话费余额查询
-  python3 cmcc_all.py --wed-seckill       # 周三充值日秒杀
+用法：
+  python3 cmcc_all.py                     # ★默认全开：签到 + 连签领奖 + AI豆任务 + 顶格兑话费 + 拓展活动 + 周三拼图 + 豆苗 + 查话费
+  python3 cmcc_all.py --dry-run           # 全量只读探测（只查状态与余额，不做写操作）
+  python3 cmcc_all.py --only-sign         # 仅签到模式（跳过赚豆与兑换任务）
+  python3 cmcc_all.py --no-gold           # 正常跑任务，但跳过兑换话费券
+  python3 cmcc_all.py --wed-seckill       # 周三充值日秒杀模式（建议定时 58 7 * * 3）
 
-青龙定时（两条固定 cron，覆盖全部任务）：
-  # 每天 08:20：主任务（签到+AI豆任务+AI豆兑换+拓展活动+周三拼图+AI豆苗+话费余额）
-  20 8 * * *  python3 cmcc_all.py --tasks --gold --games --wed --seed --fee
+青龙定时（直接使用默认命令，开箱即用）：
+  # 每天 08:20：每日聚合全功能主任务（★默认全开，无需额外命令行参数）
+  20 8 * * *  python3 cmcc_all.py
 
-  # 每周三 07:58：充值日秒杀（提前 2 分钟拉起，等到 08:00 场自动抢）
+  # 每周三 07:58：充值日秒杀（提前 2 分钟拉起预热，自旋至 08:00 开抢）
   58 7 * * 3  python3 cmcc_all.py --wed-seckill
 
   # 签到有礼场次秒杀已拆分到独立脚本 cmcc_seckill.py：
@@ -54,6 +53,18 @@ LOCAL_HOSTNAMES = {"localhost", "localhost.localdomain", "ip6-localhost",
                    "metadata.google.internal", "instance-data"}
 GOLD_TIERS = ("5元话费券", "2元话费券", "1.5元话费券", "1元话费券")
 GOLD_MIN_STOCK = 100
+
+# ==================== ⚙️ 全局业务开关 (默认全开，可直接修改) ====================
+CONFIG = {
+    # --- 每日聚合常规任务 (默认全部自动执行) ---
+    "ENABLE_SIGN": True,         # 每日签到与累计连签阶梯领奖
+    "ENABLE_TASKS": True,        # AI豆日常任务（自动完成浏览、分享等赚豆任务）
+    "ENABLE_GOLD": True,         # AI豆顶格自动兑换话费券（按可用豆余额兑换最大面额）
+    "ENABLE_GAMES": True,        # 拓展活动（游戏试玩打卡、热门剧集打卡等轻量任务）
+    "ENABLE_WED_PUZZLE": True,   # 周三充值日拼图抽奖（全周做任务攒次数，自动拼图领券）
+    "ENABLE_SEED": True,         # AI豆苗养成记（配置了 CMCC_COC3_TICKET 时自动执行，未配自动跳过）
+    "ENABLE_FEE": True,          # 实时话费余额查询（配置了 CMCC_FEE_SESSION 时自动执行，未配自动跳过）
+}
 WED_ACT_URL = (BASE + "/hlwyxhdhub/act-wedrecharge/1024101716"
                "?pageId=1849008675699650560&channelId=P00000093619")
 API_WED = BASE + "/hlwyxhdhub/api/wedrecharge"
@@ -833,45 +844,89 @@ def run_fee(a):
 
 # ============================== 主流程 ==============================
 
-def run_account(a, args):
+def run_account(a, args, config=None):
+    cfg = config or CONFIG
     lines = []
     try:
-        lines += run_sign(a, args.dry_run)
-        if args.tasks or args.gold:
+        # 1. 每日签到与连签领奖
+        if cfg.get("ENABLE_SIGN", True):
+            lines += run_sign(a, args.dry_run)
+
+        # 2. AI豆任务与顶格兑话费
+        do_tasks = cfg.get("ENABLE_TASKS", True)
+        do_gold = cfg.get("ENABLE_GOLD", True)
+        if do_tasks or do_gold:
             s, referer = exchange_session(a)
-            if args.tasks:
+            if do_tasks:
                 lines += run_tasks(a, s, referer, args.dry_run)
-            if args.gold:
+            if do_gold:
                 lines += run_gold(a, s, referer, args.dry_run)
-        if args.games:
+
+        # 3. 拓展活动（游戏试玩/追剧等轻量任务）
+        if cfg.get("ENABLE_GAMES", True):
             lines += run_games(a, args.dry_run)
-        if args.wed:
+
+        # 4. 周三充值日拼图
+        if cfg.get("ENABLE_WED_PUZZLE", True):
             lines += run_wed(a, args.dry_run)
-        if args.seed:
-            lines += run_seed(a, args.dry_run)
-        if args.fee:
-            lines += run_fee(a)
+
+        # 5. AI豆苗养成记 (仅在有 coc3_ticket 时执行)
+        if cfg.get("ENABLE_SEED", True):
+            if a.coc3_ticket:
+                lines += run_seed(a, args.dry_run)
+            else:
+                log.debug("账号 %s 未配置 CMCC_COC3_TICKET，跳过豆苗任务", mask_phone(a.phone))
+
+        # 6. 话费余额查询 (仅在有 fee_session 时执行)
+        if cfg.get("ENABLE_FEE", True):
+            if a.fee_session:
+                lines += run_fee(a)
+            else:
+                log.debug("账号 %s 未配置 CMCC_FEE_SESSION，跳过话费查询", mask_phone(a.phone))
     except Exception as e:
         log.exception("账号 %s 执行失败: %s", mask_phone(a.phone), e)
         lines.append(f"异常: {e}")
     return lines
 
 def main():
-    ap = argparse.ArgumentParser(description="中国移动全功能聚合脚本")
-    ap.add_argument("--dry-run", action="store_true", help="只查状态，不做写操作")
-    ap.add_argument("--tasks", action="store_true", help="AI豆任务")
-    ap.add_argument("--gold", action="store_true", help="AI豆顶格兑换话费券")
-    ap.add_argument("--games", action="store_true", help="拓展活动（游戏/追剧）")
-    ap.add_argument("--wed", action="store_true", help="周三充值日拼图")
-    ap.add_argument("--seed", action="store_true", help="AI豆苗养成记（需 coc3_ticket）")
-    ap.add_argument("--fee", action="store_true", help="话费余额查询（需 fee_session）")
-    ap.add_argument("--wed-seckill", action="store_true", help="周三充值日秒杀模式")
+    ap = argparse.ArgumentParser(description="中国移动全功能聚合脚本 (默认全开模式)")
+    ap.add_argument("--dry-run", action="store_true", help="只查状态与余额，不做写操作")
+    ap.add_argument("--only-sign", action="store_true", help="仅执行每日签到，跳过其他全部任务")
+    ap.add_argument("--no-tasks", action="store_true", help="跳过 AI 豆日常任务")
+    ap.add_argument("--no-gold", action="store_true", help="跳过 AI 豆兑换话费券")
+    ap.add_argument("--no-games", action="store_true", help="跳过拓展游戏与追剧任务")
+    ap.add_argument("--no-wed", action="store_true", help="跳过周三充值日拼图")
+    ap.add_argument("--no-seed", action="store_true", help="跳过 AI 豆苗养成记")
+    ap.add_argument("--no-fee", action="store_true", help="跳过话费余额查询")
+    # 兼容历史命令行开关
+    ap.add_argument("--tasks", action="store_true", help="显式指定执行 AI 豆任务 (默认已开启)")
+    ap.add_argument("--gold", action="store_true", help="显式指定执行 AI 豆兑话费 (默认已开启)")
+    ap.add_argument("--games", action="store_true", help="显式指定执行拓展活动 (默认已开启)")
+    ap.add_argument("--wed", action="store_true", help="显式指定执行周三拼图 (默认已开启)")
+    ap.add_argument("--seed", action="store_true", help="显式指定执行 AI 豆苗 (默认已开启)")
+    ap.add_argument("--fee", action="store_true", help="显式指定执行话费查询 (默认已开启)")
+    # 周三秒杀专用模式开关
+    ap.add_argument("--wed-seckill", action="store_true", help="周三充值日秒杀模式 (定时 07:58 执行)")
     ap.add_argument("--force", action="store_true", help="周三秒杀非周三也强制等待")
     ap.add_argument("--at", help="秒杀指定时刻 HH:MM[:SS]")
     ap.add_argument("--interval", type=float, default=0.35)
     ap.add_argument("--lead", type=float, default=0.4)
     ap.add_argument("--max-attempts", type=int, default=120)
     args = ap.parse_args()
+
+    # 计算生效配置 (默认全开，按参数覆盖)
+    active_cfg = dict(CONFIG)
+    if args.only_sign:
+        for k in active_cfg:
+            if k != "ENABLE_SIGN":
+                active_cfg[k] = False
+    else:
+        if args.no_tasks: active_cfg["ENABLE_TASKS"] = False
+        if args.no_gold: active_cfg["ENABLE_GOLD"] = False
+        if args.no_games: active_cfg["ENABLE_GAMES"] = False
+        if args.no_wed: active_cfg["ENABLE_WED_PUZZLE"] = False
+        if args.no_seed: active_cfg["ENABLE_SEED"] = False
+        if args.no_fee: active_cfg["ENABLE_FEE"] = False
 
     logging.basicConfig(level=logging.INFO,
                         format="%(asctime)s [%(levelname)s] %(message)s", datefmt="%H:%M:%S")
@@ -896,7 +951,7 @@ def main():
             lines = wed_seckill(a, args.dry_run, args.at, args.interval,
                                 args.lead, args.max_attempts, args.force)
         else:
-            lines = run_account(a, args)
+            lines = run_account(a, args, active_cfg)
         bullets = "\n".join(f"• {ln}" for ln in lines if ln)
         if len(accounts) > 1:
             all_lines.append(f"【账号 {i+1}: {mask_phone(a.phone)}】\n{bullets}")

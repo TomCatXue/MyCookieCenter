@@ -115,29 +115,84 @@ function parseAppTokenBody(body) {
     const isHost = /^https?:\/\/wx\.10086\.cn\//i.test(url);
 
     let captured = "", source = "", changedAuth = false, savedPayload = null;
+    let authTypeDesc = "长期 app_token";
 
     // 1) 长期 app_token：POST appTokenLogin 请求体
     if (isRequest && /\/qwhdsso\/appTokenLogin/i.test(url)) {
         const body = $request.body || $request.bodyString || "";
         const parsed = parseAppTokenBody(body);
         if (parsed && parsed.token) {
-            savedPayload = {
-                app_token: parsed.token,
-                phone: parsed.phone || "",
-                province_code: String(parsed.province || ""),
-                city_code: String(parsed.city || ""),
-            };
+            let cur = {};
+            try { cur = JSON.parse($.getdata(AUTH_KEY) || "{}"); } catch (e) {}
+            cur.app_token = parsed.token;
+            cur.phone = parsed.phone || cur.phone || "";
+            cur.province_code = String(parsed.province || cur.province_code || "");
+            cur.city_code = String(parsed.city || cur.city_code || "");
             const prev = $.getdata(AUTH_KEY) || "";
-            const next = JSON.stringify(savedPayload);
+            const next = JSON.stringify(cur);
             if (prev !== next) {
                 $.setdata(next, AUTH_KEY);
+                savedPayload = cur;
                 changedAuth = true;
-                $.log(`[INFO] 已更新长期 app_token，phone=${parsed.phone || "未知"}`);
+                authTypeDesc = "长期 app_token";
+                $.log(`[INFO] 已更新长期 app_token，phone=${cur.phone || "未知"}`);
             }
         }
     }
 
-    // 2) 短期 QWHD_SESSION_TOKEN
+    // 2) AI 豆苗养成记 ticket：dev.coc.10086.cn/coc3/
+    if (/dev\.coc\.10086\.cn/i.test(url)) {
+        let ticket = "";
+        let m = url.match(/[?&](?:ticket|jsid)=([^&#]+)/i);
+        if (m) ticket = decodeURIComponent(m[1]);
+        if (!ticket && isRequest && $request.body) {
+            try {
+                let d = JSON.parse($request.body);
+                ticket = d.ticket || d.jsid || "";
+            } catch (e) {}
+        }
+        if (ticket) {
+            let cur = {};
+            try { cur = JSON.parse($.getdata(AUTH_KEY) || "{}"); } catch (e) {}
+            if (cur.coc3_ticket !== ticket) {
+                cur.coc3_ticket = ticket;
+                $.setdata(JSON.stringify(cur), AUTH_KEY);
+                savedPayload = cur;
+                changedAuth = true;
+                authTypeDesc = "AI 豆苗 ticket (已自动并入 CMCC_AUTH)";
+                $.log(`[INFO] 已捕获并缝合 AI 豆苗 ticket: ${ticket.slice(0, 10)}...`);
+            }
+        }
+    }
+
+    // 3) 话费余额 session：touch.10086.cn
+    if (/touch\.10086\.cn/i.test(url)) {
+        let feeSession = "";
+        if (isResponse) {
+            let sc = getHeader($response.headers || {}, "set-cookie") || "";
+            let m = sc.match(/jsessionid-cmcc=([^;]+)/i);
+            if (m) feeSession = m[1];
+        }
+        if (!feeSession && isRequest) {
+            let c = getHeader($request.headers || {}, "cookie") || "";
+            let m = c.match(/jsessionid-cmcc=([^;]+)/i);
+            if (m) feeSession = m[1];
+        }
+        if (feeSession) {
+            let cur = {};
+            try { cur = JSON.parse($.getdata(AUTH_KEY) || "{}"); } catch (e) {}
+            if (cur.fee_session !== feeSession) {
+                cur.fee_session = feeSession;
+                $.setdata(JSON.stringify(cur), AUTH_KEY);
+                savedPayload = cur;
+                changedAuth = true;
+                authTypeDesc = "话费余额 Session (已自动并入 CMCC_AUTH)";
+                $.log(`[INFO] 已捕获并缝合话费余额 session: ${feeSession.slice(0, 10)}...`);
+            }
+        }
+    }
+
+    // 4) 短期 QWHD_SESSION_TOKEN
     if (isResponse && isHost) {
         const fromSet = extractSetCookie($response.headers || {});
         if (fromSet.token) { captured = fromSet.cookie; source = "Set-Cookie"; }
@@ -170,7 +225,7 @@ function parseAppTokenBody(body) {
                     : "✅ 移动长期凭据已捕获");
             let lines = [
                 `• 手机号: ${phone ? String(phone).replace(/(\d{3})\d{4}(\d{4})/, "$1****$2") : "已记录"}`,
-                `• 凭据类型: 长期 app_token`
+                `• 凭据更新: ${authTypeDesc}`
             ];
             if (res.ok) {
                 const actText = res.action === "created" ? "已新建入库" : (res.action === "updated" ? "已更新入库" : "无变化");

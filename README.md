@@ -40,12 +40,17 @@ ql repo https://github.com/TomCatXue/MyCookieCenter.git "ql_script" "" "README" 
 
 |     | 任务 | 功能 | 定时 · 变量 |
 | :-: | :--- | :--- | :---: |
+| <img src="icons/10086.png" height="16" /> | **中国移动 · 每日** | 签到连签 + AI豆任务 + 顶格兑话费 + 充值日拼图 + 豆苗 (默认全开) | `20 8 * * *` · `CMCC_AUTH` |
+| <img src="icons/10086.png" height="16" /> | **中国移动 · 秒杀** | 周三充值日 8 折话费秒杀 + 签到有礼轮换场次秒杀 | `58 7 * * 3` · `CMCC_AUTH` |
 | <img src="icons/weread.png" height="16" /> | **微信读书** | 阅读领卡 + 翻牌抽奖 + 限免入架，内置脱机换票 | `0 23 * * *` · `WEREAD_AUTH` |
 | <img src="icons/189.png" height="16" /> | **中国电信 · 每日** | 签到金豆 + 周三双抽奖 + 幸运抽奖 + 权益包 + AI 赢 Pad | `0 9 * * *` · `dxlin` |
-| <img src="icons/189.png" height="16" /> | **中国电信 · 0 点** | 每日限量 102 份，毫秒级抢兑等级权益 | `59 23 * * *` · `dxlin` |
+| <img src="icons/189.png" height="16" /> | **中国电信 · 0 点** | 每日限量 102 份，毫秒级抢兑等级权益 | `58 23 * * *` · `dxlin` |
 | <img src="https://github.com/ChinaTelecomOperators/ChinaUnicom/releases/download/Prerelease-Alpha/icon.png" height="16" /> | **中国联通** | 签到红包 + 爱听积分 + 权益超市 + 云盘 | `30 10 * * *` · `chinaUnicom_data` |
 
-> `dxlin` 格式：`手机号#服务密码#AndroidID#SessionKey`，SessionKey只用于翼支付相关脚本,多账号换行或 `&` 分隔。
+> **变量说明**：
+> - `CMCC_AUTH`：直接粘贴抓包或 Loon 插件自动同步的完整 JSON，多账号换行分隔；
+> - `dxlin` 格式：`手机号#服务密码#AndroidID[#SessionKey]`，多账号换行或 `&` 分隔；
+> - `WEREAD_AUTH`：微信读书抓包 JSON，含 `refreshToken` 永久脱机自愈。
 
 ## License
 
