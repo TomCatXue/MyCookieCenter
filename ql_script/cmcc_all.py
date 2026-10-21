@@ -210,6 +210,14 @@ def load_accounts():
 def jwt_cache_file(a):
     return Path(__file__).with_name(f".cmcc_jwt_cache_{a.phone[-4:]}.json")
 
+def clear_jwt(a):
+    try:
+        p = jwt_cache_file(a)
+        if p.exists():
+            p.unlink()
+    except Exception:
+        pass
+
 def load_jwt(a):
     try:
         d = json.loads(jwt_cache_file(a).read_text(encoding="utf-8"))
@@ -260,22 +268,28 @@ def exchange_session(a, act_url=None):
     if a.city_code:
         base_body["cityCode"] = a.city_code
     resp = None
-    cached = load_jwt(a)
-    if cached:
-        r = s.post(login_url, json={**base_body, "jwtToken": cached, "token": ""}, timeout=30)
-        cand = r.json()
-        if cand.get("code") == "SUCCESS":
-            resp = cand
-        else:
-            log.info("jwt 续期失败(%s)，回落 app_token 引导", cand.get("msg"))
+    if not getattr(a, "_jwt_failed", False):
+        cached = load_jwt(a)
+        if cached:
+            r = s.post(login_url, json={**base_body, "jwtToken": cached, "token": ""}, timeout=30)
+            cand = r.json()
+            if cand.get("code") == "SUCCESS":
+                resp = cand
+            else:
+                a._jwt_failed = True
+                clear_jwt(a)
+                log.info("jwt 已失效，已清理旧缓存并自动使用 app_token 重新换票")
     if resp is None:
         r = s.post(login_url, json={**base_body, "jwtToken": None, "token": a.app_token}, timeout=30)
         resp = r.json()
         if resp.get("code") != "SUCCESS":
             raise RuntimeError(f"appTokenLogin 失败: {resp.get('code')} {resp.get('msg')} —— "
                                "通常 app_token 已过期，请重新抓包")
+        a._jwt_failed = False
     data = resp.get("data") or {}
-    save_jwt(a, data.get("jwt"))
+    new_jwt = data.get("jwtToken") or data.get("jwt")
+    if new_jwt:
+        save_jwt(a, new_jwt)
     assert_safe_url(data.get("url"), allowed_hosts={"wx.10086.cn"})
     r = s.get(data["url"], timeout=30, allow_redirects=False)
     r.raise_for_status()
@@ -892,6 +906,7 @@ def main():
     ap = argparse.ArgumentParser(description="中国移动全功能聚合脚本 (默认全开模式)")
     ap.add_argument("--dry-run", action="store_true", help="只查状态与余额，不做写操作")
     ap.add_argument("--only-sign", action="store_true", help="仅执行每日签到，跳过其他全部任务")
+    ap.add_argument("--no-random", action="store_true", help="跳过 15-30 分钟随机延时，立即执行")
     ap.add_argument("--no-tasks", action="store_true", help="跳过 AI 豆日常任务")
     ap.add_argument("--no-gold", action="store_true", help="跳过 AI 豆兑换话费券")
     ap.add_argument("--no-games", action="store_true", help="跳过拓展游戏与追剧任务")
@@ -933,6 +948,22 @@ def main():
     if requests is None:
         log.error("缺少 requests，请先安装：pip3 install requests")
         return 1
+
+    # 防风控随机延时 (每日 08:20 自动定时主任务默认随机延时 15-30 分钟，周三秒杀与探测模式除外)
+    if not args.wed_seckill and not args.dry_run and not args.no_random:
+        env_delay = os.environ.get("CMCC_RANDOM_DELAY", "").strip().lower()
+        if env_delay not in ("0", "false", "no", "off"):
+            min_min = int(os.environ.get("CMCC_RANDOM_MIN", 15))
+            max_min = int(os.environ.get("CMCC_RANDOM_MAX", 30))
+            if max_min < min_min:
+                max_min = min_min + 5
+            delay_sec = random.randint(min_min * 60, max_min * 60)
+            target_time = (datetime.now() + timedelta(seconds=delay_sec)).strftime("%H:%M:%S")
+            log.info("🎲 [防风控随机延时] 计划随机延时 %d 分 %d 秒 (%d 秒)，预计将于 %s 正式开始执行...",
+                     delay_sec // 60, delay_sec % 60, delay_sec, target_time)
+            log.info("（提示：如需立即运行，可传参 --no-random 或设置环境变量 CMCC_RANDOM_DELAY=0）")
+            time.sleep(delay_sec)
+
     accounts = load_accounts()
     if not accounts:
         log.error("未配置 CMCC_AUTH。多账号格式：每行一个 JSON 或 app_token#手机号")

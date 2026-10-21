@@ -163,6 +163,14 @@ def jwt_cache_file(a):
     return Path(__file__).with_name(f".cmcc_jwt_cache_{a.phone[-4:]}.json")
 
 
+def clear_jwt(a):
+    try:
+        p = jwt_cache_file(a)
+        if p.exists():
+            p.unlink()
+    except Exception:
+        pass
+
 def load_jwt(a):
     try:
         d = json.loads(jwt_cache_file(a).read_text(encoding="utf-8"))
@@ -216,22 +224,28 @@ def exchange_session(a, act_url=None):
     if a.city_code:
         base_body["cityCode"] = a.city_code
     resp = None
-    cached = load_jwt(a)
-    if cached:
-        r = s.post(login_url, json={**base_body, "jwtToken": cached, "token": ""}, timeout=30)
-        cand = r.json()
-        if cand.get("code") == "SUCCESS":
-            resp = cand
-        else:
-            log.info("jwt 续期失败(%s)，回落 app_token 引导", cand.get("msg"))
+    if not getattr(a, "_jwt_failed", False):
+        cached = load_jwt(a)
+        if cached:
+            r = s.post(login_url, json={**base_body, "jwtToken": cached, "token": ""}, timeout=30)
+            cand = r.json()
+            if cand.get("code") == "SUCCESS":
+                resp = cand
+            else:
+                a._jwt_failed = True
+                clear_jwt(a)
+                log.info("jwt 已失效，已清理旧缓存并自动使用 app_token 重新换票")
     if resp is None:
         r = s.post(login_url, json={**base_body, "jwtToken": None, "token": a.app_token}, timeout=30)
         resp = r.json()
         if resp.get("code") != "SUCCESS":
             raise RuntimeError(f"appTokenLogin 失败: {resp.get('code')} {resp.get('msg')} —— "
                                "通常 app_token 已过期，请重新抓包")
+        a._jwt_failed = False
     data = resp.get("data") or {}
-    save_jwt(a, data.get("jwt"))
+    new_jwt = data.get("jwtToken") or data.get("jwt")
+    if new_jwt:
+        save_jwt(a, new_jwt)
     assert_safe_url(data.get("url"), allowed_hosts={"wx.10086.cn"})
     r = s.get(data["url"], timeout=30, allow_redirects=False)
     r.raise_for_status()
