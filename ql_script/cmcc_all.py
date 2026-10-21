@@ -589,7 +589,7 @@ def run_games(a, dry_run):
         name = act["name"]
         parts = []
         if act["sign"]:
-            dm, dp, _, qm, qp = act["sign"]
+            dm, dp, qm, qp = act["sign"]
             st = _api_call(s, referer, qm, qp, {} if qm == "POST" else None)
             data = st.get("data") or {}
             if act["signed"](data):
