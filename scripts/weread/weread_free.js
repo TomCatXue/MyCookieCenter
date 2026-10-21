@@ -6,11 +6,11 @@
 #!icon=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/weread.png
 #!tag=微信读书,限免,加书架
 
-MITM 与 cron 规则统一由 loon/CookieCenter.plugin 配置：
+MITM 与 cron 规则统一由 loon/DaiDaiPanel.plugin 配置：
 - 每周五限免入架 cron -> 本文件（每周五 10:00）
 - 每日领取 cron -> weread_claim.js（每日 23:00）
 - 周二翻牌 cron -> weread_flip.js（每周二 20:00）
-参数面板由 boxjs/CookieCenter.boxjs.json 订阅提供。
+参数面板由 boxjs/DaiDaiPanel.boxjs.json 订阅提供。
 */
 
 const AUTH_KEY = "weread_auth_v2";

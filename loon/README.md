@@ -1,8 +1,8 @@
 # Loon 插件
 
-| 插件 | 功能 | 开关 |
+| 插件 | 功能 | 独立业务开关 |
 | :--- | :--- | :--- |
-| [`CookieCenter.plugin`](./CookieCenter.plugin) | 凭据抓取合集：微信读书 / 中国电信全系 / 扫描全能王，抓到即通知 | `weread` `telecom_draw` `telecom_rights` `telecom_benefit` `camscanner` |
+| [**DaiDaiPanel.plugin**](./DaiDaiPanel.plugin) (v1.0.0) | **呆呆面板 · 凭据捕获与自动同步**：微信读书 / 扫描全能王 / 中国移动 / 中国电信。一 App 一脚本，凭据变化即时推送到呆呆面板环境变量并反馈通知，零机械定时 | `weread` `cmcc_mark` `camscanner` `telecom` |
 | [`WeReadEnhance.plugin`](./WeReadEnhance.plugin) | 微信读书：去广告、去更新弹窗、解除试听限制 | 内置总开关 |
 | [`BilibiliFix.plugin`](./BilibiliFix.plugin) | 哔哩哔哩：空降助手、分区修复、扫码登录、画质解锁 | 内置总开关 |
 | [`PixivEnhanced.plugin`](./PixivEnhanced.plugin) | Pixiv：全页面汉化、AI 漫画翻译、设置中心 | 内置总开关 |
@@ -13,17 +13,19 @@
 
 ## 使用
 
-Loon → 插件 → 右上角 **+** → 粘贴插件 Raw 地址即可。
+Loon → 插件 → 右上角 **+** → 粘贴插件 Raw 地址即可：
 
-`CookieCenter.plugin` 导入后开关**默认开启**，可单独关掉不需要的业务；抓完凭据也可关闭以减少 MITM 干扰。
+```text
+https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/loon/DaiDaiPanel.plugin
+```
 
-> **微信读书**：先进「我」的页面（拿 App 票据），再去「周二翻牌」页（补齐 Web 票据），两步才完整。
+## 核心架构：一 App 一脚本与抓取即同步
+
+- **彻底告别机械定时**：完全移除定时 Cron 轮询。推送到呆呆面板采用纯事件驱动机制——在 App 产生网络流量、拦截并识别到凭据发生变化的同一瞬间，立即推送到呆呆面板环境变量，并在系统通知弹窗中直观汇报同步状态（如 `WEREAD_AUTH 已更新入库 (ID: 101)`）。
+- **极简规则架构**：每个 App 严格对应一个独立脚本，拒绝长串冗余传参。
+- **配置双向自愈**：面板地址、App Key、App Secret 既可在 BoxJS 中配置，也可直接在 Loon 插件参数界面的 `[Argument]` 处填入，首次抓取即自动回写持久化。
 
 ## 注意
 
-- `camscanner.plugin` 与 `CookieCenter.plugin` 含相同抓取规则，**只保留一个**，否则会重复通知。
 - 每个插件都带 `#!version` 与分钟级 `#!date`，脚本 URL 带 `?v=` 缓存参数；更新后若未生效，删除插件重新导入。
-
-### QQ空间 清净
-
-规则型插件，导入即生效，无需配置。屏蔽空间信息流广告、营销卡片与推广位。
+- `camscanner.plugin` 与 `DaiDaiPanel.plugin` 含相同抓取规则，建议只启用主插件 `DaiDaiPanel.plugin` 即可。

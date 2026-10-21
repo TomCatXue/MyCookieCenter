@@ -1,0 +1,44 @@
+#!name = 呆呆面板 · 凭据捕获与自动同步
+#!desc = 聚合微信读书、中国移动、扫描全能王、中国电信凭据静默捕获。各应用配备独立开关，凭据发生变化时就地推送到呆呆面板环境变量，零机械定时。
+#!author = TomCatXue
+#!homepage = https://github.com/TomCatXue/MyCookieCenter
+#!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/daidai.png
+#!tag = 签到, Cookie, 凭据捕获, 呆呆面板, Dumb-Panel
+#!version = 1.0.2
+#!date = 2026-10-21 04:00
+
+# =================== 1. 独立业务开关 (开启即代表捕获并就地同步) ===================
+
+[Argument]
+weread = switch,true,tag=微信读书,desc=打开微信读书 App 进「我」或「翻牌/限免」自动触发抓取并就地同步至呆呆面板 WEREAD_AUTH
+cmcc_mark = switch,true,tag=中国移动,desc=在中国移动 App 打开「每日签到」活动页触发，自动抓取长期 app_token 并就地同步至呆呆面板 CMCC_AUTH
+camscanner = switch,true,tag=扫描全能王,desc=打开扫描全能王 App 进个人中心触发静默抓取并就地同步至呆呆面板 camscanner_data
+telecom = switch,true,tag=中国电信,desc=打开电信营业厅或小程序，自动捕获 5G会员 SessionKey、等级权益 sign 与活动福利凭据
+
+# --- 呆呆面板配置 (可选，若已在 BoxJS 配置则留空即可) ---
+daidai_url = input,"",tag=呆呆面板地址(可选),desc=例如 http://192.168.1.10:5700，若在 BoxJS 已配置则此项留空
+daidai_key = input,"",tag=呆呆面板AppKey(可选),desc=填入 Open API App Key，若在 BoxJS 已配置则此项留空
+daidai_secret = input,"",tag=呆呆面板AppSecret(可选),desc=填入 Open API App Secret，若在 BoxJS 已配置则此项留空
+
+# =================== 2. 捕获与就地同步规则 (每个App对应一个独立脚本) ===================
+
+[Script]
+# --- 1. 【微信读书】凭据捕获与就地同步 (联动 weread 开关) ---
+request if ${url} ~= /^https?:\/\/(i\.)?weread\.qq\.com\/(flip-card-game|user\/|feature|free\/library|checkfreequalify|login)/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/weread/weread_cookie.js?v=20261021") with enable=${weread}, tag="微信读书·凭据捕获", requires_body=true, img_url="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/weread.png"
+response if ${url} ~= /^https?:\/\/i\.weread\.qq\.com\/login/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/weread/weread_cookie.js?v=20261021") with enable=${weread}, tag="微信读书·登录回填", requires_body=true, img_url="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/weread.png"
+
+# --- 2. 【中国移动】凭据捕获与就地同步 (联动 cmcc_mark 开关) ---
+request if ${url} ~= /^https?:\/\/(wx\.10086\.cn\/(qwhdsso\/appTokenLogin|qwhdhub\/api\/mark\/)|dev\.coc\.10086\.cn\/(coc3\/|gr\/login\/)|touch\.10086\.cn\/(i\/reapp\/|i\/v1\/fee\/|i\/mobile\/))/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/cmcc/cmcc_cookie.js?v=202610210430") with enable=${cmcc_mark}, tag="中国移动·凭据捕获", requires_body=true, img_url="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/10086.png"
+response if ${url} ~= /^https?:\/\/(wx\.10086\.cn\/qwhdhub\/(qwhdmark|qwhdsso)\/|touch\.10086\.cn\/(i\/reapp\/|i\/v1\/fee\/|i\/mobile\/))/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/cmcc/cmcc_cookie.js?v=202610210430") with enable=${cmcc_mark}, tag="中国移动·会话回填", requires_body=true, img_url="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/10086.png" 
+
+# --- 3. 【扫描全能王】凭据捕获与就地同步 (联动 camscanner 开关) ---
+request if ${url} ~= /^https:\/\/api-cs\.intsig\.net\/user\/cs\/get_user_attribute/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/camscanner/camscanner.cookie.js?v=20261021") with enable=${camscanner}, tag="扫描全能王·凭据捕获", img_url="https://raw.githubusercontent.com/MaYIHEI/pin/refs/heads/main/app/camscanner.png"
+
+# --- 4. 【中国电信】凭据捕获 (联动 telecom 开关) ---
+request if ${url} ~= /^https?:\/\/(cdn\.bestpay\.cn\/marketing\/telecom\.member\.config\.json|mapi-h5\.bestpay\.com\.cn\/gapi\/handyservice\/miniprogram\/checkParam|spanner\.bestpay\.com\.cn:10081|(waphub|wappark)\.189\.cn\/(jt-sign|gateway|JinDouMall)|wx\.sx\.189\.cn\/sx_ai_benefit\/h5\/HD)/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/telecom/telecom_cookie.js?v=20261021") with enable=${telecom}, tag="中国电信·凭据捕获", requires_body=true, img_url="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/189.png"
+response if ${url} ~= /^https?:\/\/(waphub|wappark)\.189\.cn\/(jt-sign|gateway)\//i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/telecom/telecom_cookie.js?v=20261021") with enable=${telecom}, tag="中国电信·会话回填", requires_body=true, img_url="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/189.png"
+
+# =================== 3. MITM 解密域名 ===================
+
+[MITM]
+hostname = weread.qq.com, i.weread.qq.com, waphub.189.cn, wappark.189.cn, wx.sx.189.cn, mapi.bestpay.com.cn, mapi-h5.bestpay.com.cn, cdn.bestpay.cn, spanner.bestpay.com.cn, activity.bestpay.cn, h5.bestpay.cn, api-cs.intsig.net, wx.10086.cn, qwhdcdn.cmcc-cs.cn, dev.coc.10086.cn, touch.10086.cn
