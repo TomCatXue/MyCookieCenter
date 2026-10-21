@@ -339,6 +339,34 @@ function getDaidaiConfig() {
     return { host, appKey, appSecret };
 }
 
+function mergeAccountIntoEnv(existingValue, phone, newFields) {
+    if (!existingValue || !existingValue.trim()) {
+        return typeof newFields === "string" ? newFields : JSON.stringify(newFields);
+    }
+    const lines = existingValue.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    let matchedIndex = -1;
+    let parsedList = [];
+
+    for (let i = 0; i < lines.length; i++) {
+        let obj = null;
+        try { obj = JSON.parse(lines[i]); } catch (e) {}
+        if (obj && (String(obj.phone) === String(phone) || (lines[i].includes(phone)))) {
+            matchedIndex = i;
+            parsedList.push(Object.assign({}, obj, newFields));
+        } else if (obj) {
+            parsedList.push(obj);
+        } else {
+            parsedList.push(lines[i]);
+        }
+    }
+
+    if (matchedIndex === -1) {
+        parsedList.push(newFields);
+    }
+
+    return parsedList.map(item => typeof item === "object" ? JSON.stringify(item) : item).join("\n");
+}
+
 function syncToDaidai({ name, value, ident, group }, cb) {
     const cfg = getDaidaiConfig();
     const host = cfg.host;
@@ -426,38 +454,54 @@ function syncToDaidai({ name, value, ident, group }, cb) {
     const doSync = (tok, qJson) => {
         const authH = { Authorization: "Bearer " + tok };
         const proceed = (res) => {
+            const phone = ident && ident.val ? String(ident.val).trim() : "";
             const rows = (res && Array.isArray(res.data) ? res.data : []).filter(it => it && it.name === name);
             let target = null;
+            let finalVal = valStr;
+
+            const newObj = typeof value === "object" ? value : (function() {
+                try { return JSON.parse(value || "{}"); } catch(e) { return {}; }
+            })();
+
             if (rows.length > 1) {
-                if (ident && ident.val) {
-                    const tVal = String(ident.val).trim();
+                // 模式 B：面板存在多个同名变量（每变量一个账号）
+                if (phone) {
                     for (const r of rows) {
                         const vStr = String(r.value || "");
                         const rStr = String(r.remarks || "");
-                        if (vStr.includes(tVal) || rStr.includes(tVal)) {
+                        if (vStr.includes(phone) || rStr.includes(phone)) {
                             target = r;
                             break;
                         }
                     }
                 }
-                if (!target) {
-                    return safeCb({ ok: false, reason: `面板存在 ${rows.length} 条同名变量且未匹配到当前特征，防误伤已拒绝覆盖` });
+                if (target) {
+                    // 与面板中已有字段深度缝合（保留历史 app_token，补齐新抓的豆苗/话费凭证）
+                    let curObj = {};
+                    try { curObj = JSON.parse(target.value || "{}"); } catch (e) {}
+                    const merged = Object.assign({}, curObj, newObj);
+                    finalVal = JSON.stringify(merged);
+                } else {
+                    // 新账号，创建全新独立变量
+                    target = null;
                 }
             } else if (rows.length === 1) {
+                // 模式 A：面板只有 1 个变量（支持单账号或多账号换行）
                 target = rows[0];
+                finalVal = mergeAccountIntoEnv(target.value, phone, newObj);
             }
 
             if (target) {
-                if (String(target.value) === valStr && target.enabled !== false) {
+                if (String(target.value) === String(finalVal) && target.enabled !== false) {
                     return safeCb({ ok: true, action: "unchanged", envId: target.id });
                 }
-                doRequest("PUT", "/api/envs/" + target.id, authH, { value: valStr, enabled: true }, (uErr) => {
+                doRequest("PUT", "/api/envs/" + target.id, authH, { value: String(finalVal), enabled: true }, (uErr) => {
                     if (uErr) return safeCb({ ok: false, reason: "更新失败: " + uErr.message });
                     safeCb({ ok: true, action: "updated", envId: target.id });
                 });
             } else {
-                const remarks = ident && ident.val ? `MyCookieCenter (${ident.type}:${ident.val})` : "MyCookieCenter 自动同步";
-                doRequest("POST", "/api/envs", authH, { name, value: valStr, group: panelGroup, remarks }, (cErr, s, cJson) => {
+                const remarks = phone ? `MyCookieCenter (phone:${phone})` : "MyCookieCenter 自动同步";
+                doRequest("POST", "/api/envs", authH, { name, value: String(finalVal), group: panelGroup, remarks }, (cErr, s, cJson) => {
                     if (cErr) return safeCb({ ok: false, reason: "创建失败: " + cErr.message });
                     const newId = cJson && cJson.data && cJson.data.id || "";
                     safeCb({ ok: true, action: "created", envId: newId });
