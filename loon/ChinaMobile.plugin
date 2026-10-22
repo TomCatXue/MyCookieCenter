@@ -7,10 +7,10 @@
 #!loon_version = 3.5.2(1005)
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://raw.githubusercontent.com/sooyaaabo/IconLibrary/main/App/ChinaMobile.png
-#!version = 3.3.1
+#!version = 1.0.1
 #!date = 2026-10-22 14:30
 
-# 核心升级说明（2026-10-22 v3.3.1）：
+# 核心升级说明（2026-10-22 v1.0.1）：
 # 1. 开关参数格式严谨化：严格遵循 Loon 标准 key = type,default,tag=...,desc=... 格式，剔除多余空格，彻底解决 Loon UI 切换开关时只能关闭不能打开的异常。
 # 2. 轮播图与落地页四合一归一化：删除冗余的 block_broadband/block_smartbox/block_camera/block_fusion 4 个开关，合并归属于单个 HideCarousel 轮播图总开关，关闭时轮播图与落地页均正常放行，开启时轮播图组件物理消失且落地页后备拦截。
 # 3. 开关业务代码双向联动：全量核查并打通 23 个开关在核心脚本中的双向联动逻辑，确保每一个开关开启/关闭均精准生效。
