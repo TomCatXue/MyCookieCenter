@@ -18,11 +18,16 @@ tag: 中国移动
   python3 cmcc_all.py --dry-run           # 全量只读探测（只查状态与余额，不做写操作）
   python3 cmcc_all.py --only-sign         # 仅签到模式（跳过赚豆与兑换任务）
   python3 cmcc_all.py --no-gold           # 正常跑任务，但跳过兑换话费券
+  python3 cmcc_all.py --no-qinbi          # 跳过陕西秦币专区任务
+  python3 cmcc_all.py --qinbi-keepalive   # 陕西秦币20分钟轻量心跳保活 (滑动延期Session)
   python3 cmcc_all.py --wed-seckill       # 周三充值日秒杀模式（建议定时 58 7 * * 3）
 
 青龙定时（直接使用默认命令，开箱即用）：
   # 每天 08:20：每日聚合全功能主任务（★默认全开，无需额外命令行参数）
   20 8 * * *  python3 cmcc_all.py
+
+  # 陕西秦币心跳保活（可选，每20分钟轻量延期会话，维持30分钟滑动窗口长期有效）：
+  */20 7-23 * * *  python3 cmcc_all.py --qinbi-keepalive
 
   # 每周三 07:58：充值日秒杀（提前 2 分钟拉起预热，自旋至 08:00 开抢）
   58 7 * * 3  python3 cmcc_all.py --wed-seckill
@@ -33,6 +38,17 @@ tag: 中国移动
 """
 import argparse, base64, ipaddress, json, logging, os, random, re, ssl, sys, time, uuid
 from datetime import datetime, timedelta, timezone
+
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+if hasattr(sys.stderr, "reconfigure"):
+    try:
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
 from pathlib import Path
 from urllib.parse import urlsplit
 try:
@@ -42,7 +58,7 @@ except ImportError:
     requests = None
     HTTPAdapter = object
 
-SCRIPT_VERSION = "v1.0.1"
+SCRIPT_VERSION = "v1.1.0"
 TZ_CN = timezone(timedelta(hours=8))
 BASE = "https://wx.10086.cn"
 SSO_LOGIN = BASE + "/qwhdsso/login"
@@ -64,6 +80,17 @@ CONFIG = {
     "ENABLE_WED_PUZZLE": True,   # 周三充值日拼图抽奖（全周做任务攒次数，自动拼图领券）
     "ENABLE_SEED": True,         # AI豆苗养成记（配置了 CMCC_COC3_TICKET 时自动执行，未配自动跳过）
     "ENABLE_FEE": True,          # 实时话费余额查询（配置了 CMCC_FEE_SESSION 时自动执行，未配自动跳过）
+    # --- 陕西移动 · 秦币专区任务模块 (默认全部自动执行) ---
+    "ENABLE_QINBI": True,                # 陕西秦币专区总开关
+    "ENABLE_QINBI_BUBBLE": True,         # 气泡收割（天天登录气泡，每次+5秦币）
+    "ENABLE_QINBI_SIGN": True,           # 每日星星打卡（点亮星星）
+    "ENABLE_QINBI_TASKS": True,          # 赚秦币/领福利子任务（自动完成并核销）
+    "ENABLE_QINBI_LOTTERY": True,        # 每日免费抽奖（严格安全防线：仅在有免费次数时抽奖，绝不消耗秦币）
+    "ENABLE_QINBI_MONTHLY_GIFT": True,   # 月末集星大礼包（集满3星领取30秦币+1GB日包）
+    "ENABLE_QINBI_PRIVILEGE": True,      # 月度福利特权查验与提醒 (1GB流量/5元话费加赠券)
+    "ENABLE_QINBI_EXCHANGE": True,       # 大额资产自动兑换（达到 1500 秦币自动兑换话费/AI豆）
+    "QINBI_EXCHANGE_MODE": 1,            # 兑换模式：1 仅15元话费；2 话费优先，无货顺位备选1000 AI豆
+    "QINBI_HEARTBEAT_NOTIFY": False,     # 保活心跳模式是否发通知 (默认 False 彻底静默，领到后绝不打扰)
 }
 WED_ACT_URL = (BASE + "/hlwyxhdhub/act-wedrecharge/1024101716"
                "?pageId=1849008675699650560&channelId=P00000093619")
@@ -146,7 +173,7 @@ class Account:
     def __init__(self, app_token, phone, province_code="", city_code="",
                  carrier_operator="002", app_version_code="12.5.4",
                  activity_id="1021122301", channel_id="P00000057578",
-                 coc3_ticket="", fee_session=""):
+                 coc3_ticket="", fee_session="", qinbi_token=""):
         self.app_token = app_token
         self.phone = phone
         self.province_code = province_code
@@ -157,14 +184,15 @@ class Account:
         self.channel_id = channel_id
         self.coc3_ticket = coc3_ticket
         self.fee_session = fee_session
+        self.qinbi_token = qinbi_token
 
     @property
     def act_url(self):
         return f"{BASE}/qwhdhub/qwhdmark/{self.activity_id}?channelId={self.channel_id}"
 
     def validate(self):
-        if not self.app_token:
-            return "缺少 app_token"
+        if not self.app_token and not self.qinbi_token:
+            return "缺少凭证 (app_token 与 qinbi_token 至少需提供一个)"
         if not re.fullmatch(r"1\d{10}", self.phone or ""):
             return "缺少合法 11 位手机号"
         return None
@@ -186,7 +214,8 @@ def _parse_one(raw):
                        activity_id=str(d.get("activity_id", "1021122301")),
                        channel_id=str(d.get("channel_id", "P00000057578")),
                        coc3_ticket=d.get("coc3_ticket", ""),
-                       fee_session=d.get("fee_session", ""))
+                       fee_session=d.get("fee_session", ""),
+                       qinbi_token=str(d.get("qinbi_token", "")).strip())
     parts = raw.split("#")
     if len(parts) < 2:
         return None
@@ -203,11 +232,57 @@ def load_accounts():
     accounts = [a for a in accounts if a]
     coc3 = [x.strip() for x in re.split(r"[\n&]+", os.environ.get("CMCC_COC3_TICKET", "")) if x.strip()]
     fee = [x.strip() for x in re.split(r"[\n&]+", os.environ.get("CMCC_FEE_SESSION", "")) if x.strip()]
+    qinbi_raw = [x.strip() for x in re.split(r"[\n&]+", os.environ.get("CMCC_QINBI_AUTH", "")) if x.strip()]
+
     for i, a in enumerate(accounts):
         if i < len(coc3):
             a.coc3_ticket = coc3[i]
         if i < len(fee):
             a.fee_session = fee[i]
+
+    # 关联 CMCC_QINBI_AUTH (优先按手机号匹配，其次按索引对齐)
+    for q in qinbi_raw:
+        q_token, q_phone = "", ""
+        if q.startswith("{"):
+            try:
+                qd = json.loads(q)
+                q_token = str(qd.get("token") or qd.get("qinbi_token") or "").strip()
+                q_phone = str(qd.get("phone") or qd.get("phoneNum") or "").strip()
+            except Exception:
+                pass
+        elif "#" in q:
+            qp = q.split("#")
+            q_token = qp[0].strip()
+            q_phone = qp[1].strip() if len(qp) > 1 else ""
+        else:
+            q_token = q.strip()
+        if not q_token:
+            continue
+
+        matched = False
+        if q_phone:
+            for a in accounts:
+                if a.phone == q_phone:
+                    a.qinbi_token = q_token
+                    matched = True
+                    break
+        if not matched:
+            for a in accounts:
+                if not a.qinbi_token:
+                    a.qinbi_token = q_token
+                    if not a.phone and q_phone:
+                        a.phone = q_phone
+                    break
+
+    # 若仅配置了 CMCC_QINBI_AUTH，独立构建陕西秦币账号
+    if not accounts and qinbi_raw:
+        for q in qinbi_raw:
+            qp = q.split("#") if "#" in q else [q, ""]
+            tok = qp[0].strip()
+            ph = qp[1].strip() if len(qp) > 1 else ""
+            if tok:
+                accounts.append(Account(app_token="", phone=ph, qinbi_token=tok))
+
     return accounts
 
 
@@ -901,50 +976,621 @@ def run_fee(a):
     fee = dec(r["data"]["outParam"])
     return [f"话费余额：{fee.get('realBalanceFee', '?')} 元"]
 
-# ============================== 主流程 ==============================
+# ============================== 陕西移动 · 秦币专区 (模块化任务体系) ==============================
+
+QINBI_BASE = "https://sn.clientaccess.10086.cn/html5/indivbusi"
+QINBI_RECORD_FILE = Path(__file__).parent / "qincoin_exchange_cache.json"
+
+def is_qinbi_claimed_this_month(phone):
+    """查验账号当月是否已成功完成大额奖品兑换 (领到后后续保活彻底静默)"""
+    if not QINBI_RECORD_FILE.exists():
+        return False
+    try:
+        data = json.loads(QINBI_RECORD_FILE.read_text(encoding="utf-8"))
+        user_rec = data.get(str(phone), {})
+        current_month = now_cn().strftime("%Y-%m")
+        return user_rec.get("claimed_month") == current_month
+    except Exception:
+        return False
+
+class QinbiSessionExpiredError(Exception):
+    """陕西秦币 Session 30分钟无操作超时异常"""
+    pass
+
+class QinbiContext:
+    """陕西秦币会话上下文：封装网络会话、Token、鉴权头与信息缓存"""
+    def __init__(self, phone, token, session=None, dry_run=False):
+        self.phone = phone
+        self.token = str(token or "").replace("JSESSIONID=", "").strip()
+        self.session = session or new_session()
+        self.dry_run = dry_run
+        self.query_data = None
+
+    def post(self, endpoint, req_body=None):
+        import urllib.request
+        url = f"{QINBI_BASE}/{endpoint}"
+        body = req_body if req_body is not None else {}
+        payload = {
+            "token": self.token,
+            "phoneNum": self.phone,
+            "reqBody": body
+        }
+        headers = {
+            "Content-Type": "application/json; charset=utf-8",
+            "Accept": "application/json, text/javascript, */*; q=0.01",
+            "X-Requested-With": "XMLHttpRequest",
+            "User-Agent": USER_AGENT,
+            "Origin": "https://sn.clientaccess.10086.cn",
+            "Referer": "https://sn.clientaccess.10086.cn/html5/sx/qinCoin/index.html?channelId=P00000063983&yx=1390514002",
+            "Cookie": f"JSESSIONID={self.token}; loginName={self.phone}; is_login=true",
+        }
+        req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers, method="POST")
+        try:
+            with urllib.request.urlopen(req, timeout=15) as r:
+                res = json.loads(r.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            try:
+                res = json.loads(e.read().decode("utf-8", errors="replace"))
+            except Exception:
+                return {"resCode": str(e.code), "resDesc": str(e)}
+        except Exception as e:
+            log.warning("秦币接口 [%s] 请求异常: %s", endpoint, e)
+            return {"resCode": "999", "resDesc": str(e)}
+
+        res_code = str(res.get("resCode", ""))
+        if res_code == "201":
+            raise QinbiSessionExpiredError("陕西秦币会话已休眠 (超过30分钟未操作)，请在手机打开一次手厅由Loon自动捕获自愈")
+        return res
+
+    def get_info(self, force_refresh=False):
+        if self.query_data is None or force_refresh:
+            res = self.post("qinCoin/queryInfo", {})
+            if res.get("resCode") == "200":
+                self.query_data = res.get("resBody") or {}
+            else:
+                self.query_data = {}
+        return self.query_data
+
+
+# -------------------- 模块化子任务体系 (基类与具体模块) --------------------
+
+class QinbiBaseModule:
+    """标准秦币子任务模块基类，确保任何模块可随时独立插拔或增删"""
+    tag = ""          # 模块英文标识
+    name = ""         # 模块中文名称
+    cfg_key = ""      # 全局配置开关键名
+
+    def is_enabled(self, cfg):
+        return cfg.get(self.cfg_key, True)
+
+    def execute(self, ctx: QinbiContext, cfg: dict):
+        """
+        子模块执行入口，返回字符串行或 None
+        若执行正常且无可汇报增量，返回 None
+        """
+        raise NotImplementedError
+
+
+class QinbiBubbleModule(QinbiBaseModule):
+    """子模块 1：天天登录气泡查收与倒计时探测"""
+    tag = "bubble"
+    name = "气泡收割"
+    cfg_key = "ENABLE_QINBI_BUBBLE"
+
+    def execute(self, ctx, cfg):
+        bubble_res = ctx.post("qinCoin/queryBubble", {})
+        if bubble_res.get("resCode") != "200":
+            return f"气泡查询失败: {bubble_res.get('resDesc', '接口异常')}"
+        bubbles = bubble_res.get("resBody") or []
+        if not bubbles:
+            return None
+
+        results = []
+        for b in bubbles:
+            b_id = b.get("id", "qp1")
+            b_name = b.get("qpName", "天天登录")
+            b_coins = b.get("qb", 5)
+            if_get = b.get("ifGet", False)
+            remaining = b.get("remainingTime", "")
+
+            if if_get:
+                if not ctx.dry_run:
+                    rec = ctx.post("qinCoin/receive", {"type": b_id})
+                    if rec.get("resCode") == "200":
+                        results.append(f"成功收取 [{b_name}] +{b_coins} 秦币")
+                    else:
+                        results.append(f"[{b_name}] 领取失败: {rec.get('resDesc', '未知')}")
+                else:
+                    results.append(f"(只读) [{b_name}] 已成熟待收 +{b_coins} 秦币")
+            else:
+                results.append(f"[{b_name}] 冷却倒计时 (剩余 {remaining or '冷却中'})")
+        return "\n".join(results) if results else None
+
+
+class QinbiSignModule(QinbiBaseModule):
+    """子模块 2：每日星星打卡点亮"""
+    tag = "sign"
+    name = "星星打卡"
+    cfg_key = "ENABLE_QINBI_SIGN"
+
+    def execute(self, ctx, cfg):
+        info = ctx.get_info()
+        star_info = info.get("starInfo") or {}
+        signin_state = star_info.get("signinBtnState", 0)
+        current_star = star_info.get("star", 0)
+
+        if signin_state == 1:
+            if not ctx.dry_run:
+                res = ctx.post("qinCoin/signinLightUp", {})
+                if res.get("resCode") == "200":
+                    new_star = (res.get("resBody") or {}).get("star", current_star + 1)
+                    return f"成功点亮今日星星 (当前当月累积 {new_star} 颗星)"
+                else:
+                    return f"打卡失败 ({res.get('resDesc', '未知')})"
+            else:
+                return f"(只读) 今日未打卡，可点亮第 {current_star + 1} 颗星"
+        else:
+            return f"今日已打卡 (当前当月累积 {current_star} 颗星)"
+
+
+class QinbiGiftModule(QinbiBaseModule):
+    """子模块 3：月末集星大礼包一键领取 (满3星自动领 30秦币+1GB流量日包)"""
+    tag = "gift"
+    name = "月末礼包"
+    cfg_key = "ENABLE_QINBI_MONTHLY_GIFT"
+
+    def execute(self, ctx, cfg):
+        info = ctx.get_info()
+        star_info = info.get("starInfo") or {}
+        btn_state = star_info.get("btnState", 0)
+        current_star = star_info.get("star", 0)
+
+        if btn_state == 1:
+            if not ctx.dry_run:
+                rec = ctx.post("qinCoin/receive", {"type": "yjlq"})
+                if rec.get("resCode") == "200":
+                    return "🎉 成功领取月末集星大礼包 [30秦币 + 1GB流量日包]！"
+                else:
+                    return f"大礼包领取失败 ({rec.get('resDesc', '未知')})"
+            else:
+                return "(只读) 已集齐满星，可领取 [30秦币 + 1GB流量日包]"
+        elif btn_state == 2:
+            return "本月集星大礼包已领取"
+        else:
+            return f"未达满星达标线 (当前累积 {current_star}/3 颗星)"
+
+
+class QinbiTasksModule(QinbiBaseModule):
+    """子模块 4：赚秦币日常浏览与领福利子任务"""
+    tag = "tasks"
+    name = "赚币日常"
+    cfg_key = "ENABLE_QINBI_TASKS"
+
+    def execute(self, ctx, cfg):
+        info = ctx.get_info()
+        zqb_info = info.get("zqbInfo") or {}
+        task_total = zqb_info.get("taskTotal", 0)
+        task_over = zqb_info.get("taskOver", 0)
+        task_id = zqb_info.get("taskId", "")
+        lfl_cnt = zqb_info.get("lflCnt", 0)
+
+        lines = []
+        if task_id and task_over < task_total:
+            if not ctx.dry_run:
+                rec = ctx.post("qinCoin/receive", {"type": "zqb", "id": task_id})
+                if rec.get("resCode") == "200":
+                    lines.append(f"成功核销任务奖励 [{task_id}]")
+                else:
+                    lines.append(f"任务 [{task_id}] 核销失败 ({rec.get('resDesc', '未知')})")
+            else:
+                lines.append(f"(只读) 发现待核销任务奖励 [{task_id}]")
+        else:
+            lines.append(f"今日日常任务已全部完成 ({task_over}/{task_total})")
+
+        if lfl_cnt > 0:
+            if not ctx.dry_run:
+                rec = ctx.post("qinCoin/receive", {"type": "lfl"})
+                if rec.get("resCode") == "200":
+                    lines.append("成功领取专属福利")
+            else:
+                lines.append(f"(只读) 发现待领取福利 (剩余 {lfl_cnt} 次)")
+        return "\n".join(lines) if lines else None
+
+
+class QinbiLotteryModule(QinbiBaseModule):
+    """子模块 5：每日免费幸运抽奖 (绝不付费，严禁消耗秦币)"""
+    tag = "lottery"
+    name = "免费抽奖"
+    cfg_key = "ENABLE_QINBI_LOTTERY"
+
+    def execute(self, ctx, cfg):
+        info = ctx.get_info()
+        zqb_info = info.get("zqbInfo") or {}
+        gift_lottery = zqb_info.get("giftLottery", 0)
+
+        if gift_lottery > 0:
+            if not ctx.dry_run:
+                rec = ctx.post("qinCoin/lottery", {"type": 1})
+                if rec.get("resCode") == "200":
+                    rb = rec.get("resBody") or {}
+                    prize_name = rb.get("prizeName") or "谢谢参与"
+                    return f"获得 [{prize_name}] (消耗免费抽奖 1 次)"
+                else:
+                    return f"抽奖失败 ({rec.get('resDesc', '未知')})"
+            else:
+                return f"(只读) 剩余免费抽奖 {gift_lottery} 次"
+        else:
+            return "今日无免费次数 (严格跳过付费抽奖，杜绝蚕食秦币)"
+
+
+class QinbiPrivilegeModule(QinbiBaseModule):
+    """子模块 6：月度福利特权查验与提醒 (1GB流量 / 5元话费加赠券)"""
+    tag = "privilege"
+    name = "福利特权"
+    cfg_key = "ENABLE_QINBI_PRIVILEGE"
+
+    def execute(self, ctx, cfg):
+        info = ctx.get_info()
+        priv_info = info.get("privilegeInfo") or {}
+        tq1_list = priv_info.get("tq1") or []
+        claimable = []
+        for t in tq1_list:
+            if t.get("state") == 1:
+                claimable.append(f"{t.get('title')}({t.get('desc')})")
+        if claimable:
+            return f"发现可用月度特权 [{', '.join(claimable)}] (可前往手厅秦币专区激活)"
+        return None
+
+
+class QinbiExchangeModule(QinbiBaseModule):
+    """子模块 7：大额资产达到 1500 秦币自动兑换 (15元话费优先，AI豆备选，防重保护)"""
+    tag = "exchange"
+    name = "资产兑换"
+    cfg_key = "ENABLE_QINBI_EXCHANGE"
+
+    def execute(self, ctx, cfg):
+        # 1. 查验本月是否已经领到了
+        current_month = now_cn().strftime("%Y-%m")
+        record = {}
+        if QINBI_RECORD_FILE.exists():
+            try:
+                record = json.loads(QINBI_RECORD_FILE.read_text(encoding="utf-8"))
+            except Exception:
+                pass
+        user_record = record.get(str(ctx.phone), {})
+        if user_record.get("claimed_month") == current_month:
+            return f"本月 ({current_month}) 已兑换领到 [{user_record.get('prod_name')}] (自动休眠)"
+
+        # 2. 查验实时余额
+        info = ctx.get_info(force_refresh=True)
+        coin_info = info.get("qinCoinInfo") or {}
+        balance = coin_info.get("qinCoinBalance", 0)
+
+        if balance < 1500:
+            return f"当前秦币 {balance} 个，未达 1500 门槛 (距 15元话费还差 {1500 - balance} 个)"
+
+        # 3. 检索可兑商品列表
+        priv_info = info.get("privilegeInfo") or {}
+        tq4 = priv_info.get("tq4") or []
+        prod_map = {}
+        for cat in tq4:
+            for item in cat.get("items", []):
+                prod_map[item.get("id")] = item
+
+        mode = cfg.get("QINBI_EXCHANGE_MODE", 1)
+        target_prod = None
+
+        # 优先 15元直充话费 (prodId: 19)
+        item_19 = prod_map.get(19)
+        if item_19 and item_19.get("exchange") is True:
+            target_prod = item_19
+        elif mode == 2:
+            # 备选 1000 AI豆 (prodId: 25)
+            item_25 = prod_map.get(25)
+            if item_25 and item_25.get("exchange") is True:
+                target_prod = item_25
+
+        if not target_prod:
+            return f"当前秦币 {balance} 个已达标，但目标商品暂无可兑资格或库存已告罄"
+
+        target_id = target_prod.get("id")
+        target_name = target_prod.get("prodName", "目标商品")
+
+        if ctx.dry_run:
+            return f"(只读探测) 达到 1500 门槛，检测到 [{target_name}] 可直接兑换"
+
+        # 发起真实兑换
+        res = ctx.post("qinCoin/exchange", {"prodId": target_id})
+        if res.get("resCode") == "200":
+            user_record = {
+                "claimed_month": current_month,
+                "prod_id": target_id,
+                "prod_name": target_name,
+                "time": now_cn().strftime("%Y-%m-%d %H:%M:%S")
+            }
+            record[str(ctx.phone)] = user_record
+            try:
+                QINBI_RECORD_FILE.write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
+            except Exception as ex:
+                log.warning("保存兑换记录文件失败: %s", ex)
+            return f"🎉 成功兑换 [{target_name}]！消耗 1500 秦币"
+        else:
+            return f"兑换 [{target_name}] 失败: {res.get('resDesc', '未知错误')}"
+
+
+# ==================== 🛠️ 模块化任务流水线 (可随时拔插、增删、注释单行屏蔽) ====================
+QINBI_MODULES = [
+    QinbiBubbleModule(),       # 1. 气泡成熟查收 (天天登录气泡 +5)
+    QinbiSignModule(),         # 2. 每日星星打卡点亮 (月度打卡)
+    QinbiGiftModule(),         # 3. 月末集星大礼包 (满3星领 30秦币+1GB流量日包)
+    QinbiTasksModule(),        # 4. 赚秦币与领福利日常子任务
+    QinbiLotteryModule(),      # 5. 每日免费幸运抽奖 (安全底线：绝不花秦币抽奖)
+    QinbiPrivilegeModule(),    # 6. 月度福利特权查验与提醒 (1GB流量/5元话费加赠券)
+    QinbiExchangeModule(),     # 7. 大额资产自动兑换 (1500秦币话费/AI豆，带防重落盘)
+]
+
+
+def run_qinbi(a, args, cfg):
+    """陕西移动秦币专区模块化调度主流程"""
+    lines = ["【陕西移动 · 秦币专区】"]
+    ctx = QinbiContext(a.phone, a.qinbi_token, dry_run=args.dry_run)
+
+    # 1. 验证会话并拉取全局基础数据
+    try:
+        info = ctx.get_info()
+    except QinbiSessionExpiredError as e:
+        log.warning("账号 %s 陕西秦币会话失效: %s", mask_phone(a.phone), e)
+        return ["陕西秦币: 会话已休眠 (超过30分钟未操作)，请在手机打开一次手厅由Loon自动捕获自愈"]
+    except Exception as e:
+        log.warning("账号 %s 陕西秦币连接异常: %s", mask_phone(a.phone), e)
+        return [f"陕西秦币: 查询失败 ({e})"]
+
+    if not info:
+        return ["陕西秦币: 无法获取专区基础数据"]
+
+    initial_coins = info.get("qinCoinInfo", {}).get("qinCoinBalance", 0)
+
+    # 2. 依次调度模块流水线中的所有子任务 (相互独立隔离)
+    for mod in QINBI_MODULES:
+        if not mod.is_enabled(cfg):
+            log.debug("秦币模块 [%s] 开关关闭，跳过", mod.name)
+            continue
+
+        try:
+            res_text = mod.execute(ctx, cfg)
+            if res_text:
+                for sub_line in res_text.splitlines():
+                    if sub_line.strip():
+                        lines.append(f"【秦币·{mod.name}】{sub_line.strip()}")
+        except QinbiSessionExpiredError as e:
+            lines.append("• 会话超时休眠: 请在手机打开手厅自愈")
+            break
+        except Exception as e:
+            log.warning("秦币模块 [%s] 执行异常: %s", mod.name, e)
+            lines.append(f"【秦币·{mod.name}】执行异常 ({e})")
+
+    # 3. 最终资产核验
+    try:
+        final_info = ctx.get_info(force_refresh=True)
+        final_coins = final_info.get("qinCoinInfo", {}).get("qinCoinBalance", initial_coins)
+        diff = final_coins - initial_coins
+        delta_str = f" (+{diff})" if diff > 0 else ""
+        lines.append(f"【秦币·资产汇总】当前可用总额: {final_coins} 个{delta_str}")
+    except Exception:
+        pass
+
+    return lines
+
+
+def run_qinbi_heartbeat(accounts, cfg, dry_run=False):
+    """
+    轻量级心跳保活模式 (建议 Cron: */20 7-23 * * *)
+    保持后端 30 分钟无操作滑动窗口持续刷新，Session 不失效
+    【核心原则】：
+      1. 正常保活：100% 静默，绝不发送打扰通知
+      2. 若本月大额奖励已兑换领到 (15元话费/AI豆)：后续保活失效彻底静默，绝不发通知打扰
+      3. 默认 QINBI_HEARTBEAT_NOTIFY=False，杜绝高频轰炸
+    """
+    log.info("💓 启动陕西移动秦币心跳保活检测...")
+    expired_accounts = []
+    active_count = 0
+
+    for a in accounts:
+        if not a.qinbi_token:
+            continue
+        ctx = QinbiContext(a.phone, a.qinbi_token, dry_run=dry_run)
+        try:
+            info = ctx.get_info(force_refresh=True)
+            if info:
+                balance = info.get("qinCoinInfo", {}).get("qinCoinBalance", 0)
+                log.info("账号 %s 秦币心跳保活成功，Session 已顺延 30 分钟 (秦币余额: %s)", mask_phone(a.phone), balance)
+                active_count += 1
+        except QinbiSessionExpiredError:
+            # 查验本月是否已经领到了大额奖励
+            if is_qinbi_claimed_this_month(a.phone):
+                log.info("账号 %s 本月已成功领到兑换奖励，后续保活保持静默，不发通知打扰", mask_phone(a.phone))
+            else:
+                log.warning("账号 %s 秦币会话已休眠，等待 Loon 插件自动捕获自愈", mask_phone(a.phone))
+                expired_accounts.append(a)
+        except Exception as e:
+            log.warning("账号 %s 秦币心跳检测异常: %s", mask_phone(a.phone), e)
+
+    log.info("💓 心跳保活完成: %d 个在线活跃，%d 个已休眠", active_count, len(expired_accounts))
+
+    # 仅当开启了通知开关、且确实有未领到奖的失效账号时，才发送轻量提醒
+    if expired_accounts and cfg.get("QINBI_HEARTBEAT_NOTIFY", False):
+        phones = ", ".join(mask_phone(x.phone) for x in expired_accounts)
+        notify("中国移动 · 秦币会话休眠提醒",
+               f"• 账号 [{phones}] 陕西秦币会话已超时休眠\n• 请在手机上打开一次中国移动App秦币专区，Loon将自动静默捕获并同步最新凭据。")
+    return 0
+
+# ============================== 全局模块化任务流水线 (Task Pipeline) ==============================
+
+def get_qwhd_session(a):
+    """会话级缓存：避免 AI豆赚豆与兑换话费重复调用 exchange_session 消耗网络"""
+    if not hasattr(a, "_qwhd_session_cache") or a._qwhd_session_cache is None:
+        a._qwhd_session_cache = exchange_session(a)
+    return a._qwhd_session_cache
+
+
+class CmccBaseTaskModule:
+    """中国移动通用任务模块基类，统一支持启停开关、依赖凭据自检与执行隔离"""
+    tag = ""          # 模块英文标识
+    name = ""         # 模块中文名称
+    cfg_key = ""      # 全局配置开关键名
+
+    def is_enabled(self, a, cfg: dict) -> bool:
+        """检查该账号与全局配置下是否允许运行该模块"""
+        return cfg.get(self.cfg_key, True)
+
+    def execute(self, a, args, cfg: dict) -> list:
+        """执行该模块业务逻辑，返回标准化通知行列表"""
+        raise NotImplementedError
+
+
+class CmccSignTaskModule(CmccBaseTaskModule):
+    """模块 1：每日签到与连签阶梯领奖"""
+    tag = "sign"
+    name = "每日签到与连签"
+    cfg_key = "ENABLE_SIGN"
+
+    def is_enabled(self, a, cfg):
+        return bool(a.app_token) and cfg.get(self.cfg_key, True)
+
+    def execute(self, a, args, cfg):
+        return run_sign(a, args.dry_run)
+
+
+class CmccAITasksTaskModule(CmccBaseTaskModule):
+    """模块 2：AI豆日常赚豆任务 (浏览/分享)"""
+    tag = "ai_tasks"
+    name = "AI豆赚豆任务"
+    cfg_key = "ENABLE_TASKS"
+
+    def is_enabled(self, a, cfg):
+        return bool(a.app_token) and cfg.get(self.cfg_key, True)
+
+    def execute(self, a, args, cfg):
+        s, referer = get_qwhd_session(a)
+        return run_tasks(a, s, referer, args.dry_run)
+
+
+class CmccGoldTaskModule(CmccBaseTaskModule):
+    """模块 3：AI豆顶格兑换话费券"""
+    tag = "gold"
+    name = "AI豆顶格兑话费"
+    cfg_key = "ENABLE_GOLD"
+
+    def is_enabled(self, a, cfg):
+        return bool(a.app_token) and cfg.get(self.cfg_key, True)
+
+    def execute(self, a, args, cfg):
+        s, referer = get_qwhd_session(a)
+        return run_gold(a, s, referer, args.dry_run)
+
+
+class CmccGamesTaskModule(CmccBaseTaskModule):
+    """模块 4：拓展活动 (游戏试玩打卡、热门剧集打卡等轻量任务)"""
+    tag = "games"
+    name = "拓展活动(游戏/追剧)"
+    cfg_key = "ENABLE_GAMES"
+
+    def is_enabled(self, a, cfg):
+        return bool(a.app_token) and cfg.get(self.cfg_key, True)
+
+    def execute(self, a, args, cfg):
+        return run_games(a, args.dry_run)
+
+
+class CmccWedPuzzleTaskModule(CmccBaseTaskModule):
+    """模块 5：周三充值日拼图抽奖与领券"""
+    tag = "wed_puzzle"
+    name = "周三充值日拼图"
+    cfg_key = "ENABLE_WED_PUZZLE"
+
+    def is_enabled(self, a, cfg):
+        return bool(a.app_token) and cfg.get(self.cfg_key, True)
+
+    def execute(self, a, args, cfg):
+        return run_wed(a, args.dry_run)
+
+
+class CmccSeedTaskModule(CmccBaseTaskModule):
+    """模块 6：AI豆苗养成记 (coc3)"""
+    tag = "seed"
+    name = "AI豆苗养成记"
+    cfg_key = "ENABLE_SEED"
+
+    def is_enabled(self, a, cfg):
+        if not a.coc3_ticket:
+            log.debug("账号 %s 未配置 CMCC_COC3_TICKET，跳过豆苗任务", mask_phone(a.phone))
+            return False
+        return cfg.get(self.cfg_key, True)
+
+    def execute(self, a, args, cfg):
+        return run_seed(a, args.dry_run)
+
+
+class CmccFeeTaskModule(CmccBaseTaskModule):
+    """模块 7：实时话费余额查询"""
+    tag = "fee"
+    name = "实时话费查询"
+    cfg_key = "ENABLE_FEE"
+
+    def is_enabled(self, a, cfg):
+        if not a.fee_session:
+            log.debug("账号 %s 未配置 CMCC_FEE_SESSION，跳过话费查询", mask_phone(a.phone))
+            return False
+        return cfg.get(self.cfg_key, True)
+
+    def execute(self, a, args, cfg):
+        return run_fee(a)
+
+
+class CmccQinbiTaskModule(CmccBaseTaskModule):
+    """模块 8：陕西移动 · 秦币专区 (含7大模块化子任务)"""
+    tag = "qinbi"
+    name = "陕西移动·秦币专区"
+    cfg_key = "ENABLE_QINBI"
+
+    def is_enabled(self, a, cfg):
+        return bool(a.qinbi_token) and cfg.get(self.cfg_key, True)
+
+    def execute(self, a, args, cfg):
+        return run_qinbi(a, args, cfg)
+
+
+# ==================== 🛠️ 中国移动主任务流水线 (可随时拔插、增删、注释单行下架归档) ====================
+CMCC_PIPELINE = [
+    CmccSignTaskModule(),          # 1. 每日签到与阶梯领奖
+    CmccAITasksTaskModule(),       # 2. AI豆日常赚豆任务 (浏览/分享)
+    CmccGoldTaskModule(),          # 3. AI豆顶格兑换话费券
+    CmccGamesTaskModule(),         # 4. 拓展游戏与追剧打卡轻量任务
+    CmccWedPuzzleTaskModule(),     # 5. 周三充值日拼图抽奖与领券
+    CmccSeedTaskModule(),          # 6. AI豆苗养成记 (coc3)
+    CmccFeeTaskModule(),           # 7. 实时话费余额查询
+    CmccQinbiTaskModule(),         # 8. 陕西移动 · 秦币专区 (含7大模块化子任务)
+]
+
 
 def run_account(a, args, config=None):
+    """统一账户执行管线：按 CMCC_PIPELINE 流水线依次调度各业务模块"""
     cfg = config or CONFIG
     lines = []
-    try:
-        # 1. 每日签到与连签领奖
-        if cfg.get("ENABLE_SIGN", True):
-            lines += run_sign(a, args.dry_run)
+    # 重置单账号会话缓存
+    a._qwhd_session_cache = None
 
-        # 2. AI豆任务与顶格兑话费
-        do_tasks = cfg.get("ENABLE_TASKS", True)
-        do_gold = cfg.get("ENABLE_GOLD", True)
-        if do_tasks or do_gold:
-            s, referer = exchange_session(a)
-            if do_tasks:
-                lines += run_tasks(a, s, referer, args.dry_run)
-            if do_gold:
-                lines += run_gold(a, s, referer, args.dry_run)
+    for mod in CMCC_PIPELINE:
+        if not mod.is_enabled(a, cfg):
+            continue
+        try:
+            res_lines = mod.execute(a, args, cfg)
+            if res_lines:
+                lines.extend(res_lines)
+        except Exception as e:
+            log.exception("账号 %s 模块 [%s] 执行失败: %s", mask_phone(a.phone), mod.name, e)
+            lines.append(f"【{mod.name}】执行异常: {e}")
 
-        # 3. 拓展活动（游戏试玩/追剧等轻量任务）
-        if cfg.get("ENABLE_GAMES", True):
-            lines += run_games(a, args.dry_run)
-
-        # 4. 周三充值日拼图
-        if cfg.get("ENABLE_WED_PUZZLE", True):
-            lines += run_wed(a, args.dry_run)
-
-        # 5. AI豆苗养成记 (仅在有 coc3_ticket 时执行)
-        if cfg.get("ENABLE_SEED", True):
-            if a.coc3_ticket:
-                lines += run_seed(a, args.dry_run)
-            else:
-                log.debug("账号 %s 未配置 CMCC_COC3_TICKET，跳过豆苗任务", mask_phone(a.phone))
-
-        # 6. 话费余额查询 (仅在有 fee_session 时执行)
-        if cfg.get("ENABLE_FEE", True):
-            if a.fee_session:
-                lines += run_fee(a)
-            else:
-                log.debug("账号 %s 未配置 CMCC_FEE_SESSION，跳过话费查询", mask_phone(a.phone))
-    except Exception as e:
-        log.exception("账号 %s 执行失败: %s", mask_phone(a.phone), e)
-        lines.append(f"异常: {e}")
     return lines
 
 def main():
@@ -958,6 +1604,8 @@ def main():
     ap.add_argument("--no-wed", action="store_true", help="跳过周三充值日拼图")
     ap.add_argument("--no-seed", action="store_true", help="跳过 AI 豆苗养成记")
     ap.add_argument("--no-fee", action="store_true", help="跳过话费余额查询")
+    ap.add_argument("--no-qinbi", action="store_true", help="跳过陕西秦币专区任务")
+    ap.add_argument("--qinbi-keepalive", "--heartbeat", action="store_true", dest="qinbi_keepalive", help="陕西秦币20分钟轻量心跳保活模式")
     # 兼容历史命令行开关
     ap.add_argument("--tasks", action="store_true", help="显式指定执行 AI 豆任务 (默认已开启)")
     ap.add_argument("--gold", action="store_true", help="显式指定执行 AI 豆兑话费 (默认已开启)")
@@ -987,6 +1635,7 @@ def main():
         if args.no_wed: active_cfg["ENABLE_WED_PUZZLE"] = False
         if args.no_seed: active_cfg["ENABLE_SEED"] = False
         if args.no_fee: active_cfg["ENABLE_FEE"] = False
+        if args.no_qinbi: active_cfg["ENABLE_QINBI"] = False
 
     logging.basicConfig(level=logging.INFO,
                         format="%(asctime)s [%(levelname)s] %(message)s", datefmt="%H:%M:%S")
@@ -1010,6 +1659,8 @@ def main():
             time.sleep(delay_sec)
 
     accounts = load_accounts()
+    if args.qinbi_keepalive:
+        return run_qinbi_heartbeat(accounts, active_cfg, args.dry_run)
     if not accounts:
         log.error("未配置 CMCC_AUTH。多账号格式：每行一个 JSON 或 app_token#手机号")
         return 1

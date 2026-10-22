@@ -7362,129 +7362,122 @@ class UserService:
         self.sign_getTelephone()
         self.sign_query_my_prizes()
 
+    # ==================== 🛠️ 中国联通模块化任务注册表 (可随时拔插、增删、注释单行屏蔽) ====================
+    UNICOM_MODULE_PIPELINE = [
+        {
+            "name": "签到区",
+            "cfg_key": "enable_sign",
+            "run": lambda u: u.sign_task_main(),
+            "query": lambda u: (u.sign_getContinuous(is_query_only=True),
+                                u.sign_month_sign_gift(is_query_only=True),
+                                u.sign_getTelephone(),
+                                u.sign_query_my_prizes()),
+        },
+        {
+            "name": "联通祝福",
+            "cfg_key": "enable_ltzf",
+            "run": lambda u: u.ltzf_task(),
+            "query": None,
+        },
+        {
+            "name": "天天领现金",
+            "cfg_key": "enable_ttlxj",
+            "run": lambda u: u.ttlxj_task(),
+            "query": lambda u: u.ttlxj_task(is_query_only=True),
+        },
+        {
+            "name": "通通乡村",
+            "cfg_key": "enable_ttxc",
+            "run": lambda u: u.ttxc_task(),
+            "query": lambda u: u.ttxc_task(is_query_only=True),
+        },
+        {
+            "name": "权益超市",
+            "cfg_key": "enable_market",
+            "run": lambda u: u.market_task(),
+            "query": lambda u: u.market_task(is_query_only=True),
+        },
+        {
+            "name": "联通阅读",
+            "cfg_key": "enable_woread",
+            "run": lambda u: u.woread_task(),
+            "query": lambda u: u.woread_queryTicketAccount(),
+        },
+        {
+            "name": "联通爱听",
+            "cfg_key": "enable_aiting",
+            "run": lambda u: u.aiting_task(),
+            "query": lambda u: u.aiting_task(is_query_only=True),
+            "cooldown_before": True,
+        },
+        {
+            "name": "安全管家",
+            "cfg_key": "enable_security",
+            "run": lambda u: u.securityButlerTask(),
+            "query": lambda u: u.securityButlerTask(is_query_only=True),
+        },
+        {
+            "name": "联通云盘",
+            "cfg_key": "enable_ltyp",
+            "run": lambda u: u.ltyp_task(),
+            "query": lambda u: u.ltyp_task(is_query_only=True),
+        },
+        {
+            "name": "沃云手机",
+            "cfg_key": "enable_wostore",
+            "run": lambda u: u.wostore_cloud_task(),
+            "query": lambda u: u.wostore_cloud_task(is_query_only=True),
+        },
+        {
+            "name": "省份专属活动",
+            "cfg_key": "enable_regional",
+            "run": lambda u: u.regional_task(),
+            "query": lambda u: u.regional_task(is_query_only=True),
+        },
+    ]
+
+
     def execute_daily_tasks(self, query_only=False):
+        """统一联通任务执行管线：按 UNICOM_MODULE_PIPELINE 流水线依次调度各业务模块"""
         if query_only:
             self.log("📋 [查询模式] 仅查询资产，跳过任务执行", notify=True)
             try:
                 self.queryRemain()
-                if globalConfig.get("enable_sign", True):
-                    try:
-                        self.sign_getContinuous(is_query_only=True)
-                        self.sign_month_sign_gift(is_query_only=True)
-                        self.sign_getTelephone()
-                    except Exception as e:
-                        self.log(f"首页签到查询异常: {e}")
-                    try:
-                        self.sign_query_my_prizes()
-                    except Exception as e:
-                        self.log(f"抢兑记录查询异常: {e}")
-                if globalConfig.get("enable_ttlxj", True):
-                    try:
-                        self.ttlxj_task(is_query_only=True)
-                    except Exception as e:
-                        self.log(f"天天领现金查询异常: {e}")
-                if globalConfig.get("enable_ttxc", True):
-                    try:
-                        self.ttxc_task(is_query_only=True)
-                    except Exception as e:
-                        self.log(f"通通乡村查询异常: {e}")
-                if globalConfig.get("enable_market", True):
-                    try:
-                        self.market_task(is_query_only=True)
-                    except Exception as e:
-                        self.log(f"权益超市查询异常: {e}")
-                if globalConfig.get("enable_woread", True):
-                    try:
-                        self.woread_queryTicketAccount()
-                    except Exception as e:
-                        self.log(f"联通阅读查询异常: {e}")
-                if globalConfig.get("enable_aiting", True):
-                    try:
-                        self.aiting_task(is_query_only=True)
-                    except Exception as e:
-                        self.log(f"联通爱听查询异常: {e}")
-                if globalConfig.get("enable_security", True):
-                    try:
-                        self.securityButlerTask(is_query_only=True)
-                    except Exception as e:
-                        self.log(f"安全管家查询异常: {e}")
-                if globalConfig.get("enable_ltyp", True):
-                    try:
-                        self.ltyp_task(is_query_only=True)
-                    except Exception as e:
-                        self.log(f"联通云盘查询异常: {e}")
-                if globalConfig.get("enable_wostore", True):
-                    try:
-                        self.wostore_cloud_task(is_query_only=True)
-                    except Exception as e:
-                        self.log(f"沃云手机查询异常: {e}")
-                if globalConfig.get("enable_regional", True):
-                    try:
-                        self.regional_task(is_query_only=True)
-                    except Exception as e:
-                        pass
             except Exception as e:
-                self.log(f"查询异常: {e}")
+                self.log(f"余量查询异常: {e}")
+            for mod in UNICOM_MODULE_PIPELINE:
+                if not globalConfig.get(mod["cfg_key"], True):
+                    continue
+                q_func = mod.get("query")
+                if q_func:
+                    try:
+                        q_func(self)
+                    except Exception as e:
+                        self.log(f"{mod['name']}查询异常: {e}")
             return
-        if globalConfig.get("enable_sign", True):
-            self.sign_task_main()
-        else:
-            self.log("==== 签到区 ====")
-            self.log("⏭️ 已被总开关关闭，跳过")
-        if globalConfig.get("enable_ltzf", True):
-            self.ltzf_task()
-        else:
-            self.log("==== 联通祝福 ====")
-            self.log("⏭️ 已被总开关关闭，跳过")
-        if globalConfig.get("enable_ttlxj", True):
-            self.ttlxj_task()
-        else:
-            self.log("==== 天天领现金 ====")
-            self.log("⏭️ 已被总开关关闭，跳过")
-        if globalConfig.get("enable_ttxc", True):
-            self.ttxc_task()
-        else:
-            self.log("==== 通通乡村 ====")
-            self.log("⏭️ 已被总开关关闭，跳过")
-        if globalConfig.get("enable_market", True):
-            self.market_task()
-        else:
-            self.log("==== 权益超市 ====")
-            self.log("⏭️ 已被总开关关闭，跳过")
-        if globalConfig.get("enable_woread", True):
-            self.woread_task()
-        else:
-            self.log("==== 联通阅读 ====")
-            self.log("⏭️ 已被总开关关闭，跳过")
-        need_cooldown = globalConfig.get("enable_woread", True) and globalConfig.get("enable_aiting", True)
-        if need_cooldown:
-            self.log("⏳ 等待120秒（阅读冷却：联通限制两次阅读间隔2分钟）...")
-            time.sleep(120)
-        if globalConfig.get("enable_aiting", True):
-            self.aiting_task()
-        else:
-            self.log("==== 联通爱听 ====")
-            self.log("⏭️ 已被总开关关闭，跳过")
-        if globalConfig.get("enable_security", True):
-            self.securityButlerTask()
-        else:
-            self.log("==== 安全管家 ====")
-            self.log("⏭️ 已被总开关关闭，跳过")
-        if globalConfig.get("enable_ltyp", True):
-            self.ltyp_task()
-        else:
-            self.log("==== 联通云盘 ====")
-            self.log("⏭️ 已被总开关关闭，跳过")
-        if globalConfig.get("enable_wostore", True):
-            self.wostore_cloud_task()
-        else:
-            self.log("==== 沃云手机 ====")
-            self.log("⏭️ 已被总开关关闭，跳过")
-        if globalConfig.get("enable_regional", True):
-            self.regional_task()
-        else:
-            self.log("==== 区域专区 ====")
-            self.log("⏭️ 已被总开关关闭，跳过")
+
+        # 正常任务执行流水线
+        woread_ran = False
+        for mod in UNICOM_MODULE_PIPELINE:
+            m_name = mod["name"]
+            cfg_k = mod["cfg_key"]
+            if not globalConfig.get(cfg_k, True):
+                self.log(f"==== {m_name} ====")
+                self.log("⏭️ 已被总开关关闭，跳过")
+                continue
+
+            # 阅读冷却保护（联通接口限制两次阅读间隔至少2分钟）
+            if mod.get("cooldown_before") and woread_ran and globalConfig.get("enable_aiting", True):
+                self.log("⏳ 等待120秒（阅读冷却：联通限制两次阅读间隔2分钟）...")
+                time.sleep(120)
+
+            try:
+                mod["run"](self)
+                if cfg_k == "enable_woread":
+                    woread_ran = True
+            except Exception as e:
+                self.log(f"⚠️ {m_name} 执行异常: {e}")
+
 
 def cross_view_security_share_keys(users):
     participants = [

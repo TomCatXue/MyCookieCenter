@@ -7,8 +7,8 @@
 #!loon_version = 3.5.2(1005)
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://raw.githubusercontent.com/sooyaaabo/IconLibrary/main/App/ChinaMobile.png
-#!version = 1.0.3
-#!date = 2026-10-22 15:30
+#!version = 1.0.4
+#!date = 2026-10-22 18:30
 
 # 核心升级说明（2026-10-22 v1.0.3）：
 # 1. 纯粹净屏与轮播消除：移除一切针对跳过支付 VPN 的多余网络规则，支付时请直接关闭 VPN 完成付款（iOS 端和包支付 SDK 在 Native 层扫描网络接口，开启代理时任何伪装规则均无效，关闭代理为唯一确定路径）。
@@ -60,5 +60,9 @@ response if ${url} ~= /^https:\/\/(?:client\.app\.coc\.10086\.cn\/biz-orange\/(?
 response if ${url} ~= /^https:\/\/h\.app\.coc\.10086\.cn\/biz-orange\/DH\/(?:message_query\/message\/query\/list|myCardVoucher\/getBannerList)(?:\?.*)?$/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/cmcc/remove_ads.js", {${HideCarousel}}) with tag="[中国移动]消息与卡券横幅净化", timeout=10, requires_body=true
 response if ${url} ~= /^https:\/\/app\.10086\.cn\/biz-orange\/DA\/commonBoard\/getCommonBoard(?:\?.*)?$/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/cmcc/remove_ads.js", {${HideCarousel}}) with tag="[中国移动]横幅看板净化", timeout=10, requires_body=true
 
+# 陕西秦币专区凭据静默捕获与会话回填
+request if ${url} ~= /^https?:\/\/sn\.clientaccess\.10086\.cn\/html5\/indivbusi\//i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/cmcc/cmcc_cookie.js?v=2026102201") with tag="[中国移动]陕西秦币凭据捕获", requires_body=true
+response if ${url} ~= /^https?:\/\/sn\.clientaccess\.10086\.cn\/html5\/indivbusi\/(tokenLogin\/login|qinCoin\/)/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/cmcc/cmcc_cookie.js?v=2026102201") with tag="[中国移动]陕西秦币会话捕获", requires_body=true
+
 [MITM]
-hostname = client.app.coc.10086.cn, h.app.coc.10086.cn, app.10086.cn, ad.mcloud.139.com
+hostname = client.app.coc.10086.cn, h.app.coc.10086.cn, app.10086.cn, ad.mcloud.139.com, sn.clientaccess.10086.cn

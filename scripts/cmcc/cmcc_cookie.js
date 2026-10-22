@@ -19,7 +19,9 @@ const SHORT_KEY = "cmcc_mark_cookie";
 const NOTIFY_KEY = "cmcc_mark_notify_time";
 const SEED_NOTIFY_KEY = "cmcc_seed_notify_time";
 const FEE_NOTIFY_KEY = "cmcc_fee_notify_time";
-const SCRIPT_VERSION = "2026-10-21.r3";
+const QINBI_TOKEN_KEY = "cmcc_qinbi_token";
+const QINBI_NOTIFY_KEY = "cmcc_qinbi_notify_time";
+const SCRIPT_VERSION = "2026-10-22.r4";
 const NOTIFY_GAP_MS = 10 * 1000;
 const EXT_COOLDOWN_MS = 10 * 60 * 1000; // 拓展凭据 10 分钟强去重防抖
 
@@ -226,7 +228,90 @@ function parseAppTokenBody(body) {
         }
     }
 
-    // 4) 短期 QWHD_SESSION_TOKEN
+    // 4) 陕西移动 · 秦币专区 (sn.clientaccess.10086.cn)
+    if (/sn\.clientaccess\.10086\.cn/i.test(url)) {
+        $.log(`[CMCC] 命中陕西移动秦币网关: ${url.split("?")[0]}`);
+        let qinbiToken = "", qinbiPhone = "";
+
+        // a. 从请求体中提取 (POST JSON: token & phoneNum)
+        if (isRequest && $request.body) {
+            try {
+                const b = typeof $request.body === "string" ? JSON.parse($request.body) : $request.body;
+                if (b.token && String(b.token).startsWith("ldSN-")) {
+                    qinbiToken = String(b.token).trim();
+                } else if (b.token && String(b.token).includes("JSESSIONID=")) {
+                    const m = String(b.token).match(/JSESSIONID=([^;]+)/i);
+                    if (m) qinbiToken = m[1].trim();
+                }
+                if (b.phoneNum && /^1\d{10}$/.test(String(b.phoneNum))) {
+                    qinbiPhone = String(b.phoneNum);
+                }
+            } catch (e) {}
+        }
+
+        // b. 从 Header Cookie 或 Set-Cookie 中提取
+        if (!qinbiToken) {
+            const h = isResponse ? ($response.headers || {}) : ($request.headers || {});
+            const rawCookie = getHeader(h, isResponse ? "set-cookie" : "cookie") || "";
+            const m = String(rawCookie).match(/JSESSIONID=([^;]+)/i);
+            if (m && m[1].startsWith("ldSN-")) {
+                qinbiToken = m[1].trim();
+            }
+            const mp = String(rawCookie).match(/loginName=(\d{11})/i);
+            if (mp && !qinbiPhone) {
+                qinbiPhone = mp[1];
+            }
+        }
+
+        // c. 从登录响应体中提取 (tokenLogin/login 返回 resBody.token)
+        if (!qinbiToken && isResponse && $response.body) {
+            try {
+                const rb = typeof $response.body === "string" ? JSON.parse($response.body) : $response.body;
+                if (rb.resCode === "200" && rb.resBody && rb.resBody.token) {
+                    qinbiToken = String(rb.resBody.token).trim();
+                }
+                if (rb.resDesc && /^1\d{10}$/.test(String(rb.resDesc))) {
+                    qinbiPhone = String(rb.resDesc);
+                }
+            } catch (e) {}
+        }
+
+        if (qinbiToken) {
+            let cur = {};
+            try { cur = JSON.parse($.getdata(AUTH_KEY) || "{}"); } catch (e) {}
+            const lastQinbiNotify = Number($.getdata(QINBI_NOTIFY_KEY) || 0);
+
+            if (cur.qinbi_token !== qinbiToken) {
+                cur.qinbi_token = qinbiToken;
+                if (qinbiPhone && !cur.phone) cur.phone = qinbiPhone;
+                $.setdata(qinbiToken, QINBI_TOKEN_KEY);
+                $.setdata(JSON.stringify(cur), AUTH_KEY);
+                savedPayload = cur;
+
+                // 同步至面板 CMCC_QINBI_AUTH 专用独立变量
+                syncToDaidai({
+                    name: "CMCC_QINBI_AUTH",
+                    value: qinbiPhone ? `${qinbiToken}#${qinbiPhone}` : qinbiToken,
+                    ident: { type: "phone", val: qinbiPhone || cur.phone },
+                    group: "中国移动"
+                }, (qRes) => {
+                    $.log(`[CMCC] 陕西秦币专用变量同步结果: ${JSON.stringify(qRes)}`);
+                });
+
+                if (Date.now() - lastQinbiNotify >= EXT_COOLDOWN_MS) {
+                    $.setdata(String(Date.now()), QINBI_NOTIFY_KEY);
+                    changedAuth = true;
+                    authTypeDesc = "陕西秦币 Token (已自动并入 CMCC_AUTH 与 CMCC_QINBI_AUTH)";
+                } else {
+                    $.log(`[INFO] 陕西秦币 Token 已更新(冷却期内静默同步): ${safeToken(qinbiToken)}`);
+                }
+            } else {
+                $.log(`[INFO] 陕西秦币 Token 未变化: ${safeToken(qinbiToken)}`);
+            }
+        }
+    }
+
+    // 5) 短期 QWHD_SESSION_TOKEN
     if (isResponse && isHost) {
         const fromSet = extractSetCookie($response.headers || {});
         if (fromSet.token) { captured = fromSet.cookie; source = "Set-Cookie"; }

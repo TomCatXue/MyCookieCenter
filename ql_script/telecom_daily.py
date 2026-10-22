@@ -2990,6 +2990,147 @@ def do_notify(account_blocks: List[str], account_count: int, first_mask: str):
 
 
 # ==================== 🚀 主程序 ====================
+# ============================== 电信模块化任务流水线体系 (Task Pipeline) ==============================
+
+class TelecomContext:
+    """中国电信账号执行上下文"""
+    def __init__(self, sess, user, phone, session_key, m_phone, is_wednesday):
+        self.sess = sess
+        self.user = user
+        self.phone = phone
+        self.session_key = session_key
+        self.m_phone = m_phone
+        self.is_wednesday = is_wednesday
+
+
+class TelecomBaseTaskModule:
+    """中国电信通用任务模块基类，统一支持启停开关、依赖自检与异常隔离"""
+    tag = ""          # 模块英文标识
+    name = ""         # 模块中文名称
+    cfg_key = ""      # 全局配置开关键名
+    requires_session_key = False
+
+    def is_enabled(self, ctx: TelecomContext, cfg: dict) -> bool:
+        if self.requires_session_key and not ctx.session_key:
+            return False
+        return cfg.get(self.cfg_key, True)
+
+    def execute(self, ctx: TelecomContext, cfg: dict) -> list:
+        raise NotImplementedError
+
+
+class TelecomDailySignModule(TelecomBaseTaskModule):
+    """模块 1：每日签到与金豆"""
+    tag = "daily_sign"
+    name = "每日签到与金豆"
+    cfg_key = "ENABLE_DAILY_SIGN"
+
+    def execute(self, ctx, cfg):
+        return sign_tasks(ctx.sess, ctx.user)
+
+
+class TelecomWednesdayLotteryModule(TelecomBaseTaskModule):
+    """模块 2：周三会员抽权益币"""
+    tag = "wednesday_lottery"
+    name = "周三会员抽权益币"
+    cfg_key = "ENABLE_WEDNESDAY"
+    requires_session_key = True
+
+    def execute(self, ctx, cfg):
+        r = run_wednesday_lottery(ctx.sess, cfg.get("ACT_COIN", "hd76690472"),
+                                 "周三会员抽权益币", ctx.session_key, ctx.phone,
+                                 closed_hint="活动暂未开放或已抽完")
+        return [f"• 周三会员抽权益币: {r}"]
+
+
+class TelecomWeeklyThriceModule(TelecomBaseTaskModule):
+    """模块 3：每周抽三次"""
+    tag = "weekly_thrice"
+    name = "每周抽三次"
+    cfg_key = "ENABLE_WEEKLY_THRICE"
+    requires_session_key = True
+
+    def execute(self, ctx, cfg):
+        r = run_wednesday_lottery(ctx.sess, cfg.get("ACT_THRICE", "hd92859166"),
+                                 "每周抽三次", ctx.session_key, ctx.phone,
+                                 closed_hint="活动暂未开放或本周已抽完")
+        return [f"• 每周抽三次: {r}"]
+
+
+class TelecomLuckyDrawModule(TelecomBaseTaskModule):
+    """模块 4：权益商城幸运抽奖"""
+    tag = "lucky_draw"
+    name = "权益商城幸运抽奖"
+    cfg_key = "ENABLE_LUCKY_DRAW"
+    requires_session_key = True
+
+    def execute(self, ctx, cfg):
+        r = run_lucky_lottery(ctx.sess, cfg.get("ACT_LUCKY", "A2025011413413484352835699495179"),
+                             "权益商城幸运抽奖", ctx.session_key, ctx.phone)
+        return [f"• 权益商城幸运抽奖: {r}"]
+
+
+class TelecomAutoClaimModule(TelecomBaseTaskModule):
+    """模块 5：等级权益包自动领取"""
+    tag = "auto_claim"
+    name = "权益包自动领取"
+    cfg_key = "ENABLE_AUTO_CLAIM"
+    requires_session_key = True
+
+    def execute(self, ctx, cfg):
+        r = run_auto_claim(ctx.sess, ctx.phone, ctx.session_key)
+        return [f"• 权益包自动领取: {r}"] if r else []
+
+
+class TelecomEquityCoinModule(TelecomBaseTaskModule):
+    """模块 6：账户当前权益币查询"""
+    tag = "equity_coin"
+    name = "账户权益币查询"
+    cfg_key = "ENABLE_EQUITY_COIN"
+    requires_session_key = True
+
+    def execute(self, ctx, cfg):
+        coin_str = query_equity_coin_balance(ctx.sess, ctx.phone, ctx.session_key)
+        return [f"• 账户当前权益币: {coin_str}"] if coin_str else []
+
+
+class TelecomKeepAliveModule(TelecomBaseTaskModule):
+    """模块 7：非周三会话静默保活"""
+    tag = "keep_alive"
+    name = "会话静默保活"
+    cfg_key = "ENABLE_KEEP_ALIVE"
+    requires_session_key = True
+
+    def is_enabled(self, ctx, cfg):
+        return bool(ctx.session_key) and not ctx.is_wednesday and cfg.get(self.cfg_key, True)
+
+    def execute(self, ctx, cfg):
+        send_session_keep_alive(ctx.sess, ctx.phone, ctx.session_key)
+        return []
+
+
+class TelecomAiPadModule(TelecomBaseTaskModule):
+    """模块 8：AI奇遇赢Pad (iMusic制作与积分累积)"""
+    tag = "ai_pad"
+    name = "AI奇遇赢Pad"
+    cfg_key = "ENABLE_AI_PAD"
+
+    def execute(self, ctx, cfg):
+        return run_ai_pad_tasks(ctx.sess, ctx.user)
+
+
+# ==================== 🛠️ 中国电信主任务流水线 (可随时拔插、增删、注释单行下架归档) ====================
+TELECOM_PIPELINE = [
+    TelecomDailySignModule(),        # 业务 1：每日签到与金豆
+    TelecomWednesdayLotteryModule(), # 业务 2：周三会员抽权益币
+    TelecomWeeklyThriceModule(),     # 业务 3：每周抽三次
+    TelecomLuckyDrawModule(),        # 业务 4：权益商城幸运抽奖
+    TelecomAutoClaimModule(),        # 业务 5：等级权益包自动领取
+    TelecomEquityCoinModule(),       # 业务 6：账户当前权益币查询
+    TelecomKeepAliveModule(),        # 业务 7：非周三会话静默保活
+    TelecomAiPadModule(),            # 业务 8：AI奇遇赢Pad (iMusic)
+]
+
 def main():
     print("=" * 65)
     print(f"  🎉 [{SCRIPT_VERSION}] 中国电信 · 每日任务聚合脚本 🎉  ")
