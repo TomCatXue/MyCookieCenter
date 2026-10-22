@@ -34,7 +34,7 @@ except ImportError:
     requests = None
     HTTPAdapter = object
 
-SCRIPT_VERSION = "v1.0.0"
+SCRIPT_VERSION = "v1.0.1"
 TZ_CN = timezone(timedelta(hours=8))
 BASE = "https://wx.10086.cn"
 SSO_LOGIN = BASE + "/qwhdsso/login"
@@ -156,7 +156,52 @@ def _parse_one(raw):
 
 def load_accounts():
     raw = os.environ.get("CMCC_AUTH", "")
-    return [a for a in (_parse_one(x) for x in re.split(r"[\n&]+", raw)) if a]
+    accounts = []
+    for chunk in _auth_chunks(raw):
+        accounts.append(_parse_one(chunk))
+    return [a for a in accounts if a]
+
+
+def _auth_chunks(raw):
+    decoder = json.JSONDecoder()
+    chunks = []
+    rest = str(raw or "")
+    while rest:
+        start = rest.find("{")
+        if start < 0:
+            break
+        try:
+            obj, end = decoder.raw_decode(rest[start:])
+        except json.JSONDecodeError:
+            rest = rest[:start] + " " + rest[start + 1:]
+            continue
+        chunks.append(json.dumps(obj, ensure_ascii=False))
+        rest = rest[:start] + " " + rest[start + end:]
+    for line in rest.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        if "&" in line:
+            head, *tails = line.split("&")
+            if re.match(r"^[^\s#&]+#[^\s&#]+(?:\#[^\s&#]*)*$", head):
+                chunks.append(head)
+            for tail in tails:
+                match = re.match(r"^([^\s#&]+#[^\s&#]+(?:\#[^\s&#]*)*)$", tail.strip())
+                if match:
+                    chunks.append(match.group(1))
+            line = head.strip()
+        if line.startswith(("http://", "https://", "www.")):
+            match = re.search(r"(?:^|\s)([^\s&]+#[^\s&#]+(?:\#[^\s&#]*)*)\s*$", line)
+            if match:
+                chunks.append(match.group(1))
+            continue
+        if "#" in line and line not in chunks:
+            chunks.append(line)
+    deduped = []
+    for chunk in chunks:
+        if chunk not in deduped:
+            deduped.append(chunk)
+    return deduped
 
 
 def jwt_cache_file(a):
