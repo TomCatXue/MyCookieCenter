@@ -16,9 +16,12 @@
 const $ = new Env("扫描全能王 [Cookie]");
 
 const CK_KEY = 'camscanner_data';
-const SCRIPT_VERSION = '2026-10-17-notify';
+const SCRIPT_VERSION = '2026-10-22-tokenpwd';
 const NOTIFY_TIME_KEY = 'camscanner_notify_time';
 const NOTIFY_GAP_MS = 10 * 1000;
+const RENEW_HINT_KEY = 'camscanner_renew_hint_time';
+// token_pwd 是长效换票种子，仅登录/重登时下发，捕获一次即可长期自动换票
+const TOKEN_PWD_HINT_GAP_MS = 24 * 3600 * 1000;
 
 (function main() {
     if (typeof $request === "undefined") {
@@ -32,6 +35,14 @@ const NOTIFY_GAP_MS = 10 * 1000;
         const url = $request.url;
         const headers = $request.headers || {};
 
+        // 优先捕获换票接口的 token_pwd（退出登录重登时才会出现）
+        const tokenPwd = (url.match(/[?&]token_pwd=([^&]+)/) || [])[1] || '';
+        if (tokenPwd) {
+            captureTokenPwd(url, tokenPwd);
+            $.done();
+            return;
+        }
+
         // token 优先从 header 取,再从 URL 取
         const token =
             headers['x-is-token'] ||
@@ -40,6 +51,7 @@ const NOTIFY_GAP_MS = 10 * 1000;
 
         const csEptD = (url.match(/[?&]cs_ept_d=([^&]+)/) || [])[1] || '';
         const clientId = (url.match(/[?&]client_id=([^&]+)/) || [])[1] || '';
+        const hdrEptD = headers['x-is-cs-ept-d'] || headers['X-Is-Cs-Ept-D'] || '';
 
         if (!token) {
             $.log('[WARN] 未拿到 token,跳过');
@@ -56,11 +68,17 @@ const NOTIFY_GAP_MS = 10 * 1000;
             token: token,
             cs_ept_d: csEptD || prev.cs_ept_d || '',
             client_id: clientId || prev.client_id || '',
+            device_ept_d: hdrEptD || prev.device_ept_d || '',
+            // 保留已捕获的 token_pwd，避免被常规 token 刷新覆盖
+            token_pwd: prev.token_pwd || '',
+            account_encrypt: prev.account_encrypt || '',
+            account_type: prev.account_type || '',
         };
 
         const unchanged = prev.token === data.token
             && prev.cs_ept_d === data.cs_ept_d
-            && prev.client_id === data.client_id;
+            && prev.client_id === data.client_id
+            && (prev.device_ept_d || '') === (data.device_ept_d || '');
 
         if (!unchanged) {
             $.setdata(JSON.stringify(data), CK_KEY);
@@ -108,6 +126,39 @@ const NOTIFY_GAP_MS = 10 * 1000;
 
     $.done();
 })();
+
+/**
+ * 捕获长效换票种子 token_pwd 及配套参数。
+ * 只在 URL 含 token_pwd 时触发（即 update_token_by_tokenpwd 换票请求），
+ * 值仅存 persistentStore，绝不打印/通知/入库。
+ */
+function captureTokenPwd(url, tokenPwd) {
+    let prev = {};
+    try { prev = JSON.parse($.getdata(CK_KEY) || '{}'); } catch (e) { }
+
+    // 换票请求 query 的 cs_ept_d（用户级）与 header 的 x-is-cs-ept-d（设备级）是两个不同值，
+    // 换票必须用 query 里的用户级值；header 设备指纹沿用既有捕获值
+    const hdrEpt = ($request.headers && ($request.headers['x-is-cs-ept-d'] || $request.headers['X-Is-Cs-Ept-D'])) || '';
+    const data = {
+        token: prev.token || '',
+        cs_ept_d: (url.match(/[?&]cs_ept_d=([^&]+)/) || [])[1] || prev.cs_ept_d || '',
+        device_ept_d: hdrEpt || prev.device_ept_d || '',
+        client_id: (url.match(/[?&]client_id=([^&]+)/) || [])[1] || prev.client_id || '',
+        token_pwd: tokenPwd,
+        account_encrypt: (url.match(/[?&]accountEncrypt=([^&]+)/) || [])[1] || prev.account_encrypt || '',
+        account_type: (url.match(/[?&]account_type=([^&]+)/) || [])[1] || prev.account_type || '',
+    };
+    $.setdata(JSON.stringify(data), CK_KEY);
+
+    // 低频提醒一次，不刷屏、不泄露值
+    const last = Number($.getdata(RENEW_HINT_KEY) || 0);
+    if (Date.now() - last >= TOKEN_PWD_HINT_GAP_MS) {
+        $.setdata(String(Date.now()), RENEW_HINT_KEY);
+        $.msg('扫描全能王', '🔑 长效换票种子已捕获',
+            'token_pwd 已安全保存至本地\n后续 token 失效将自动换票，无需再开 App 抓取');
+    }
+    $.log('[CamScanner] token_pwd 已捕获并保存（值已脱敏）');
+}
 
 function Env(s) {
     this.name = s;

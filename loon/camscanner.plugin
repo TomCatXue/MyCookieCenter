@@ -4,14 +4,15 @@
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/26/ff/f2/26fff2c0-729b-5216-0c13-7d0499f10940/AppIconLite-0-0-1x_U007ephone-0-6-0-0-sRGB-85-220.png/512x512bb.jpg
 #!tag = 扫描全能王,Cookie,签到
-#!version = 1.4.0
-#!date = 2026-10-17 10:20
+#!version = 1.5.0
+#!date = 2026-10-22 15:30
 
 # =================== 独立开关 ===================
 
 [Argument]
 cookie_capture = switch,true,tag=抓取Cookie,desc=打开扫描全能王触发用户属性接口抓取Cookie
 sign_in = switch,true,tag=每日签到,desc=每天10:15自动签到
+auto_renew = switch,true,tag=自动换票,desc=每天08:05用长效种子自动换新token
 
 # =================== MITM ===================
 
@@ -24,6 +25,12 @@ hostname = api-cs.intsig.net
 # 抓取 Cookie：打开扫描全能王 → 触发用户属性接口 → 保存并通知「Cookie 获取成功」
 # 注：DaiDaiPanel.plugin 已含同一规则；两个插件同时启用会重复通知，建议只保留其一
 request if ${url} ~= /^https:\/\/api-cs\.intsig\.net\/user\/cs\/get_user_attribute/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/camscanner/camscanner.cookie.js?v=20261017") with enable=${cookie_capture}, tag="扫描全能王 Cookie", img_url="https://raw.githubusercontent.com/MaYIHEI/pin/refs/heads/main/app/camscanner.png"
+
+# 捕获长效换票种子：退出登录并重新登录时，update_token_by_tokenpwd 会携带 token_pwd，仅此时出现一次
+request if ${url} ~= /^https:\/\/api-cs\.intsig\.net\/user\/cs\/update_token_by_tokenpwd/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/camscanner/camscanner.cookie.js?v=20261022") with enable=${cookie_capture}, tag="扫描全能王 换票种子", img_url="https://raw.githubusercontent.com/MaYIHEI/pin/refs/heads/main/app/camscanner.png"
+
+# 自动换票：每天 08:05 用已捕获的 token_pwd 换新 token（首次需先退出登录重登抓一次种子）
+cron "5 8 * * *" then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/camscanner/camscanner.renew.js?v=20261022") with enable=${auto_renew}, tag="扫描全能王换票", img_url="https://raw.githubusercontent.com/MaYIHEI/pin/refs/heads/main/app/camscanner.png"
 
 # 每日签到：每天 10:15 自动执行
 cron "15 8 * * *" then script("https://raw.githubusercontent.com/MaYIHEI/paperclip/refs/heads/main/app/camscanner/camscanner.js") with tag="扫描全能王签到", img_url="https://raw.githubusercontent.com/MaYIHEI/pin/refs/heads/main/app/camscanner.png"
