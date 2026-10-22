@@ -7,8 +7,8 @@
 #!loon_version = 3.5.2(1005)
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://raw.githubusercontent.com/sooyaaabo/IconLibrary/main/App/ChinaMobile.png
-#!version = 1.0.1
-#!date = 2026-10-22 14:30
+#!version = 1.0.2
+#!date = 2026-10-22 15:00
 
 # 核心升级说明（2026-10-22 v1.0.1）：
 # 1. 开关参数格式严谨化：严格遵循 Loon 标准 key = type,default,tag=...,desc=... 格式，剔除多余空格，彻底解决 Loon UI 切换开关时只能关闭不能打开的异常。
@@ -42,10 +42,12 @@ HideMyToolbox = switch,false,tag=[我的] 隐藏-百宝箱,desc=隐藏「我的�
 HideMyLifeServices = switch,false,tag=[我的] 隐藏-生活服务,desc=隐藏「我的」生活服务（areaId 20230928004）
 
 [Rule]
-# 中国移动支付与和包风控直连（解决付款提示VPN）
+# 中国移动核心支付、和包收银台与风控直连（解决付款提示VPN）
 DOMAIN-SUFFIX, cmpay.com, DIRECT
 DOMAIN-SUFFIX, pay.10086.cn, DIRECT
+DOMAIN-SUFFIX, touch.10086.cn, DIRECT
 DOMAIN-KEYWORD, hepay, DIRECT
+DOMAIN, id6.me, DIRECT
 DOMAIN-SUFFIX, 10086.cn, DIRECT
 # APM 行为与埋点日志上报拦截（物理级阻断，省电防追踪）
 DOMAIN-SUFFIX, cmicapm.com, REJECT
@@ -58,11 +60,6 @@ request if ${url} ~= /^https?:\/\/(?:client\.app\.coc|app)\.10086\.cn\/biz-orang
 request if ${url} ~= /^https?:\/\/client\.app\.coc\.10086\.cn\/biz-orange\/(?:DN\/(?:dropsAdverService\/getDropsAdverNew|homepagePopup\/getSortInfo|toast\/getToastRule)|DH\/toast\/august\/getToast|DA\/liveSuspension\/getPageCode)(?:\?.*)?$/i then reject_dict(200)
 response if ${url} ~= /^https:\/\/ad\.mcloud\.139\.com\/advertapi\/adv-filter\/adv-filter\/AdInfoFilter\/getAdInfos(?:\?.*)?$/i && ${response.status} == 200 then response.json.jq(".body=[]")
 
-# 轮播落地页后备兜底（当未清缓存时后备拦截，直接归属 HideCarousel 轮播图总开关）
-request if ${HideCarousel} == true && ${url} ~= /^https:\/\/wx\.10086\.cn\/website\/businessPlatform\/home\/broadband\/broadbandBooking\?/i && ${url} ~= /[?&]productPackageId=2026061117294960202003480(?:&|$)/i && ${url} ~= /[?&]channelId=P00000042131(?:&|$)/i then reject(404)
-request if ${HideCarousel} == true && ${url} ~= /^https:\/\/wap\.sn\.10086\.cn\/h5\/MobileSmartBox\/html\/index\.html\?/i && ${url} ~= /[?&]channelId=P00000042132(?:&|$)/i && ${url} ~= /[?&]yx=1501352005(?:&|$)/i then reject(404)
-request if ${HideCarousel} == true && ${url} ~= /^https:\/\/wap\.sn\.10086\.cn\/h5\/CameraWithScreen\/html\/index\.html\?/i && ${url} ~= /[?&]channelId=P00000042133(?:&|$)/i && ${url} ~= /[?&]yx=1423518010(?:&|$)/i then reject(404)
-request if ${HideCarousel} == true && ${url} ~= /^https:\/\/wap\.sn\.10086\.cn\/h5\/HallFamilyFusionVerMediumhigh\/html\/index\.html\?/i && ${url} ~= /[?&]channelId=P00000042134(?:&|$)/i && ${url} ~= /[?&]yx=1501352006(?:&|$)/i then reject(404)
 
 [Script]
 # 页面与轮播净化核心脚本（含 AES 动态解密、横幅轮播区整体移除与四大落地推广广告剔除）
@@ -71,4 +68,4 @@ response if ${url} ~= /^https:\/\/h\.app\.coc\.10086\.cn\/biz-orange\/DH\/(?:mes
 response if ${url} ~= /^https:\/\/app\.10086\.cn\/biz-orange\/DA\/commonBoard\/getCommonBoard(?:\?.*)?$/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/cmcc/remove_ads.js", {${HideCarousel}}) with tag="[中国移动]横幅看板净化", timeout=10, requires_body=true
 
 [MITM]
-hostname = client.app.coc.10086.cn, h.app.coc.10086.cn, app.10086.cn, ad.mcloud.139.com, wx.10086.cn, wap.sn.10086.cn
+hostname = client.app.coc.10086.cn, h.app.coc.10086.cn, app.10086.cn, ad.mcloud.139.com

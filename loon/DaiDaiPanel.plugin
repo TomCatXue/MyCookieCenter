@@ -4,8 +4,8 @@
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/daidai.png
 #!tag = 签到, Cookie, 凭据捕获, 呆呆面板, Dumb-Panel
-#!version = 1.0.2
-#!date = 2026-10-21 04:00
+#!version = 1.0.3
+#!date = 2026-10-22 15:00
 
 # =================== 1. 独立业务开关 (开启即代表捕获并就地同步) ===================
 
@@ -28,8 +28,8 @@ request if ${url} ~= /^https?:\/\/(i\.)?weread\.qq\.com\/(flip-card-game|user\/|
 response if ${url} ~= /^https?:\/\/i\.weread\.qq\.com\/login/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/weread/weread_cookie.js?v=20261021") with enable=${weread}, tag="微信读书·登录回填", requires_body=true, img_url="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/weread.png"
 
 # --- 2. 【中国移动】凭据捕获与就地同步 (联动 cmcc_mark 开关) ---
-request if ${url} ~= /^https?:\/\/(wx\.10086\.cn\/(qwhdsso\/appTokenLogin|qwhdhub\/api\/mark\/)|dev\.coc\.10086\.cn\/(coc3\/|gr\/login\/)|touch\.10086\.cn\/(i\/reapp\/|i\/v1\/fee\/|i\/mobile\/))/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/cmcc/cmcc_cookie.js?v=202610210430") with enable=${cmcc_mark}, tag="中国移动·凭据捕获", requires_body=true, img_url="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/10086.png"
-response if ${url} ~= /^https?:\/\/(wx\.10086\.cn\/qwhdhub\/(qwhdmark|qwhdsso)\/|touch\.10086\.cn\/(i\/reapp\/|i\/v1\/fee\/|i\/mobile\/))/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/cmcc/cmcc_cookie.js?v=202610210430") with enable=${cmcc_mark}, tag="中国移动·会话回填", requires_body=true, img_url="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/10086.png" 
+request if ${url} ~= /^https?:\/\/(wx\.10086\.cn\/(qwhdsso\/appTokenLogin|qwhdhub\/api\/mark\/)|dev\.coc\.10086\.cn\/(coc3\/|gr\/login\/))/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/cmcc/cmcc_cookie.js?v=202610210430") with enable=${cmcc_mark}, tag="中国移动·凭据捕获", requires_body=true, img_url="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/10086.png"
+response if ${url} ~= /^https?:\/\/(wx\.10086\.cn\/qwhdhub\/(qwhdmark|qwhdsso)\/)/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/cmcc/cmcc_cookie.js?v=202610210430") with enable=${cmcc_mark}, tag="中国移动·会话回填", requires_body=true, img_url="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/10086.png" 
 
 # --- 3. 【扫描全能王】凭据捕获与就地同步 (联动 camscanner 开关) ---
 request if ${url} ~= /^https:\/\/api-cs\.intsig\.net\/user\/cs\/get_user_attribute/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/camscanner/camscanner.cookie.js?v=20261021") with enable=${camscanner}, tag="扫描全能王·凭据捕获", img_url="https://raw.githubusercontent.com/MaYIHEI/pin/refs/heads/main/app/camscanner.png"
@@ -41,4 +41,4 @@ response if ${url} ~= /^https?:\/\/(waphub|wappark)\.189\.cn\/(jt-sign|gateway)\
 # =================== 3. MITM 解密域名 ===================
 
 [MITM]
-hostname = weread.qq.com, i.weread.qq.com, waphub.189.cn, wappark.189.cn, wx.sx.189.cn, mapi.bestpay.com.cn, mapi-h5.bestpay.com.cn, cdn.bestpay.cn, spanner.bestpay.com.cn, activity.bestpay.cn, h5.bestpay.cn, api-cs.intsig.net, wx.10086.cn, qwhdcdn.cmcc-cs.cn, dev.coc.10086.cn, touch.10086.cn
+hostname = weread.qq.com, i.weread.qq.com, waphub.189.cn, wappark.189.cn, wx.sx.189.cn, mapi.bestpay.com.cn, mapi-h5.bestpay.com.cn, cdn.bestpay.cn, spanner.bestpay.com.cn, activity.bestpay.cn, h5.bestpay.cn, api-cs.intsig.net, wx.10086.cn, qwhdcdn.cmcc-cs.cn, dev.coc.10086.cn

@@ -3,7 +3,7 @@
 @Description: 中国移动 · 页面、横幅与轮播精准净化增强脚本
 @Author: Yuheng0101, anker1209, ccyykk666, sooyaaabo; 轮播净化与防VPN增强 TomCatXue
 @Updated: 2026-10-22
-@Version: v1.0.1
+@Version: v1.0.2
 ------------------------------------------
 */
 (function () {
