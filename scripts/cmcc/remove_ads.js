@@ -3,7 +3,7 @@
 @Description: 中国移动 · 页面、横幅与轮播精准净化增强脚本
 @Author: Yuheng0101, anker1209, ccyykk666, sooyaaabo; 轮播净化与防VPN增强 TomCatXue
 @Updated: 2026-10-22
-@Version: v3.3.0
+@Version: v3.3.1
 ------------------------------------------
 */
 (function () {
@@ -91,7 +91,24 @@
   }
 
   var isMyPageRequest = /\/DN\/myPageNew\/getMyPageNew(?:\?|$)/.test(url);
-  if (isMyPageRequest && !enabled("MineClean")) {
+  if (
+    isMyPageRequest &&
+    !enabled("MineClean") &&
+    !enabled("HideCarousel") &&
+    !enabled("HideMyCheckIn") &&
+    !enabled("HideMyMarketing") &&
+    !enabled("HideMyServices") &&
+    !enabled("HideMyFamilyCube") &&
+    !enabled("HideMyDevicesCube") &&
+    !enabled("HideMyMiniProgram") &&
+    !enabled("HideMyDigitalHuman") &&
+    !enabled("HideMySelections") &&
+    !enabled("HideMyGroup") &&
+    !enabled("HideMyRingtone") &&
+    !enabled("HideMyCloudDrive") &&
+    !enabled("HideMyToolbox") &&
+    !enabled("HideMyLifeServices")
+  ) {
     $done({});
     return;
   }
@@ -406,6 +423,9 @@
     if (!body || !Array.isArray(body.areaList)) return false;
     var changed = false;
 
+    var cleanHome = enabled("HomeBasicClean");
+    var hideCarousel = enabled("HideCarousel");
+
     var removedAreas = {
       "20250923002": true,
       "20260529002": true,
@@ -420,33 +440,49 @@
     };
     var before = body.areaList.length;
     body.areaList = body.areaList.filter(function (area) {
-      return (
-        !removedAreas[String(area && area.areaId)] &&
-        !isWaterfallArea(area)
-      );
-    });
-    changed = body.areaList.length !== before;
-    var pageNo = Number(body.lastPageNo);
+      if (!area) return false;
+      var aid = String(area.areaId || "");
+      var aname = String(area.areaName || "");
 
-    if (
-      (pageNo === 1 || (body.areaList.length === 0 && pageNo > 1)) &&
-      body.lastPage !== true
-    ) {
-      body.lastPage = true;
-      changed = true;
+      if (cleanHome && (removedAreas[aid] || isWaterfallArea(area))) {
+        return false;
+      }
+      if (hideCarousel && (
+        aname.indexOf("轮播") >= 0 ||
+        aname.indexOf("横幅") >= 0 ||
+        aname.indexOf("走马灯") >= 0 ||
+        String(area.areaType || "").toLowerCase() === "banner"
+      )) {
+        return false;
+      }
+      return true;
+    });
+    if (body.areaList.length !== before) changed = true;
+
+    if (cleanHome) {
+      var pageNo = Number(body.lastPageNo);
+      if (
+        (pageNo === 1 || (body.areaList.length === 0 && pageNo > 1)) &&
+        body.lastPage !== true
+      ) {
+        body.lastPage = true;
+        changed = true;
+      }
     }
 
     body.areaList.forEach(function (area) {
       var areaId = String(area && area.areaId);
       if (!Array.isArray(area.moduleList)) return;
 
-      if (areaId === "20250829002") {
+      if (cleanHome && areaId === "20250829002") {
         var moduleCount = area.moduleList.length;
         area.moduleList = area.moduleList.filter(function (module) {
           return String(module && module.moduleId) !== "XBYYW01";
         });
         if (area.moduleList.length !== moduleCount) changed = true;
+      }
 
+      if (areaId === "20250829002") {
         var topSwitchByTabId = {
           "1": "HideTopFamily",
           "2": "HideTopAge",
@@ -466,7 +502,7 @@
         });
       }
 
-      if (areaId === "20250829004") {
+      if (cleanHome && areaId === "20250829004") {
         area.moduleList.forEach(function (module) {
           if (String(module && module.moduleId) !== "XBAN01" || !Array.isArray(module.adverList)) return;
           var adCount = module.adverList.length;
@@ -477,7 +513,7 @@
         });
       }
 
-      if (areaId === "20250829008") {
+      if (cleanHome && areaId === "20250829008") {
         area.moduleList.forEach(function (module) {
           if (String(module && module.moduleId) !== "XBZB01" || !Array.isArray(module.adverList)) return;
           module.adverList.forEach(function (adver) {
@@ -499,11 +535,13 @@
 
   function shouldHideTopTab(tab) {
     var channelId = String(tab && tab.channelId || "");
-    if (channelId === "P00000063396") return enabled("HideTopFamily");
-    if (channelId === "P00000063397") return enabled("HideTopAge");
-    if (channelId === "P00000090722") return enabled("HideTopPhone");
-    if (channelId === "P00000090723") return enabled("HideTopNearby");
-    if (channelId === "P00000091556") return enabled("HideTopEnterprise");
+    var tabId = String(tab && tab.tabId || "");
+    if (channelId === "P00000063396" || tabId === "1") return enabled("HideTopFamily");
+    if (channelId === "P00000063397" || tabId === "2") return enabled("HideTopAge");
+    if (channelId === "P00000090722" || tabId === "3") return enabled("HideTopPhone");
+    if (channelId === "P00000090723" || tabId === "4") return enabled("HideTopNearby");
+    if (channelId === "P00000091555" || channelId === "P00000091557" || tabId === "5") return enabled("HideTopAI");
+    if (channelId === "P00000091556" || tabId === "6") return enabled("HideTopEnterprise");
     return false;
   }
 
@@ -532,27 +570,67 @@
   }
 
   function filterMyPage(payload) {
-    if (!enabled("MineClean")) return false;
     var body = payload && payload.rspBody;
     if (!body || !Array.isArray(body.areaList)) return false;
-    var removedAreas = {
+
+    var cleanMine = enabled("MineClean");
+    var hideCarousel = enabled("HideCarousel");
+
+    // 纯商业广告/弹窗区域（受 MineClean 控制）
+    var pureAdAreas = {
       "20260610006": true,
-      "20230721008": true,
-      "20230721012": true,
-      "20251024002": true,
-      "20230721020": true,
-      "20251230002": true,
-      "20240624002": true,
       "20250219002": true,
       "20230721040": true,
-      "20230928004": true,
-      "20240708002": true,
       "20230721034": true
     };
+
+    // 13 个细分功能区域与开关映射表（受对应 HideMy* 开关控制，默认 false 不隐藏）
+    var featureAreaToSwitch = {
+      "20230721008": "HideMyCheckIn",       // 签到浮窗
+      "20230721012": "HideMyMarketing",     // 营销区域
+      "20230721018": "HideMyServices",      // 我的服务
+      "20240708002": "HideMyFamilyCube",    // 我的家庭
+      "20251024002": "HideMyDevicesCube",   // 我的设备
+      "20231017002": "HideMyMiniProgram",   // 我的账户
+      "20230721020": "HideMyDigitalHuman",  // AI智能助理
+      "20230721030": "HideMySelections",    // 我的优选
+      "20230721036": "HideMyGroup",         // 我的集团
+      "20251230002": "HideMyRingtone",      // 我的彩铃
+      "20240624002": "HideMyCloudDrive",    // 我的云盘
+      "20230721044": "HideMyToolbox",       // 百宝箱
+      "20230928004": "HideMyLifeServices"   // 生活服务
+    };
+
     var before = body.areaList.length;
     body.areaList = body.areaList.filter(function (area) {
-      return !removedAreas[String(area && area.areaId)];
+      if (!area) return false;
+      var aid = String(area.areaId || "");
+      var aname = String(area.areaName || "");
+
+      // 1. 基础纯商业广告位清理
+      if (cleanMine && pureAdAreas[aid]) {
+        return false;
+      }
+
+      // 2. 轮播图/横幅清理
+      if (hideCarousel && (
+        aname.indexOf("轮播") >= 0 ||
+        aname.indexOf("横幅") >= 0 ||
+        aname.indexOf("走马灯") >= 0 ||
+        String(area.areaType || "").toLowerCase() === "banner"
+      )) {
+        return false;
+      }
+
+      // 3. 细分功能区开关过滤（当且仅当对应开关显式开启时隐藏，关闭时完整保留）
+      var sw = featureAreaToSwitch[aid];
+      if (sw && enabled(sw)) {
+        return false;
+      }
+
+      return true;
     });
+
     return body.areaList.length !== before;
   }
 
@@ -560,6 +638,9 @@
     var body = payload && payload.rspBody;
     if (!body || !Array.isArray(body.areaList)) return false;
     var isRemainingPage = String(body.pageCode) === "00028";
+
+    var cleanService = enabled("ServicePageClean");
+    var hideCarousel = enabled("HideCarousel");
 
     var waterfallAreas = {
       "20260320004": true,
@@ -575,11 +656,11 @@
       "20260320018": true,
       "20260320022": true
     };
-    var clearWaterfall = !!(
+    var clearWaterfall = cleanService && !!(
       body.waterfall &&
       waterfallFloors[String(body.waterfall.floorCode)]
     );
-    if (!clearWaterfall) {
+    if (cleanService && !clearWaterfall) {
       for (var areaIndex = 0; areaIndex < body.areaList.length; areaIndex += 1) {
         var areaId = String(
           body.areaList[areaIndex] && body.areaList[areaIndex].areaId
@@ -591,7 +672,7 @@
       }
     }
 
-    var removedAreas = {
+    var serviceAdAreas = {
       "20230515006": true,
       "20230609002": true,
       "20230515007": true,
@@ -611,18 +692,23 @@
       "20260320020": true
     };
     if (enabled("MineClean")) {
-      removedAreas["20230621010"] = true;
-      removedAreas["20230621014"] = true;
+      serviceAdAreas["20230621010"] = true;
+      serviceAdAreas["20230621014"] = true;
     }
-    if (isRemainingPage) removedAreas["20230515019"] = true;
+    if (isRemainingPage) serviceAdAreas["20230515019"] = true;
 
-    var hideCarousel = enabled("HideCarousel");
     var before = body.areaList.length;
     body.areaList = body.areaList.filter(function (area) {
       if (!area) return false;
       var aid = String(area.areaId || "");
       var aname = String(area.areaName || "");
-      if (removedAreas[aid]) return false;
+
+      // 1. 专区基础广告位清理
+      if (cleanService && serviceAdAreas[aid]) {
+        return false;
+      }
+
+      // 2. 轮播图/横幅/走马灯清理（受 HideCarousel 轮播总开关控制）
       if (hideCarousel && (
         aname.indexOf("轮播") >= 0 ||
         aname.indexOf("横幅") >= 0 ||
@@ -648,7 +734,7 @@
       if (!Array.isArray(area && area.moduleList)) return;
       var areaId = String(area.areaId);
 
-      if (isRemainingPage && areaId === "20230612004") {
+      if (cleanService && isRemainingPage && areaId === "20230612004") {
         var bottomCount = area.moduleList.length;
         area.moduleList = area.moduleList.filter(function (module) {
           return String(module && module.moduleId) !== "market-button-2-001";
@@ -666,11 +752,12 @@
           var link = String(adver.linkUrl || "");
           var title = String(adver.advTitle || "");
 
-          if (isRemainingPage && areaId === "20230510013" && mid === "1392480007") {
+          if (cleanService && isRemainingPage && areaId === "20230510013" && mid === "1392480007") {
             return false;
           }
 
-          if (
+          // 四大目标推广广告过滤（归属 HideCarousel 轮播总开关统一控制）
+          if (hideCarousel && (
             cid === "P00000042131" || cid === "P00000042132" ||
             cid === "P00000042133" || cid === "P00000042134" ||
             link.indexOf("broadbandBooking") >= 0 ||
@@ -679,7 +766,7 @@
             link.indexOf("HallFamilyFusionVerMediumhigh") >= 0 ||
             title.indexOf("办宽带") >= 0 || title.indexOf("移动智盒") >= 0 ||
             title.indexOf("带屏摄像头") >= 0 || title.indexOf("融合套餐") >= 0
-          ) {
+          )) {
             return false;
           }
           return true;
@@ -687,7 +774,7 @@
         if (module.adverList.length !== adCount) changed = true;
       });
 
-      if (areaId === "20230515002") {
+      if (cleanService && areaId === "20230515002") {
         area.moduleList.forEach(function (module) {
           if (!Array.isArray(module && module.adverList)) return;
           var adCount = module.adverList.length;
@@ -701,7 +788,7 @@
         });
       }
 
-      if (areaId === "20230515008") {
+      if (cleanService && areaId === "20230515008") {
         var moduleCount = area.moduleList.length;
         area.moduleList.forEach(function (module) {
           if (!Array.isArray(module && module.adverList)) return;
@@ -742,6 +829,7 @@
   }
 
   function filterCouponRecommendations(payload) {
+    if (!enabled("HideCarousel")) return false;
     var body = payload && payload.rspBody;
     if (!body || !Array.isArray(body.adverList) || body.adverList.length === 0) return false;
     body.adverList = [];
@@ -749,6 +837,7 @@
   }
 
   function filterRechargeCommonBoard(payload) {
+    if (!enabled("HideCarousel")) return false;
     var body = payload && payload.rspBody;
     if (!body || !Array.isArray(body.commonBoardDbList)) return false;
     var before = body.commonBoardDbList.length;
