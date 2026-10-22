@@ -1,20 +1,20 @@
 #!name = 中国移动 · 净屏与功能增强
-#!desc = 彻底净化启动页、首页轮播、各专区横幅推广与「我的」弹窗，彻底移除轮播图组件并解决付款提示VPN问题；纯标准插件格式。
+#!desc = 彻底净化启动页、首页轮播、各专区横幅推广与「我的」弹窗，底层物理级彻底移除轮播图组件；标准插件格式。
 #!openUrl = https://apps.apple.com/app/id583700738
-#!author = Yuheng0101, anker1209, ccyykk666, sooyaaabo; 轮播净化与防VPN增强 TomCatXue
-#!tag = 去广告, 中国移动, 轮播净化, 支付防VPN
+#!author = Yuheng0101, anker1209, ccyykk666, sooyaaabo; 轮播净化 TomCatXue
+#!tag = 去广告, 中国移动, 轮播净化
 #!system = iOS,iPadOS
 #!loon_version = 3.5.2(1005)
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://raw.githubusercontent.com/sooyaaabo/IconLibrary/main/App/ChinaMobile.png
-#!version = 1.0.2
-#!date = 2026-10-22 15:00
+#!version = 1.0.3
+#!date = 2026-10-22 15:30
 
-# 核心升级说明（2026-10-22 v1.0.1）：
-# 1. 开关参数格式严谨化：严格遵循 Loon 标准 key = type,default,tag=...,desc=... 格式，剔除多余空格，彻底解决 Loon UI 切换开关时只能关闭不能打开的异常。
-# 2. 轮播图与落地页四合一归一化：删除冗余的 block_broadband/block_smartbox/block_camera/block_fusion 4 个开关，合并归属于单个 HideCarousel 轮播图总开关，关闭时轮播图与落地页均正常放行，开启时轮播图组件物理消失且落地页后备拦截。
-# 3. 开关业务代码双向联动：全量核查并打通 23 个开关在核心脚本中的双向联动逻辑，确保每一个开关开启/关闭均精准生效。
-# 4. 支付防 VPN 检测：剥离 touch.10086.cn 支付解密，直连 pay.10086.cn 与 cmpay.com，保障付款流程顺畅。
+# 核心升级说明（2026-10-22 v1.0.3）：
+# 1. 纯粹净屏与轮播消除：移除一切针对跳过支付 VPN 的多余网络规则，支付时请直接关闭 VPN 完成付款（iOS 端和包支付 SDK 在 Native 层扫描网络接口，开启代理时任何伪装规则均无效，关闭代理为唯一确定路径）。
+# 2. 开关参数格式严谨化：严格遵循 Loon 标准 key = type,default,tag=...,desc=... 格式，剔除多余空格，彻底解决 Loon UI 切换开关时只能关闭不能打开的异常。
+# 3. 轮播图物理级消除：在底层 AES 解密接口 (getAdverList / getTopAreaList) 中直接剔除「横幅轮播区」与四大目标推广，使前端轮播组件彻底消失而非仅阻断点击。
+# 4. 开关业务代码双向联动：全量打通 23 个开关在核心脚本中的双向联动逻辑，确保每一个开关开启/关闭均精准生效。
 
 [Argument]
 HideCarousel = switch,true,tag=[轮播] 彻底移除轮播图,desc=移除首页与各专区横幅轮播图组件及四大落地推广（办宽带/智盒/摄像头/融合套餐），使其彻底消失而非仅阻断跳转
@@ -42,13 +42,6 @@ HideMyToolbox = switch,false,tag=[我的] 隐藏-百宝箱,desc=隐藏「我的�
 HideMyLifeServices = switch,false,tag=[我的] 隐藏-生活服务,desc=隐藏「我的」生活服务（areaId 20230928004）
 
 [Rule]
-# 中国移动核心支付、和包收银台与风控直连（解决付款提示VPN）
-DOMAIN-SUFFIX, cmpay.com, DIRECT
-DOMAIN-SUFFIX, pay.10086.cn, DIRECT
-DOMAIN-SUFFIX, touch.10086.cn, DIRECT
-DOMAIN-KEYWORD, hepay, DIRECT
-DOMAIN, id6.me, DIRECT
-DOMAIN-SUFFIX, 10086.cn, DIRECT
 # APM 行为与埋点日志上报拦截（物理级阻断，省电防追踪）
 DOMAIN-SUFFIX, cmicapm.com, REJECT
 DOMAIN-SUFFIX, dc.cmicapm.com, REJECT
