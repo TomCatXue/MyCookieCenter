@@ -4,6 +4,7 @@
 | :--- | :--- | :--- |
 | [**DaiDaiPanel.plugin**](./DaiDaiPanel.plugin) (v1.0.3) | **呆呆面板 · 凭据捕获与自动同步**：微信读书 / 扫描全能王 / 中国移动 / 中国电信。一 App 一脚本，凭据变化即时推送到呆呆面板环境变量并反馈通知，零机械定时 | `weread` `cmcc_mark` `camscanner` `telecom` |
 | [**ChinaMobile.plugin**](./ChinaMobile.plugin) (v1.0.3) | **中国移动 · 净屏与功能增强**：彻底净化开屏、首页轮播、各专区横幅推广与「我的」弹窗，底层物理级彻底移除轮播图组件 | HideCarousel 轮播总控及全功能细分开关 |
+| [**ChinaTelecomAdBlock.plugin**](./ChinaTelecomAdBlock.plugin) (v1.1.9) | **中国电信营业厅 · 全广告面净化**：开屏、轮播、广告空间、信息流、本地、宽带、商城、消息营销、我的页、AI、直播、积分与升级推广分级净化 | SplashClean / CarouselClean / AdSpaceClean / PopupClean 等 14 个净化开关 |
 | [`WeReadEnhance.plugin`](./WeReadEnhance.plugin) | 微信读书：去广告、去更新弹窗、解除试听限制 | 内置总开关 |
 | [`BilibiliFix.plugin`](./BilibiliFix.plugin) | 哔哩哔哩：空降助手、分区修复、扫码登录、画质解锁 | 内置总开关 |
 | [`PixivEnhanced.plugin`](./PixivEnhanced.plugin) | Pixiv：全页面汉化、AI 漫画翻译、设置中心 | 内置总开关 |
