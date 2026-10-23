@@ -1,9 +1,9 @@
 /*
 ------------------------------------------
-@Description: 中国移动 · 移动爱家全方位净化增强脚本（含首页轮播、智能爱家、发现页音视频/文章、钱包充话费、借钱与信息流）
-@Author: Yuheng0101, anker1209, ccyykk666, sooyaaabo; 轮播与专区全方位净化 TomCatXue
-@Updated: 2026-10-23 23:30
-@Version: v1.2.0
+@Description: 中国移动 · 页面、横幅与轮播精准净化增强脚本
+@Author: Yuheng0101, anker1209, ccyykk666, sooyaaabo; 轮播净化 TomCatXue
+@Updated: 2026-10-24
+@Version: v1.0.3
 ------------------------------------------
 */
 (function () {
@@ -48,9 +48,6 @@
     HomeBasicClean: true,
     ServicePageClean: true,
     MineClean: true,
-    WalletClean: true,
-    DiscoverClean: true,
-    SmartPageClean: true,
     HideTopFamily: false,
     HideTopAge: false,
     HideTopPhone: false,
@@ -73,20 +70,10 @@
   };
 
   function enabled(name) {
-    var val = undefined;
-    if (typeof ARGUMENTS === "object" && ARGUMENTS !== null && Object.prototype.hasOwnProperty.call(ARGUMENTS, name)) {
-      val = ARGUMENTS[name];
-    }
-    if (val === undefined && typeof $persistentStore !== "undefined" && typeof $persistentStore.read === "function") {
-      val = $persistentStore.read(name);
-    }
-    if (val === undefined && typeof $prefs !== "undefined" && typeof $prefs.valueForKey === "function") {
-      val = $prefs.valueForKey(name);
-    }
-    if (val === undefined) {
-      val = ARGUMENT_DEFAULTS[name];
-    }
-    return val === true || val === "true" || val === 1 || val === "1";
+    var value = Object.prototype.hasOwnProperty.call(ARGUMENTS, name)
+      ? ARGUMENTS[name]
+      : ARGUMENT_DEFAULTS[name];
+    return value === true || value === "true" || value === 1 || value === "1";
   }
 
   var isNavigationRequest = /\/DN\/init\/getNavigation(?:\?|$)/.test(url);
@@ -130,19 +117,13 @@
   var isH5Request =
     /\/(?:DH\/(?:message_query\/message\/query\/list|myCardVoucher\/getBannerList)|DA\/(?:commonBoard\/getCommonBoard|baseServiceFunction\/getAdverList))(?:\?|$)/.test(url) ||
     /h\.app\.coc\.10086\.cn/.test(url);
-  var isJfShopRequest = /app\.jf\.10086\.cn\/cmcc-h5-shop\//.test(url);
-  var isMiguVideoRequest = /display-sc\.miguvideo\.com\/display\/v3\/static/.test(url);
-  var isCanvasLayoutRequest = /res\.coc\.10086\.cn\/.*rightsmarket-h5-canvas.*\.layout\..*\.json/.test(url);
-  var isPlaintextRequest = isJfShopRequest || isMiguVideoRequest || isCanvasLayoutRequest;
-
-  var xPen = (isRechargeRequest || isPlaintextRequest)
+  var xPen = isRechargeRequest
     ? ""
     : String(getHeader($response.headers, "x-pen"));
 
   if (
-    !isRechargeRequest &&
-    !isPlaintextRequest &&
-    ((isH5Request && xPen !== "1") || (!isH5Request && xPen !== "14"))
+    (!isRechargeRequest && isH5Request && xPen !== "1") ||
+    (!isRechargeRequest && !isH5Request && xPen !== "14")
   ) {
     $done({});
     return;
@@ -381,7 +362,7 @@
     return JSON.parse(
       utf8Decode(
         aesCbcDecrypt(
-          base64Decode(String(ciphertext).replace(/\s+/g, "")),
+          base64Decode(ciphertext),
           utf8Encode(keyText),
           utf8Encode(ivText)
         )
@@ -419,28 +400,15 @@
 
   function isWaterfallArea(area) {
     if (!area) return false;
-    var aid = String(area.areaId || "");
-    var aname = String(area.areaName || "");
-    if (aid === "20251125008" || aname.indexOf("瀑布流") >= 0) return true;
     if (String(area.waterfall) === "1") return true;
 
     if (Array.isArray(area.additionInfo)) {
       for (var index = 0; index < area.additionInfo.length; index += 1) {
         var item = area.additionInfo[index];
-        var itemKey = String(item && item.name || "").toLowerCase();
-        var itemVal = String(item && item.value || "");
         if (
-          itemKey.indexOf("waterfall") >= 0 &&
-          (itemVal === "1" || itemVal === "")
+          String(item && item.name).toLowerCase() === "waterfall" &&
+          String(item && item.value) === "1"
         ) return true;
-      }
-    }
-
-    if (Array.isArray(area.moduleList)) {
-      for (var mIdx = 0; mIdx < area.moduleList.length; mIdx += 1) {
-        var mod = area.moduleList[mIdx];
-        var modId = String(mod && mod.moduleId || "").toLowerCase();
-        if (modId.indexOf("waterfall") >= 0) return true;
       }
     }
 
@@ -463,7 +431,6 @@
       "20260529002": true,
       "20260508002": true,
       "20241010002": true,
-      "20251125008": true, // 瀑布流关联tab
       "20250609002": true,
       "20250929002": true,
       "20241115002": true,
@@ -484,7 +451,6 @@
         aname.indexOf("轮播") >= 0 ||
         aname.indexOf("横幅") >= 0 ||
         aname.indexOf("走马灯") >= 0 ||
-        aid === "20241010002" ||
         String(area.areaType || "").toLowerCase() === "banner"
       )) {
         return false;
@@ -516,14 +482,6 @@
         if (area.moduleList.length !== moduleCount) changed = true;
       }
 
-      if (cleanHome && areaId === "20250916002") {
-        var moduleCount = area.moduleList.length;
-        area.moduleList = area.moduleList.filter(function (module) {
-          return !String(module && module.moduleId || "").startsWith("XBYYW");
-        });
-        if (area.moduleList.length !== moduleCount) changed = true;
-      }
-
       if (areaId === "20250829002") {
         var topSwitchByTabId = {
           "1": "HideTopFamily",
@@ -549,9 +507,7 @@
           if (String(module && module.moduleId) !== "XBAN01" || !Array.isArray(module.adverList)) return;
           var adCount = module.adverList.length;
           module.adverList = module.adverList.filter(function (adver) {
-            var str = JSON.stringify(adver);
-            if (str.indexOf("礼包") >= 0 || str.indexOf("优惠") >= 0 || str.indexOf("推广") >= 0 || str.indexOf("活动") >= 0) return false;
-            return true;
+            return JSON.stringify(adver).indexOf("签到") < 0;
           });
           if (module.adverList.length !== adCount) changed = true;
         });
@@ -622,9 +578,6 @@
 
     // 纯商业广告/弹窗区域（受 MineClean 控制）
     var pureAdAreas = {
-      "20230721012": true, // 营销区域
-      "20240206004": true, // 权益卡片新
-      "20230908006": true, // 品牌入口
       "20260610006": true,
       "20250219002": true,
       "20230721040": true,
@@ -635,16 +588,9 @@
     var featureAreaToSwitch = {
       "20230721008": "HideMyCheckIn",       // 签到浮窗
       "20230721012": "HideMyMarketing",     // 营销区域
-      "20240206004": "HideMyMarketing",     // 权益卡片新
-      "20230908006": "HideMyMarketing",     // 品牌入口
       "20230721018": "HideMyServices",      // 我的服务
-      "20260104006": "HideMyServices",      // 我的服务cube卡片
       "20240708002": "HideMyFamilyCube",    // 我的家庭
-      "20240429006": "HideMyFamilyCube",    // 我的家庭cube卡片
-      "20240528002": "HideMyFamilyCube",    // 家庭管理cube卡片
       "20251024002": "HideMyDevicesCube",   // 我的设备
-      "20251016004": "HideMyDevicesCube",   // 我的设备（cubeList）
-      "20260610004": "HideMyDevicesCube",   // 新通话cube卡片id
       "20231017002": "HideMyMiniProgram",   // 我的账户
       "20230721020": "HideMyDigitalHuman",  // AI智能助理
       "20230721030": "HideMySelections",    // 我的优选
@@ -652,8 +598,7 @@
       "20251230002": "HideMyRingtone",      // 我的彩铃
       "20240624002": "HideMyCloudDrive",    // 我的云盘
       "20230721044": "HideMyToolbox",       // 百宝箱
-      "20230928004": "HideMyLifeServices",  // 生活服务
-      "20260610008": "HideMyMarketing"      // 卡券包包
+      "20230928004": "HideMyLifeServices"   // 生活服务
     };
 
     var before = body.areaList.length;
@@ -686,22 +631,7 @@
       return true;
     });
 
-    var cubeChanged = false;
-    if (Array.isArray(body.cubeList)) {
-      var cubeBefore = body.cubeList.length;
-      body.cubeList.forEach(function (cube) {
-        if (!cube || cube.isShow === "0") return;
-        var cubeId = String(cube.areaId || "");
-        var sw = featureAreaToSwitch[cubeId];
-        if (sw && enabled(sw) && cube.isShow !== "0") {
-          cube.isShow = "0";
-          cubeChanged = true;
-        }
-      });
-      if (body.cubeList.length !== cubeBefore) cubeChanged = true;
-    }
-
-    return body.areaList.length !== before || cubeChanged;
+    return body.areaList.length !== before;
   }
 
   function filterServicePages(payload) {
@@ -937,158 +867,6 @@
     return false;
   }
 
-  function filterTitleBar(payload) {
-    if (!enabled("SmartPageClean") && !enabled("HideCarousel")) return false;
-    var body = payload && payload.rspBody;
-    if (!body || !Array.isArray(body.areaList)) return false;
-    var changed = false;
-
-    body.areaList.forEach(function (area) {
-      if (!Array.isArray(area && area.moduleList)) return;
-      area.moduleList.forEach(function (module) {
-        if (String(module && module.moduleId) === "title_icon" && Array.isArray(module.adverList) && module.adverList.length > 0) {
-          module.adverList = [];
-          changed = true;
-        }
-      });
-    });
-
-    return changed;
-  }
-
-  function filterJfShop(url, payload) {
-    if (!enabled("WalletClean")) return false;
-    if (!payload || typeof payload !== "object") return false;
-    var changed = false;
-
-    if (/\/cmcc-h5-shop\/cms\/contents(?:\?|$)/.test(url)) {
-      var list = payload.resultJson;
-      var isStr = false;
-      if (typeof list === "string") {
-        try {
-          list = JSON.parse(list);
-          isStr = true;
-        } catch (e) {}
-      }
-      if (Array.isArray(list)) {
-        var beforeLen = list.length;
-        list = list.filter(function (m) {
-          var mid = Number(m && m.moduleId);
-          return mid === 2000000000001185 || mid === 2000000000001062;
-        });
-        if (list.length !== beforeLen) {
-          payload.resultJson = isStr ? JSON.stringify(list) : list;
-          changed = true;
-        }
-      }
-    }
-
-    if (/\/cmcc-h5-shop\/hePay\/all(?:\?|$)/.test(url)) {
-      var rj = payload.resultJson;
-      var isStrRj = false;
-      if (typeof rj === "string") {
-        try {
-          rj = JSON.parse(rj);
-          isStrRj = true;
-        } catch (e) {}
-      }
-      if (rj && typeof rj === "object" && rj.heBaoWallet) {
-        if (Array.isArray(rj.heBaoWallet.marketActivityList)) {
-          var beforeAct = rj.heBaoWallet.marketActivityList.length;
-          rj.heBaoWallet.marketActivityList = rj.heBaoWallet.marketActivityList.filter(function (act) {
-            var jump = String(act && act.imageJumpUrl || "");
-            var rem = String(act && act.imageRemarks || "");
-            return rem.indexOf("借") < 0 && rem.indexOf("贷") < 0 && jump.indexOf("loan") < 0 && jump.indexOf("crloan") < 0 && jump.indexOf("credit") < 0;
-          });
-          if (rj.heBaoWallet.marketActivityList.length !== beforeAct) {
-            payload.resultJson = isStrRj ? JSON.stringify(rj) : rj;
-            changed = true;
-          }
-        }
-      }
-    }
-
-    if (/\/cmcc-h5-shop\/cms\/yourFavorite(?:\?|$)/.test(url)) {
-      var fav = payload.resultJson;
-      var isStrFav = false;
-      if (typeof fav === "string") {
-        try {
-          fav = JSON.parse(fav);
-          isStrFav = true;
-        } catch (e) {}
-      }
-      if (fav && fav.pageResult && Array.isArray(fav.pageResult.pageData)) {
-        if (fav.pageResult.pageData.length > 0) {
-          fav.pageResult.pageData = [];
-          fav.pageResult.count = 0;
-          fav.pageResult.pageCount = 0;
-          payload.resultJson = isStrFav ? JSON.stringify(fav) : fav;
-          changed = true;
-        }
-      }
-    }
-
-    return changed;
-  }
-
-  function filterMiguVideo(payload) {
-    if (!enabled("DiscoverClean")) return false;
-    if (!payload || typeof payload !== "object") return false;
-    var changed = false;
-    if (payload.body && typeof payload.body === "object") {
-      if (Array.isArray(payload.body.groups) && payload.body.groups.length > 0) {
-        payload.body.groups = [];
-        changed = true;
-      }
-      if (Array.isArray(payload.body.data) && payload.body.data.length > 0) {
-        payload.body.data = [];
-        changed = true;
-      }
-    }
-    return changed;
-  }
-
-  function filterCanvasLayout(payload) {
-    if (!enabled("SmartPageClean") && !enabled("HideCarousel")) return false;
-    if (!payload || !Array.isArray(payload.instanceList)) return false;
-    var changed = false;
-
-    var filterCarousel = enabled("HideCarousel");
-    var filterSmart = enabled("SmartPageClean");
-
-    var beforeRows = payload.instanceList.length;
-    payload.instanceList = payload.instanceList.map(function (row) {
-      if (!Array.isArray(row)) return row;
-      return row.filter(function (sub) {
-        var inst = sub && sub.instance;
-        var name = String(inst && inst.name || "");
-
-        if (filterCarousel && (
-          name.indexOf("SwiperComp") >= 0 ||
-          name.indexOf("LeaderboardEntrComp") >= 0
-        )) {
-          return false;
-        }
-
-        if (filterSmart && (
-          name.indexOf("FloatingPicComp") >= 0 ||
-          name.indexOf("FloatComp") >= 0 ||
-          name.indexOf("DialogComp") >= 0 ||
-          name.indexOf("CTOPDialogComp") >= 0
-        )) {
-          return false;
-        }
-
-        return true;
-      });
-    }).filter(function (row) {
-      return Array.isArray(row) && row.length > 0;
-    });
-
-    if (payload.instanceList.length !== beforeRows) changed = true;
-    return changed;
-  }
-
   function filterAggregationData(payload) {
     var body = payload && payload.rspBody;
     if (!body) return false;
@@ -1104,51 +882,12 @@
       changed = true;
     }
 
-    // 彻底清空所有开屏弹窗与浮层广告（包含 isAdvert=0 的“幸运三日签”等各类商业活动弹窗）
-    if (Array.isArray(body.popUpList) && body.popUpList.length > 0) {
-      body.popUpList = [];
-      changed = true;
-    }
-
-    // 彻底清空开屏全屏抽屉广告 (drawerOpens)
-    if (Array.isArray(body.drawerOpens) && body.drawerOpens.length > 0) {
-      body.drawerOpens = [];
-      changed = true;
-    }
-
-    if (body.systematicNotification && Object.keys(body.systematicNotification).length > 0) {
-      body.systematicNotification = {};
-      changed = true;
-    }
-
-    if (body.englishPop && Object.keys(body.englishPop).length > 0) {
-      body.englishPop = {};
-      changed = true;
-    }
-
-    if (body.cardPopup && Object.keys(body.cardPopup).length > 0) {
-      body.cardPopup = {};
-      changed = true;
-    }
-    if (body.cardReminderPopup && Object.keys(body.cardReminderPopup).length > 0) {
-      body.cardReminderPopup = {};
-      changed = true;
-    }
-    if (body.clipboardPop && Object.keys(body.clipboardPop).length > 0) {
-      body.clipboardPop = {};
-      changed = true;
-    }
-    if (body.iopBirthdayPopup && Object.keys(body.iopBirthdayPopup).length > 0) {
-      body.iopBirthdayPopup = {};
-      changed = true;
-    }
-    if (body.iopBridalGiftPopup && Object.keys(body.iopBridalGiftPopup).length > 0) {
-      body.iopBridalGiftPopup = {};
-      changed = true;
-    }
-    if (body.cardAdvers && Array.isArray(body.cardAdvers.dataList) && body.cardAdvers.dataList.length > 0) {
-      body.cardAdvers.dataList = [];
-      changed = true;
+    if (Array.isArray(body.popUpList)) {
+      var popupCount = body.popUpList.length;
+      body.popUpList = body.popUpList.filter(function (item) {
+        return String(item && item.isAdvert) !== "1";
+      });
+      if (body.popUpList.length !== popupCount) changed = true;
     }
 
     if (Object.prototype.hasOwnProperty.call(body, "suspensionAdver")) {
@@ -1175,30 +914,6 @@
   }
 
   try {
-    if (isPlaintextRequest) {
-      var plainJson;
-      try {
-        plainJson = JSON.parse(responseBody);
-      } catch (e) {
-        $done({});
-        return;
-      }
-      var plainChanged = false;
-      if (isJfShopRequest) {
-        plainChanged = filterJfShop(url, plainJson);
-      } else if (isMiguVideoRequest) {
-        plainChanged = filterMiguVideo(plainJson);
-      } else if (isCanvasLayoutRequest) {
-        plainChanged = filterCanvasLayout(plainJson);
-      }
-      if (!plainChanged) {
-        $done({});
-        return;
-      }
-      $done({ body: JSON.stringify(plainJson) });
-      return;
-    }
-
     if (isRechargeRequest) {
       var rechargeEnvelope = JSON.parse(responseBody);
       var rechargeOutParam =
@@ -1277,7 +992,6 @@
     if (declaredLength > 0 && declaredLength < responseBody.length) {
       responseBody = responseBody.slice(0, declaredLength);
     }
-    responseBody = responseBody.replace(/\s+/g, "");
 
     var payload = decryptJson(responseBody, AES_KEY, AES_IV);
     var changed = false;
@@ -1294,8 +1008,6 @@
       changed = filterSearchWords(payload);
     } else if (/\/DA\/baseServiceFunction\/getAdverList(?:\?|$)/.test(url)) {
       changed = filterServicePages(payload);
-    } else if (/\/DN\/titleBar\/getIcon(?:\?|$)/.test(url)) {
-      changed = filterTitleBar(payload);
     }
 
     if (!changed) {
