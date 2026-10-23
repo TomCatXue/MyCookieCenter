@@ -21,7 +21,7 @@ const SEED_NOTIFY_KEY = "cmcc_seed_notify_time";
 const FEE_NOTIFY_KEY = "cmcc_fee_notify_time";
 const QINBI_TOKEN_KEY = "cmcc_qinbi_token";
 const QINBI_NOTIFY_KEY = "cmcc_qinbi_notify_time";
-const SCRIPT_VERSION = "2026-10-22.r4";
+const SCRIPT_VERSION = "2026-10-23.r1";
 const NOTIFY_GAP_MS = 10 * 1000;
 const EXT_COOLDOWN_MS = 10 * 60 * 1000; // 拓展凭据 10 分钟强去重防抖
 
@@ -229,51 +229,57 @@ function parseAppTokenBody(body) {
     }
 
     // 4) 陕西移动 · 秦币专区 (sn.clientaccess.10086.cn)
+    // 严格安全防线：仅在响应体确认 resCode == 200 时捕获；若返回 201(超过30分钟未操作) 坚决忽略，杜绝捕获死会话
     if (/sn\.clientaccess\.10086\.cn/i.test(url)) {
         $.log(`[CMCC] 命中陕西移动秦币网关: ${url.split("?")[0]}`);
         let qinbiToken = "", qinbiPhone = "";
 
-        // a. 从请求体中提取 (POST JSON: token & phoneNum)
-        if (isRequest && $request.body) {
+        if (isResponse && $response.body) {
+            let rb = null;
             try {
-                const b = typeof $request.body === "string" ? JSON.parse($request.body) : $request.body;
-                if (b.token && String(b.token).startsWith("ldSN-")) {
-                    qinbiToken = String(b.token).trim();
-                } else if (b.token && String(b.token).includes("JSESSIONID=")) {
-                    const m = String(b.token).match(/JSESSIONID=([^;]+)/i);
-                    if (m) qinbiToken = m[1].trim();
-                }
-                if (b.phoneNum && /^1\d{10}$/.test(String(b.phoneNum))) {
-                    qinbiPhone = String(b.phoneNum);
-                }
+                rb = typeof $response.body === "string" ? JSON.parse($response.body) : $response.body;
             } catch (e) {}
-        }
+            const resCode = rb ? String(rb.resCode || "") : "";
 
-        // b. 从 Header Cookie 或 Set-Cookie 中提取
-        if (!qinbiToken) {
-            const h = isResponse ? ($response.headers || {}) : ($request.headers || {});
-            const rawCookie = getHeader(h, isResponse ? "set-cookie" : "cookie") || "";
-            const m = String(rawCookie).match(/JSESSIONID=([^;]+)/i);
-            if (m && m[1].startsWith("ldSN-")) {
-                qinbiToken = m[1].trim();
-            }
-            const mp = String(rawCookie).match(/loginName=(\d{11})/i);
-            if (mp && !qinbiPhone) {
-                qinbiPhone = mp[1];
-            }
-        }
+            if (resCode === "201") {
+                $.log("[CMCC] ⚠️ 陕西秦币会话已休眠 (201: 超过30分钟未操作)，拒绝捕获失效Token");
+            } else if (resCode === "200") {
+                // a. 优先从响应头 Set-Cookie 提取新签发的 JSESSIONID
+                const h = $response.headers || {};
+                const rawSetCookie = getHeader(h, "set-cookie") || "";
+                const m = String(rawSetCookie).match(/JSESSIONID=([^;]+)/i);
+                if (m && m[1].startsWith("ldSN-")) {
+                    qinbiToken = m[1].trim();
+                }
 
-        // c. 从登录响应体中提取 (tokenLogin/login 返回 resBody.token)
-        if (!qinbiToken && isResponse && $response.body) {
-            try {
-                const rb = typeof $response.body === "string" ? JSON.parse($response.body) : $response.body;
-                if (rb.resCode === "200" && rb.resBody && rb.resBody.token) {
+                // b. 从登录成功响应体提取 (tokenLogin/login 返回 resBody.token)
+                if (!qinbiToken && rb.resBody && rb.resBody.token) {
                     qinbiToken = String(rb.resBody.token).trim();
                 }
-                if (rb.resDesc && /^1\d{10}$/.test(String(rb.resDesc))) {
-                    qinbiPhone = String(rb.resDesc);
+
+                // c. 从已通过 200 校验的请求体中提取确认有效的 Token
+                if (!qinbiToken && typeof $request !== "undefined" && $request && $request.body) {
+                    try {
+                        const b = typeof $request.body === "string" ? JSON.parse($request.body) : $request.body;
+                        if (b.token && String(b.token).startsWith("ldSN-")) {
+                            qinbiToken = String(b.token).trim();
+                        } else if (b.token && String(b.token).includes("JSESSIONID=")) {
+                            const tm = String(b.token).match(/JSESSIONID=([^;]+)/i);
+                            if (tm) qinbiToken = tm[1].trim();
+                        }
+                        if (b.phoneNum && /^1\d{10}$/.test(String(b.phoneNum))) {
+                            qinbiPhone = String(b.phoneNum);
+                        }
+                    } catch (e) {}
                 }
-            } catch (e) {}
+
+                // 提取手机号
+                if (!qinbiPhone) {
+                    const mp = String(rawSetCookie).match(/loginName=(\d{11})/i);
+                    if (mp) qinbiPhone = mp[1];
+                    else if (rb.resDesc && /^1\d{10}$/.test(String(rb.resDesc))) qinbiPhone = String(rb.resDesc);
+                }
+            }
         }
 
         if (qinbiToken) {

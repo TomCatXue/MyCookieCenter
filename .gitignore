@@ -39,3 +39,4 @@ _doc.html
 _p.html
 
 .playwright-mcp/
+ql_script/.*_cache*.json

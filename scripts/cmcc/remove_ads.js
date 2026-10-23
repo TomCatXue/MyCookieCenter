@@ -1,9 +1,9 @@
 /*
 ------------------------------------------
-@Description: 中国移动 · 页面、横幅与轮播精准净化增强脚本
-@Author: Yuheng0101, anker1209, ccyykk666, sooyaaabo; 轮播净化 TomCatXue
-@Updated: 2026-10-22
-@Version: v1.0.3
+@Description: 中国移动 · 移动爱家全方位净化增强脚本（含首页轮播、智能爱家、发现页音视频/文章、钱包充话费、借钱与信息流）
+@Author: Yuheng0101, anker1209, ccyykk666, sooyaaabo; 轮播与专区全方位净化 TomCatXue
+@Updated: 2026-10-23
+@Version: v1.1.0
 ------------------------------------------
 */
 (function () {
@@ -48,6 +48,9 @@
     HomeBasicClean: true,
     ServicePageClean: true,
     MineClean: true,
+    WalletClean: true,
+    DiscoverClean: true,
+    SmartPageClean: true,
     HideTopFamily: false,
     HideTopAge: false,
     HideTopPhone: false,
@@ -117,13 +120,19 @@
   var isH5Request =
     /\/(?:DH\/(?:message_query\/message\/query\/list|myCardVoucher\/getBannerList)|DA\/(?:commonBoard\/getCommonBoard|baseServiceFunction\/getAdverList))(?:\?|$)/.test(url) ||
     /h\.app\.coc\.10086\.cn/.test(url);
-  var xPen = isRechargeRequest
+  var isJfShopRequest = /app\.jf\.10086\.cn\/cmcc-h5-shop\//.test(url);
+  var isMiguVideoRequest = /display-sc\.miguvideo\.com\/display\/v3\/static/.test(url);
+  var isCanvasLayoutRequest = /res\.coc\.10086\.cn\/.*rightsmarket-h5-canvas.*\.layout\..*\.json/.test(url);
+  var isPlaintextRequest = isJfShopRequest || isMiguVideoRequest || isCanvasLayoutRequest;
+
+  var xPen = (isRechargeRequest || isPlaintextRequest)
     ? ""
     : String(getHeader($response.headers, "x-pen"));
 
   if (
-    (!isRechargeRequest && isH5Request && xPen !== "1") ||
-    (!isRechargeRequest && !isH5Request && xPen !== "14")
+    !isRechargeRequest &&
+    !isPlaintextRequest &&
+    ((isH5Request && xPen !== "1") || (!isH5Request && xPen !== "14"))
   ) {
     $done({});
     return;
@@ -451,6 +460,7 @@
         aname.indexOf("轮播") >= 0 ||
         aname.indexOf("横幅") >= 0 ||
         aname.indexOf("走马灯") >= 0 ||
+        aid === "20241010002" ||
         String(area.areaType || "").toLowerCase() === "banner"
       )) {
         return false;
@@ -478,6 +488,14 @@
         var moduleCount = area.moduleList.length;
         area.moduleList = area.moduleList.filter(function (module) {
           return String(module && module.moduleId) !== "XBYYW01";
+        });
+        if (area.moduleList.length !== moduleCount) changed = true;
+      }
+
+      if (cleanHome && areaId === "20250916002") {
+        var moduleCount = area.moduleList.length;
+        area.moduleList = area.moduleList.filter(function (module) {
+          return !String(module && module.moduleId || "").startsWith("XBYYW");
         });
         if (area.moduleList.length !== moduleCount) changed = true;
       }
@@ -867,6 +885,152 @@
     return false;
   }
 
+  function filterTitleBar(payload) {
+    if (!enabled("SmartPageClean") && !enabled("HideCarousel")) return false;
+    var body = payload && payload.rspBody;
+    if (!body || !Array.isArray(body.areaList)) return false;
+    var changed = false;
+
+    body.areaList.forEach(function (area) {
+      if (!Array.isArray(area && area.moduleList)) return;
+      area.moduleList.forEach(function (module) {
+        if (String(module && module.moduleId) === "title_icon" && Array.isArray(module.adverList) && module.adverList.length > 0) {
+          module.adverList = [];
+          changed = true;
+        }
+      });
+    });
+
+    return changed;
+  }
+
+  function filterJfShop(url, payload) {
+    if (!enabled("WalletClean")) return false;
+    if (!payload || typeof payload !== "object") return false;
+    var changed = false;
+
+    if (/\/cmcc-h5-shop\/cms\/contents(?:\?|$)/.test(url)) {
+      var list = payload.resultJson;
+      var isStr = false;
+      if (typeof list === "string") {
+        try {
+          list = JSON.parse(list);
+          isStr = true;
+        } catch (e) {}
+      }
+      if (Array.isArray(list)) {
+        var beforeLen = list.length;
+        list = list.filter(function (m) {
+          var mid = Number(m && m.moduleId);
+          return mid === 2000000000001185;
+        });
+        if (list.length !== beforeLen) {
+          payload.resultJson = isStr ? JSON.stringify(list) : list;
+          changed = true;
+        }
+      }
+    }
+
+    if (/\/cmcc-h5-shop\/hePay\/all(?:\?|$)/.test(url)) {
+      var rj = payload.resultJson;
+      var isStrRj = false;
+      if (typeof rj === "string") {
+        try {
+          rj = JSON.parse(rj);
+          isStrRj = true;
+        } catch (e) {}
+      }
+      if (rj && typeof rj === "object") {
+        if (rj.heBaoWallet !== null || rj.digitalAsset !== null) {
+          rj.heBaoWallet = null;
+          rj.digitalAsset = null;
+          payload.resultJson = isStrRj ? JSON.stringify(rj) : rj;
+          changed = true;
+        }
+      }
+    }
+
+    if (/\/cmcc-h5-shop\/cms\/yourFavorite(?:\?|$)/.test(url)) {
+      var fav = payload.resultJson;
+      var isStrFav = false;
+      if (typeof fav === "string") {
+        try {
+          fav = JSON.parse(fav);
+          isStrFav = true;
+        } catch (e) {}
+      }
+      if (fav && fav.pageResult && Array.isArray(fav.pageResult.pageData)) {
+        if (fav.pageResult.pageData.length > 0) {
+          fav.pageResult.pageData = [];
+          fav.pageResult.count = 0;
+          fav.pageResult.pageCount = 0;
+          payload.resultJson = isStrFav ? JSON.stringify(fav) : fav;
+          changed = true;
+        }
+      }
+    }
+
+    return changed;
+  }
+
+  function filterMiguVideo(payload) {
+    if (!enabled("DiscoverClean")) return false;
+    if (!payload || typeof payload !== "object") return false;
+    var changed = false;
+    if (payload.body && typeof payload.body === "object") {
+      if (Array.isArray(payload.body.groups) && payload.body.groups.length > 0) {
+        payload.body.groups = [];
+        changed = true;
+      }
+      if (Array.isArray(payload.body.data) && payload.body.data.length > 0) {
+        payload.body.data = [];
+        changed = true;
+      }
+    }
+    return changed;
+  }
+
+  function filterCanvasLayout(payload) {
+    if (!enabled("SmartPageClean") && !enabled("HideCarousel")) return false;
+    if (!payload || !Array.isArray(payload.instanceList)) return false;
+    var changed = false;
+
+    var filterCarousel = enabled("HideCarousel");
+    var filterSmart = enabled("SmartPageClean");
+
+    var beforeRows = payload.instanceList.length;
+    payload.instanceList = payload.instanceList.map(function (row) {
+      if (!Array.isArray(row)) return row;
+      return row.filter(function (sub) {
+        var inst = sub && sub.instance;
+        var name = String(inst && inst.name || "");
+
+        if (filterCarousel && (
+          name.indexOf("SwiperComp") >= 0 ||
+          name.indexOf("LeaderboardEntrComp") >= 0
+        )) {
+          return false;
+        }
+
+        if (filterSmart && (
+          name.indexOf("FloatingPicComp") >= 0 ||
+          name.indexOf("FloatComp") >= 0 ||
+          name.indexOf("DialogComp") >= 0 ||
+          name.indexOf("CTOPDialogComp") >= 0
+        )) {
+          return false;
+        }
+
+        return true;
+      });
+    }).filter(function (row) {
+      return Array.isArray(row) && row.length > 0;
+    });
+
+    if (payload.instanceList.length !== beforeRows) changed = true;
+    return changed;
+  }
+
   function filterAggregationData(payload) {
     var body = payload && payload.rspBody;
     if (!body) return false;
@@ -914,6 +1078,30 @@
   }
 
   try {
+    if (isPlaintextRequest) {
+      var plainJson;
+      try {
+        plainJson = JSON.parse(responseBody);
+      } catch (e) {
+        $done({});
+        return;
+      }
+      var plainChanged = false;
+      if (isJfShopRequest) {
+        plainChanged = filterJfShop(url, plainJson);
+      } else if (isMiguVideoRequest) {
+        plainChanged = filterMiguVideo(plainJson);
+      } else if (isCanvasLayoutRequest) {
+        plainChanged = filterCanvasLayout(plainJson);
+      }
+      if (!plainChanged) {
+        $done({});
+        return;
+      }
+      $done({ body: JSON.stringify(plainJson) });
+      return;
+    }
+
     if (isRechargeRequest) {
       var rechargeEnvelope = JSON.parse(responseBody);
       var rechargeOutParam =
@@ -1008,6 +1196,8 @@
       changed = filterSearchWords(payload);
     } else if (/\/DA\/baseServiceFunction\/getAdverList(?:\?|$)/.test(url)) {
       changed = filterServicePages(payload);
+    } else if (/\/DN\/titleBar\/getIcon(?:\?|$)/.test(url)) {
+      changed = filterTitleBar(payload);
     }
 
     if (!changed) {

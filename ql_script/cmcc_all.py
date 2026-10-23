@@ -391,7 +391,7 @@ def exchange_session(a, act_url=None):
     if not getattr(a, "_jwt_failed", False):
         cached = load_jwt(a)
         if cached:
-            r = s.post(login_url, json={**base_body, "jwtToken": cached, "token": ""}, timeout=30)
+            r = s.post(login_url, json={**base_body, "jwtToken": cached, "token": a.app_token}, timeout=30)
             cand = r.json()
             if cand.get("code") == "SUCCESS":
                 resp = cand
