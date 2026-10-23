@@ -2,8 +2,8 @@
 ------------------------------------------
 @Description: 移动爱家 · 全方位去广告与界面纯净增强脚本
 @Author: TomCatXue
-@Updated: 2026-10-23 17:05
-@Version: v1.0.4
+@Updated: 2026-10-23 17:30
+@Version: v1.0.5
 ------------------------------------------
 */
 (function () {
@@ -84,7 +84,8 @@
   var isHjqBannerRequest = /(?:base\.hjq\.komect\.com\/(?:base\/idx\/getBannerContentList|keel\/idx\/getTabBannerList|hjq-prov\/api\/provApply\/homepage\/getBannerList)|base\/idx\/getBannerContentList)/.test(url);
   var isHjqContentRequest = /(?:base\.hjq\.komect\.com\/)?(?:idx\/(?:getHomePageList|getFrameList|getPlaceList|getTabContentList)|keel\/idx\/getAfLiveCardList|base\/deviceidx\/getDeviceContentList)/.test(url);
   var isUmpLaunchRequest = /\/admsg\/v2\/launch(?:\?|$)/i.test(url);
-  var isPlaintextRequest = isJfShopRequest || isMiguVideoRequest || isCanvasLayoutRequest || isKomectVideoRequest || isHjqShopLayout || isHjqBannerRequest || isHjqContentRequest || isUmpLaunchRequest || isJfAdRequest;
+  var isHebaoPayAdRequest = /p\.10086\.cn\/wap\/v1\/(?:polymeriza-page\/(?:banner|popup|activity|business|group-cards|marquee)|float\/window|guess\/shop)(?:\?|$)/.test(url);
+  var isPlaintextRequest = isJfShopRequest || isMiguVideoRequest || isCanvasLayoutRequest || isKomectVideoRequest || isHjqShopLayout || isHjqBannerRequest || isHjqContentRequest || isUmpLaunchRequest || isJfAdRequest || isHebaoPayAdRequest;
 
   // 严格安全校验：原生接口必须带 x-pen=14；明文 H5 接口按域名放行。
   var isNativeEncryptedRequest = /(?:client|apm)\.app\.coc\.10086\.cn\/biz-orange\/DN\//.test(url);
@@ -324,11 +325,10 @@
   }
 
   function decryptJson(ciphertext, keyText, ivText) {
-    ciphertext = decodeResponseEnvelope(ciphertext);
     return JSON.parse(
       utf8Decode(
         aesCbcDecrypt(
-          base64Decode(ciphertext),
+          base64Decode(String(ciphertext).replace(/\s+/g, "")),
           utf8Encode(keyText),
           utf8Encode(ivText)
         )
@@ -338,35 +338,12 @@
 
   function encryptJson(payload, keyText, ivText) {
     return base64Encode(
-      utf8Encode(
-        base64Encode(
-          aesCbcEncrypt(
-            utf8Encode(JSON.stringify(payload)),
-            utf8Encode(keyText),
-            utf8Encode(ivText)
-          )
-        )
+      aesCbcEncrypt(
+        utf8Encode(JSON.stringify(payload)),
+        utf8Encode(keyText),
+        utf8Encode(ivText)
       )
     );
-  }
-
-  function decodeResponseEnvelope(text) {
-    var compact = String(text).replace(/\s+/g, "");
-    var raw = "";
-    try {
-      raw = utf8Decode(base64Decode(compact));
-    } catch (e) {
-      return compact;
-    }
-    // 新版接口：response body 为 base64(base64(AES密文))，先去外壳再交 AES。
-    if (raw.indexOf("ykytces3") === 0) {
-      try {
-        var inner = raw.replace(/\s+/g, "");
-        base64Decode(inner);
-        return inner;
-      } catch (e) {}
-    }
-    return compact;
   }
 
   function signedResult(body) {
@@ -973,6 +950,27 @@
   try {
     // 1. 明文 JSON 接口分发（钱包、发现页、画布）
     if (isPlaintextRequest) {
+      if (isHebaoPayAdRequest) {
+        $done({
+          status: 200,
+          headers: { "Content-Type": "application/json;charset=UTF-8" },
+          body: JSON.stringify({
+            msgCd: "WAP00000",
+            msgInfo: "成功",
+            body: {
+              bannerArrayList: [],
+              popupArrayList: [],
+              groupCardsArrayList: [],
+              shopArrayList: [],
+              activityList: [],
+              marqueeList: [],
+              floatList: []
+            }
+          })
+        });
+        return;
+      }
+
       var plainJson;
       try {
         plainJson = JSON.parse(responseBody);

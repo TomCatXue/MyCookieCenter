@@ -2,8 +2,8 @@
 ------------------------------------------
 @Description: 中国移动 · 移动爱家全方位净化增强脚本（含首页轮播、智能爱家、发现页音视频/文章、钱包充话费、借钱与信息流）
 @Author: Yuheng0101, anker1209, ccyykk666, sooyaaabo; 轮播与专区全方位净化 TomCatXue
-@Updated: 2026-10-23 17:05
-@Version: v1.1.1
+@Updated: 2026-10-23 17:30
+@Version: v1.1.2
 ------------------------------------------
 */
 (function () {
@@ -368,11 +368,10 @@
   }
 
   function decryptJson(ciphertext, keyText, ivText) {
-    ciphertext = decodeResponseEnvelope(ciphertext);
     return JSON.parse(
       utf8Decode(
         aesCbcDecrypt(
-          base64Decode(ciphertext),
+          base64Decode(String(ciphertext).replace(/\s+/g, "")),
           utf8Encode(keyText),
           utf8Encode(ivText)
         )
@@ -382,34 +381,12 @@
 
   function encryptJson(payload, keyText, ivText) {
     return base64Encode(
-      utf8Encode(
-        base64Encode(
-          aesCbcEncrypt(
-            utf8Encode(JSON.stringify(payload)),
-            utf8Encode(keyText),
-            utf8Encode(ivText)
-          )
-        )
+      aesCbcEncrypt(
+        utf8Encode(JSON.stringify(payload)),
+        utf8Encode(keyText),
+        utf8Encode(ivText)
       )
     );
-  }
-
-  function decodeResponseEnvelope(text) {
-    var compact = String(text).replace(/\s+/g, "");
-    var raw = "";
-    try {
-      raw = utf8Decode(base64Decode(compact));
-    } catch (e) {
-      return compact;
-    }
-    if (raw.indexOf("ykytces3") === 0) {
-      try {
-        var inner = raw.replace(/\s+/g, "");
-        base64Decode(inner);
-        return inner;
-      } catch (e) {}
-    }
-    return compact;
   }
 
   function signedResult(body) {
@@ -629,10 +606,16 @@
     var featureAreaToSwitch = {
       "20230721008": "HideMyCheckIn",       // 签到浮窗
       "20230721012": "HideMyMarketing",     // 营销区域
+      "20240206004": "HideMyMarketing",     // 权益卡片新
+      "20230908006": "HideMyMarketing",     // 品牌入口
       "20230721018": "HideMyServices",      // 我的服务
+      "20260104006": "HideMyServices",      // 我的服务cube卡片
       "20240708002": "HideMyFamilyCube",    // 我的家庭
+      "20240429006": "HideMyFamilyCube",    // 我的家庭cube卡片
+      "20240528002": "HideMyFamilyCube",    // 家庭管理cube卡片
       "20251024002": "HideMyDevicesCube",   // 我的设备
       "20251016004": "HideMyDevicesCube",   // 我的设备（cubeList）
+      "20260610004": "HideMyDevicesCube",   // 新通话cube卡片id
       "20231017002": "HideMyMiniProgram",   // 我的账户
       "20230721020": "HideMyDigitalHuman",  // AI智能助理
       "20230721030": "HideMySelections",    // 我的优选
@@ -640,7 +623,8 @@
       "20251230002": "HideMyRingtone",      // 我的彩铃
       "20240624002": "HideMyCloudDrive",    // 我的云盘
       "20230721044": "HideMyToolbox",       // 百宝箱
-      "20230928004": "HideMyLifeServices"   // 生活服务
+      "20230928004": "HideMyLifeServices",  // 生活服务
+      "20260610008": "HideMyMarketing"      // 卡券包包
     };
 
     var before = body.areaList.length;
