@@ -2,8 +2,8 @@
 ------------------------------------------
 @Description: 移动爱家 · 全方位去广告与界面纯净增强脚本
 @Author: TomCatXue
-@Updated: 2026-10-23 16:35
-@Version: v1.0.3
+@Updated: 2026-10-23 17:05
+@Version: v1.0.4
 ------------------------------------------
 */
 (function () {
@@ -324,6 +324,7 @@
   }
 
   function decryptJson(ciphertext, keyText, ivText) {
+    ciphertext = decodeResponseEnvelope(ciphertext);
     return JSON.parse(
       utf8Decode(
         aesCbcDecrypt(
@@ -337,12 +338,35 @@
 
   function encryptJson(payload, keyText, ivText) {
     return base64Encode(
-      aesCbcEncrypt(
-        utf8Encode(JSON.stringify(payload)),
-        utf8Encode(keyText),
-        utf8Encode(ivText)
+      utf8Encode(
+        base64Encode(
+          aesCbcEncrypt(
+            utf8Encode(JSON.stringify(payload)),
+            utf8Encode(keyText),
+            utf8Encode(ivText)
+          )
+        )
       )
     );
+  }
+
+  function decodeResponseEnvelope(text) {
+    var compact = String(text).replace(/\s+/g, "");
+    var raw = "";
+    try {
+      raw = utf8Decode(base64Decode(compact));
+    } catch (e) {
+      return compact;
+    }
+    // 新版接口：response body 为 base64(base64(AES密文))，先去外壳再交 AES。
+    if (raw.indexOf("ykytces3") === 0) {
+      try {
+        var inner = raw.replace(/\s+/g, "");
+        base64Decode(inner);
+        return inner;
+      } catch (e) {}
+    }
+    return compact;
   }
 
   function signedResult(body) {
@@ -578,9 +602,12 @@
     var changed = false;
     var body = payload.body;
     if (payload.body && typeof payload.body === "object") {
-      if (Array.isArray(payload.body.data) && payload.body.data.length > 0) {
-        payload.body.data = [];
-        changed = true;
+      // 组件型响应里的 body.data 是资讯/视频卡片本身，不应清空；整页内容才清空 groups。
+      if (
+        !Array.isArray(payload.body.groups) &&
+        !Array.isArray(payload.body.data)
+      ) {
+        return false;
       }
     }
     // 页面结构下按组件类型移除焦点大图，保留导航与普通内容。
@@ -614,7 +641,7 @@
 
   // ==================== 4.2 移动爱家商城首页布局净化（保留Icon功能入口，移除视频/引流/瀑布流） ====================
   function filterHjqShopLayout(url, payload) {
-    if (!enabled("HomeClean")) return false;
+    if (!enabled("HomeClean") && !enabled("HideCarousel")) return false;
     if (!payload || typeof payload !== "object") return false;
     var changed = false;
 
@@ -624,9 +651,12 @@
         payload.data = payload.data.filter(function (item) {
           var pattern = String(item && item.patternCode);
           var title = String(item && item.titleLeftText);
-          // 仅保留首页 Icon 入口与通用业务办理，移除视频、瀑布流与纯营销楼层。
+          // 保留首页 Icon 入口与服务宫格，仅移除轮播、视频、瀑布流与纯营销楼层。
           if (pattern === "p002") return true;
-          if (pattern === "p121") return title.indexOf("视频") < 0 && title.indexOf("影音") < 0;
+          if (enabled("HomeClean") && pattern === "p121") {
+            return title.indexOf("视频") < 0 && title.indexOf("影音") < 0;
+          }
+          if (pattern === "p121") return true;
           return false;
         });
         if (payload.data.length !== beforeLen) changed = true;
@@ -640,7 +670,10 @@
           var pattern = String(item && item.patternCode);
           var title = String(item && item.titleLeftText);
           if (pattern === "p002") return true;
-          if (pattern === "p121") return title.indexOf("视频") < 0 && title.indexOf("影音") < 0;
+          if (enabled("HomeClean") && pattern === "p121") {
+            return title.indexOf("视频") < 0 && title.indexOf("影音") < 0;
+          }
+          if (pattern === "p121") return true;
           return false;
         });
         if (payload.data.frameList.length !== beforeFrameLen) changed = true;
@@ -905,6 +938,8 @@
     var hideCarousel = enabled("HideCarousel");
 
     var pureAdAreas = {
+      "20230721012": true,
+      "20230721008": true,
       "20260610006": true,
       "20250219002": true,
       "20230721040": true,
@@ -981,7 +1016,7 @@
     if (declaredLength > 0 && declaredLength < responseBody.length) {
       responseBody = responseBody.slice(0, declaredLength);
     }
-
+    responseBody = responseBody.replace(/\s+/g, "");
     var payload = decryptJson(responseBody, AES_KEY, AES_IV);
     var changed = false;
 

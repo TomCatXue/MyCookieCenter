@@ -2,8 +2,8 @@
 ------------------------------------------
 @Description: 中国移动 · 移动爱家全方位净化增强脚本（含首页轮播、智能爱家、发现页音视频/文章、钱包充话费、借钱与信息流）
 @Author: Yuheng0101, anker1209, ccyykk666, sooyaaabo; 轮播与专区全方位净化 TomCatXue
-@Updated: 2026-10-23
-@Version: v1.1.0
+@Updated: 2026-10-23 17:05
+@Version: v1.1.1
 ------------------------------------------
 */
 (function () {
@@ -368,6 +368,7 @@
   }
 
   function decryptJson(ciphertext, keyText, ivText) {
+    ciphertext = decodeResponseEnvelope(ciphertext);
     return JSON.parse(
       utf8Decode(
         aesCbcDecrypt(
@@ -381,12 +382,34 @@
 
   function encryptJson(payload, keyText, ivText) {
     return base64Encode(
-      aesCbcEncrypt(
-        utf8Encode(JSON.stringify(payload)),
-        utf8Encode(keyText),
-        utf8Encode(ivText)
+      utf8Encode(
+        base64Encode(
+          aesCbcEncrypt(
+            utf8Encode(JSON.stringify(payload)),
+            utf8Encode(keyText),
+            utf8Encode(ivText)
+          )
+        )
       )
     );
+  }
+
+  function decodeResponseEnvelope(text) {
+    var compact = String(text).replace(/\s+/g, "");
+    var raw = "";
+    try {
+      raw = utf8Decode(base64Decode(compact));
+    } catch (e) {
+      return compact;
+    }
+    if (raw.indexOf("ykytces3") === 0) {
+      try {
+        var inner = raw.replace(/\s+/g, "");
+        base64Decode(inner);
+        return inner;
+      } catch (e) {}
+    }
+    return compact;
   }
 
   function signedResult(body) {
@@ -609,6 +632,7 @@
       "20230721018": "HideMyServices",      // 我的服务
       "20240708002": "HideMyFamilyCube",    // 我的家庭
       "20251024002": "HideMyDevicesCube",   // 我的设备
+      "20251016004": "HideMyDevicesCube",   // 我的设备（cubeList）
       "20231017002": "HideMyMiniProgram",   // 我的账户
       "20230721020": "HideMyDigitalHuman",  // AI智能助理
       "20230721030": "HideMySelections",    // 我的优选
@@ -649,7 +673,22 @@
       return true;
     });
 
-    return body.areaList.length !== before;
+    var cubeChanged = false;
+    if (Array.isArray(body.cubeList)) {
+      var cubeBefore = body.cubeList.length;
+      body.cubeList.forEach(function (cube) {
+        if (!cube || cube.isShow === "0") return;
+        var cubeId = String(cube.areaId || "");
+        var sw = featureAreaToSwitch[cubeId];
+        if (sw && enabled(sw) && cube.isShow !== "0") {
+          cube.isShow = "0";
+          cubeChanged = true;
+        }
+      });
+      if (body.cubeList.length !== cubeBefore) cubeChanged = true;
+    }
+
+    return body.areaList.length !== before || cubeChanged;
   }
 
   function filterServicePages(payload) {
@@ -1180,6 +1219,7 @@
     if (declaredLength > 0 && declaredLength < responseBody.length) {
       responseBody = responseBody.slice(0, declaredLength);
     }
+    responseBody = responseBody.replace(/\s+/g, "");
 
     var payload = decryptJson(responseBody, AES_KEY, AES_IV);
     var changed = false;
