@@ -2,8 +2,8 @@
 ------------------------------------------
 @Description: 移动爱家 · 全方位去广告与界面纯净增强脚本
 @Author: TomCatXue
-@Updated: 2026-10-23 17:30
-@Version: v1.0.5
+@Updated: 2026-10-23 17:50
+@Version: v1.0.6
 ------------------------------------------
 */
 (function () {
@@ -84,7 +84,7 @@
   var isHjqBannerRequest = /(?:base\.hjq\.komect\.com\/(?:base\/idx\/getBannerContentList|keel\/idx\/getTabBannerList|hjq-prov\/api\/provApply\/homepage\/getBannerList)|base\/idx\/getBannerContentList)/.test(url);
   var isHjqContentRequest = /(?:base\.hjq\.komect\.com\/)?(?:idx\/(?:getHomePageList|getFrameList|getPlaceList|getTabContentList)|keel\/idx\/getAfLiveCardList|base\/deviceidx\/getDeviceContentList)/.test(url);
   var isUmpLaunchRequest = /\/admsg\/v2\/launch(?:\?|$)/i.test(url);
-  var isHebaoPayAdRequest = /p\.10086\.cn\/wap\/v1\/(?:polymeriza-page\/(?:banner|popup|activity|business|group-cards|marquee)|float\/window|guess\/shop)(?:\?|$)/.test(url);
+  var isHebaoPayAdRequest = /p\.10086\.cn\/wap\/v1\/(?:polymeriza-page\/(?:banner|popup|activity|business|group-cards|many-cards|marquee|area|homepage)|float\/window|guess\/shop|page-position\/query)(?:\?|$)/.test(url);
   var isPlaintextRequest = isJfShopRequest || isMiguVideoRequest || isCanvasLayoutRequest || isKomectVideoRequest || isHjqShopLayout || isHjqBannerRequest || isHjqContentRequest || isUmpLaunchRequest || isJfAdRequest || isHebaoPayAdRequest;
 
   // 严格安全校验：原生接口必须带 x-pen=14；明文 H5 接口按域名放行。
@@ -959,12 +959,24 @@
             msgInfo: "成功",
             body: {
               bannerArrayList: [],
+              bannerList: [],
               popupArrayList: [],
+              popupList: [],
               groupCardsArrayList: [],
+              groupCardList: [],
+              groupCards: [],
+              manyCards: [],
+              cards: [],
               shopArrayList: [],
+              shopList: [],
               activityList: [],
               marqueeList: [],
-              floatList: []
+              floatList: [],
+              areaList: [],
+              areas: [],
+              positionList: [],
+              businessList: [],
+              cardList: []
             }
           })
         });

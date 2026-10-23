@@ -8,7 +8,7 @@
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://raw.githubusercontent.com/sooyaaabo/IconLibrary/main/App/ChinaMobile.png
 #!version = 1.1.2
-#!date = 2026-10-23 17:30
+#!date = 2026-10-23 17:50
 
 # 核心升级说明（2026-10-23 v1.1.0）：
 # 1. 首页与智能爱家专区轮播图物理级消除：底层 AES 接口剔除首页顶部轮播与 XBYYW 运营位横幅；移动爱家/智能专区剔除 Swiper 轮播图、Leaderboard 大图、标题栏右上角营销推广以及悬浮窗与触点弹窗。
@@ -72,18 +72,18 @@ response if ${url} ~= /^https:\/\/ad\.mcloud\.139\.com\/advertapi\/adv-filter\/a
 
 [Script]
 # 页面与轮播净化核心脚本（含 AES 动态解密、横幅轮播区整体移除、右上角广告清理与四大落地推广剔除）
-response if ${url} ~= /^https:\/\/(?:client\.app\.coc\.10086\.cn\/biz-orange\/(?:DN\/(?:homePage\/getTopAreaList|myPageNew\/getMyPageNew|multipleInterfaces\/aggregationData|init\/getNavigation|searchWord\/getSearchWordInfo|titleBar\/getIcon)|DA\/baseServiceFunction\/getAdverList)|h\.app\.coc\.10086\.cn\/biz-orange\/DA\/baseServiceFunction\/getAdverList)(?:\?.*)?$/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/cmcc/remove_ads.js?v=2026102306", {${HideCarousel}, ${HomeBasicClean}, ${ServicePageClean}, ${MineClean}, ${WalletClean}, ${DiscoverClean}, ${SmartPageClean}, ${HideTopFamily}, ${HideTopAge}, ${HideTopPhone}, ${HideTopNearby}, ${HideTopAI}, ${HideTopEnterprise}, ${HideMyCheckIn}, ${HideMyMarketing}, ${HideMyServices}, ${HideMyFamilyCube}, ${HideMyDevicesCube}, ${HideMyMiniProgram}, ${HideMyDigitalHuman}, ${HideMySelections}, ${HideMyGroup}, ${HideMyRingtone}, ${HideMyCloudDrive}, ${HideMyToolbox}, ${HideMyLifeServices}}) with tag="[中国移动]页面与轮播净化", timeout=10, requires_body=true
-response if ${url} ~= /^https:\/\/h\.app\.coc\.10086\.cn\/biz-orange\/DH\/(?:message_query\/message\/query\/list|myCardVoucher\/getBannerList)(?:\?.*)?$/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/cmcc/remove_ads.js?v=2026102306", {${HideCarousel}}) with tag="[中国移动]消息与卡券横幅净化", timeout=10, requires_body=true
-response if ${url} ~= /^https:\/\/app\.10086\.cn\/biz-orange\/DA\/commonBoard\/getCommonBoard(?:\?.*)?$/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/cmcc/remove_ads.js?v=2026102306", {${HideCarousel}}) with tag="[中国移动]横幅看板净化", timeout=10, requires_body=true
+response if ${url} ~= /^https:\/\/(?:client\.app\.coc\.10086\.cn\/biz-orange\/(?:DN\/(?:homePage\/getTopAreaList|myPageNew\/getMyPageNew|multipleInterfaces\/aggregationData|init\/getNavigation|searchWord\/getSearchWordInfo|titleBar\/getIcon)|DA\/baseServiceFunction\/getAdverList)|h\.app\.coc\.10086\.cn\/biz-orange\/DA\/baseServiceFunction\/getAdverList)(?:\?.*)?$/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/cmcc/remove_ads.js?v=2026102307", {${HideCarousel}, ${HomeBasicClean}, ${ServicePageClean}, ${MineClean}, ${WalletClean}, ${DiscoverClean}, ${SmartPageClean}, ${HideTopFamily}, ${HideTopAge}, ${HideTopPhone}, ${HideTopNearby}, ${HideTopAI}, ${HideTopEnterprise}, ${HideMyCheckIn}, ${HideMyMarketing}, ${HideMyServices}, ${HideMyFamilyCube}, ${HideMyDevicesCube}, ${HideMyMiniProgram}, ${HideMyDigitalHuman}, ${HideMySelections}, ${HideMyGroup}, ${HideMyRingtone}, ${HideMyCloudDrive}, ${HideMyToolbox}, ${HideMyLifeServices}}) with tag="[中国移动]页面与轮播净化", timeout=10, requires_body=true
+response if ${url} ~= /^https:\/\/h\.app\.coc\.10086\.cn\/biz-orange\/DH\/(?:message_query\/message\/query\/list|myCardVoucher\/getBannerList)(?:\?.*)?$/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/cmcc/remove_ads.js?v=2026102307", {${HideCarousel}}) with tag="[中国移动]消息与卡券横幅净化", timeout=10, requires_body=true
+response if ${url} ~= /^https:\/\/app\.10086\.cn\/biz-orange\/DA\/commonBoard\/getCommonBoard(?:\?.*)?$/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/cmcc/remove_ads.js?v=2026102307", {${HideCarousel}}) with tag="[中国移动]横幅看板净化", timeout=10, requires_body=true
 
 # 我的钱包与充话费专区净化（清空充话费下方轮播图、端AI推荐、爆品必抢、会员优享卡片、猜你喜欢信息流与借钱吧贷款卡片）
-response if ${url} ~= /^https:\/\/app\.jf\.10086\.cn\/cmcc-h5-shop\/(?:cms\/(?:contents|yourFavorite)|hePay\/all)(?:\?.*)?$/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/cmcc/remove_ads.js?v=2026102306", {${WalletClean}, ${HideCarousel}}) with tag="[中国移动]我的钱包与充话费净化", timeout=10, requires_body=true
+response if ${url} ~= /^https:\/\/app\.jf\.10086\.cn\/cmcc-h5-shop\/(?:cms\/(?:contents|yourFavorite)|hePay\/all)(?:\?.*)?$/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/cmcc/remove_ads.js?v=2026102307", {${WalletClean}, ${HideCarousel}}) with tag="[中国移动]我的钱包与充话费净化", timeout=10, requires_body=true
 
 # 发现页短视频、大轮播图与新闻资讯文章流净化
-response if ${url} ~= /^https?:\/\/display-sc\.miguvideo\.com\/display\/v3\/static(?:\/.*)?$/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/cmcc/remove_ads.js?v=2026102306", {${DiscoverClean}, ${HideCarousel}}) with tag="[中国移动]发现页视频与文章净化", timeout=10, requires_body=true
+response if ${url} ~= /^https?:\/\/display-sc\.miguvideo\.com\/display\/v3\/static(?:\/.*)?$/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/cmcc/remove_ads.js?v=2026102307", {${DiscoverClean}, ${HideCarousel}}) with tag="[中国移动]发现页视频与文章净化", timeout=10, requires_body=true
 
 # 移动爱家与智能专区画布布局净化（剔除轮播图 Swiper、排行榜大图、悬浮窗动效与营销触点弹窗）
-response if ${url} ~= /^https:\/\/res\.coc\.10086\.cn\/res\/cdn\/coc1\/fixedPath\/production\.rightsmarket-h5-canvas\.online\.layout\..*\.json(?:\?.*)?$/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/cmcc/remove_ads.js?v=2026102306", {${SmartPageClean}, ${HideCarousel}}) with tag="[中国移动]智能专区与爱家画布净化", timeout=10, requires_body=true
+response if ${url} ~= /^https:\/\/res\.coc\.10086\.cn\/res\/cdn\/coc1\/fixedPath\/production\.rightsmarket-h5-canvas\.online\.layout\..*\.json(?:\?.*)?$/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/cmcc/remove_ads.js?v=2026102307", {${SmartPageClean}, ${HideCarousel}}) with tag="[中国移动]智能专区与爱家画布净化", timeout=10, requires_body=true
 
 # 陕西秦币专区凭据静默捕获与会话回填
 request if ${url} ~= /^https?:\/\/sn\.clientaccess\.10086\.cn\/html5\/indivbusi\//i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/cmcc/cmcc_cookie.js?v=2026102201") with tag="[中国移动]陕西秦币凭据捕获", requires_body=true
