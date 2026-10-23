@@ -12,8 +12,8 @@
 ================================================================================
 @Name: 微信读书 · 全功能自动化任务（青龙面板专版）
 @Author: TomCatXue
-@Version: 1.4.5
-@Updated: 2026-10-15
+@Version: 1.4.6
+@Updated: 2026-10-23
 ================================================================================
 使用说明：
 - 核心环境变量：
@@ -76,7 +76,7 @@ const CONFIG = {
 // 常量与系统配置
 // ================================================================================
 const SCRIPT_NAME = "微信读书 · 全功能任务";
-const SCRIPT_VERSION = "1.4.5";
+const SCRIPT_VERSION = "1.4.6";
 const AUTH_KEY = "weread_auth_v2";
 const CACHE_FILE = "./weread_session.json";
 const API = "https://i.weread.qq.com";
@@ -912,7 +912,7 @@ function parseSingleHelper(raw) {
         try {
             let cachedStr = $.getdata(`weread_helper_${h.vid}`);
             if (cachedStr) {
-                let cachedObj = JSON.parse(cachedStr);
+                let cachedObj = typeof cachedStr === "string" ? JSON.parse(cachedStr) : cachedStr;
                 if (cachedObj && cachedObj.wrSkey) {
                     h.wrSkey = cachedObj.wrSkey;
                     h.skey = cachedObj.wrSkey;
@@ -1072,57 +1072,73 @@ async function tryWebRenewal(helperAuth) {
     }
     if (typeof wrRt === "string") wrRt = decodeURIComponent(wrRt);
 
-    $.log("[WeRead] 正在通过 /web/login/renewal 自动续期小号 Web Cookie (wr_rt)...");
-    try {
-        let renewHeaders = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-            "Content-Type": "application/json",
-            "Accept": "application/json, text/plain, */*",
-            "Origin": "https://weread.qq.com",
-            "Referer": "https://weread.qq.com/web/book/read",
-            "Cookie": helperAuth.rawCookie || `wr_vid=${wrVid}; wr_skey=${wrSkey}; wr_rt=${wrRt}; wr_loggedIn=1;`
-        };
+    let maskH = String(wrVid).length > 4 ? String(wrVid).slice(0, 4) + "****" : String(wrVid);
+    $.log(`[WeRead] 正在通过 /web/login/renewal 自动续期小号 [${maskH}] Web Cookie (wr_rt)...`);
 
-        let res = await post(
-            "https://weread.qq.com/web/login/renewal",
-            JSON.stringify({ "rq": "%2Fweb%2Fbook%2Fread", "ql": false }),
-            renewHeaders
-        );
+    // 变体重试列表 (借鉴 findmover/wxread，提升对腾讯不同网关版本容错能力)
+    const COOKIE_DATA_VARIANTS = [
+        { "rq": "%2Fweb%2Fbook%2Fread", "ql": false },
+        { "rq": "%2Fweb%2Fbook%2Fread" },
+        { "rq": "%2Fweb%2Fbook%2Fread", "ql": true }
+    ];
 
-        let resData = decode(res.body);
-        let setCookies = res.headers ? (res.headers["set-cookie"] || res.headers["Set-Cookie"]) : null;
-        let newSkey = null;
-        let newRt = null;
+    let renewHeaders = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+        "Content-Type": "application/json",
+        "Accept": "application/json, text/plain, */*",
+        "Origin": "https://weread.qq.com",
+        "Referer": "https://weread.qq.com/web/book/read",
+        "Cookie": helperAuth.rawCookie || `wr_vid=${wrVid}; wr_skey=${wrSkey}; wr_rt=${wrRt}; wr_loggedIn=1;`
+    };
 
-        if (setCookies) {
-            let cookieStr = Array.isArray(setCookies) ? setCookies.join("; ") : String(setCookies);
-            let skeyMatch = cookieStr.match(/wr_skey=([^;\s]+)/);
-            if (skeyMatch) newSkey = skeyMatch[1];
-            let rtMatch = cookieStr.match(/wr_rt=([^;\s]+)/);
-            if (rtMatch) newRt = decodeURIComponent(rtMatch[1]);
-        }
+    let lastError = "";
+    for (let variant of COOKIE_DATA_VARIANTS) {
+        try {
+            let res = await post(
+                "https://weread.qq.com/web/login/renewal",
+                JSON.stringify(variant),
+                renewHeaders
+            );
 
-        if (res.status === 200 && (resData?.succ === 1 || newSkey)) {
-            if (newSkey) {
-                helperAuth.wrSkey = newSkey;
-                helperAuth.skey = newSkey;
+            let resData = decode(res.body);
+            let setCookies = res.headers ? (res.headers["set-cookie"] || res.headers["Set-Cookie"]) : null;
+            let newSkey = null;
+            let newRt = null;
+
+            if (setCookies) {
+                let cookieStr = Array.isArray(setCookies) ? setCookies.join("; ") : String(setCookies);
+                let skeyMatch = cookieStr.match(/wr_skey=([^;\s]+)/);
+                if (skeyMatch) newSkey = skeyMatch[1];
+                let rtMatch = cookieStr.match(/wr_rt=([^;\s]+)/);
+                if (rtMatch) newRt = decodeURIComponent(rtMatch[1]);
             }
-            if (newRt) helperAuth.wrRt = newRt;
-            helperAuth.rawCookie = `wr_vid=${wrVid}; wr_skey=${helperAuth.wrSkey}; wr_rt=${helperAuth.wrRt || wrRt}; wr_loggedIn=1;`;
-            $.log(`[WeRead] 🎉 小号 Web Cookie 自动续期成功！最新 skey: ${helperAuth.wrSkey?.slice(0, 4)}****`);
-            try {
-                let cacheData = { wrSkey: helperAuth.wrSkey, wrRt: helperAuth.wrRt || wrRt, rawCookie: helperAuth.rawCookie };
-                $.setdata(JSON.stringify(cacheData), `weread_helper_${wrVid}`);
-            } catch (e) { }
-            return helperAuth;
-        } else {
-            $.log(`[WeRead] ⚠️ Web Cookie 自动续期响应: ${resData?.errMsg || ("HTTP " + res.status)}`);
-            return null;
+
+            if (res.status === 200 && (resData?.succ === 1 || newSkey)) {
+                if (newSkey) {
+                    helperAuth.wrSkey = newSkey;
+                    helperAuth.skey = newSkey;
+                }
+                if (newRt) helperAuth.wrRt = newRt;
+                helperAuth.rawCookie = `wr_vid=${wrVid}; wr_skey=${helperAuth.wrSkey}; wr_rt=${helperAuth.wrRt || wrRt}; wr_loggedIn=1;`;
+                $.log(`[WeRead] 🎉 小号 [${maskH}] Web Cookie 自动续期成功！最新 skey: ${helperAuth.wrSkey?.slice(0, 4)}****`);
+                try {
+                    let cacheData = { wrSkey: helperAuth.wrSkey, wrRt: helperAuth.wrRt || wrRt, rawCookie: helperAuth.rawCookie, updateTime: Date.now() };
+                    $.setdata(JSON.stringify(cacheData), `weread_helper_${wrVid}`);
+                } catch (e) { }
+                return helperAuth;
+            } else {
+                lastError = resData?.errMsg || ("HTTP " + res.status);
+            }
+        } catch (e) {
+            lastError = e.message || String(e);
         }
-    } catch (e) {
-        $.log(`[WeRead] ⚠️ Web Cookie 自动续期网络异常: ${e.message || e}`);
-        return null;
     }
+
+    $.log(`[WeRead] ⚠️ 小号 [${maskH}] Web Cookie 自动续期响应: ${lastError}`);
+    if (String(lastError).includes("鉴权失败") || String(lastError).includes("-2013")) {
+        $.log(`[WeRead] 💡 提示：小号 [${maskH}] 的 wr_rt 可能已过期或缺少桌面网页指纹。建议在电脑无痕浏览器打开 weread.qq.com 扫码抓取最新长效 Cookie 替换。`);
+    }
+    return null;
 }
 
 // ============================================================
@@ -1800,9 +1816,28 @@ async function main() {
     $.log(`📅 当前时间: ${bjTimeStr} (北京时间·星期${["日", "一", "二", "三", "四", "五", "六"][dayOfWeek]})`);
     $.log(`⚙️ 任务队列: [阅读领卡: ${canClaim ? '执行' : '跳过'}] [翻牌抽奖: ${canFlip ? '执行' : '跳过'}] [限免入架: ${canFree ? '执行' : '跳过'}]`);
 
+    // 3. 助力小号每日主动心跳保活与自动换票 (对齐 findmover/wxread 每日活跃机制，消除7天休眠超时)
+    let configuredHelpers = getHelperAuthList();
+    if (configuredHelpers && configuredHelpers.length > 0) {
+        $.log(`\n💓 --- 检查助力小号状态与每日心跳保活 (共 ${configuredHelpers.length} 个) ---`);
+        for (let h of configuredHelpers) {
+            let hVid = String(h.vid || h.wrVid || "");
+            let maskH = hVid.length > 4 ? hVid.slice(0, 4) + "****" : hVid;
+            if (h.wrRt || h.wr_rt) {
+                await tryWebRenewal(h);
+            } else if (h.refreshToken && h.deviceId) {
+                if (!h.wrSkey && !h.skey) {
+                    await tryRefreshLogin(h, null);
+                }
+            } else {
+                $.log(`[WeRead] ℹ️ 小号 [${maskH}] 仅配置了静态 SKEY，建议补充 wr_rt 种子以支持每日自动续期`);
+            }
+        }
+    }
+
     const summaryReport = [];
 
-    // 3. 循环遍历所有账号执行任务
+    // 4. 循环遍历所有主账号执行业务任务
     for (let i = 0; i < accounts.length; i++) {
         let auth = accounts[i];
         let vidMask = (auth.vid ? String(auth.vid).slice(0, 4) + '****' : `账号${i + 1}`);
@@ -1884,7 +1919,7 @@ async function main() {
         }
     }
 
-    // 4. 汇总通知
+    // 5. 汇总通知
     const subtitle = accounts.length === 1
         ? `执行完成 (1个账号) - 【${accounts[0].vid ? String(accounts[0].vid).slice(0, 4) + '****' : '主账号'}】`
         : `执行完成 (${accounts.length}个账号)`;
