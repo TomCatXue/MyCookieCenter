@@ -2,8 +2,8 @@
 ------------------------------------------
 @Description: 中国移动 · 移动爱家全方位净化增强脚本（含首页轮播、智能爱家、发现页音视频/文章、钱包充话费、借钱与信息流）
 @Author: Yuheng0101, anker1209, ccyykk666, sooyaaabo; 轮播与专区全方位净化 TomCatXue
-@Updated: 2026-10-23 17:30
-@Version: v1.1.2
+@Updated: 2026-10-23 23:30
+@Version: v1.2.0
 ------------------------------------------
 */
 (function () {
@@ -998,7 +998,7 @@
           rj.heBaoWallet.marketActivityList = rj.heBaoWallet.marketActivityList.filter(function (act) {
             var jump = String(act && act.imageJumpUrl || "");
             var rem = String(act && act.imageRemarks || "");
-            return rem.indexOf("借") < 0 && jump.indexOf("loan") < 0 && jump.indexOf("crloan") < 0;
+            return rem.indexOf("借") < 0 && rem.indexOf("贷") < 0 && jump.indexOf("loan") < 0 && jump.indexOf("crloan") < 0 && jump.indexOf("credit") < 0;
           });
           if (rj.heBaoWallet.marketActivityList.length !== beforeAct) {
             payload.resultJson = isStrRj ? JSON.stringify(rj) : rj;
@@ -1113,6 +1113,11 @@
     // 彻底清空开屏全屏抽屉广告 (drawerOpens)
     if (Array.isArray(body.drawerOpens) && body.drawerOpens.length > 0) {
       body.drawerOpens = [];
+      changed = true;
+    }
+
+    if (body.systematicNotification && Object.keys(body.systematicNotification).length > 0) {
+      body.systematicNotification = {};
       changed = true;
     }
 
