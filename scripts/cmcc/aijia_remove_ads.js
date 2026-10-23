@@ -85,7 +85,7 @@
   var isHjqContentRequest = /(?:base\.hjq\.komect\.com\/)?(?:idx\/(?:getHomePageList|getFrameList|getPlaceList|getTabContentList)|keel\/idx\/getAfLiveCardList|base\/deviceidx\/getDeviceContentList)/.test(url);
   var isUmpLaunchRequest = /\/admsg\/v2\/launch(?:\?|$)/i.test(url);
   var isSceneRequest = /(?:base\/)?scene\/(?:getRuleTemplates|getRecommendRules)/.test(url);
-  var isHebaoPayAdRequest = /p\.10086\.cn\/wap\/v1\/(?:polymeriza-page\/(?:banner|popup|activity|business|group-cards|many-cards|marquee)|float\/window|guess\/shop|page-position\/query)(?:\?|$)/.test(url);
+  var isHebaoPayAdRequest = /p\.10086\.cn\/wap\/v1\/(?:polymeriza-page\/(?:banner|popup|activity|business|group-cards|marquee)|float\/window|guess\/shop)(?:\?|$)/.test(url);
   var isPlaintextRequest = isJfShopRequest || isMiguVideoRequest || isCanvasLayoutRequest || isHjqShopLayout || isHjqBannerRequest || isHjqContentRequest || isUmpLaunchRequest || isJfAdRequest || isHebaoPayAdRequest || isSceneRequest;
 
   // 严格安全校验：原生接口必须带 x-pen=14；明文 H5 接口按域名放行。
@@ -701,10 +701,7 @@
     if (!payload || typeof payload !== "object") return false;
     var changed = false;
 
-    if (Array.isArray(payload.data) && payload.data.length > 0) {
-      payload.data = [];
-      changed = true;
-    }
+    // 清理模板推荐和轮播推荐，但绝对保留用户的有效一键场景数据 (payload.data)
     if (Array.isArray(payload.ruleTemplateList) && payload.ruleTemplateList.length > 0) {
       payload.ruleTemplateList = [];
       changed = true;
@@ -720,7 +717,7 @@
     return changed;
   }
 
-  // ==================== 4.4 友盟 U-Push 启动广告清洗（admsg/v2/launch） ====================
+  // ==================== 4.4 友盟 U-Push
   function filterUmpLaunch(payload) {
     if (!enabled("HideCarousel") || !enabled("LaunchAdClean")) return false;
     if (!payload || typeof payload !== "object" || Array.isArray(payload)) return false;
@@ -793,18 +790,22 @@
           isStrRj = true;
         } catch (e) {}
       }
-      if (rj && typeof rj === "object") {
-        if (rj.heBaoWallet !== null || rj.digitalAsset !== null || rj.zoneApplication !== null) {
-          rj.heBaoWallet = null;
-          rj.digitalAsset = null;
-          rj.zoneApplication = null;
-          payload.resultJson = isStrRj ? JSON.stringify(rj) : rj;
-          changed = true;
+      if (rj && typeof rj === "object" && rj.heBaoWallet) {
+        if (Array.isArray(rj.heBaoWallet.marketActivityList)) {
+          var beforeAct = rj.heBaoWallet.marketActivityList.length;
+          rj.heBaoWallet.marketActivityList = rj.heBaoWallet.marketActivityList.filter(function (act) {
+            var jump = String(act && act.imageJumpUrl || "");
+            var rem = String(act && act.imageRemarks || "");
+            return rem.indexOf("借") < 0 && jump.indexOf("loan") < 0 && jump.indexOf("crloan") < 0;
+          });
+          if (rj.heBaoWallet.marketActivityList.length !== beforeAct) {
+            payload.resultJson = isStrRj ? JSON.stringify(rj) : rj;
+            changed = true;
+          }
         }
       }
     }
 
-    // 3. /cmcc-h5-shop/cms/yourFavorite: 精彩推荐信息流
     if (/\/cmcc-h5-shop\/cms\/yourFavorite(?:\?|$)/.test(url)) {
       var fav = payload.resultJson;
       var isStrFav = false;

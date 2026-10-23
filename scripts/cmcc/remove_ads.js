@@ -992,12 +992,18 @@
           isStrRj = true;
         } catch (e) {}
       }
-      if (rj && typeof rj === "object") {
-        if (rj.heBaoWallet !== null || rj.digitalAsset !== null) {
-          rj.heBaoWallet = null;
-          rj.digitalAsset = null;
-          payload.resultJson = isStrRj ? JSON.stringify(rj) : rj;
-          changed = true;
+      if (rj && typeof rj === "object" && rj.heBaoWallet) {
+        if (Array.isArray(rj.heBaoWallet.marketActivityList)) {
+          var beforeAct = rj.heBaoWallet.marketActivityList.length;
+          rj.heBaoWallet.marketActivityList = rj.heBaoWallet.marketActivityList.filter(function (act) {
+            var jump = String(act && act.imageJumpUrl || "");
+            var rem = String(act && act.imageRemarks || "");
+            return rem.indexOf("借") < 0 && jump.indexOf("loan") < 0 && jump.indexOf("crloan") < 0;
+          });
+          if (rj.heBaoWallet.marketActivityList.length !== beforeAct) {
+            payload.resultJson = isStrRj ? JSON.stringify(rj) : rj;
+            changed = true;
+          }
         }
       }
     }
