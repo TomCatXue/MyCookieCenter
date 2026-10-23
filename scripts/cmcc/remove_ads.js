@@ -1099,12 +1099,46 @@
       changed = true;
     }
 
-    if (Array.isArray(body.popUpList)) {
-      var popupCount = body.popUpList.length;
-      body.popUpList = body.popUpList.filter(function (item) {
-        return String(item && item.isAdvert) !== "1";
-      });
-      if (body.popUpList.length !== popupCount) changed = true;
+    // 彻底清空所有开屏弹窗与浮层广告（包含 isAdvert=0 的“幸运三日签”等各类商业活动弹窗）
+    if (Array.isArray(body.popUpList) && body.popUpList.length > 0) {
+      body.popUpList = [];
+      changed = true;
+    }
+
+    // 彻底清空开屏全屏抽屉广告 (drawerOpens)
+    if (Array.isArray(body.drawerOpens) && body.drawerOpens.length > 0) {
+      body.drawerOpens = [];
+      changed = true;
+    }
+
+    if (body.englishPop && Object.keys(body.englishPop).length > 0) {
+      body.englishPop = {};
+      changed = true;
+    }
+
+    if (body.cardPopup && Object.keys(body.cardPopup).length > 0) {
+      body.cardPopup = {};
+      changed = true;
+    }
+    if (body.cardReminderPopup && Object.keys(body.cardReminderPopup).length > 0) {
+      body.cardReminderPopup = {};
+      changed = true;
+    }
+    if (body.clipboardPop && Object.keys(body.clipboardPop).length > 0) {
+      body.clipboardPop = {};
+      changed = true;
+    }
+    if (body.iopBirthdayPopup && Object.keys(body.iopBirthdayPopup).length > 0) {
+      body.iopBirthdayPopup = {};
+      changed = true;
+    }
+    if (body.iopBridalGiftPopup && Object.keys(body.iopBridalGiftPopup).length > 0) {
+      body.iopBridalGiftPopup = {};
+      changed = true;
+    }
+    if (body.cardAdvers && Array.isArray(body.cardAdvers.dataList) && body.cardAdvers.dataList.length > 0) {
+      body.cardAdvers.dataList = [];
+      changed = true;
     }
 
     if (Object.prototype.hasOwnProperty.call(body, "suspensionAdver")) {
