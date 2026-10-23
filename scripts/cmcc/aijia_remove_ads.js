@@ -2,8 +2,8 @@
 ------------------------------------------
 @Description: 移动爱家 · 全方位去广告与界面纯净增强脚本
 @Author: TomCatXue
-@Updated: 2026-10-23 18:20
-@Version: v1.0.8
+@Updated: 2026-10-23 20:30
+@Version: v1.0.9
 ------------------------------------------
 */
 (function () {
@@ -81,11 +81,12 @@
   var isCanvasLayoutRequest = /res\.coc\.10086\.cn\/.*rightsmarket-h5-canvas.*\.layout\..*\.json/.test(url);
   var isKomectVideoRequest = /video\.komect\.com\/camera\/core\/api\/bind\/queryList/.test(url);
   var isHjqShopLayout = /shop\.hjq\.komect\.com\/hjqmall\/layout\/index\//.test(url);
-  var isHjqBannerRequest = /(?:base\.hjq\.komect\.com\/(?:base\/idx\/getBannerContentList|keel\/idx\/getTabBannerList|hjq-prov\/api\/provApply\/homepage\/getBannerList)|base\/idx\/getBannerContentList)/.test(url);
+  var isHjqBannerRequest = /(?:base\.hjq\.komect\.com\/)?(?:(?:base|keel)\/)?idx\/(?:getBannerContentList|getTabBannerList)|hjq-prov\/api\/provApply\/homepage\/getBannerList/.test(url);
   var isHjqContentRequest = /(?:base\.hjq\.komect\.com\/)?(?:idx\/(?:getHomePageList|getFrameList|getPlaceList|getTabContentList)|keel\/idx\/getAfLiveCardList|base\/deviceidx\/getDeviceContentList)/.test(url);
   var isUmpLaunchRequest = /\/admsg\/v2\/launch(?:\?|$)/i.test(url);
+  var isSceneRequest = /(?:base\/)?scene\/(?:getRuleTemplates|getRecommendRules)/.test(url);
   var isHebaoPayAdRequest = /p\.10086\.cn\/wap\/v1\/(?:polymeriza-page\/(?:banner|popup|activity|business|group-cards|many-cards|marquee)|float\/window|guess\/shop|page-position\/query)(?:\?|$)/.test(url);
-  var isPlaintextRequest = isJfShopRequest || isMiguVideoRequest || isCanvasLayoutRequest || isKomectVideoRequest || isHjqShopLayout || isHjqBannerRequest || isHjqContentRequest || isUmpLaunchRequest || isJfAdRequest || isHebaoPayAdRequest;
+  var isPlaintextRequest = isJfShopRequest || isMiguVideoRequest || isCanvasLayoutRequest || isKomectVideoRequest || isHjqShopLayout || isHjqBannerRequest || isHjqContentRequest || isUmpLaunchRequest || isJfAdRequest || isHebaoPayAdRequest || isSceneRequest;
 
   // 严格安全校验：原生接口必须带 x-pen=14；明文 H5 接口按域名放行。
   var isNativeEncryptedRequest = /(?:client|apm)\.app\.coc\.10086\.cn\/biz-orange\/DN\//.test(url);
@@ -738,13 +739,38 @@
     }
 
     // getBannerContentList 若直接返回数组，用原位清空保证调用方可见。
-    if (Array.isArray(payload) && !/idx\/getTabContentList/.test(url)) {
+    if (Array.isArray(payload) && /getBannerContentList|getTabBannerList/.test(url)) {
       if (payload.length > 0) {
         payload.splice(0, payload.length);
         changed = true;
       }
     }
 
+    return changed;
+  }
+
+  // ==================== 4.35 智能页面右侧推荐卡片与场景轮播模板净化 ====================
+  function filterSceneTemplates(payload) {
+    if (!enabled("SmartPageClean") && !enabled("HideCarousel")) return false;
+    if (!payload || typeof payload !== "object") return false;
+    var changed = false;
+
+    if (Array.isArray(payload.data) && payload.data.length > 0) {
+      payload.data = [];
+      changed = true;
+    }
+    if (Array.isArray(payload.ruleTemplateList) && payload.ruleTemplateList.length > 0) {
+      payload.ruleTemplateList = [];
+      changed = true;
+    }
+    if (Array.isArray(payload.recommendRuleList) && payload.recommendRuleList.length > 0) {
+      payload.recommendRuleList = [];
+      changed = true;
+    }
+    if (Array.isArray(payload.sceneRecommendDataArray) && payload.sceneRecommendDataArray.length > 0) {
+      payload.sceneRecommendDataArray = [];
+      changed = true;
+    }
     return changed;
   }
 
@@ -802,7 +828,7 @@
         // 只保留十宫格功能入口（2000000000001185），剔除轮播、推荐、公告、会员卡片与话费广告位。
         list = list.filter(function (m) {
           var mid = Number(m && m.moduleId);
-          return mid === 2000000000001185;
+          return mid === 2000000000001185 || mid === 2000000000001062;
         });
         if (list.length !== beforeLen) {
           payload.resultJson = isStr ? JSON.stringify(list) : list;
@@ -1000,6 +1026,8 @@
         plainChanged = filterUmpLaunch(plainJson);
       } else if (isJfAdRequest) {
         plainChanged = filterJfAds(url, plainJson);
+      } else if (isSceneRequest) {
+        plainChanged = filterSceneTemplates(plainJson);
       }
       if (!plainChanged) {
         $done({});
