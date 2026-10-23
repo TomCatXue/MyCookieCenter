@@ -7,11 +7,12 @@
 #!loon_version = 3.5.2(1005)
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/41/57/e5/4157e52f-d849-d15f-d210-d7bf93c7129e/AppIcon-0-0-1x_U007emarketing-0-6-0-sRGB-85-220.png/512x512bb.jpg
-#!version = 1.0.2
-#!date = 2026-10-23 15:45
+#!version = 1.0.3
+#!date = 2026-10-23 16:35
 
 [Argument]
 HideCarousel = switch,true,tag=[轮播] 彻底移除轮播图,desc=移除首页与各专区横幅轮播图组件，使其彻底消失而非仅阻断跳转
+LaunchAdClean = switch,true,tag=[开屏] 启动广告净化,desc=清理友盟 U-Push 启动广告与本地缓存下发的开屏素材
 HomeClean = switch,true,tag=[首页] 首页基础净化,desc=清理首页横幅轮播、XBYYW运营位广告、等级条营销与瀑布流
 SmartPageClean = switch,true,tag=[智能] 移动爱家智能专区净化,desc=清理移动爱家/智能专区右上角广告、轮播大图、悬浮窗动效与营销触点弹窗
 DiscoverClean = switch,true,tag=[发现] 发现页短视频与文章净化,desc=清空发现页短视频信息流、大轮播图与新闻资讯模块
@@ -31,12 +32,17 @@ DOMAIN-SUFFIX, dnlog.cmpassport.com, REJECT
 DOMAIN-SUFFIX, log1.cmpassport.com, REJECT
 DOMAIN-SUFFIX, dfp.cmft.com.cn, REJECT
 DOMAIN-SUFFIX, mtm.online-cmcc.cn, REJECT
-DOMAIN-SUFFIX, apm.app.coc.10086.cn, REJECT
 DOMAIN-SUFFIX, apm.clientaccess.10086.cn, REJECT
 # 移动爱家(和家亲)用户行为全链路追踪与营销平台
 DOMAIN-SUFFIX, trace.hjq.komect.com, REJECT
 DOMAIN-SUFFIX, event.video.komect.com, REJECT
 DOMAIN-SUFFIX, aishop.vis.komect.com, REJECT
+# 第三方广告 SDK 与咪咕广告投放端点
+DOMAIN-SUFFIX, ggc.cmvideo.cn, REJECT
+DOMAIN-SUFFIX, adxserver.ad.cmvideo.cn, REJECT
+DOMAIN-SUFFIX, ggadjust.cmvideo.cn, REJECT
+DOMAIN-SUFFIX, gdt.qq.com, REJECT
+DOMAIN-SUFFIX, e.qq.com, REJECT
 
 [Rewrite]
 # 和包/我的钱包充话费核心营销接口秒拒（轮播图、弹窗、悬浮窗、借钱与优享卡片、精彩推荐信息流、活动与业务推广、跑马灯）
@@ -45,35 +51,41 @@ request if ${url} ~= /^https?:\/\/p\.10086\.cn\/wap\/v1\/(?:polymeriza-page\/(?:
 # 移动爱家商城降价气泡浮窗与轻量推荐秒拒
 request if ${url} ~= /^https?:\/\/shop\.hjq\.komect\.com\/hjqmall\/(?:goods\/(?:price\/reduction\/bubble|recommend\/light))(?:\?.*)?$/i then reject_dict(200)
 
-# 开屏与基础广告规则秒拒拦截（零脚本开销）
+# 友盟 U-Push 启动广告：仅拦启动广告接口，不影响普通推送通道
+request if ${url} ~= /^https?:\/\/(?:ulogs\.umeng\.com|ulogs\.umengcloud\.com|msg\.umengcloud\.com)\/admsg\/v2\/launch(?:\?.*)?$/i then reject_dict(200)
+
+# 开屏与基础广告规则秒拒拦截（零脚本开销；titleBar/getIcon 必须走脚本，不在此处拦截）
 request if ${url} ~= /^https?:\/\/(?:client\.app\.coc|app)\.10086\.cn\/biz-orange\/DN\/(?:explorePage\/getAdverList|init\/startInit|emotionMarket)(?:\?.*)?$/i then reject(200)
 request if ${url} ~= /^https?:\/\/client\.app\.coc\.10086\.cn\/biz-orange\/(?:DN\/(?:dropsAdverService\/getDropsAdverNew|homepagePopup\/getSortInfo|toast\/getToastRule|detainment\/august\/getPages)|DH\/(?:toast\/august\/(?:getToast|getPages)|message_query\/index\/getLatestPushMsg)|DA\/liveSuspension\/getPageCode|UN\/message\/pushMessage)(?:\?.*)?$/i then reject_dict(200)
 request if ${url} ~= /^https?:\/\/client\.app\.coc\.10086\.cn\/cache_server\/api\/cache\/encrypt\/reportV2(?:\?.*)?$/i then reject_dict(200)
 request if ${url} ~= /^https?:\/\/push\.it\.10086\.cn\/(?:contact\/(?:pull\/getUserActivityInfo|receipt\/activityReceipt)|mc\/pull\/pullDDpushMsgDetail)(?:\?.*)?$/i then reject_dict(200)
-request if ${url} ~= /^https?:\/\/app\.jf\.10086\.cn\/cmcc-h5-shop\/cms\/(?:advertisePosition|advertisePage)(?:\?.*)?$/i then reject_dict(200)
+request if ${url} ~= /^https?:\/\/app\.jf\.10086\.cn\/cmcc-h5-shop\/cms\/(?:advertisePosition|advertisePage|globalIcon)(?:\?.*)?$/i then reject_dict(200)
 response if ${url} ~= /^https:\/\/ad\.mcloud\.139\.com\/advertapi\/adv-filter\/adv-filter\/AdInfoFilter\/getAdInfos(?:\?.*)?$/i && ${response.status} == 200 then response.json.jq(".body=[]")
 
 [Script]
 # 防304缓存穿透：请求阶段剥离 If-None-Match 与 If-Modified-Since，强制获取完整响应进行脚本清洗
-request if ${url} ~= /^https:\/\/res\.coc\.10086\.cn\/res\/cdn\/coc1\/fixedPath\/production\.rightsmarket-h5-canvas\.online\.layout\..*\.json(?:\?.*)?$/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/cmcc/aijia_remove_ads.js?v=2026102303") with tag="[移动爱家]防304缓存穿透", timeout=5
+request if ${url} ~= /^https:\/\/res\.coc\.10086\.cn\/res\/cdn\/coc1\/fixedPath\/production\.rightsmarket-h5-canvas\.online\.layout\..*\.json(?:\?.*)?$/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/cmcc/aijia_remove_ads.js?v=2026102304") with tag="[移动爱家]防304缓存穿透", timeout=5
 
 # 移动爱家原生页面净化（首页顶部轮播图、标题栏右上角广告、我的页面营销）
-response if ${url} ~= /^https:\/\/client\.app\.coc\.10086\.cn\/biz-orange\/DN\/(?:homePage\/getTopAreaList|titleBar\/getIcon|myPageNew\/getMyPageNew)(?:\?.*)?$/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/cmcc/aijia_remove_ads.js?v=2026102303", {${HideCarousel}, ${HomeClean}, ${SmartPageClean}, ${MineClean}}) with tag="[移动爱家]原生页面与轮播净化", timeout=10, requires_body=true
+response if ${url} ~= /^https:\/\/(?:client|apm)\.app\.coc\.10086\.cn\/biz-orange\/DN\/(?:homePage\/getTopAreaList|titleBar\/getIcon|myPageNew\/getMyPageNew)(?:\?.*)?$/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/cmcc/aijia_remove_ads.js?v=2026102304", {${HideCarousel}, ${HomeClean}, ${SmartPageClean}, ${MineClean}}) with tag="[移动爱家]原生页面与轮播净化", timeout=10, requires_body=true
 
 # 我的钱包与充话费专区净化（清空充话费下方轮播图、端AI推荐、爆品必抢、会员优享卡片、猜你喜欢信息流与借钱吧贷款卡片）
-response if ${url} ~= /^https:\/\/app\.jf\.10086\.cn\/cmcc-h5-shop\/(?:cms\/(?:contents|yourFavorite)|hePay\/all)(?:\?.*)?$/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/cmcc/aijia_remove_ads.js?v=2026102303", {${WalletClean}, ${HideCarousel}}) with tag="[移动爱家]我的钱包与充话费净化", timeout=10, requires_body=true
+response if ${url} ~= /^https:\/\/app\.jf\.10086\.cn\/cmcc-h5-shop\/(?:cms\/(?:contents|yourFavorite)|hePay\/all)(?:\?.*)?$/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/cmcc/aijia_remove_ads.js?v=2026102304", {${WalletClean}, ${HideCarousel}}) with tag="[移动爱家]我的钱包与充话费净化", timeout=10, requires_body=true
 
 # 发现页短视频、大轮播图与新闻资讯文章流净化
-response if ${url} ~= /^https?:\/\/display-sc\.miguvideo\.com\/display\/v3\/static(?:\/.*)?$/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/cmcc/aijia_remove_ads.js?v=2026102303", {${DiscoverClean}, ${HideCarousel}}) with tag="[移动爱家]发现页视频与文章净化", timeout=10, requires_body=true
+response if ${url} ~= /^https?:\/\/display-sc\.miguvideo\.com\/display\/v3\/static(?:\/.*)?$/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/cmcc/aijia_remove_ads.js?v=2026102304", {${DiscoverClean}, ${HideCarousel}}) with tag="[移动爱家]发现页视频与文章净化", timeout=10, requires_body=true
 
 # 移动爱家与智能专区画布布局净化（剔除轮播图 Swiper、排行榜大图、悬浮窗动效与营销触点弹窗）
-response if ${url} ~= /^https:\/\/res\.coc\.10086\.cn\/res\/cdn\/coc1\/fixedPath\/production\.rightsmarket-h5-canvas\.online\.layout\..*\.json(?:\?.*)?$/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/cmcc/aijia_remove_ads.js?v=2026102303", {${SmartPageClean}, ${HideCarousel}}) with tag="[移动爱家]智能专区与爱家画布净化", timeout=10, requires_body=true
+response if ${url} ~= /^https:\/\/res\.coc\.10086\.cn\/res\/cdn\/coc1\/fixedPath\/production\.rightsmarket-h5-canvas\.online\.layout\..*\.json(?:\?.*)?$/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/cmcc/aijia_remove_ads.js?v=2026102304", {${SmartPageClean}, ${HideCarousel}}) with tag="[移动爱家]智能专区与爱家画布净化", timeout=10, requires_body=true
 
 # 移动爱家设备列表与摄像头中心推广横幅清理
-response if ${url} ~= /^https?:\/\/video\.komect\.com\/camera\/core\/api\/bind\/queryList(?:\?.*)?$/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/cmcc/aijia_remove_ads.js?v=2026102303", {${HomeClean}, ${HideCarousel}}) with tag="[移动爱家]设备横幅推广净化", timeout=10, requires_body=true
+response if ${url} ~= /^https?:\/\/video\.komect\.com\/camera\/core\/api\/bind\/queryList(?:\?.*)?$/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/cmcc/aijia_remove_ads.js?v=2026102304", {${HomeClean}, ${HideCarousel}}) with tag="[移动爱家]设备横幅推广净化", timeout=10, requires_body=true
 
 # 移动爱家商城首页布局净化（保留Icon功能入口，移除视频/引流专区与瀑布流）
-response if ${url} ~= /^https?:\/\/shop\.hjq\.komect\.com\/hjqmall\/layout\/index\/(?:content|frame)(?:\?.*)?$/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/cmcc/aijia_remove_ads.js?v=2026102303", {${HomeClean}, ${HideCarousel}}) with tag="[移动爱家]商城楼层净化", timeout=10, requires_body=true
+response if ${url} ~= /^https?:\/\/shop\.hjq\.komect\.com\/hjqmall\/layout\/index\/(?:content|frame)(?:\?.*)?$/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/cmcc/aijia_remove_ads.js?v=2026102304", {${HomeClean}, ${HideCarousel}}) with tag="[移动爱家]商城楼层净化", timeout=10, requires_body=true
+
+# 和家亲原生首页 Banner / 楼层内容净化（base.hjq.komect.com 与 keel 接口）
+response if ${url} ~= /^https?:\/\/base\.hjq\.komect\.com\/(?:base\/idx\/(?:getBannerContentList|getHomePageList|getFrameList|getPlaceList|getTabContentList)|keel\/idx\/(?:getTabBannerList|getAfLiveCardList)|hjq-prov\/api\/provApply\/homepage\/getBannerList|base\/deviceidx\/getDeviceContentList)(?:\?.*)?$/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/cmcc/aijia_remove_ads.js?v=2026102304", {${HideCarousel}, ${HomeClean}}) with tag="[移动爱家]和家亲首页Banner与楼层净化", timeout=10, requires_body=true
 
 [MITM]
-hostname = p.10086.cn, shop.hjq.komect.com, video.komect.com, client.app.coc.10086.cn, h.app.coc.10086.cn, app.10086.cn, app.jf.10086.cn, display-sc.miguvideo.com, res.coc.10086.cn, push.it.10086.cn, ad.mcloud.139.com
+hostname = p.10086.cn, shop.hjq.komect.com, video.komect.com, base.hjq.komect.com, client.app.coc.10086.cn, apm.app.coc.10086.cn, h.app.coc.10086.cn, app.10086.cn, app.jf.10086.cn, display-sc.miguvideo.com, res.coc.10086.cn, push.it.10086.cn, ad.mcloud.139.com, ulogs.umeng.com, ulogs.umengcloud.com, msg.umengcloud.com
