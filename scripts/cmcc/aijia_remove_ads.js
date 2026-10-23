@@ -2,8 +2,8 @@
 ------------------------------------------
 @Description: 移动爱家 · 全方位去广告与界面纯净增强脚本
 @Author: TomCatXue
-@Updated: 2026-10-23
-@Version: v1.0.0
+@Updated: 2026-10-23 14:30
+@Version: v1.0.1
 ------------------------------------------
 */
 (function () {
@@ -77,7 +77,8 @@
   var isJfShopRequest = /app\.jf\.10086\.cn\/cmcc-h5-shop\//.test(url);
   var isMiguVideoRequest = /display-sc\.miguvideo\.com\/display\/v3\/static/.test(url);
   var isCanvasLayoutRequest = /res\.coc\.10086\.cn\/.*rightsmarket-h5-canvas.*\.layout\..*\.json/.test(url);
-  var isPlaintextRequest = isJfShopRequest || isMiguVideoRequest || isCanvasLayoutRequest;
+  var isKomectVideoRequest = /video\.komect\.com\/camera\/core\/api\/bind\/queryList/.test(url);
+  var isPlaintextRequest = isJfShopRequest || isMiguVideoRequest || isCanvasLayoutRequest || isKomectVideoRequest;
 
   // 严格安全校验：对明文请求跳过 x-pen 检查
   var xPen = isPlaintextRequest ? "" : String(getHeader($response.headers, "x-pen"));
@@ -568,6 +569,18 @@
     return changed;
   }
 
+  // ==================== 4.1 移动爱家设备列表与摄像头中心推广横幅清理 ====================
+  function filterKomectVideo(payload) {
+    if (!enabled("HomeClean") && !enabled("HideCarousel")) return false;
+    if (!payload || typeof payload !== "object") return false;
+    var changed = false;
+    if (Array.isArray(payload.configArray) && payload.configArray.length > 0) {
+      payload.configArray = [];
+      changed = true;
+    }
+    return changed;
+  }
+
   // ==================== 5. 我的钱包 / 充话费下方所有模块净化 ====================
   function filterJfShop(url, payload) {
     if (!enabled("WalletClean")) return false;
@@ -699,6 +712,8 @@
         plainChanged = filterMiguVideo(plainJson);
       } else if (isCanvasLayoutRequest) {
         plainChanged = filterCanvasLayout(plainJson);
+      } else if (isKomectVideoRequest) {
+        plainChanged = filterKomectVideo(plainJson);
       }
       if (!plainChanged) {
         $done({});
