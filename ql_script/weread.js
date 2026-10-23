@@ -913,7 +913,14 @@ function parseSingleHelper(raw) {
             let cachedStr = $.getdata(`weread_helper_${h.vid}`);
             if (cachedStr) {
                 let cachedObj = typeof cachedStr === "string" ? JSON.parse(cachedStr) : cachedStr;
-                if (cachedObj && cachedObj.wrSkey) {
+                let userSkey = h.wrSkey || h.skey || "";
+                let cachedInitSkey = cachedObj.initialSkey || "";
+                // 核心防死锁：若用户在环境变量中配置了全新凭证(skey变更或缓存已标记失败)，以环境变量最新值为准并废弃旧缓存
+                if (cachedObj.failed || (cachedInitSkey && userSkey && userSkey !== cachedInitSkey)) {
+                    return h;
+                }
+                // 仅当用户配置未变更时，复用自动续期产生的最新有效 skey
+                if (cachedObj && cachedObj.wrSkey && (!userSkey || userSkey === cachedInitSkey)) {
                     h.wrSkey = cachedObj.wrSkey;
                     h.skey = cachedObj.wrSkey;
                     if (cachedObj.wrRt) h.wrRt = decodeURIComponent(cachedObj.wrRt);
@@ -1053,7 +1060,23 @@ function getHelperAuthList() {
             }
         }
     }
-    return list;
+
+    // 自动按 vid 去重，并向用户提示避免填入重复小号
+    let seenVids = new Set();
+    let uniqueList = [];
+    for (let h of list) {
+        let v = String(h.vid || h.wrVid || "");
+        if (v) {
+            if (!seenVids.has(v)) {
+                seenVids.add(v);
+                uniqueList.push(h);
+            } else {
+                let maskV = v.length > 4 ? v.slice(0, 4) + "****" : v;
+                $.log(`[WeRead] ⚠️ 检测到重复的小号凭证 [${maskV}]，已自动合并去重。注意：微信读书每周每小号限助力1本，领满2本需配置2个不同的小号。`);
+            }
+        }
+    }
+    return uniqueList;
 }
 
 // 兼容单小号获取
@@ -1073,7 +1096,9 @@ async function tryWebRenewal(helperAuth) {
     if (typeof wrRt === "string") wrRt = decodeURIComponent(wrRt);
 
     let maskH = String(wrVid).length > 4 ? String(wrVid).slice(0, 4) + "****" : String(wrVid);
-    $.log(`[WeRead] 正在通过 /web/login/renewal 自动续期小号 [${maskH}] Web Cookie (wr_rt)...`);
+    let skeyPrefix = wrSkey ? (wrSkey.slice(0, 4) + "****") : "空";
+    let rtPrefix = wrRt ? (wrRt.slice(0, 6) + "..." + wrRt.slice(-4)) : "空";
+    $.log(`[WeRead] 正在通过 /web/login/renewal 自动续期小号 [${maskH}] Web Cookie (发送skey: ${skeyPrefix}, rt: ${rtPrefix})...`);
 
     // 变体重试列表 (借鉴 findmover/wxread，提升对腾讯不同网关版本容错能力)
     const COOKIE_DATA_VARIANTS = [
@@ -1122,7 +1147,13 @@ async function tryWebRenewal(helperAuth) {
                 helperAuth.rawCookie = `wr_vid=${wrVid}; wr_skey=${helperAuth.wrSkey}; wr_rt=${helperAuth.wrRt || wrRt}; wr_loggedIn=1;`;
                 $.log(`[WeRead] 🎉 小号 [${maskH}] Web Cookie 自动续期成功！最新 skey: ${helperAuth.wrSkey?.slice(0, 4)}****`);
                 try {
-                    let cacheData = { wrSkey: helperAuth.wrSkey, wrRt: helperAuth.wrRt || wrRt, rawCookie: helperAuth.rawCookie, updateTime: Date.now() };
+                    let cacheData = {
+                        wrSkey: helperAuth.wrSkey,
+                        wrRt: helperAuth.wrRt || wrRt,
+                        rawCookie: helperAuth.rawCookie,
+                        initialSkey: wrSkey,
+                        updateTime: Date.now()
+                    };
                     $.setdata(JSON.stringify(cacheData), `weread_helper_${wrVid}`);
                 } catch (e) { }
                 return helperAuth;
@@ -1136,7 +1167,17 @@ async function tryWebRenewal(helperAuth) {
 
     $.log(`[WeRead] ⚠️ 小号 [${maskH}] Web Cookie 自动续期响应: ${lastError}`);
     if (String(lastError).includes("鉴权失败") || String(lastError).includes("-2013")) {
-        $.log(`[WeRead] 💡 提示：小号 [${maskH}] 的 wr_rt 可能已过期或缺少桌面网页指纹。建议在电脑无痕浏览器打开 weread.qq.com 扫码抓取最新长效 Cookie 替换。`);
+        try {
+            const fs = require("fs");
+            if (fs.existsSync(CACHE_FILE)) {
+                let cur = JSON.parse(fs.readFileSync(CACHE_FILE, "utf-8"));
+                if (cur && cur[`weread_helper_${wrVid}`]) {
+                    delete cur[`weread_helper_${wrVid}`];
+                    fs.writeFileSync(CACHE_FILE, JSON.stringify(cur, null, 2), "utf-8");
+                }
+            }
+        } catch (e) { }
+        $.log(`[WeRead] 💡 已自动清理小号 [${maskH}] 的本地失效缓存。请检查环境变量中的最新凭证或尝试重新运行。`);
     }
     return null;
 }
