@@ -2,8 +2,8 @@
 ------------------------------------------
 @Description: 移动爱家 · 全方位去广告与界面纯净增强脚本
 @Author: TomCatXue
-@Updated: 2026-10-23 14:30
-@Version: v1.0.1
+@Updated: 2026-10-23 15:45
+@Version: v1.0.2
 ------------------------------------------
 */
 (function () {
@@ -78,7 +78,8 @@
   var isMiguVideoRequest = /display-sc\.miguvideo\.com\/display\/v3\/static/.test(url);
   var isCanvasLayoutRequest = /res\.coc\.10086\.cn\/.*rightsmarket-h5-canvas.*\.layout\..*\.json/.test(url);
   var isKomectVideoRequest = /video\.komect\.com\/camera\/core\/api\/bind\/queryList/.test(url);
-  var isPlaintextRequest = isJfShopRequest || isMiguVideoRequest || isCanvasLayoutRequest || isKomectVideoRequest;
+  var isHjqShopLayout = /shop\.hjq\.komect\.com\/hjqmall\/layout\/index\//.test(url);
+  var isPlaintextRequest = isJfShopRequest || isMiguVideoRequest || isCanvasLayoutRequest || isKomectVideoRequest || isHjqShopLayout;
 
   // 严格安全校验：对明文请求跳过 x-pen 检查
   var xPen = isPlaintextRequest ? "" : String(getHeader($response.headers, "x-pen"));
@@ -581,6 +582,35 @@
     return changed;
   }
 
+  // ==================== 4.2 移动爱家商城首页布局净化（保留Icon功能入口，移除视频/引流/瀑布流） ====================
+  function filterHjqShopLayout(url, payload) {
+    if (!enabled("HomeClean") && !enabled("HideCarousel")) return false;
+    if (!payload || typeof payload !== "object") return false;
+    var changed = false;
+
+    if (/\/hjqmall\/layout\/index\/content(?:\?|$)/.test(url)) {
+      if (Array.isArray(payload.data)) {
+        var beforeLen = payload.data.length;
+        payload.data = payload.data.filter(function (item) {
+          return String(item && item.patternCode) === "p002";
+        });
+        if (payload.data.length !== beforeLen) changed = true;
+      }
+    }
+
+    if (/\/hjqmall\/layout\/index\/frame(?:\?|$)/.test(url)) {
+      if (payload.data && Array.isArray(payload.data.frameList)) {
+        var beforeFrameLen = payload.data.frameList.length;
+        payload.data.frameList = payload.data.frameList.filter(function (item) {
+          return String(item && item.patternCode) === "p002";
+        });
+        if (payload.data.frameList.length !== beforeFrameLen) changed = true;
+      }
+    }
+
+    return changed;
+  }
+
   // ==================== 5. 我的钱包 / 充话费下方所有模块净化 ====================
   function filterJfShop(url, payload) {
     if (!enabled("WalletClean")) return false;
@@ -714,6 +744,8 @@
         plainChanged = filterCanvasLayout(plainJson);
       } else if (isKomectVideoRequest) {
         plainChanged = filterKomectVideo(plainJson);
+      } else if (isHjqShopLayout) {
+        plainChanged = filterHjqShopLayout(url, plainJson);
       }
       if (!plainChanged) {
         $done({});
