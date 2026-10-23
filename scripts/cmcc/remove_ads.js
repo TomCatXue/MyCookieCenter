@@ -1,9 +1,9 @@
 /*
 ------------------------------------------
-@Description: 中国移动 · 净屏与功能增强脚本（含首页轮播、专区横幅、发现页音视频/文章、钱包充话费、借钱与信息流）
-@Author: Yuheng0101, anker1209, ccyykk666, sooyaaabo; 轮播与专区全方位净化 TomCatXue
-@Updated: 2026-10-23 18:05
-@Version: v1.1.3
+@Description: 中国移动 · 页面、横幅与轮播精准净化增强脚本
+@Author: Yuheng0101, anker1209, ccyykk666, sooyaaabo; 轮播净化 TomCatXue
+@Updated: 2026-10-23 18:20
+@Version: v1.0.4
 ------------------------------------------
 */
 (function () {
@@ -48,8 +48,6 @@
     HomeBasicClean: true,
     ServicePageClean: true,
     MineClean: true,
-    WalletClean: true,
-    DiscoverClean: true,
     HideTopFamily: false,
     HideTopAge: false,
     HideTopPhone: false,
@@ -119,18 +117,13 @@
   var isH5Request =
     /\/(?:DH\/(?:message_query\/message\/query\/list|myCardVoucher\/getBannerList)|DA\/(?:commonBoard\/getCommonBoard|baseServiceFunction\/getAdverList))(?:\?|$)/.test(url) ||
     /h\.app\.coc\.10086\.cn/.test(url);
-  var isJfShopRequest = /app\.jf\.10086\.cn\/cmcc-h5-shop\//.test(url);
-  var isMiguVideoRequest = /display-sc\.miguvideo\.com\/display\/v3\/static/.test(url);
-  var isPlaintextRequest = isJfShopRequest || isMiguVideoRequest;
-
-  var xPen = (isRechargeRequest || isPlaintextRequest)
+  var xPen = isRechargeRequest
     ? ""
     : String(getHeader($response.headers, "x-pen"));
 
   if (
-    !isRechargeRequest &&
-    !isPlaintextRequest &&
-    ((isH5Request && xPen !== "1") || (!isH5Request && xPen !== "14"))
+    (!isRechargeRequest && isH5Request && xPen !== "1") ||
+    (!isRechargeRequest && !isH5Request && xPen !== "14")
   ) {
     $done({});
     return;
@@ -369,7 +362,7 @@
     return JSON.parse(
       utf8Decode(
         aesCbcDecrypt(
-          base64Decode(String(ciphertext).replace(/\s+/g, "")),
+          base64Decode(ciphertext),
           utf8Encode(keyText),
           utf8Encode(ivText)
         )
@@ -458,7 +451,6 @@
         aname.indexOf("轮播") >= 0 ||
         aname.indexOf("横幅") >= 0 ||
         aname.indexOf("走马灯") >= 0 ||
-        aid === "20241010002" ||
         String(area.areaType || "").toLowerCase() === "banner"
       )) {
         return false;
@@ -486,14 +478,6 @@
         var moduleCount = area.moduleList.length;
         area.moduleList = area.moduleList.filter(function (module) {
           return String(module && module.moduleId) !== "XBYYW01";
-        });
-        if (area.moduleList.length !== moduleCount) changed = true;
-      }
-
-      if (cleanHome && areaId === "20250916002") {
-        var moduleCount = area.moduleList.length;
-        area.moduleList = area.moduleList.filter(function (module) {
-          return !String(module && module.moduleId || "").startsWith("XBYYW");
         });
         if (area.moduleList.length !== moduleCount) changed = true;
       }
@@ -604,16 +588,9 @@
     var featureAreaToSwitch = {
       "20230721008": "HideMyCheckIn",       // 签到浮窗
       "20230721012": "HideMyMarketing",     // 营销区域
-      "20240206004": "HideMyMarketing",     // 权益卡片新
-      "20230908006": "HideMyMarketing",     // 品牌入口
       "20230721018": "HideMyServices",      // 我的服务
-      "20260104006": "HideMyServices",      // 我的服务cube卡片
       "20240708002": "HideMyFamilyCube",    // 我的家庭
-      "20240429006": "HideMyFamilyCube",    // 我的家庭cube卡片
-      "20240528002": "HideMyFamilyCube",    // 家庭管理cube卡片
       "20251024002": "HideMyDevicesCube",   // 我的设备
-      "20251016004": "HideMyDevicesCube",   // 我的设备（cubeList）
-      "20260610004": "HideMyDevicesCube",   // 新通话cube卡片id
       "20231017002": "HideMyMiniProgram",   // 我的账户
       "20230721020": "HideMyDigitalHuman",  // AI智能助理
       "20230721030": "HideMySelections",    // 我的优选
@@ -621,8 +598,7 @@
       "20251230002": "HideMyRingtone",      // 我的彩铃
       "20240624002": "HideMyCloudDrive",    // 我的云盘
       "20230721044": "HideMyToolbox",       // 百宝箱
-      "20230928004": "HideMyLifeServices",  // 生活服务
-      "20260610008": "HideMyMarketing"      // 卡券包包
+      "20230928004": "HideMyLifeServices"   // 生活服务
     };
 
     var before = body.areaList.length;
@@ -655,22 +631,7 @@
       return true;
     });
 
-    var cubeChanged = false;
-    if (Array.isArray(body.cubeList)) {
-      var cubeBefore = body.cubeList.length;
-      body.cubeList.forEach(function (cube) {
-        if (!cube || cube.isShow === "0") return;
-        var cubeId = String(cube.areaId || "");
-        var sw = featureAreaToSwitch[cubeId];
-        if (sw && enabled(sw) && cube.isShow !== "0") {
-          cube.isShow = "0";
-          cubeChanged = true;
-        }
-      });
-      if (body.cubeList.length !== cubeBefore) cubeChanged = true;
-    }
-
-    return body.areaList.length !== before || cubeChanged;
+    return body.areaList.length !== before;
   }
 
   function filterServicePages(payload) {
@@ -906,111 +867,6 @@
     return false;
   }
 
-  function filterTitleBar(payload) {
-    if (!enabled("HomeBasicClean") && !enabled("HideCarousel")) return false;
-    var body = payload && payload.rspBody;
-    if (!body || !Array.isArray(body.areaList)) return false;
-    var changed = false;
-
-    body.areaList.forEach(function (area) {
-      if (!Array.isArray(area && area.moduleList)) return;
-      area.moduleList.forEach(function (module) {
-        if (String(module && module.moduleId) === "title_icon" && Array.isArray(module.adverList) && module.adverList.length > 0) {
-          module.adverList = [];
-          changed = true;
-        }
-      });
-    });
-
-    return changed;
-  }
-
-  function filterJfShop(url, payload) {
-    if (!enabled("WalletClean")) return false;
-    if (!payload || typeof payload !== "object") return false;
-    var changed = false;
-
-    if (/\/cmcc-h5-shop\/cms\/contents(?:\?|$)/.test(url)) {
-      var list = payload.resultJson;
-      var isStr = false;
-      if (typeof list === "string") {
-        try {
-          list = JSON.parse(list);
-          isStr = true;
-        } catch (e) {}
-      }
-      if (Array.isArray(list)) {
-        var beforeLen = list.length;
-        list = list.filter(function (m) {
-          var mid = Number(m && m.moduleId);
-          return mid === 2000000000001185;
-        });
-        if (list.length !== beforeLen) {
-          payload.resultJson = isStr ? JSON.stringify(list) : list;
-          changed = true;
-        }
-      }
-    }
-
-    if (/\/cmcc-h5-shop\/hePay\/all(?:\?|$)/.test(url)) {
-      var rj = payload.resultJson;
-      var isStrRj = false;
-      if (typeof rj === "string") {
-        try {
-          rj = JSON.parse(rj);
-          isStrRj = true;
-        } catch (e) {}
-      }
-      if (rj && typeof rj === "object") {
-        if (rj.heBaoWallet !== null || rj.digitalAsset !== null) {
-          rj.heBaoWallet = null;
-          rj.digitalAsset = null;
-          payload.resultJson = isStrRj ? JSON.stringify(rj) : rj;
-          changed = true;
-        }
-      }
-    }
-
-    if (/\/cmcc-h5-shop\/cms\/yourFavorite(?:\?|$)/.test(url)) {
-      var fav = payload.resultJson;
-      var isStrFav = false;
-      if (typeof fav === "string") {
-        try {
-          fav = JSON.parse(fav);
-          isStrFav = true;
-        } catch (e) {}
-      }
-      if (fav && fav.pageResult && Array.isArray(fav.pageResult.pageData)) {
-        if (fav.pageResult.pageData.length > 0) {
-          fav.pageResult.pageData = [];
-          fav.pageResult.count = 0;
-          fav.pageResult.pageCount = 0;
-          payload.resultJson = isStrFav ? JSON.stringify(fav) : fav;
-          changed = true;
-        }
-      }
-    }
-
-    return changed;
-  }
-
-  function filterMiguVideo(payload) {
-    if (!enabled("DiscoverClean")) return false;
-    if (!payload || typeof payload !== "object") return false;
-    var changed = false;
-    if (payload.body && typeof payload.body === "object") {
-      if (Array.isArray(payload.body.groups) && payload.body.groups.length > 0) {
-        payload.body.groups = [];
-        changed = true;
-      }
-      if (Array.isArray(payload.body.data) && payload.body.data.length > 0) {
-        payload.body.data = [];
-        changed = true;
-      }
-    }
-    return changed;
-  }
-
   function filterAggregationData(payload) {
     var body = payload && payload.rspBody;
     if (!body) return false;
@@ -1058,28 +914,6 @@
   }
 
   try {
-    if (isPlaintextRequest) {
-      var plainJson;
-      try {
-        plainJson = JSON.parse(responseBody);
-      } catch (e) {
-        $done({});
-        return;
-      }
-      var plainChanged = false;
-      if (isJfShopRequest) {
-        plainChanged = filterJfShop(url, plainJson);
-      } else if (isMiguVideoRequest) {
-        plainChanged = filterMiguVideo(plainJson);
-      }
-      if (!plainChanged) {
-        $done({});
-        return;
-      }
-      $done({ body: JSON.stringify(plainJson) });
-      return;
-    }
-
     if (isRechargeRequest) {
       var rechargeEnvelope = JSON.parse(responseBody);
       var rechargeOutParam =
@@ -1158,7 +992,6 @@
     if (declaredLength > 0 && declaredLength < responseBody.length) {
       responseBody = responseBody.slice(0, declaredLength);
     }
-    responseBody = responseBody.replace(/\s+/g, "");
 
     var payload = decryptJson(responseBody, AES_KEY, AES_IV);
     var changed = false;
@@ -1175,8 +1008,6 @@
       changed = filterSearchWords(payload);
     } else if (/\/DA\/baseServiceFunction\/getAdverList(?:\?|$)/.test(url)) {
       changed = filterServicePages(payload);
-    } else if (/\/DN\/titleBar\/getIcon(?:\?|$)/.test(url)) {
-      changed = filterTitleBar(payload);
     }
 
     if (!changed) {
