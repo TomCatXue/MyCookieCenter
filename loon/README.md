@@ -3,8 +3,8 @@
 | 插件 | 功能 | 独立业务开关 |
 | :--- | :--- | :--- |
 | [**DaiDaiPanel.plugin**](./DaiDaiPanel.plugin) (v1.0.3) | **呆呆面板 · 凭据捕获与自动同步**：微信读书 / 扫描全能王 / 中国移动 / 中国电信。一 App 一脚本，凭据变化即时推送到呆呆面板环境变量并反馈通知，零机械定时 | `weread` `cmcc_mark` `camscanner` `telecom` |
-| [**ChinaMobile.plugin**](./ChinaMobile.plugin) (v1.1.2) | **中国移动 · 净屏与功能增强**：彻底还原标准单层 Base64 加密避免客户端解密异常；修复「我的」页面全量开关与新版 cubeList 容器；彻底净化开屏、首页轮播与各专区横幅 | HideCarousel 轮播总控及全功能细分开关 |
-| [**ChinaMobileAiJia.plugin**](./ChinaMobileAiJia.plugin) (v1.0.6) | **移动爱家 · 全方位净化与纯净增强**：彻底剥离与中国移动 App 的域名冲突；和包充话费钱包全营销接口标准空业务响应；净化和家亲楼层 Banner、友盟启动广告、智能专区与发现页 | HideCarousel、LaunchAdClean 及全专区细分开关 |
+| [**ChinaMobile.plugin**](./ChinaMobile.plugin) (v1.1.3) | **中国移动 · 净屏与功能增强**：彻底剥离移动爱家相关开关与脚本，恢复纯净专属去广告；修复单层标准 AES 加解密协议，全面支持新版我的页面与 cubeList 容器 | HideCarousel 轮播总控及全功能细分开关 |
+| [**ChinaMobileAiJia.plugin**](./ChinaMobileAiJia.plugin) (v1.0.7) | **移动爱家 · 全方位净化与纯净增强**：放行充话费 area/homepage 核心骨架根除“服务出错”；精准清空充话费轮播、会员优享、借款、精彩推荐等全部营销卡片；覆盖和家亲楼层与设备推广 | HideCarousel、LaunchAdClean 及全专区细分开关 |
 | [`WeReadEnhance.plugin`](./WeReadEnhance.plugin) | 微信读书：去广告、去更新弹窗、解除试听限制 | 内置总开关 |
 | [`BilibiliFix.plugin`](./BilibiliFix.plugin) | 哔哩哔哩：空降助手、分区修复、扫码登录、画质解锁 | 内置总开关 |
 | [`PixivEnhanced.plugin`](./PixivEnhanced.plugin) | Pixiv：全页面汉化、AI 漫画翻译、设置中心 | 内置总开关 |

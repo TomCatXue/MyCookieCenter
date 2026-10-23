@@ -1,9 +1,9 @@
 /*
 ------------------------------------------
-@Description: 中国移动 · 移动爱家全方位净化增强脚本（含首页轮播、智能爱家、发现页音视频/文章、钱包充话费、借钱与信息流）
+@Description: 中国移动 · 净屏与功能增强脚本（含首页轮播、专区横幅、发现页音视频/文章、钱包充话费、借钱与信息流）
 @Author: Yuheng0101, anker1209, ccyykk666, sooyaaabo; 轮播与专区全方位净化 TomCatXue
-@Updated: 2026-10-23 17:30
-@Version: v1.1.2
+@Updated: 2026-10-23 18:05
+@Version: v1.1.3
 ------------------------------------------
 */
 (function () {
@@ -50,7 +50,6 @@
     MineClean: true,
     WalletClean: true,
     DiscoverClean: true,
-    SmartPageClean: true,
     HideTopFamily: false,
     HideTopAge: false,
     HideTopPhone: false,
@@ -122,8 +121,7 @@
     /h\.app\.coc\.10086\.cn/.test(url);
   var isJfShopRequest = /app\.jf\.10086\.cn\/cmcc-h5-shop\//.test(url);
   var isMiguVideoRequest = /display-sc\.miguvideo\.com\/display\/v3\/static/.test(url);
-  var isCanvasLayoutRequest = /res\.coc\.10086\.cn\/.*rightsmarket-h5-canvas.*\.layout\..*\.json/.test(url);
-  var isPlaintextRequest = isJfShopRequest || isMiguVideoRequest || isCanvasLayoutRequest;
+  var isPlaintextRequest = isJfShopRequest || isMiguVideoRequest;
 
   var xPen = (isRechargeRequest || isPlaintextRequest)
     ? ""
@@ -909,7 +907,7 @@
   }
 
   function filterTitleBar(payload) {
-    if (!enabled("SmartPageClean") && !enabled("HideCarousel")) return false;
+    if (!enabled("HomeBasicClean") && !enabled("HideCarousel")) return false;
     var body = payload && payload.rspBody;
     if (!body || !Array.isArray(body.areaList)) return false;
     var changed = false;
@@ -1013,47 +1011,6 @@
     return changed;
   }
 
-  function filterCanvasLayout(payload) {
-    if (!enabled("SmartPageClean") && !enabled("HideCarousel")) return false;
-    if (!payload || !Array.isArray(payload.instanceList)) return false;
-    var changed = false;
-
-    var filterCarousel = enabled("HideCarousel");
-    var filterSmart = enabled("SmartPageClean");
-
-    var beforeRows = payload.instanceList.length;
-    payload.instanceList = payload.instanceList.map(function (row) {
-      if (!Array.isArray(row)) return row;
-      return row.filter(function (sub) {
-        var inst = sub && sub.instance;
-        var name = String(inst && inst.name || "");
-
-        if (filterCarousel && (
-          name.indexOf("SwiperComp") >= 0 ||
-          name.indexOf("LeaderboardEntrComp") >= 0
-        )) {
-          return false;
-        }
-
-        if (filterSmart && (
-          name.indexOf("FloatingPicComp") >= 0 ||
-          name.indexOf("FloatComp") >= 0 ||
-          name.indexOf("DialogComp") >= 0 ||
-          name.indexOf("CTOPDialogComp") >= 0
-        )) {
-          return false;
-        }
-
-        return true;
-      });
-    }).filter(function (row) {
-      return Array.isArray(row) && row.length > 0;
-    });
-
-    if (payload.instanceList.length !== beforeRows) changed = true;
-    return changed;
-  }
-
   function filterAggregationData(payload) {
     var body = payload && payload.rspBody;
     if (!body) return false;
@@ -1114,8 +1071,6 @@
         plainChanged = filterJfShop(url, plainJson);
       } else if (isMiguVideoRequest) {
         plainChanged = filterMiguVideo(plainJson);
-      } else if (isCanvasLayoutRequest) {
-        plainChanged = filterCanvasLayout(plainJson);
       }
       if (!plainChanged) {
         $done({});
