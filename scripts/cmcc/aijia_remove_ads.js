@@ -87,7 +87,6 @@
   var isSceneRequest = /(?:base\/)?scene\/(?:getRuleTemplates|getRecommendRules)/.test(url);
   var isHebaoPayAdRequest = /p\.10086\.cn\/wap\/v1\/(?:polymeriza-page\/(?:banner|popup|activity|business|group-cards|marquee)|float\/window|guess\/shop)(?:\?|$)/.test(url);
   var isPlaintextRequest = isJfShopRequest || isMiguVideoRequest || isCanvasLayoutRequest || isHjqShopLayout || isHjqBannerRequest || isHjqContentRequest || isUmpLaunchRequest || isJfAdRequest || isHebaoPayAdRequest || isSceneRequest;
-
   // 严格安全校验：原生接口必须带 x-pen=14；明文 H5 接口按域名放行。
   var isNativeEncryptedRequest = /(?:client|apm)\.app\.coc\.10086\.cn\/biz-orange\/DN\//.test(url);
   var xPen = String(getHeader($response.headers, "x-pen"));
@@ -661,6 +660,34 @@
     return changed;
   }
 
+  // ==================== 4.31 移动爱家内容/房间/设备列表安全净化（仅剔除运营横幅，严禁清空房间与设备） ====================
+  function filterHjqPlaceList(payload) {
+    if (!enabled("HideCarousel")) return false;
+    if (!payload) return false;
+    var changed = false;
+
+    function cleanPlace(place) {
+      if (!place || typeof place !== "object") return;
+      var bannerKeys = ["bannerList", "bannerContentList", "bannerInfoList", "operationFloatList"];
+      bannerKeys.forEach(function (k) {
+        if (Array.isArray(place[k]) && place[k].length > 0) {
+          place[k] = [];
+          changed = true;
+        }
+      });
+    }
+
+    if (Array.isArray(payload)) {
+      payload.forEach(cleanPlace);
+    } else if (typeof payload === "object") {
+      cleanPlace(payload);
+      if (Array.isArray(payload.data)) payload.data.forEach(cleanPlace);
+      if (Array.isArray(payload.placeList)) payload.placeList.forEach(cleanPlace);
+      if (Array.isArray(payload.frameList)) payload.frameList.forEach(cleanPlace);
+    }
+    return changed;
+  }
+
   // ==================== 4.3 和家亲原生 Banner / 首页楼层清洗 ====================
   function filterHjqBanner(url, payload) {
     if (!enabled("HideCarousel")) return false;
@@ -966,8 +993,10 @@
       
       } else if (isHjqShopLayout) {
         plainChanged = filterHjqShopLayout(url, plainJson);
-      } else if (isHjqBannerRequest || isHjqContentRequest) {
+      } else if (isHjqBannerRequest) {
         plainChanged = filterHjqBanner(url, plainJson);
+      } else if (isHjqContentRequest) {
+        plainChanged = filterHjqPlaceList(plainJson);
       } else if (isUmpLaunchRequest) {
         plainChanged = filterUmpLaunch(plainJson);
       } else if (isJfAdRequest) {
