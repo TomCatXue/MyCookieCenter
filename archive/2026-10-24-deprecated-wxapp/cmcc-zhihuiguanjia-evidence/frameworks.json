@@ -1,0 +1,254 @@
+[
+  {
+    "name": "AlrdFramework.framework",
+    "bundle": "com.ddl.Alrd.AlrdFramework",
+    "ver": "1.0.0",
+    "min_os": "10.0"
+  },
+  {
+    "name": "BlackbeesFrameworkSDK.framework",
+    "bundle": "com.blackbees.frameworkResources.BlackbeesFrameworkSDK",
+    "ver": "1.0",
+    "min_os": "11.0"
+  },
+  {
+    "name": "CMIOT_SDK.framework",
+    "bundle": "com.iot.chinamobile.CMIOT-SDK",
+    "ver": "1.1.0",
+    "min_os": "8.0"
+  },
+  {
+    "name": "CarePatch.framework",
+    "bundle": "com.protontek.hangzhou.CarePatch",
+    "ver": "1.0",
+    "min_os": "8.0"
+  },
+  {
+    "name": "CarePatchTempPatch.framework",
+    "bundle": "com.protontek.hangzhou.CarePatchTempPatch",
+    "ver": "1.0",
+    "min_os": "8.0"
+  },
+  {
+    "name": "DDZombieMonitor.framework",
+    "bundle": "com.jweigang.DDZombieMonitor",
+    "ver": "1.0",
+    "min_os": "11.0"
+  },
+  {
+    "name": "FaceLiveKit.framework",
+    "bundle": "com.bbs.test1",
+    "ver": "1.0",
+    "min_os": "11.0"
+  },
+  {
+    "name": "GDTMobSDK.framework",
+    "bundle": "com.qq.gdt.GDTMobSDK",
+    "ver": "1.0",
+    "min_os": "11.0"
+  },
+  {
+    "name": "GMObjC.framework",
+    "bundle": "com.lifei.GMObjC",
+    "ver": "1.0",
+    "min_os": "9.0"
+  },
+  {
+    "name": "HHYSDK_OC.framework",
+    "bundle": "com.cmcc.HHYSDK-OC",
+    "ver": "1.0",
+    "min_os": "12.0"
+  },
+  {
+    "name": "HYRemote.framework",
+    "bundle": "com.cmcchycd.hyremote",
+    "ver": "0.4.0",
+    "min_os": "12.4"
+  },
+  {
+    "name": "HistorSDK.framework",
+    "bundle": "com.hikvision.HistorSDK",
+    "ver": "1.0.6",
+    "min_os": "10.0"
+  },
+  {
+    "name": "IOTSDK.framework",
+    "bundle": "VIOT.SDK",
+    "ver": "4.3.0",
+    "min_os": "9.0"
+  },
+  {
+    "name": "LZBluetooth.framework",
+    "bundle": "com.lifesense.sdk.LZBluetooth",
+    "ver": "1.6.13",
+    "min_os": "9.0"
+  },
+  {
+    "name": "LittleCIM.framework",
+    "bundle": "com.cmcchy.LittleCIM",
+    "ver": "2.0.0",
+    "min_os": "11.0"
+  },
+  {
+    "name": "LittlecVoIP.framework",
+    "bundle": "com.cmcchy.xiaoxi.voip",
+    "ver": "1.0",
+    "min_os": "9.0"
+  },
+  {
+    "name": "MGMediaFramework.framework",
+    "bundle": "com.migucloud.MediaFramework",
+    "ver": "9.9.10",
+    "min_os": "8.0"
+  },
+  {
+    "name": "MGProxy.framework",
+    "bundle": "com.migucloud.MGProxy.www",
+    "ver": "1.1.0",
+    "min_os": "8.0"
+  },
+  {
+    "name": "MQTTClient.framework",
+    "bundle": "org.owntracks.MQTTClient",
+    "ver": "0.5.2",
+    "min_os": "8.0"
+  },
+  {
+    "name": "MSSecretSDK.framework",
+    "bundle": "com.midea.MSSecretSDK",
+    "ver": "1.0",
+    "min_os": "8.0"
+  },
+  {
+    "name": "MSmartSDK.framework",
+    "bundle": "org.cocoapods.MSmartSDK",
+    "ver": "8.0.0",
+    "min_os": "9.0"
+  },
+  {
+    "name": "ONTPlayer.framework",
+    "bundle": "com.ioteam.ONTPlayer",
+    "ver": "1.5.3",
+    "min_os": "9.0"
+  },
+  {
+    "name": "SccEngine.framework",
+    "bundle": "tb.sccengine.scc.SccEngine",
+    "ver": "2.0.0",
+    "min_os": "8.0"
+  },
+  {
+    "name": "SmartCloudMobileSDK.framework",
+    "bundle": "com.jd.SmartCloudMobileSDK",
+    "ver": "1.5.4",
+    "min_os": "8.0"
+  },
+  {
+    "name": "Tquic.framework",
+    "bundle": "org.tencent.net.Tquic",
+    "ver": "95.4624.0",
+    "min_os": "10.0"
+  },
+  {
+    "name": "WYVideoConsultSDK_Dynamic.framework",
+    "bundle": "com.wedoctor.wyvideoconsult.WYVideoConsultSDK-Dynamic",
+    "ver": "1.0",
+    "min_os": "10.0"
+  },
+  {
+    "name": "WebRTC.framework",
+    "bundle": "org.webrtc.WebRTC",
+    "ver": "1.0",
+    "min_os": "12.0"
+  },
+  {
+    "name": "YYLFaceDetect.framework",
+    "bundle": "yyl.YYLFaceDetect",
+    "ver": "1.0",
+    "min_os": "11.0"
+  },
+  {
+    "name": "ZDKDynamicFramework.framework",
+    "bundle": "com.ZDKDynamicFramework",
+    "ver": "1.18.32",
+    "min_os": "8.0"
+  },
+  {
+    "name": "dhsdk.framework",
+    "bundle": "dahua.dhsdk",
+    "ver": "1.0",
+    "min_os": "9.0"
+  },
+  {
+    "name": "fcnslib.framework",
+    "bundle": "com.cmhi.fcnslib",
+    "ver": "1.0",
+    "min_os": "11.0"
+  },
+  {
+    "name": "hermes.framework",
+    "bundle": "dev.hermesengine.iphoneos",
+    "ver": "0.12.0",
+    "min_os": "12.4"
+  },
+  {
+    "name": "homelite.framework",
+    "bundle": "com.thundersoft.osware.homelite",
+    "ver": "1.0",
+    "min_os": "12.0"
+  },
+  {
+    "name": "jupiter.framework",
+    "bundle": "com.wedoctor.jupiter.jupiter",
+    "ver": "1.0",
+    "min_os": "9.0"
+  },
+  {
+    "name": "libpag.framework",
+    "bundle": "com.tencent.libpag",
+    "ver": "4.5.12",
+    "min_os": "9.0"
+  },
+  {
+    "name": "liveaccelerator.framework",
+    "bundle": "com.qcloud.qvb.liveaccelerator",
+    "ver": "1.0",
+    "min_os": "11.0"
+  },
+  {
+    "name": "nuisdk.framework",
+    "bundle": "alibaba.idst.nuisdk",
+    "ver": "1.0",
+    "min_os": "9.0"
+  },
+  {
+    "name": "opus.framework",
+    "bundle": "org.opus-codec.org",
+    "ver": "1.1.3",
+    "min_os": "9.0"
+  },
+  {
+    "name": "pingTool.framework",
+    "bundle": "com.qiyou.pingtool",
+    "ver": "1.0.0",
+    "min_os": "9.0"
+  },
+  {
+    "name": "proxy.framework",
+    "bundle": "com.qiyou.qyproxy",
+    "ver": "1.0.2",
+    "min_os": "9.0"
+  },
+  {
+    "name": "rtcengine.framework",
+    "bundle": "com.techbridge.rtcengine",
+    "ver": "2.0",
+    "min_os": "8.0"
+  },
+  {
+    "name": "sccbase.framework",
+    "bundle": "tb.sccengine.base.sccbase",
+    "ver": "1.0",
+    "min_os": "8.0"
+  }
+]

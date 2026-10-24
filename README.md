@@ -51,9 +51,7 @@ ql repo https://github.com/TomCatXue/MyCookieCenter.git "ql_script" "" "README" 
 | <img src="icons/189.png" height="16" /> | **电信秒杀** | 等级权益抢兑 | `dxlin` |
 | <img src="https://github.com/ChinaTelecomOperators/ChinaUnicom/releases/download/Prerelease-Alpha/icon.png" height="16" /> | **中国联通** | 签到、积分与权益 | `chinaUnicom_data` |
 | <img src="./icons/linli.png" height="16" /> | **林里** | 取码并签到 | `YYB_SERVER` |
-| <img src="./icons/huisheng.png" height="16" /> | **惠省** | 红包墙领券 | `YYB_SERVER` + `HUISHENG_LOGIN_GATEWAY` |
 | <img src="./icons/bibisheng.png" height="16" /> | **笔笔省** | 每日领券 | `YYB_SERVER` |
-| <img src="./icons/haidilao.png" height="16" /> | **海底捞** | 会员签到 | `YYB_SERVER` |
 | <img src="./icons/miniso.png" height="16" /> | **名创优品** | 每日签到 | `YYB_SERVER` |
 
 > **变量说明：**
@@ -63,7 +61,9 @@ ql repo https://github.com/TomCatXue/MyCookieCenter.git "ql_script" "" "README" 
 > - `WEREAD_AUTH`：微信读书抓包 JSON，含 `refreshToken` 永久脱机自愈；
 > - `YYB_SERVER`：YYB-Go-Enhanced 取码服务，格式 `地址@账号ID`，每行一个账号；林里另需 `LINLI_STORE_ID`、`LINLI_ACTIVITY_ID`，详见 [ql_script/README.md](./ql_script/README.md)。
 
-> **验证状态：** 五个小程序脚本已通过本地契约与 HTTP mock；真实平台仍需账号实测。惠省脚本已内置美团签名后端调用，直接配置 `HUISHENG_MT_BACKEND` 与 `HUISHENG_MT_PROJECT_ID` 即可，详见 [ql_script/README.md](./ql_script/README.md)。
+> **验证状态：** 小程序脚本已通过本地契约与 HTTP mock；真实平台仍需账号实测。
+>
+> **已归档：** 惠省、海底捞已暂停维护并移出仓库，源码与图标保存在 `archive/2026-10-24-deprecated-wxapp/`。归档原因与复活路径见该目录的 `README.md`（技术细节另存于本地私有笔记，未随仓库发布）。
 
 ## License
 
