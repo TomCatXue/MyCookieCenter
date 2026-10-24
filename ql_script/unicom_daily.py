@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 ===================================================================
-📌 版本: v1.4.0 (2026-10-08 海岛逐浪应援版)
+📌 版本: v1.4.1 (2026-10-24 海岛逐浪应援版)
 中国联通 · 每日签到与福利任务聚合脚本
 ===================================================================
 new Env('中国联通 · 每日签到与福利');
@@ -29,6 +29,9 @@ tag: 中国联通
   a. 账号密码自动获取Token (推荐): export chinaUnicomCookie="138****0000#123456"
   b. Token#AppId 免密模式 (推荐): export chinaUnicomCookie="a3e4c1ff2xxxxxxxxx#912d30xxxxxx"
   c. 仅Token模式: export chinaUnicomCookie="a3e4c1ff2xxxxxxxxx"
+
+更新说明 (v1.4.1):
+  - 修复 UNICOM_MODULE_PIPELINE 全局作用域: 注册表移至顶层，消除类方法内 NameError
 
 更新说明 (v1.4.0):
   - 移除已下线的云盘乘风活动 (上游 v1.2.1 确认该活动接口族已全部下线)
@@ -85,7 +88,7 @@ from requests.packages.urllib3.util.retry import Retry
 from Crypto.Cipher import AES, PKCS1_v1_5
 from Crypto.PublicKey import RSA
 from Crypto.Util.Padding import pad, unpad
-SCRIPT_VERSION = "v1.4.0"
+SCRIPT_VERSION = "v1.4.1"
 # ========================================
 # 全局配置 (globalConfig)
 # true=开启, false=关闭
@@ -7362,80 +7365,6 @@ class UserService:
         self.sign_getTelephone()
         self.sign_query_my_prizes()
 
-    # ==================== 🛠️ 中国联通模块化任务注册表 (可随时拔插、增删、注释单行屏蔽) ====================
-    UNICOM_MODULE_PIPELINE = [
-        {
-            "name": "签到区",
-            "cfg_key": "enable_sign",
-            "run": lambda u: u.sign_task_main(),
-            "query": lambda u: (u.sign_getContinuous(is_query_only=True),
-                                u.sign_month_sign_gift(is_query_only=True),
-                                u.sign_getTelephone(),
-                                u.sign_query_my_prizes()),
-        },
-        {
-            "name": "联通祝福",
-            "cfg_key": "enable_ltzf",
-            "run": lambda u: u.ltzf_task(),
-            "query": None,
-        },
-        {
-            "name": "天天领现金",
-            "cfg_key": "enable_ttlxj",
-            "run": lambda u: u.ttlxj_task(),
-            "query": lambda u: u.ttlxj_task(is_query_only=True),
-        },
-        {
-            "name": "通通乡村",
-            "cfg_key": "enable_ttxc",
-            "run": lambda u: u.ttxc_task(),
-            "query": lambda u: u.ttxc_task(is_query_only=True),
-        },
-        {
-            "name": "权益超市",
-            "cfg_key": "enable_market",
-            "run": lambda u: u.market_task(),
-            "query": lambda u: u.market_task(is_query_only=True),
-        },
-        {
-            "name": "联通阅读",
-            "cfg_key": "enable_woread",
-            "run": lambda u: u.woread_task(),
-            "query": lambda u: u.woread_queryTicketAccount(),
-        },
-        {
-            "name": "联通爱听",
-            "cfg_key": "enable_aiting",
-            "run": lambda u: u.aiting_task(),
-            "query": lambda u: u.aiting_task(is_query_only=True),
-            "cooldown_before": True,
-        },
-        {
-            "name": "安全管家",
-            "cfg_key": "enable_security",
-            "run": lambda u: u.securityButlerTask(),
-            "query": lambda u: u.securityButlerTask(is_query_only=True),
-        },
-        {
-            "name": "联通云盘",
-            "cfg_key": "enable_ltyp",
-            "run": lambda u: u.ltyp_task(),
-            "query": lambda u: u.ltyp_task(is_query_only=True),
-        },
-        {
-            "name": "沃云手机",
-            "cfg_key": "enable_wostore",
-            "run": lambda u: u.wostore_cloud_task(),
-            "query": lambda u: u.wostore_cloud_task(is_query_only=True),
-        },
-        {
-            "name": "省份专属活动",
-            "cfg_key": "enable_regional",
-            "run": lambda u: u.regional_task(),
-            "query": lambda u: u.regional_task(is_query_only=True),
-        },
-    ]
-
 
     def execute_daily_tasks(self, query_only=False):
         """统一联通任务执行管线：按 UNICOM_MODULE_PIPELINE 流水线依次调度各业务模块"""
@@ -7477,6 +7406,82 @@ class UserService:
                     woread_ran = True
             except Exception as e:
                 self.log(f"⚠️ {m_name} 执行异常: {e}")
+
+
+# ==================== 🛠️ 中国联通模块化任务注册表 (可随时拔插、增删、注释单行屏蔽) ====================
+UNICOM_MODULE_PIPELINE = [
+    {
+        "name": "签到区",
+        "cfg_key": "enable_sign",
+        "run": lambda u: u.sign_task_main(),
+        "query": lambda u: (u.sign_getContinuous(is_query_only=True),
+                            u.sign_month_sign_gift(is_query_only=True),
+                            u.sign_getTelephone(),
+                            u.sign_query_my_prizes()),
+    },
+    {
+        "name": "联通祝福",
+        "cfg_key": "enable_ltzf",
+        "run": lambda u: u.ltzf_task(),
+        "query": None,
+    },
+    {
+        "name": "天天领现金",
+        "cfg_key": "enable_ttlxj",
+        "run": lambda u: u.ttlxj_task(),
+        "query": lambda u: u.ttlxj_task(is_query_only=True),
+    },
+    {
+        "name": "通通乡村",
+        "cfg_key": "enable_ttxc",
+        "run": lambda u: u.ttxc_task(),
+        "query": lambda u: u.ttxc_task(is_query_only=True),
+    },
+    {
+        "name": "权益超市",
+        "cfg_key": "enable_market",
+        "run": lambda u: u.market_task(),
+        "query": lambda u: u.market_task(is_query_only=True),
+    },
+    {
+        "name": "联通阅读",
+        "cfg_key": "enable_woread",
+        "run": lambda u: u.woread_task(),
+        "query": lambda u: u.woread_queryTicketAccount(),
+    },
+    {
+        "name": "联通爱听",
+        "cfg_key": "enable_aiting",
+        "run": lambda u: u.aiting_task(),
+        "query": lambda u: u.aiting_task(is_query_only=True),
+        "cooldown_before": True,
+    },
+    {
+        "name": "安全管家",
+        "cfg_key": "enable_security",
+        "run": lambda u: u.securityButlerTask(),
+        "query": lambda u: u.securityButlerTask(is_query_only=True),
+    },
+    {
+        "name": "联通云盘",
+        "cfg_key": "enable_ltyp",
+        "run": lambda u: u.ltyp_task(),
+        "query": lambda u: u.ltyp_task(is_query_only=True),
+    },
+    {
+        "name": "沃云手机",
+        "cfg_key": "enable_wostore",
+        "run": lambda u: u.wostore_cloud_task(),
+        "query": lambda u: u.wostore_cloud_task(is_query_only=True),
+    },
+    {
+        "name": "省份专属活动",
+        "cfg_key": "enable_regional",
+        "run": lambda u: u.regional_task(),
+        "query": lambda u: u.regional_task(is_query_only=True),
+    },
+]
+UserService.UNICOM_MODULE_PIPELINE = UNICOM_MODULE_PIPELINE
 
 
 def cross_view_security_share_keys(users):
