@@ -2,8 +2,8 @@
 ------------------------------------------
 @Description: 移动爱家 · 全方位去广告与界面纯净增强脚本
 @Author: TomCatXue
-@Updated: 2026-10-23 21:10
-@Version: v1.1.0
+@Updated: 2026-10-24 10:00
+@Version: v1.1.4
 ------------------------------------------
 */
 (function () {
@@ -85,7 +85,7 @@
   var isHjqContentRequest = /(?:base\.hjq\.komect\.com\/)?(?:idx\/(?:getHomePageList|getFrameList|getPlaceList|getTabContentList)|keel\/idx\/getAfLiveCardList|base\/deviceidx\/getDeviceContentList)/.test(url);
   var isUmpLaunchRequest = /\/admsg\/v2\/launch(?:\?|$)/i.test(url);
   var isSceneRequest = /(?:base\/)?scene\/(?:getRuleTemplates|getRecommendRules)/.test(url);
-  var isHebaoPayAdRequest = /p\.10086\.cn\/wap\/v1\/(?:polymeriza-page\/(?:banner|popup|activity|business|group-cards|marquee)|float\/window|guess\/shop)(?:\?|$)/.test(url);
+  var isHebaoPayAdRequest = /p\.10086\.cn\/wap\/v1\/(?:polymeriza-page\/(?:banner|popup|activity|business|group-cards|marquee)|float\/window|guess\/shop|page-position\/query)(?:\?|$)/.test(url);
   var isPlaintextRequest = isJfShopRequest || isMiguVideoRequest || isCanvasLayoutRequest || isHjqShopLayout || isHjqBannerRequest || isHjqContentRequest || isUmpLaunchRequest || isJfAdRequest || isHebaoPayAdRequest || isSceneRequest;
   // 严格安全校验：原生接口必须带 x-pen=14；明文 H5 接口按域名放行。
   var isNativeEncryptedRequest = /(?:client|apm)\.app\.coc\.10086\.cn\/biz-orange\/DN\//.test(url);
@@ -627,14 +627,8 @@
         var beforeLen = payload.data.length;
         payload.data = payload.data.filter(function (item) {
           var pattern = String(item && item.patternCode);
-          var title = String(item && item.titleLeftText);
-          // 保留首页 Icon 入口与服务宫格，仅移除轮播、视频、瀑布流与纯营销楼层。
-          if (pattern === "p002") return true;
-          if (enabled("HomeClean") && pattern === "p121") {
-            return title.indexOf("视频") < 0 && title.indexOf("影音") < 0;
-          }
-          if (pattern === "p121") return true;
-          return false;
+          // 仅保留首页功能 Icon 入口 (p002)，彻底剔除 p121 纵向营销与商业广告专区
+          return pattern === "p002";
         });
         if (payload.data.length !== beforeLen) changed = true;
       }
@@ -645,13 +639,7 @@
         var beforeFrameLen = payload.data.frameList.length;
         payload.data.frameList = payload.data.frameList.filter(function (item) {
           var pattern = String(item && item.patternCode);
-          var title = String(item && item.titleLeftText);
-          if (pattern === "p002") return true;
-          if (enabled("HomeClean") && pattern === "p121") {
-            return title.indexOf("视频") < 0 && title.indexOf("影音") < 0;
-          }
-          if (pattern === "p121") return true;
-          return false;
+          return pattern === "p002";
         });
         if (payload.data.frameList.length !== beforeFrameLen) changed = true;
       }
@@ -703,6 +691,16 @@
     }
 
     if (typeof payload === "object") {
+      // 1. 如果接口顶层 data 或 body 直接就是 Banner 列表数组（如 getBannerContentList/all_975, LITE005）
+      if (Array.isArray(payload.data) && payload.data.length > 0) {
+        payload.data = [];
+        changed = true;
+      }
+      if (Array.isArray(payload.body) && payload.body.length > 0) {
+        payload.body = [];
+        changed = true;
+      }
+
       var bannerKeys = ["bannerList", "bannerContentList", "bannerInfoList", "operationFloatList"];
       bannerKeys.forEach(function (k) {
         if (Array.isArray(payload[k]) && payload[k].length > 0) {
@@ -710,10 +708,18 @@
           changed = true;
         }
       });
-      if (payload.data && typeof payload.data === "object") {
+      if (payload.data && typeof payload.data === "object" && !Array.isArray(payload.data)) {
         bannerKeys.forEach(function (k) {
           if (Array.isArray(payload.data[k]) && payload.data[k].length > 0) {
             payload.data[k] = [];
+            changed = true;
+          }
+        });
+      }
+      if (payload.body && typeof payload.body === "object" && !Array.isArray(payload.body)) {
+        bannerKeys.forEach(function (k) {
+          if (Array.isArray(payload.body[k]) && payload.body[k].length > 0) {
+            payload.body[k] = [];
             changed = true;
           }
         });
@@ -728,11 +734,8 @@
     if (!payload || typeof payload !== "object") return false;
     var changed = false;
 
-    // 清理模板推荐和轮播推荐，但绝对保留用户的有效一键场景数据 (payload.data)
-    if (Array.isArray(payload.ruleTemplateList) && payload.ruleTemplateList.length > 0) {
-      payload.ruleTemplateList = [];
-      changed = true;
-    }
+    // 场景核心模板列表属于用户一键快捷场景模式 (ruleTemplateList)，绝对保留不清理
+    // 仅清理右侧推荐规则轮播 (recommendRuleList)
     if (Array.isArray(payload.recommendRuleList) && payload.recommendRuleList.length > 0) {
       payload.recommendRuleList = [];
       changed = true;
@@ -951,9 +954,31 @@
     // 1. 明文 JSON 接口分发（钱包、发现页、画布）
     if (isPlaintextRequest) {
       if (isHebaoPayAdRequest) {
+        if (!enabled("WalletClean") && !enabled("HideCarousel")) {
+          $done({});
+          return;
+        }
+        if (/\/page-position\/query(?:\?|$)/.test(url)) {
+          // 提供基础核心卡片布局：15 资产/银行卡，20 充话费，18 数字资产/卡券，1 专区服务(生活缴费)，17 账单；物理剔除 19 轮播大图、16 跑马灯、7 商业卡片、21 单图广告
+          $done({
+            body: JSON.stringify({
+              msgCd: "WAP00000",
+              msgInfo: "成功",
+              body: {
+                sortList: [
+                  { sortMode: "15" },
+                  { sortMode: "20" },
+                  { sortMode: "18" },
+                  { sortMode: "1" },
+                  { sortMode: "17" }
+                ]
+              }
+            })
+          });
+          return;
+        }
+
         $done({
-          status: 200,
-          headers: { "Content-Type": "application/json;charset=UTF-8" },
           body: JSON.stringify({
             msgCd: "WAP00000",
             msgInfo: "成功",
