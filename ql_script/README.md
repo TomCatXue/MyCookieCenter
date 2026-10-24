@@ -25,12 +25,46 @@ ql repo https://github.com/TomCatXue/MyCookieCenter.git "ql_script" "" "README" 
 
 | 脚本文件 | 任务名称 | 内嵌定时 Cron | 任务标签 Tag | 核心环境变量 | 核心功能说明 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| [`cmcc_all.py`](./cmcc_all.py) | **中国移动 · 每日聚合** | `20 8 * * *`<br>(每天 08:20) | **中国移动** | **`CMCC_AUTH`** | **全功能默认全开**：签到 + 连签领奖 + AI豆任务 + AI豆顶格兑换话费券 + 拓展活动 + 周三充值日拼图 + AI豆苗 + 实时话费查询。单命令开箱即用，内置周三秒杀模式 `--wed-seckill`（定时 `58 7 * * 3`）。jwt 脱机自愈换票。 |
-| [`cmcc_seckill.py`](./cmcc_seckill.py) | **中国移动 · 场次秒杀** | 无固定 cron<br>(时间/奖品轮换) | **中国移动** | **`CMCC_AUTH`** | 签到有礼场次独立秒杀。先 `--dry-run` 查看真实排期，脚本会自动推送下一场时间与建议 cron，按提示设置定时执行。 |
-| [`telecom_daily.py`](./telecom_daily.py) | **中国电信 · 每日任务聚合** | `0 9 * * *`<br>(每天 09:00) | **中国电信** | **`dxlin`** | **三合一整合版 (v2.0.0)**：掌厅打卡领豆 + 阶梯连签奖励 + 金豆转盘 + 浏览任务 + 宠物喂食 + 周三会员双抽奖(仅周三执行) + 权益商城幸运抽奖 + 权益包自动领取 + 权益币余额 + AI奇遇赢Pad。单次登录全业务共享。 |
-| [`telecom_midnight_equity.py`](./telecom_midnight_equity.py) | **中国电信 · 0点等级权益秒杀** | `58 23 * * *`<br>(每天 23:58) | **中国电信** | **`dxlin`** | 毫秒级多线程并发抢兑每月等级专属特权（话费券/视频月卡等），当月抢中后自动休眠，未抢中每天持续抢购。 |
-| [`unicom_daily.py`](./unicom_daily.py) | **中国联通 · 每日聚合任务** | `30 10 * * *`<br>(每天 10:30) | **中国联通** | **`chinaUnicom_data`** | 首页签到红包 + 联通爱听赚积分 + 天天领现金 + 权益超市福利 + 沃云手机签到 + 通通乡村能量与安全管家。 |
-| [`weread.js`](./weread.js) | **微信读书 · 全功能任务** | `0 23 * * *`<br>(每天 23:00) | **微信读书** | **`WEREAD_AUTH`** | 每日阅读时长领卡 + 周二翻牌抽奖 + 周五限免图书入架。内置纯 JS S-box 逆向签名引擎，长效脱机自愈换票。 |
+| [`cmcc_all.py`](./cmcc_all.py) | **中国移动** | `20 8 * * *`<br>(每天 08:20) | **中国移动** | **`CMCC_AUTH`** | **全功能默认全开**：签到 + 连签领奖 + AI豆任务 + AI豆顶格兑换话费券 + 拓展活动 + 周三充值日拼图 + AI豆苗 + 实时话费查询。单命令开箱即用，内置周三秒杀模式 `--wed-seckill`（定时 `58 7 * * 3`）。jwt 脱机自愈换票。 |
+| [`cmcc_seckill.py`](./cmcc_seckill.py) | **移动秒杀** | 无固定 cron<br>(时间/奖品轮换) | **中国移动** | **`CMCC_AUTH`** | 签到有礼场次独立秒杀。先 `--dry-run` 查看真实排期，脚本会自动推送下一场时间与建议 cron，按提示设置定时执行。 |
+| [`telecom_daily.py`](./telecom_daily.py) | **中国电信** | `0 9 * * *`<br>(每天 09:00) | **中国电信** | **`dxlin`** | **三合一整合版 (v2.0.0)**：掌厅打卡领豆 + 阶梯连签奖励 + 金豆转盘 + 浏览任务 + 宠物喂食 + 周三会员双抽奖(仅周三执行) + 权益商城幸运抽奖 + 权益包自动领取 + 权益币余额 + AI奇遇赢Pad。单次登录全业务共享。 |
+| [`telecom_midnight_equity.py`](./telecom_midnight_equity.py) | **电信秒杀** | `58 23 * * *`<br>(每天 23:58) | **中国电信** | **`dxlin`** | 毫秒级多线程并发抢兑每月等级专属特权（话费券/视频月卡等），当月抢中后自动休眠，未抢中每天持续抢购。 |
+| [`unicom_daily.py`](./unicom_daily.py) | **中国联通** | `30 10 * * *`<br>(每天 10:30) | **中国联通** | **`chinaUnicom_data`** | 首页签到红包 + 联通爱听赚积分 + 天天领现金 + 权益超市福利 + 沃云手机签到 + 通通乡村能量与安全管家。 |
+| [`weread.js`](./weread.js) | **微信读书** | `0 23 * * *`<br>(每天 23:00) | **微信读书** | **`WEREAD_AUTH`** | 每日阅读时长领卡 + 周二翻牌抽奖 + 周五限免图书入架。内置纯 JS S-box 逆向签名引擎，长效脱机自愈换票。 |
+| [`linli.py`](./linli.py) | **林里** | `10 10 * * *`<br>(每天 10:10) | **微信小程序** | **`YYB_SERVER`**<br>+ `LINLI_STORE_ID`<br>+ `LINLI_ACTIVITY_ID` | YYB 取码 → 企迈静默登录 → 林里签到。门店和签到活动是企迈业务参数，取码不能替代；需从签到页请求中抓取一次。 |
+| [`huisheng.py`](./huisheng.py) | **惠省** | `5 0 * * *`<br>(每天 00:05) | **微信小程序** | **`YYB_SERVER`** | YYB 取码 → 美团惠省登录 → 红包墙列表 → 一键领券。活动与风控会轮换，首次接入需真机确认。 |
+| [`bibisheng.py`](./bibisheng.py) | **笔笔省** | `30 7 * * *`<br>(每天 07:30) | **微信小程序** | **`YYB_SERVER`** | YYB 取码 → `jscode` 会话 → 天天领券列表 → 领取每日免费券。 |
+| [`haidilao.py`](./haidilao.py) | **海底捞** | `23 7 * * *`<br>(每天 07:23) | **微信小程序** | **`YYB_SERVER`** | YYB 取码 → 海底捞会员登录 → 每日签到与碎片查询。登录 code 链路待真机最终核对。 |
+| [`miniso.py`](./miniso.py) | **名创优品** | `30 8 * * *`<br>(每天 08:30) | **微信小程序** | **`YYB_SERVER`** | YYB 取码 → AES 登录 → skey 缓存 → 每日签到与 mini 币差值。 |
+
+---
+
+## 📱 微信小程序脚本配置
+
+五个脚本完全独立，统一读取同一个 YYB-Go-Enhanced 服务：
+
+```text
+YYB_SERVER = 地址@账号ID
+```
+
+- 多账号每行一条；`账号ID` 也可以是 YYB 配置为引用模式的 OpenID。
+- 服务启用协议鉴权时，配置 `YYB_API_KEY` 或 `YYB_PROTOCOL_TOKEN`（二选一）。
+- 五个脚本均调用 `POST /wxapp/getCode`，兼容 `/wx/code`；外层 `result.code` 是一次性 `wx.login` code，不落盘、不打印。
+- `LINLI_STORE_ID` 是企迈门店 ID（例如 `212501`），`LINLI_ACTIVITY_ID` 是签到活动 ID；`wx.login` code 无法推导这两个值，必须从林里签到页请求中抓取。
+- 惠省可选配置 `HUISHENG_CITY_ID_LEVEL2`、`HUISHENG_CITY_ID_LEVEL3`、`HUISHENG_LATITUDE`、`HUISHENG_LONGITUDE`。
+- 依赖：`requests`；林里、名创优品另需 `pycryptodome`。
+
+本地离线验证：
+
+```bash
+python -m py_compile ql_script/linli.py ql_script/huisheng.py ql_script/bibisheng.py ql_script/haidilao.py ql_script/miniso.py
+python tests/wxapp_yyb_contract.test.py -v       # 契约与回归
+python tests/wxapp_mock_http.test.py -v           # 本地 HTTP mock
+```
+
+> **验证状态：** YYB 顶层 `result.code`、请求构造、登录字段、幂等分支和缓存已通过本地契约/HTTP mock；真实平台仍需账号实测。
+> **林里限制：** `LINLI_STORE_ID` 与 `LINLI_ACTIVITY_ID` 属于业务参数，YYB 只提供登录 code，不能替代。
+> **惠省限制：** 未实现 `mtgsig` 生成/重放；若真机返回美团签名错误，需要支持官方小程序签名的网关能力，不能靠反复重试解决。
 
 ---
 

@@ -1,5 +1,5 @@
-#!name = 中国移动 · 净屏与功能增强
-#!desc = 彻底净化启动页、首页轮播、各专区横幅推广与「我的」弹窗，底层物理级彻底移除轮播图组件；标准插件格式。
+#!name = 中国移动
+#!desc = 净化开屏、首页轮播、专区横幅与「我的」弹窗。
 #!openUrl = https://apps.apple.com/app/id583700738
 #!author = Yuheng0101, anker1209, ccyykk666, sooyaaabo; 轮播净化 TomCatXue
 #!tag = 去广告, 中国移动, 轮播净化
@@ -7,8 +7,8 @@
 #!loon_version = 3.5.2(1005)
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/ce/b7/2c/ceb72c6e-21c3-0c8b-a960-2fb8a547279f/AppIcon-0-0-1x_U007epad-0-1-0-sRGB-85-220.png/512x512bb.jpg
-#!version = 1.0.9
-#!date = 2026-10-24 13:13
+#!version = 1.0.10
+#!date = 2026-10-24 14:43
 
 # 核心升级说明（2026-10-22 v1.0.3）：
 # 1. 纯粹净屏与轮播消除：移除一切针对跳过支付 VPN 的多余网络规则，支付时请直接关闭 VPN 完成付款（iOS 端和包支付 SDK 在 Native 层扫描网络接口，开启代理时任何伪装规则均无效，关闭代理为唯一确定路径）。

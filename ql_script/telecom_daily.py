@@ -5,7 +5,7 @@
 📌 版本: v2.1.1 (2026-10-17 修复 C005 信封参数污染 + 完善 YYB 与 Ticket 换票诊断)
 中国电信 · 每日任务聚合脚本 (单一脚本统一管理全系电信业务)
 ===================================================================
-new Env('中国电信 · 每日任务聚合');
+new Env('中国电信');
 cron: 0 9 * * *
 tag: 中国电信
 # @tag 中国电信
@@ -2978,12 +2978,12 @@ def do_notify(account_blocks: List[str], account_count: int, first_mask: str):
     print("\n" + "=" * 65)
     print("                       📊 任务执行结果总报                       ")
     print("=" * 65)
-    print(f"📣 [{SCRIPT_VERSION}]【中国电信 · 每日任务聚合】\n{subtitle}\n\n{notify_body}")
+    print(f"📣 [{SCRIPT_VERSION}]【中国电信】\n{subtitle}\n\n{notify_body}")
     print("=" * 65 + "\n")
 
     if HAS_NOTIFY and ql_send and notify_body:
         try:
-            ql_send(f"[{SCRIPT_VERSION}] 中国电信 · 每日任务聚合", f"{subtitle}\n\n{notify_body}")
+            ql_send(f"[{SCRIPT_VERSION}] 中国电信", f"{subtitle}\n\n{notify_body}")
             log("🔔 青龙通知推送成功！")
         except Exception as e:
             log(f"⚠️ 推送通知异常: {str(e)}")
@@ -3133,7 +3133,7 @@ TELECOM_PIPELINE = [
 
 def main():
     print("=" * 65)
-    print(f"  🎉 [{SCRIPT_VERSION}] 中国电信 · 每日任务聚合脚本 🎉  ")
+    print(f"  🎉 [{SCRIPT_VERSION}] 中国电信 🎉  ")
     print("=" * 65)
 
     now = now_cn()

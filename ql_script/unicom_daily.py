@@ -5,7 +5,7 @@
 📌 版本: v1.4.1 (2026-10-24 海岛逐浪应援版)
 中国联通 · 每日签到与福利任务聚合脚本
 ===================================================================
-new Env('中国联通 · 每日签到与福利');
+new Env('中国联通');
 cron: 30 10 * * *
 tag: 中国联通
 # @tag 中国联通
@@ -7683,12 +7683,12 @@ def do_notify(users):
     print("\n" + "=" * 65)
     print("                       📊 任务执行结果总报                       ")
     print("=" * 65)
-    print(f"📣 [{SCRIPT_VERSION}]【中国联通 · 每日签到与福利】\n{subtitle}\n\n{body}")
+    print(f"📣 [{SCRIPT_VERSION}]【中国联通】\n{subtitle}\n\n{body}")
     print("=" * 65 + "\n")
 
     try:
         from notify import send
-        send(f"[{SCRIPT_VERSION}] 中国联通 · 每日签到与福利", f"{subtitle}\n\n{body}")
+        send(f"[{SCRIPT_VERSION}] 中国联通", f"{subtitle}\n\n{body}")
         print("🔔 青龙通知推送成功！")
     except Exception as e:
         print(f"⚠️ 推送通知异常: {str(e)}")

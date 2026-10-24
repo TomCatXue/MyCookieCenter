@@ -1,5 +1,5 @@
-#!name = 移动爱家 · 全方位净化与纯净增强
-#!desc = 彻底净化移动爱家首页轮播、智能专区右上角广告与画布轮播大图/悬浮弹窗、发现页短视频/资讯文章流，以及我的钱包充话费下方轮播图、借钱、会员优享卡片与精彩推荐信息流。
+#!name = 移动爱家
+#!desc = 净化首页轮播、智能专区、短视频和钱包营销推荐。
 #!openUrl = https://apps.apple.com/app/id1147452377
 #!author = TomCatXue
 #!tag = 去广告, 移动爱家, 中国移动, 轮播净化
@@ -7,8 +7,8 @@
 #!loon_version = 3.5.2(1005)
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/41/57/e5/4157e52f-d849-d15f-d210-d7bf93c7129e/AppIcon-0-0-1x_U007emarketing-0-6-0-sRGB-85-220.png/512x512bb.jpg
-#!version = 1.1.3-fix1
-#!date = 2026-10-24 11:00
+#!version = 1.1.4
+#!date = 2026-10-24 14:43
 
 [Argument]
 HideCarousel = switch,true,tag=[轮播] 彻底移除轮播图,desc=移除首页与各专区横幅轮播图组件，使其彻底消失而非仅阻断跳转

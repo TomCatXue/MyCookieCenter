@@ -11,7 +11,7 @@
 
 秒杀资格要求当日已完成签到（markStatus == marked）；脚本会自动补签一次。
 
-new Env('中国移动 · 场次秒杀')
+new Env('移动秒杀')
 cron: 0 0 * * *
 tag: 中国移动
 
@@ -474,7 +474,7 @@ def main():
     subtitle = (f"执行完成 ({len(accounts)}个账号)" if len(accounts) > 1
                 else f"执行完成 (1个账号) - 【{mask_phone(accounts[0].phone) if accounts else '?'}】")
     print("\n========== 执行结果 ==========\n" + summary)
-    notify("中国移动 · 场次秒杀", f"{subtitle}\n\n{summary}")
+    notify("移动秒杀", f"{subtitle}\n\n{summary}")
     return 1 if failed else 0
 
 

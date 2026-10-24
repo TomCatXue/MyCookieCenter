@@ -14,7 +14,9 @@ notes/
 
 # 本地开发文档与回归测试（个人存档，不进公开仓库）
 docs/
-tests/
+tests/*
+!tests/wxapp_yyb_contract.test.py
+!tests/wxapp_mock_http.test.py
 
 # 依赖
 node_modules/
