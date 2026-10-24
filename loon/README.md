@@ -4,7 +4,7 @@
 | :--- | :--- | :--- |
 | [**DaiDaiPanel.plugin**](./DaiDaiPanel.plugin) (v1.0.3) | **呆呆面板 · 凭据捕获与自动同步**：微信读书 / 扫描全能王 / 中国移动 / 中国电信。一 App 一脚本，凭据变化即时推送到呆呆面板环境变量并反馈通知，零机械定时 | `weread` `cmcc_mark` `camscanner` `telecom` |
 | [**ChinaMobile.plugin**](./ChinaMobile.plugin) (v1.0.9) | **中国移动 · 净屏与功能增强**：回滚至已知良好基线版本，彻底剥离移动爱家冲突规则；标准单层 AES 加解密，彻底恢复首页轮播与界面去广告 | HideCarousel 轮播总控及全功能细分开关 |
-| [**ChinaMobileAiJia.plugin**](./ChinaMobileAiJia.plugin) (v1.1.4) | **移动爱家 · 全方位净化与纯净增强**：放行充话费 area/homepage 核心骨架根除“服务出错”；精准清空充话费轮播、会员优享(groupCardMold)、借款(businessAllList)、精彩推荐；彻底剥离中国移动域名 | HideCarousel、LaunchAdClean 及全专区细分开关 |
+| [**ChinaMobileAiJia.plugin**](./ChinaMobileAiJia.plugin) (v1.1.5) | **移动爱家 · 全方位净化与纯净增强**：放行充话费 area/homepage 核心骨架根除“服务出错”；精准清空充话费轮播、会员优享(groupCardMold)、借款(businessAllList)、精彩推荐；彻底剥离中国移动域名 | HideCarousel、LaunchAdClean 及全专区细分开关 |
 | [`WeReadEnhance.plugin`](./WeReadEnhance.plugin) | 微信读书：去广告、去更新弹窗、解除试听限制 | 内置总开关 |
 | [`BilibiliFix.plugin`](./BilibiliFix.plugin) | 哔哩哔哩：空降助手、分区修复、扫码登录、画质解锁 | 内置总开关 |
 | [`PixivEnhanced.plugin`](./PixivEnhanced.plugin) | Pixiv：全页面汉化、AI 漫画翻译、设置中心 | 内置总开关 |

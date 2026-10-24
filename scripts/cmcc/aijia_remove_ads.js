@@ -2,8 +2,8 @@
 ------------------------------------------
 @Description: 移动爱家 · 全方位去广告与界面纯净增强脚本
 @Author: TomCatXue
-@Updated: 2026-10-24 10:00
-@Version: v1.1.4
+@Updated: 2026-10-24 10:35
+@Version: v1.1.5
 ------------------------------------------
 */
 (function () {
@@ -958,9 +958,16 @@
           $done({});
           return;
         }
+        var hbHeaders = ($response && $response.headers) ? Object.assign({}, $response.headers) : {};
+        deleteHeader(hbHeaders, "content-encoding");
+        deleteHeader(hbHeaders, "content-length");
+        hbHeaders["Content-Type"] = "application/json;charset=UTF-8";
+
         if (/\/page-position\/query(?:\?|$)/.test(url)) {
           // 提供基础核心卡片布局：15 资产/银行卡，20 充话费，18 数字资产/卡券，1 专区服务(生活缴费)，17 账单；物理剔除 19 轮播大图、16 跑马灯、7 商业卡片、21 单图广告
           $done({
+            status: 200,
+            headers: hbHeaders,
             body: JSON.stringify({
               msgCd: "WAP00000",
               msgInfo: "成功",
@@ -979,6 +986,8 @@
         }
 
         $done({
+          status: 200,
+          headers: hbHeaders,
           body: JSON.stringify({
             msgCd: "WAP00000",
             msgInfo: "成功",
@@ -1033,7 +1042,10 @@
         $done({});
         return;
       }
-      $done({ body: JSON.stringify(plainJson) });
+      var outHeaders = ($response && $response.headers) ? Object.assign({}, $response.headers) : {};
+      deleteHeader(outHeaders, "content-encoding");
+      deleteHeader(outHeaders, "content-length");
+      $done({ headers: outHeaders, body: JSON.stringify(plainJson) });
       return;
     }
 
