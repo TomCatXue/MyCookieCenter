@@ -2,8 +2,8 @@
 ------------------------------------------
 @Description: 移动爱家 · 全方位去广告与界面纯净增强脚本
 @Author: TomCatXue
-@Updated: 2026-10-23 21:10
-@Version: v1.1.0
+@Updated: 2026-10-24 11:00
+@Version: v1.1.3-fix1
 ------------------------------------------
 */
 (function () {
@@ -1008,7 +1008,11 @@
         $done({});
         return;
       }
-      $done({ body: JSON.stringify(plainJson) });
+      // 发现页/商城等接口原始响应带 Content-Encoding: gzip，这里输出的是明文 JSON，必须剥离 gzip 头，否则端侧按 gzip 解压会一直报网络错误。
+      var plainHeaders = ($response && $response.headers) ? Object.assign({}, $response.headers) : {};
+      deleteHeader(plainHeaders, "content-encoding");
+      deleteHeader(plainHeaders, "content-length");
+      $done({ headers: plainHeaders, body: JSON.stringify(plainJson) });
       return;
     }
 
