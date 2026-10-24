@@ -42,26 +42,26 @@ Loon 负责无感捕获与即时同步，呆呆面板 / 青龙面板负责脱机
 ql repo https://github.com/TomCatXue/MyCookieCenter.git "ql_script" "" "README" "main"
 ```
 
-| 图标 | 任务 | 功能 | <nobr>定时&nbsp;·&nbsp;变量</nobr> |
+| 图标 | 任务 | 功能 | 变量 |
 | :-: | :--- | :--- | :---: |
-| <img src="icons/10086.png" height="16" /> | **中国移动** | 签到连签 + AI豆任务 + 顶格兑话费 + 充值日拼图 + 豆苗 (默认全开) | <nobr><code>20 8 * * *</code>&nbsp;·&nbsp;<code>CMCC_AUTH</code></nobr> |
-| <img src="icons/10086.png" height="16" /> | **移动秒杀** | 签到有礼轮换场次秒杀 | <nobr><code>58 7 * * *</code>&nbsp;·&nbsp;<code>CMCC_AUTH</code></nobr> |
-| <img src="icons/weread.png" height="16" /> | **微信读书** | 阅读领卡 + 翻牌抽奖 + 限免入架，内置脱机换票 | <nobr><code>0 23 * * *</code>&nbsp;·&nbsp;<code>WEREAD_AUTH</code></nobr> |
-| <img src="icons/189.png" height="16" /> | **中国电信** | 签到金豆 + 周三双抽奖 + 幸运抽奖 + 权益包 + AI 赢 Pad | <nobr><code>0 9 * * *</code>&nbsp;·&nbsp;<code>dxlin</code></nobr> |
-| <img src="icons/189.png" height="16" /> | **电信秒杀** | 每日限量 102 份，毫秒级抢兑等级权益 | <nobr><code>58 23 * * *</code>&nbsp;·&nbsp;<code>dxlin</code></nobr> |
-| <img src="https://github.com/ChinaTelecomOperators/ChinaUnicom/releases/download/Prerelease-Alpha/icon.png" height="16" /> | **中国联通** | 签到红包 + 爱听积分 + 权益超市 + 云盘 | <nobr><code>30 10 * * *</code>&nbsp;·&nbsp;<code>chinaUnicom_data</code></nobr> |
-| <img src="./icons/daidai.png" height="16" /> | **林里** | 微信小程序 YYB 取码 + 企迈静默登录签到 | <nobr><code>10 10 * * *</code>&nbsp;·&nbsp;<code>YYB_SERVER</code></nobr> |
-| <img src="./icons/daidai.png" height="16" /> | **惠省** | 微信小程序 YYB 取码 + 美团红包墙领券 | <nobr><code>5 0 * * *</code>&nbsp;·&nbsp;<code>YYB_SERVER</code></nobr> |
-| <img src="./icons/daidai.png" height="16" /> | **笔笔省** | 微信小程序 YYB 取码 + 天天领免费券 | <nobr><code>30 7 * * *</code>&nbsp;·&nbsp;<code>YYB_SERVER</code></nobr> |
-| <img src="./icons/daidai.png" height="16" /> | **海底捞** | 微信小程序 YYB 取码 + 会员签到 | <nobr><code>23 7 * * *</code>&nbsp;·&nbsp;<code>YYB_SERVER</code></nobr> |
-| <img src="./icons/daidai.png" height="16" /> | **名创优品** | 微信小程序 YYB 取码 + mini 币签到 | <nobr><code>30 8 * * *</code>&nbsp;·&nbsp;<code>YYB_SERVER</code></nobr> |
+| <img src="icons/10086.png" height="16" /> | **中国移动** | 签到、AI 豆任务与兑换 | `CMCC_AUTH` |
+| <img src="icons/10086.png" height="16" /> | **移动秒杀** | 场次秒杀 | `CMCC_AUTH` |
+| <img src="icons/weread.png" height="16" /> | **微信读书** | 阅读领卡、翻牌与限免 | `WEREAD_AUTH` |
+| <img src="icons/189.png" height="16" /> | **中国电信** | 签到、抽奖与权益领取 | `dxlin` |
+| <img src="icons/189.png" height="16" /> | **电信秒杀** | 等级权益抢兑 | `dxlin` |
+| <img src="https://github.com/ChinaTelecomOperators/ChinaUnicom/releases/download/Prerelease-Alpha/icon.png" height="16" /> | **中国联通** | 签到、积分与权益 | `chinaUnicom_data` |
+| <img src="./icons/linli.png" height="16" /> | **林里** | 取码并签到 | `YYB_SERVER` |
+| <img src="./icons/huisheng.png" height="16" /> | **惠省** | 红包墙领券 | `YYB_SERVER` |
+| <img src="./icons/bibisheng.png" height="16" /> | **笔笔省** | 每日领券 | `YYB_SERVER` |
+| <img src="./icons/haidilao.png" height="16" /> | **海底捞** | 会员签到 | `YYB_SERVER` |
+| <img src="./icons/miniso.png" height="16" /> | **名创优品** | 每日签到 | `YYB_SERVER` |
 
 > **变量说明：**
 >
 > - `CMCC_AUTH`：支持完整 JSON、`app_token#手机号`，多账号换行或 `&` 分隔，自动兼容混排；
 > - `dxlin` 格式：`手机号#服务密码#AndroidID[#SessionKey]`，多账号换行或 `&` 分隔；
 > - `WEREAD_AUTH`：微信读书抓包 JSON，含 `refreshToken` 永久脱机自愈；
-> - `YYB_SERVER`：YYB-Go-Enhanced 取码服务，格式 `地址@账号ID`，每行一个账号；林里另需 `LINLI_STORE_ID` 与 `LINLI_ACTIVITY_ID`，详见 [ql_script/README.md](./ql_script/README.md)。
+> - `YYB_SERVER`：YYB-Go-Enhanced 取码服务，格式 `地址@账号ID`，每行一个账号；林里另需 `LINLI_STORE_ID`、`LINLI_ACTIVITY_ID`，详见 [ql_script/README.md](./ql_script/README.md)。
 
 > **验证状态：** 五个小程序脚本已通过本地契约与 HTTP mock；真实平台仍需账号实测。惠省未内置 `mtgsig` 伪造/重放能力，详见 [ql_script/README.md](./ql_script/README.md)。
 
