@@ -2,8 +2,8 @@
 ------------------------------------------
 @Description: 中国移动 · 移动爱家全方位净化增强脚本（含首页轮播、智能爱家、发现页音视频/文章、钱包充话费、借钱与信息流）
 @Author: Yuheng0101, anker1209, ccyykk666, sooyaaabo; 轮播与专区全方位净化 TomCatXue
-@Updated: 2026-10-23 17:30
-@Version: v1.1.2
+@Updated: 2026-10-24 13:13
+@Version: v1.1.3
 ------------------------------------------
 */
 (function () {
@@ -47,7 +47,6 @@
     HideCarousel: true,
     HomeBasicClean: true,
     ServicePageClean: true,
-    MineClean: true,
     WalletClean: true,
     DiscoverClean: true,
     SmartPageClean: true,
@@ -57,8 +56,8 @@
     HideTopNearby: false,
     HideTopAI: false,
     HideTopEnterprise: false,
+    HideMyHeaderEntry: false,
     HideMyCheckIn: false,
-    HideMyMarketing: false,
     HideMyServices: false,
     HideMyFamilyCube: false,
     HideMyDevicesCube: false,
@@ -69,7 +68,10 @@
     HideMyRingtone: false,
     HideMyCloudDrive: false,
     HideMyToolbox: false,
-    HideMyLifeServices: false
+    HideMyLifeServices: false,
+    HideMyVideo: false,
+    HideMyExclusiveServices: false,
+    HideMyNewCall: false
   };
 
   function enabled(name) {
@@ -98,29 +100,6 @@
     !enabled("HideTopNearby") &&
     !enabled("HideTopAI") &&
     !enabled("HideTopEnterprise")
-  ) {
-    $done({});
-    return;
-  }
-
-  var isMyPageRequest = /\/DN\/myPageNew\/getMyPageNew(?:\?|$)/.test(url);
-  if (
-    isMyPageRequest &&
-    !enabled("MineClean") &&
-    !enabled("HideCarousel") &&
-    !enabled("HideMyCheckIn") &&
-    !enabled("HideMyMarketing") &&
-    !enabled("HideMyServices") &&
-    !enabled("HideMyFamilyCube") &&
-    !enabled("HideMyDevicesCube") &&
-    !enabled("HideMyMiniProgram") &&
-    !enabled("HideMyDigitalHuman") &&
-    !enabled("HideMySelections") &&
-    !enabled("HideMyGroup") &&
-    !enabled("HideMyRingtone") &&
-    !enabled("HideMyCloudDrive") &&
-    !enabled("HideMyToolbox") &&
-    !enabled("HideMyLifeServices")
   ) {
     $done({});
     return;
@@ -617,10 +596,7 @@
     var body = payload && payload.rspBody;
     if (!body || !Array.isArray(body.areaList)) return false;
 
-    var cleanMine = enabled("MineClean");
-    var hideCarousel = enabled("HideCarousel");
-
-    // 纯商业广告/弹窗区域（受 MineClean 控制）
+    // 营销内容不提供用户开关，始终移除；业务卡才允许逐项控制。
     var pureAdAreas = {
       "20230721012": true, // 营销区域
       "20240206004": true, // 权益卡片新
@@ -630,21 +606,21 @@
       "20230721040": true,
       "20230721034": true
     };
+    var pureAdCubeIds = {
+      "20260610008": true // 卡券提醒
+    };
 
-    // 13 个细分功能区域与开关映射表（受对应 HideMy* 开关控制，默认 false 不隐藏）
+    // 每张业务卡独立开关；营销区不会出现在此表中。
     var featureAreaToSwitch = {
+      "20230720006": "HideMyHeaderEntry",    // 标题栏服务入口
       "20230721008": "HideMyCheckIn",       // 签到浮窗
-      "20230721012": "HideMyMarketing",     // 营销区域
-      "20240206004": "HideMyMarketing",     // 权益卡片新
-      "20230908006": "HideMyMarketing",     // 品牌入口
       "20230721018": "HideMyServices",      // 我的服务
       "20260104006": "HideMyServices",      // 我的服务cube卡片
       "20240708002": "HideMyFamilyCube",    // 我的家庭
       "20240429006": "HideMyFamilyCube",    // 我的家庭cube卡片
-      "20240528002": "HideMyFamilyCube",    // 家庭管理cube卡片
+      "20240528002": "HideMyLifeServices",  // 生活服务cube卡片
       "20251024002": "HideMyDevicesCube",   // 我的设备
       "20251016004": "HideMyDevicesCube",   // 我的设备（cubeList）
-      "20260610004": "HideMyDevicesCube",   // 新通话cube卡片id
       "20231017002": "HideMyMiniProgram",   // 我的账户
       "20230721020": "HideMyDigitalHuman",  // AI智能助理
       "20230721030": "HideMySelections",    // 我的优选
@@ -653,7 +629,9 @@
       "20240624002": "HideMyCloudDrive",    // 我的云盘
       "20230721044": "HideMyToolbox",       // 百宝箱
       "20230928004": "HideMyLifeServices",  // 生活服务
-      "20260610008": "HideMyMarketing"      // 卡券包包
+      "20260423002": "HideMyVideo",         // 我的视频
+      "20260508004": "HideMyExclusiveServices", // 我的专属服务
+      "20260610004": "HideMyNewCall"        // 新通话
     };
 
     var before = body.areaList.length;
@@ -662,22 +640,22 @@
       var aid = String(area.areaId || "");
       var aname = String(area.areaName || "");
 
-      // 1. 基础纯商业广告位清理
-      if (cleanMine && pureAdAreas[aid]) {
+      // 1. 营销内容始终移除
+      if (pureAdAreas[aid]) {
         return false;
       }
 
-      // 2. 轮播图/横幅清理
-      if (hideCarousel && (
+      // 2. 我的页轮播/横幅均属营销内容，始终移除
+      if (
         aname.indexOf("轮播") >= 0 ||
         aname.indexOf("横幅") >= 0 ||
         aname.indexOf("走马灯") >= 0 ||
         String(area.areaType || "").toLowerCase() === "banner"
-      )) {
+      ) {
         return false;
       }
 
-      // 3. 细分功能区开关过滤（当且仅当对应开关显式开启时隐藏，关闭时完整保留）
+      // 3. 业务卡开关过滤（关闭开关时完整保留）
       var sw = featureAreaToSwitch[aid];
       if (sw && enabled(sw)) {
         return false;
@@ -690,8 +668,14 @@
     if (Array.isArray(body.cubeList)) {
       var cubeBefore = body.cubeList.length;
       body.cubeList.forEach(function (cube) {
-        if (!cube || cube.isShow === "0") return;
+        if (!cube) return;
         var cubeId = String(cube.areaId || "");
+        if (pureAdCubeIds[cubeId] && cube.isShow !== "0") {
+          cube.isShow = "0";
+          cubeChanged = true;
+          return;
+        }
+        if (cube.isShow === "0") return;
         var sw = featureAreaToSwitch[cubeId];
         if (sw && enabled(sw) && cube.isShow !== "0") {
           cube.isShow = "0";
@@ -761,7 +745,7 @@
       "20260320016": true,
       "20260320020": true
     };
-    if (enabled("MineClean")) {
+    if (enabled("ServicePageClean")) {
       serviceAdAreas["20230621010"] = true;
       serviceAdAreas["20230621014"] = true;
     }
