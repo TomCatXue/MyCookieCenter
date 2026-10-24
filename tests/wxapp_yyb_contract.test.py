@@ -689,22 +689,17 @@ class YYBContractTest(unittest.TestCase):
 
     def test_huisheng_login_requires_cipher_and_builds_tabs(self):
         module = load("huisheng")
-
-        def fake_post(url, data=None, headers=None, timeout=None):
-            return MockResponse(
-                {
-                    "data": {
-                        "token": "mt-token",
-                        "openId": "openid",
-                        "openIdCipher": "cipher",
-                        "userId": 7,
-                    }
+        auth = module._auth_from_body(
+            {
+                "result": {
+                    "mtToken": "mt-token",
+                    "openId": "openid",
+                    "openIdCipher": "cipher",
+                    "userId": 7,
                 }
-            )
-
-        with mock.patch.object(module.requests, "post", side_effect=fake_post):
-            auth = module.login_by_code("code")
-        self.assertEqual(auth["open_id_cipher"], "cipher")
+            }
+        )
+        self.assertIsNotNone(auth)
         body = module.base_wall_body(auth, 1700000000000)
         self.assertEqual(body["wm_logintoken"], "mt-token")
         self.assertEqual(body["open_id"], "openid")
@@ -732,6 +727,217 @@ class YYBContractTest(unittest.TestCase):
             }
         )
         self.assertEqual(tabs, [{"planCode": "p1", "rightCodes": ["r1"]}])
+
+    def test_huisheng_gateway_sends_ref_and_parses_complete_auth(self):
+        module = load("huisheng")
+        captured = {}
+
+        def fake_post(url, json=None, headers=None, timeout=None):
+            captured.update(
+                {"url": url, "json": json, "headers": headers, "timeout": timeout}
+            )
+            return MockResponse(
+                {
+                    "success": True,
+                    "result": {
+                        "token": "mt-token",
+                        "openId": "openid",
+                        "openIdCipher": "cipher",
+                        "unionId": "unionid",
+                        "userId": 7,
+                        "finger_applets": "fingerprint",
+                    },
+                }
+            )
+
+        with mock.patch.dict(
+            os.environ, {"HUISHENG_LOGIN_GATEWAY_KEY": "gateway-key"}, clear=False
+        ), mock.patch.object(module.requests, "post", side_effect=fake_post):
+            auth = module.login_via_gateway("ref", "http://gateway.test")
+
+        self.assertEqual(
+            captured["url"], "http://gateway.test" + module.LOGIN_GATEWAY_PATH
+        )
+        self.assertEqual(
+            captured["json"],
+            {"ref": "ref", "app_id": module.APPID, "openid": ""},
+        )
+        self.assertEqual(captured["headers"]["Authorization"], "Bearer gateway-key")
+        self.assertEqual(auth["token"], "mt-token")
+        self.assertEqual(auth["open_id"], "openid")
+        self.assertEqual(auth["open_id_cipher"], "cipher")
+        self.assertEqual(auth["union_id"], "unionid")
+        self.assertEqual(auth["user_id"], 7)
+        self.assertEqual(auth["finger_applets"], "fingerprint")
+
+    def test_huisheng_gateway_supports_project_run_contract(self):
+        module = load("huisheng")
+        captured = {}
+
+        def fake_post(url, json=None, headers=None, timeout=None):
+            captured.update({"url": url, "json": json})
+            return MockResponse(
+                {
+                    "success": True,
+                    "result": {
+                        "ok": True,
+                        "mtToken": "mt-token",
+                        "openId": "openid",
+                        "openIdCipher": "cipher",
+                        "unionId": "unionid",
+                        "userId": 7,
+                    },
+                }
+            )
+
+        with mock.patch.dict(
+            os.environ,
+            {
+                "HUISHENG_LOGIN_PROJECT_ID": "12",
+                "HUISHENG_MT_OPENID": "backend-openid",
+            },
+            clear=False,
+        ), mock.patch.object(module.requests, "post", side_effect=fake_post):
+            auth = module.login_via_gateway("ref", "http://gateway.test")
+
+        self.assertEqual(captured["url"], "http://gateway.test/api/projects/12/run")
+        self.assertEqual(
+            captured["json"],
+            {
+                "params": {
+                    "openid": "backend-openid",
+                    "appid": module.APPID,
+                    "proxyUrl": "",
+                }
+            },
+        )
+        self.assertEqual(auth["token"], "mt-token")
+
+    def test_huisheng_inline_backend_uses_ref_openid_mapping(self):
+        module = load("huisheng")
+        captured = {}
+
+        def fake_post(url, json=None, headers=None, timeout=None):
+            captured.update({"url": url, "json": json, "headers": headers})
+            return MockResponse(
+                {
+                    "success": True,
+                    "result": {
+                        "ok": True,
+                        "mtToken": "mt-token",
+                        "openId": "meituan-openid",
+                        "openIdCipher": "cipher",
+                        "unionId": "unionid",
+                        "userId": 7,
+                    },
+                }
+            )
+
+        with mock.patch.dict(
+            os.environ,
+            {
+                "HUISHENG_MT_BACKEND": "http://backend.test:18273",
+                "HUISHENG_MT_PROJECT_ID": "12",
+                "HUISHENG_MT_LICENSE_KEY": "license",
+                "HUISHENG_MT_OPENIDS": "ref=backend-openid",
+            },
+            clear=False,
+        ), mock.patch.object(module.requests, "post", side_effect=fake_post):
+            auth = module.login_via_inline_backend("ref")
+
+        self.assertEqual(captured["url"], "http://backend.test:18273/api/projects/12/run")
+        self.assertEqual(
+            captured["json"],
+            {
+                "params": {
+                    "openid": "backend-openid",
+                    "appid": module.APPID,
+                    "proxyUrl": "",
+                }
+            },
+        )
+        self.assertEqual(captured["headers"]["Authorization"], "Bearer license")
+        self.assertEqual(auth["token"], "mt-token")
+        self.assertEqual(auth["open_id"], "meituan-openid")
+
+    def test_huisheng_inline_backend_rejects_non_2xx(self):
+        module = load("huisheng")
+        response = MockResponse(
+            {"success": True, "result": {"mtToken": "x", "openId": "o"}},
+            status=502,
+        )
+        with mock.patch.dict(
+            os.environ,
+            {
+                "HUISHENG_MT_BACKEND": "http://backend.test:18273",
+                "HUISHENG_MT_PROJECT_ID": "12",
+                "HUISHENG_MT_OPENIDS": "ref=backend-openid",
+            },
+            clear=False,
+        ), mock.patch.object(module.requests, "post", return_value=response):
+            with self.assertRaisesRegex(RuntimeError, "HTTP 502"):
+                module.login_via_inline_backend("ref")
+
+    def test_huisheng_inline_backend_reads_openid_from_yyb_when_unmapped(self):
+        module = load("huisheng")
+        with mock.patch.dict(
+            os.environ,
+            {
+                "HUISHENG_MT_BACKEND": "http://backend.test:18273",
+                "HUISHENG_MT_PROJECT_ID": "12",
+                "HUISHENG_MT_OPENIDS": "",
+                "YYB_SERVER": "http://yyb.test@ref",
+            },
+            clear=False,
+        ), mock.patch.object(
+            module,
+            "_fetch_yyb_account",
+            return_value={"openid": "yyb-openid"},
+        ), mock.patch.object(
+            module,
+            "run_meituan_project",
+            return_value={"token": "t", "open_id": "o"},
+        ) as run:
+            module.login_via_inline_backend("ref")
+        self.assertEqual(run.call_args.args[3], "yyb-openid")
+
+    def test_huisheng_gateway_rejects_partial_identity(self):
+        module = load("huisheng")
+        with mock.patch.object(
+            module.requests,
+            "post",
+            return_value=MockResponse(
+                {
+                    "openId": "openid",
+                    "openIdCipher": "cipher",
+                    "error": {"code": 101155, "type": "connect_not_bind_mobile"},
+                }
+            ),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "未返回完整登录态"):
+                module.login_via_gateway("ref", "http://gateway.test")
+
+    def test_huisheng_gateway_mode_does_not_fall_back_to_yyb_code(self):
+        module = load("huisheng")
+        with mock.patch.dict(
+            os.environ, {"HUISHENG_LOGIN_GATEWAY": "http://gateway.test"}, clear=False
+        ), mock.patch.object(
+            module,
+            "login_via_gateway",
+            side_effect=RuntimeError("gateway rejected"),
+        ), mock.patch.object(module, "fetch_yyb_code") as fetch, mock.patch.object(
+            module, "login_by_code"
+        ) as legacy:
+            ok, lines = module.run_account(module.YYBEntry("http://yyb.test", "ref"), 1)
+        self.assertFalse(ok)
+        self.assertIn("gateway rejected", lines[0])
+        fetch.assert_not_called()
+        legacy.assert_not_called()
+
+    def test_huisheng_legacy_code_path_is_explicitly_unsupported(self):
+        module = load("huisheng")
+        with self.assertRaisesRegex(RuntimeError, "HUISHENG_LOGIN_GATEWAY"):
+            module.login_by_code("code")
 
     def test_linli_login_and_sign_contract(self):
         module = load("linli")

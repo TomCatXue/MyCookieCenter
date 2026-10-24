@@ -115,7 +115,9 @@ class MockHttpTest(unittest.TestCase):
         }
         with mock.patch.object(module, "fetch_yyb_code", return_value="wx-code"), mock.patch.object(
             module, "save_token"
-        ), mock.patch.object(module.time, "sleep"):
+        ), mock.patch.object(module.time, "sleep"), mock.patch.object(
+            module, "load_cache", return_value={}
+        ):
             _, lines = module.run_account(module.YYBEntry(self.base, "ref"), 1)
         self.assertIn("领取 1 张", lines[0])
         login = next(call for call in MockPlatform.calls if "/txbbs-user/user/login" in call[1])
@@ -151,7 +153,9 @@ class MockHttpTest(unittest.TestCase):
         }
         with mock.patch.object(module, "fetch_yyb_code", return_value="wx-code"), mock.patch.object(
             module, "save_token"
-        ), mock.patch.object(module.time, "sleep"):
+        ), mock.patch.object(module.time, "sleep"), mock.patch.object(
+            module, "load_cache", return_value={}
+        ):
             _, lines = module.run_account(module.YYBEntry(self.base, "ref"), 1)
         self.assertIn("签到成功", lines[0])
         sign = next(call for call in MockPlatform.calls if call[1].endswith("/signin/signin"))

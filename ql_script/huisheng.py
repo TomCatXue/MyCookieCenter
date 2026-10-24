@@ -10,8 +10,26 @@ tag: 微信小程序
 环境变量：
   YYB_SERVER   取码服务，格式：地址@账号ref（多账号换行）
   YYB_API_KEY  可选，取码服务 Bearer Token
+  HUISHENG_LOGIN_GATEWAY
+               兼容入口，美团签名登录网关地址
+  HUISHENG_LOGIN_GATEWAY_PATH
+               可选，配合 HUISHENG_LOGIN_GATEWAY 的自定义路径
+  HUISHENG_LOGIN_PROJECT_ID
+               可选，旧网关项目 ID
+  HUISHENG_MT_OPENID
+               可选，旧网关账号 OpenID（多账号按行与 YYB_SERVER 对齐）
+  HUISHENG_LOGIN_GATEWAY_KEY
+               可选，网关 Bearer Token
+  HUISHENG_MT_BACKEND
+               必填（无网关时），支持美团纯算签名的后端地址
+  HUISHENG_MT_PROJECT_ID
+               必填（无网关时），美团 Code 登录项目 ID
+  HUISHENG_MT_LICENSE_KEY
+               可选，后端授权码
+  HUISHENG_MT_OPENIDS
+               可选，ref=后端OpenID 映射，多账号换行
 
-链路：YYB getCode -> 美团开放平台 weapplogin -> wm_logintoken/openId/openIdCipher
+链路：美团签名后端 -> wm_logintoken/openId/openIdCipher
       -> 红包墙列表 -> grantActivityCoupon 一键领取
 
 验证状态：登录与红包墙接口按社区已披露契约实现；惠省活动可能轮换且带美团风控，
@@ -33,9 +51,10 @@ except ImportError:
     requests = None
 
 
-SCRIPT_VERSION = "2026-10-24.r1"
+SCRIPT_VERSION = "2026-10-24.r2"
 APPID = "wx0b42a347aafbe0d0"
-OPEN_LOGIN = "https://open.meituan.com/user/v1/weapplogin"
+OPEN_LOGIN = "https://open.meituan.com/user/v1/weappsilentlogin"
+LOGIN_GATEWAY_PATH = "/api/projects/meituan/login"
 HOST = "https://media.meituan.com"
 LIST_PATH = "/fulishemini/couponActivity/listActivityCoupon"
 GRANT_PATH = "/fulishemini/couponActivity/grantActivityCoupon"
@@ -147,6 +166,13 @@ def login_headers() -> Dict[str, str]:
     }
 
 
+def _first_value(*values: Any) -> Optional[str]:
+    for value in values:
+        if value is not None and value != "" and value != "null":
+            return str(value)
+    return None
+
+
 def _pick_token(data: Any) -> Optional[str]:
     if not isinstance(data, dict):
         return None
@@ -167,38 +193,281 @@ def _pick_token(data: Any) -> Optional[str]:
     return None
 
 
+def _auth_from_body(body: Any) -> Optional[Dict[str, Any]]:
+    if not isinstance(body, dict):
+        return None
+    result = body.get("result") if isinstance(body.get("result"), dict) else {}
+    inner = body.get("data") if isinstance(body.get("data"), dict) else {}
+    inner_data = inner.get("data") if isinstance(inner.get("data"), dict) else {}
+    candidates = (result, inner, inner_data, body)
+
+    token = _first_value(
+        *(
+            item.get("token") or item.get("mtToken") or item.get("wm_logintoken")
+            for item in candidates
+        )
+    )
+    open_id = _first_value(
+        *(
+            item.get("openId") or item.get("openid") or item.get("open_id")
+            for item in candidates
+        )
+    )
+    cipher = _first_value(
+        *(
+            item.get("openIdCipher")
+            or item.get("openidCipher")
+            or item.get("openid_cipher")
+            or item.get("cipher")
+            for item in candidates
+        )
+    )
+    union_id = _first_value(
+        *(item.get("unionId") or item.get("unionid") for item in candidates)
+    )
+    user_id = next(
+        (
+            item.get("userId") or item.get("userid") or item.get("user_id")
+            for item in candidates
+            if item.get("userId") or item.get("userid") or item.get("user_id")
+        ),
+        "",
+    )
+    finger_applets = _first_value(
+        *(
+            item.get("finger_applets")
+            or item.get("fingerApplets")
+            or item.get("fingerprint")
+            for item in candidates
+        )
+    )
+    if not token or not open_id:
+        return None
+    return {
+        "token": token,
+        "open_id": open_id,
+        "open_id_cipher": cipher or "",
+        "union_id": union_id or "",
+        "user_id": user_id,
+        "finger_applets": finger_applets or "",
+        "updated": int(time.time()),
+    }
+
+
+def _gateway_openid(entry_ref: str) -> str:
+    raw = os.getenv("HUISHENG_MT_OPENID", "").strip()
+    if not raw:
+        return ""
+    values = [line.strip() for line in raw.splitlines() if line.strip()]
+    if len(values) == 1:
+        return values[0]
+    entries = parse_yyb_entries()
+    for index, entry in enumerate(entries):
+        if entry.ref == entry_ref and index < len(values):
+            return values[index]
+    return ""
+
+
+def parse_openid_mapping(raw: str) -> Dict[str, str]:
+    mapping: Dict[str, str] = {}
+    for line in (raw or "").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        if "=" in line:
+            ref, openid = line.split("=", 1)
+        elif ":" in line:
+            ref, openid = line.split(":", 1)
+        else:
+            continue
+        if ref.strip() and openid.strip():
+            mapping[ref.strip()] = openid.strip()
+    return mapping
+
+
+def _fetch_yyb_account(entry_ref: str, endpoint: str, api_key: str = "") -> Dict[str, Any]:
+    if requests is None:
+        raise RuntimeError("缺少 requests，请先安装")
+    endpoint = endpoint.strip().rstrip("/")
+    if not endpoint:
+        return {}
+    if not endpoint.startswith(("http://", "https://")):
+        endpoint = "http://" + endpoint
+    headers = {"Content-Type": "application/json"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    try:
+        response = requests.get(
+            endpoint + "/wx/getuserinfo",
+            params={"ref": entry_ref},
+            headers=headers,
+            timeout=30,
+        )
+        body = response.json()
+    except Exception:
+        return {}
+    return body if isinstance(body, dict) else {}
+
+
+def resolve_backend_openid(entry_ref: str) -> str:
+    mapping = parse_openid_mapping(os.getenv("HUISHENG_MT_OPENIDS", ""))
+    openid = mapping.get(str(entry_ref), "").strip()
+    if openid:
+        return openid
+    entries = parse_yyb_entries()
+    yyb_entry = next((item for item in entries if item.ref == entry_ref), None)
+    endpoint = yyb_entry.endpoint if yyb_entry else ""
+    body = _fetch_yyb_account(
+        entry_ref,
+        endpoint,
+        os.getenv("YYB_API_KEY") or os.getenv("YYB_PROTOCOL_TOKEN") or "",
+    )
+    openid = str(body.get("openid") or "").strip()
+    if openid:
+        return openid
+    raise RuntimeError(
+        f"无法解析后端 OpenID（ref={entry_ref}），请配置 HUISHENG_MT_OPENIDS"
+    )
+
+
+def run_meituan_project(
+    backend: str,
+    license_key: str,
+    project_id: int,
+    openid: str,
+    app_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    if requests is None:
+        raise RuntimeError("缺少 requests，请先安装")
+    backend = backend.strip().rstrip("/")
+    if not backend.startswith(("http://", "https://")):
+        backend = "http://" + backend
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {license_key}",
+    }
+    response = requests.post(
+        f"{backend}/api/projects/{int(project_id)}/run",
+        json={
+            "params": {
+                "openid": openid,
+                "appid": app_id or APPID,
+                "proxyUrl": "",
+            }
+        },
+        headers=headers,
+        timeout=60,
+    )
+    try:
+        body = response.json()
+    except ValueError as exc:
+        raise RuntimeError(
+            f"美团后端返回非 JSON: HTTP {response.status_code}"
+        ) from exc
+    if not isinstance(body, dict):
+        raise RuntimeError(f"美团后端返回非法 JSON: HTTP {response.status_code}")
+    if response.status_code >= 400:
+        detail = body.get("error") or body.get("message") or body.get("msg")
+        raise RuntimeError(
+            f"美团后端 HTTP {response.status_code}: {detail or 'request failed'}"
+        )
+    auth = _auth_from_body(body)
+    if auth is None:
+        detail = (
+            body.get("error")
+            or body.get("message")
+            or body.get("msg")
+            or f"HTTP {response.status_code}"
+        )
+        raise RuntimeError(f"美团后端未返回完整登录态: {detail}")
+    return auth
+
+
+def login_via_inline_backend(entry_ref: str) -> Dict[str, Any]:
+    backend = (os.getenv("HUISHENG_MT_BACKEND") or "").strip()
+    try:
+        project_id = int(os.getenv("HUISHENG_MT_PROJECT_ID", "0") or 0)
+    except ValueError as exc:
+        raise RuntimeError("HUISHENG_MT_PROJECT_ID 必须是数字") from exc
+    if not backend or project_id <= 0:
+        raise RuntimeError(
+            "缺少 HUISHENG_MT_BACKEND / HUISHENG_MT_PROJECT_ID"
+        )
+    openid = resolve_backend_openid(entry_ref)
+    return run_meituan_project(
+        backend,
+        os.getenv("HUISHENG_MT_LICENSE_KEY", ""),
+        project_id,
+        openid,
+        APPID,
+    )
+
+
+def login_via_gateway(entry_ref: str, gateway: str) -> Dict[str, Any]:
+    if requests is None:
+        raise RuntimeError("缺少 requests，请先安装")
+    endpoint = gateway.strip().rstrip("/")
+    if not endpoint.startswith(("http://", "https://")):
+        endpoint = "http://" + endpoint
+    headers = {"Content-Type": "application/json"}
+    api_key = (
+        os.getenv("HUISHENG_LOGIN_GATEWAY_KEY")
+        or os.getenv("YYB_API_KEY")
+        or os.getenv("YYB_PROTOCOL_TOKEN")
+        or ""
+    ).strip()
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    openid = _gateway_openid(entry_ref)
+    project_id = (os.getenv("HUISHENG_LOGIN_PROJECT_ID") or "").strip()
+    configured_path = (os.getenv("HUISHENG_LOGIN_GATEWAY_PATH") or "").strip()
+    if configured_path:
+        path = configured_path
+        payload = {"ref": entry_ref, "app_id": APPID, "openid": openid}
+    elif project_id:
+        path = f"/api/projects/{project_id}/run"
+        payload = {
+            "params": {
+                "openid": openid,
+                "appid": APPID,
+                "proxyUrl": "",
+            }
+        }
+    else:
+        path = LOGIN_GATEWAY_PATH
+        payload = {"ref": entry_ref, "app_id": APPID, "openid": openid}
+    try:
+        response = requests.post(
+            endpoint + path,
+            json=payload,
+            headers=headers,
+            timeout=60,
+        )
+    except Exception as exc:
+        raise RuntimeError(f"美团登录网关请求失败: {type(exc).__name__}") from exc
+    try:
+        body = response.json()
+    except ValueError as exc:
+        raise RuntimeError(f"美团登录网关返回非 JSON: HTTP {response.status_code}") from exc
+    auth = _auth_from_body(body)
+    if auth is None:
+        detail = (
+            body.get("error")
+            or body.get("message")
+            or body.get("msg")
+            or f"HTTP {response.status_code}"
+        )
+        raise RuntimeError(f"美团登录网关未返回完整登录态: {detail}")
+    return auth
+
+
 def login_by_code(code: str) -> Dict[str, Any]:
     if requests is None:
         raise RuntimeError("缺少 requests，请先安装")
-    response = requests.post(
-        OPEN_LOGIN,
-        data={"code": code, "appName": APP_NAME},
-        headers=login_headers(),
-        timeout=30,
+    raise RuntimeError(
+        "惠省登录需要美团 mtgsig；当前 YYB getCode 不能直接换 token，"
+        "请配置 HUISHENG_LOGIN_GATEWAY"
     )
-    body = response.json()
-    token = _pick_token(body)
-    inner = body.get("data") if isinstance(body, dict) else {}
-    inner = inner if isinstance(inner, dict) else {}
-    open_id = (
-        body.get("openId")
-        or inner.get("openId")
-        or inner.get("open_id")
-    )
-    open_id_cipher = body.get("openIdCipher") or inner.get("openIdCipher")
-    if not token or not open_id or not open_id_cipher:
-        raise RuntimeError(
-            "惠省登录失败: "
-            + str(body.get("message") or body.get("msg") or "未返回 token/openId/openIdCipher")
-        )
-    return {
-        "token": str(token),
-        "open_id": str(open_id),
-        "open_id_cipher": str(open_id_cipher),
-        "union_id": inner.get("unionId") or inner.get("unionid") or "",
-        "user_id": inner.get("userId") or inner.get("userid") or "",
-        "updated": int(time.time()),
-    }
 
 
 def wall_query() -> str:
@@ -227,6 +496,8 @@ def wall_headers(auth: Dict[str, Any]) -> Dict[str, str]:
         "xweb_xhr": "1",
         "openIdCipher": str(auth.get("open_id_cipher") or ""),
         "openId": str(auth.get("open_id") or ""),
+        "openid": str(auth.get("open_id") or ""),
+        "openidcipher": str(auth.get("open_id_cipher") or ""),
         "csecuserid": str(auth.get("user_id") or ""),
         "token": str(auth.get("token") or ""),
         "Referer": f"https://servicewechat.com/{APPID}/270/page-frame.html",
@@ -258,6 +529,7 @@ def base_wall_body(auth: Dict[str, Any], event_time: int) -> Dict[str, Any]:
         "wm_open_id": auth["open_id"],
         "wm_open_id_cipher": auth["open_id_cipher"],
         "unpl": str(auth.get("unpl") or ""),
+        "finger_applets": str(auth.get("finger_applets") or ""),
         "req_time": event_time,
         "userid": auth.get("user_id") or "",
         "user_id": auth.get("user_id") or "",
@@ -272,7 +544,6 @@ def base_wall_body(auth: Dict[str, Any], event_time: int) -> Dict[str, Any]:
         "cPosition": 1005,
         "pBizLine": 9000,
         "pSubCode": 30300,
-        "finger_applets": "",
         "requestType": 0,
         "requestSource": 1,
         "couponActivityScene": 1,
@@ -429,13 +700,25 @@ def notify(title: str, lines: List[str]) -> None:
 
 def run_account(entry: YYBEntry, index: int) -> tuple[bool, List[str]]:
     prefix = f"账号{index}"
-    code = fetch_yyb_code(f"{entry.endpoint}@{entry.ref}", APPID)
-    if not code:
-        return False, [f"{prefix} 取码失败"]
-    try:
-        auth = login_by_code(code)
-    except RuntimeError as exc:
-        return False, [f"{prefix} {exc}"]
+    gateway = (os.getenv("HUISHENG_LOGIN_GATEWAY") or "").strip()
+    if gateway:
+        try:
+            auth = login_via_gateway(entry.ref, gateway)
+        except RuntimeError as exc:
+            return False, [f"{prefix} {exc}"]
+    elif (os.getenv("HUISHENG_MT_BACKEND") or "").strip():
+        try:
+            auth = login_via_inline_backend(entry.ref)
+        except RuntimeError as exc:
+            return False, [f"{prefix} {exc}"]
+    else:
+        code = fetch_yyb_code(f"{entry.endpoint}@{entry.ref}", APPID)
+        if not code:
+            return False, [f"{prefix} 取码失败"]
+        try:
+            auth = login_by_code(code)
+        except RuntimeError as exc:
+            return False, [f"{prefix} {exc}"]
     attach_device(auth, entry.ref)
 
     body = base_wall_body(auth, int(time.time() * 1000))

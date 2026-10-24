@@ -32,7 +32,7 @@ ql repo https://github.com/TomCatXue/MyCookieCenter.git "ql_script" "" "README" 
 | [`unicom_daily.py`](./unicom_daily.py) | **中国联通** | `30 10 * * *`<br>(每天 10:30) | **中国联通** | **`chinaUnicom_data`** | 首页签到红包 + 联通爱听赚积分 + 天天领现金 + 权益超市福利 + 沃云手机签到 + 通通乡村能量与安全管家。 |
 | [`weread.js`](./weread.js) | **微信读书** | `0 23 * * *`<br>(每天 23:00) | **微信读书** | **`WEREAD_AUTH`** | 每日阅读时长领卡 + 周二翻牌抽奖 + 周五限免图书入架。内置纯 JS S-box 逆向签名引擎，长效脱机自愈换票。 |
 | [`linli.py`](./linli.py) | **林里** | `10 10 * * *`<br>(每天 10:10) | **微信小程序** | **`YYB_SERVER`**<br>+ `LINLI_STORE_ID`<br>+ `LINLI_ACTIVITY_ID` | YYB 取码 → 企迈静默登录 → 林里签到。门店和签到活动是企迈业务参数，取码不能替代；需从签到页请求中抓取一次。 |
-| [`huisheng.py`](./huisheng.py) | **惠省** | `5 0 * * *`<br>(每天 00:05) | **微信小程序** | **`YYB_SERVER`** | YYB 取码 → 美团惠省登录 → 红包墙列表 → 一键领券。活动与风控会轮换，首次接入需真机确认。 |
+| [`huisheng.py`](./huisheng.py) | **惠省** | `5 0 * * *`<br>(每天 00:05) | **微信小程序** | **`YYB_SERVER`**<br>+ `HUISHENG_LOGIN_GATEWAY` | 美团签名登录网关 → 红包墙列表 → 一键领券。`wx.login code` 不能直接换 token。 |
 | [`bibisheng.py`](./bibisheng.py) | **笔笔省** | `30 7 * * *`<br>(每天 07:30) | **微信小程序** | **`YYB_SERVER`** | YYB 取码 → `jscode` 会话 → 天天领券列表 → 领取每日免费券。 |
 | [`haidilao.py`](./haidilao.py) | **海底捞** | `23 7 * * *`<br>(每天 07:23) | **微信小程序** | **`YYB_SERVER`** | YYB 取码 → 海底捞会员登录 → 每日签到与碎片查询。登录 code 链路待真机最终核对。 |
 | [`miniso.py`](./miniso.py) | **名创优品** | `30 8 * * *`<br>(每天 08:30) | **微信小程序** | **`YYB_SERVER`** | YYB 取码 → AES 登录 → skey 缓存 → 每日签到与 mini 币差值。 |
@@ -49,10 +49,22 @@ YYB_SERVER = 地址@账号ID
 
 - 多账号每行一条；`账号ID` 也可以是 YYB 配置为引用模式的 OpenID。
 - 服务启用协议鉴权时，配置 `YYB_API_KEY` 或 `YYB_PROTOCOL_TOKEN`（二选一）。
-- 五个脚本均调用 `POST /wxapp/getCode`，兼容 `/wx/code`；外层 `result.code` 是一次性 `wx.login` code，不落盘、不打印。
+- 林里、笔笔省、海底捞、名创优品调用 `POST /wxapp/getCode`（兼容 `/wx/code`），一次性 `wx.login` code 不落盘、不打印。
 - `LINLI_STORE_ID` 是企迈门店 ID（例如 `212501`），`LINLI_ACTIVITY_ID` 是签到活动 ID；`wx.login` code 无法推导这两个值，必须从林里签到页请求中抓取。
 - 惠省可选配置 `HUISHENG_CITY_ID_LEVEL2`、`HUISHENG_CITY_ID_LEVEL3`、`HUISHENG_LATITUDE`、`HUISHENG_LONGITUDE`。
+- 惠省推荐直接在脚本内配置 `HUISHENG_MT_BACKEND`、`HUISHENG_MT_PROJECT_ID`、`HUISHENG_MT_LICENSE_KEY`，并用 `HUISHENG_MT_OPENIDS` 提供 `ref=后端OpenID` 映射。脚本会直接调用后端的 `/api/projects/{id}/run`，不再需要额外适配器。
+- 旧配置 `HUISHENG_LOGIN_GATEWAY` 仍兼容；网关返回 `token`（或 `mtToken`）、`openId`、`openIdCipher`、`userId`、`unionId`，可选 `finger_applets`。
 - 依赖：`requests`；林里、名创优品另需 `pycryptodome`。
+
+惠省单文件示例：
+
+```text
+YYB_SERVER=http://yyb-go:8000@1
+HUISHENG_MT_BACKEND=http://yyb:18273
+HUISHENG_MT_PROJECT_ID=12
+HUISHENG_MT_LICENSE_KEY=your-license-key
+HUISHENG_MT_OPENIDS=1=oExampleBackendOpenid
+```
 
 本地离线验证：
 
@@ -64,7 +76,7 @@ python tests/wxapp_mock_http.test.py -v           # 本地 HTTP mock
 
 > **验证状态：** YYB 顶层 `result.code`、请求构造、登录字段、幂等分支和缓存已通过本地契约/HTTP mock；真实平台仍需账号实测。
 > **林里限制：** `LINLI_STORE_ID` 与 `LINLI_ACTIVITY_ID` 属于业务参数，YYB 只提供登录 code，不能替代。
-> **惠省限制：** 未实现 `mtgsig` 生成/重放；若真机返回美团签名错误，需要支持官方小程序签名的网关能力，不能靠反复重试解决。
+> **惠省限制：** 美团 `mtgsig` 必须由网关在取码后实时生成；不能用旧 HAR 的 `mtgsig` 重放，也不能仅改登录 URL。
 
 ---
 
