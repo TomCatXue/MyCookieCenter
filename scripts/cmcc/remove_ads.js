@@ -2,8 +2,8 @@
 ------------------------------------------
 @Description: 中国移动 · 移动爱家全方位净化增强脚本（含首页轮播、智能爱家、发现页音视频/文章、钱包充话费、借钱与信息流）
 @Author: Yuheng0101, anker1209, ccyykk666, sooyaaabo; 轮播与专区全方位净化 TomCatXue
-@Updated: 2026-10-25 10:58
-@Version: v1.1.4
+@Updated: 2026-10-25 13:48
+@Version: v1.1.7
 ------------------------------------------
 */
 (function () {
@@ -109,6 +109,7 @@
 
   var isRechargeRequest = /\/i\/v1\/cust\/(?:aiMainQry|iopBatchQry)\//.test(url);
   var isFamilyCubeRequest = /\/DH\/MyPage\/getFamilyCube(?:\?|$)/.test(url);
+  var isWalletHtmlRequest = /^https:\/\/p\.10086\.cn\/waph5\/hebaoPay\/hbpayIndex(?:\?|$)/.test(url);
   var isH5Request =
     /\/(?:DH\/(?:message_query\/message\/query\/list|myCardVoucher\/getBannerList|MyPage\/getFamilyCube)|DA\/(?:commonBoard\/getCommonBoard|baseServiceFunction\/getAdverList))(?:\?|$)/.test(url) ||
     /h\.app\.coc\.10086\.cn/.test(url);
@@ -122,6 +123,7 @@
     : String(getHeader($response.headers, "x-pen"));
 
   if (
+    !isWalletHtmlRequest &&
     !isRechargeRequest &&
     !isPlaintextRequest &&
     ((isH5Request && xPen !== "1") || (!isH5Request && xPen !== "14"))
@@ -1132,7 +1134,8 @@
       if (Array.isArray(body.suspensionAdver.pageList)) {
         var pageCount = body.suspensionAdver.pageList.length;
         body.suspensionAdver.pageList = body.suspensionAdver.pageList.filter(function (item) {
-          return String(item && item.activityName || "").indexOf("5元话费") < 0;
+          var name = String(item && item.activityName || "");
+          return name.indexOf("5元话费") < 0 && name.indexOf("签到") < 0;
         });
         if (body.suspensionAdver.pageList.length !== pageCount) changed = true;
       }
@@ -1164,7 +1167,83 @@
     return true;
   }
 
+  function injectWalletHtml(html) {
+    if (!enabled("WalletClean")) return false;
+    if (typeof html !== "string" || html.length === 0) return false;
+
+    var hook = [
+      "<style id=\"cmcc-wallet-clean-style\">",
+      ".bannerSwiper,.youLike,.floatImg,.floatDiv,.advPopup{display:none!important}",
+      "</style>",
+      "<script id=\"cmcc-wallet-clean\">",
+      "(function(){",
+      "\"use strict\";",
+      "var sentinel=window.location.search.indexOf(\"CMCC_SENTINEL_SECRET\")>=0;",
+      "window.__cmccWalletCleanSelectors=[\".bannerSwiper\",\".youLike\",\".floatImg\",\".floatDiv\",\".advPopup\"];",
+      "window.__cmccWalletCleanTexts=[\"借钱\",\"优享会员\",\"会员优享\"];",
+      "if(sentinel)return;",
+      "function hide(el){",
+      "if(!el||el.nodeType!==1||el.getAttribute(\"data-cmcc-hidden\")===\"1\")return;",
+      "el.setAttribute(\"data-cmcc-hidden\",\"1\");",
+      "el.style.setProperty(\"display\",\"none\",\"important\");",
+      "}",
+      "function cleanSelectors(){",
+      "window.__cmccWalletCleanSelectors.forEach(function(selector){",
+      "document.querySelectorAll(selector).forEach(hide);",
+      "});",
+      "}",
+      "function cleanText(){",
+      "var containers=document.querySelectorAll(\".business_s .card_s, .financeDiv\");",
+      "containers.forEach(function(card){",
+      "var title=card.querySelector(\".title\");",
+      "if(!title)return;",
+      "var span=title.querySelector(\"span\");",
+      "var name=String(title.firstChild&&title.firstChild.nodeType===3?title.firstChild.textContent:span?span.textContent:title.textContent||\"\").replace(/\\s+/g,\"\");",
+      "if(window.__cmccWalletCleanTexts.indexOf(name)>=0)hide(card);",
+      "});",
+      "}",
+      "function clean(){cleanSelectors();cleanText();}",
+      "var queued=false;",
+      "function schedule(){",
+      "if(queued)return;",
+      "queued=true;",
+      "var run=function(){queued=false;clean();};",
+      "if(typeof window.requestAnimationFrame===\"function\")window.requestAnimationFrame(run);",
+      "else if(typeof window.setTimeout===\"function\")window.setTimeout(run,0);",
+      "else run();",
+      "}",
+      "clean();",
+      "if(document.readyState===\"loading\")document.addEventListener(\"DOMContentLoaded\",schedule,{once:true});",
+      "else schedule();",
+      "if(typeof MutationObserver===\"function\")new MutationObserver(schedule).observe(document.documentElement,{childList:true,subtree:true});",
+      "})();",
+      "</script>"
+    ].join("");
+    var markerIndex = html.toLowerCase().lastIndexOf("</body>");
+    if (markerIndex < 0) return false;
+    return html.slice(0, markerIndex) + hook + html.slice(markerIndex);
+  }
+
   try {
+    if (isWalletHtmlRequest) {
+      var walletHtml = injectWalletHtml(responseBody);
+      if (!walletHtml) {
+        $done({});
+        return;
+      }
+      var walletHeaders = {};
+      var walletOriginalHeaders = $response.headers || {};
+      for (var walletHeaderName in walletOriginalHeaders) {
+        if (Object.prototype.hasOwnProperty.call(walletOriginalHeaders, walletHeaderName)) {
+          walletHeaders[walletHeaderName] = walletOriginalHeaders[walletHeaderName];
+        }
+      }
+      deleteHeader(walletHeaders, "content-encoding");
+      deleteHeader(walletHeaders, "content-length");
+      $done({ body: walletHtml, headers: walletHeaders });
+      return;
+    }
+
     if (isPlaintextRequest) {
       var plainJson;
       try {
