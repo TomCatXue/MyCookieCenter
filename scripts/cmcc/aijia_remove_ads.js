@@ -86,7 +86,11 @@
   var isUmpLaunchRequest = /\/admsg\/v2\/launch(?:\?|$)/i.test(url);
   var isSceneRequest = /(?:base\/)?scene\/(?:getRuleTemplates|getRecommendRules)/.test(url);
   var isHebaoPayAdRequest = /p\.10086\.cn\/wap\/v1\/(?:polymeriza-page\/(?:banner|popup|activity|business|group-cards|marquee)|float\/window|guess\/shop)(?:\?|$)/.test(url);
-  var isPlaintextRequest = isJfShopRequest || isMiguVideoRequest || isCanvasLayoutRequest || isHjqShopLayout || isHjqBannerRequest || isHjqContentRequest || isUmpLaunchRequest || isJfAdRequest || isHebaoPayAdRequest || isSceneRequest;
+  // 摄像头中心 queryList：响应体是 base64(JSON)，含推广配置 configArray（需保留功能配置）
+  var isKomectCameraQuery = /video\.komect\.com\/camera\/core\/api\/bind\/queryList/.test(url);
+  // 移动爱家「发现/直播」页轮播与推荐：外层 JSON，data 为 AES 密文，直接置空即可不渲染
+  var isPensionAdRequest = /pension\.home\.komect\.com\/ac-health-(?:epg\/h5\/banner\/selectByCon|recommend\/tag\/liveShowList)/.test(url);
+  var isPlaintextRequest = isJfShopRequest || isMiguVideoRequest || isCanvasLayoutRequest || isHjqShopLayout || isHjqBannerRequest || isHjqContentRequest || isUmpLaunchRequest || isJfAdRequest || isHebaoPayAdRequest || isSceneRequest || isPensionAdRequest;
   // 严格安全校验：原生接口必须带 x-pen=14；明文 H5 接口按域名放行。
   var isNativeEncryptedRequest = /(?:client|apm)\.app\.coc\.10086\.cn\/biz-orange\/DN\//.test(url);
   var xPen = String(getHeader($response.headers, "x-pen"));
@@ -610,9 +614,36 @@
     if (!payload || typeof payload !== "object") return false;
     var changed = false;
     if (Array.isArray(payload.configArray) && payload.configArray.length > 0) {
-      payload.configArray = [];
-      changed = true;
+      // 仅移除纯推广项，严禁清空可配网设备类型/支付配置/回放天数等功能项
+      var adTypes = { "1": true, "4": true, "8": true };
+      var before = payload.configArray.length;
+      payload.configArray = payload.configArray.filter(function (item) {
+        return !adTypes[String(item && item.type)];
+      });
+      if (payload.configArray.length !== before) changed = true;
     }
+    return changed;
+  }
+
+  // ==================== 4.0 摄像头中心推广配置清洗（base64(JSON) 响应） ====================
+  function filterKomectCameraQuery(payload) {
+    if (!enabled("HomeClean") && !enabled("HideCarousel")) return false;
+    if (!payload || typeof payload !== "object") return false;
+    return filterKomectVideo(payload);
+  }
+
+  // ==================== 4.0.1 发现/直播页轮播与推荐净化（外层 JSON 的 data 为 AES 密文，直接置空） ====================
+  function filterPensionAd(payload) {
+    if (!enabled("DiscoverClean") && !enabled("HideCarousel")) return false;
+    if (!payload || typeof payload !== "object") return false;
+    var changed = false;
+    var clearKeys = ["data"];
+    clearKeys.forEach(function (k) {
+      if (payload[k] !== undefined && payload[k] !== null && payload[k] !== "") {
+        payload[k] = "";
+        changed = true;
+      }
+    });
     return changed;
   }
 
@@ -728,11 +759,7 @@
     if (!payload || typeof payload !== "object") return false;
     var changed = false;
 
-    // 清理模板推荐和轮播推荐，但绝对保留用户的有效一键场景数据 (payload.data)
-    if (Array.isArray(payload.ruleTemplateList) && payload.ruleTemplateList.length > 0) {
-      payload.ruleTemplateList = [];
-      changed = true;
-    }
+    // 仅清理推荐类数据，绝对保留用户自己的自动化规则模板 (ruleTemplateList) 与有效场景数据 (payload.data)
     if (Array.isArray(payload.recommendRuleList) && payload.recommendRuleList.length > 0) {
       payload.recommendRuleList = [];
       changed = true;
@@ -948,6 +975,27 @@
 
   // ==================== 核心分发链路 ====================
   try {
+    // 0. 摄像头中心 queryList：base64(JSON)，先解码再按配置类型精准清洗，再回编码
+    if (isKomectCameraQuery) {
+      var camRaw = String(responseBody).replace(/\s+/g, "");
+      var camPayload;
+      try {
+        camPayload = JSON.parse(utf8Decode(base64Decode(camRaw)));
+      } catch (e) {
+        $done({});
+        return;
+      }
+      if (!filterKomectCameraQuery(camPayload)) {
+        $done({});
+        return;
+      }
+      var camHeaders = ($response && $response.headers) ? Object.assign({}, $response.headers) : {};
+      deleteHeader(camHeaders, "content-encoding");
+      deleteHeader(camHeaders, "content-length");
+      $done({ headers: camHeaders, body: base64Encode(utf8Encode(JSON.stringify(camPayload))) });
+      return;
+    }
+
     // 1. 明文 JSON 接口分发（钱包、发现页、画布）
     if (isPlaintextRequest) {
       if (isHebaoPayAdRequest) {
@@ -1003,6 +1051,8 @@
         plainChanged = filterJfAds(url, plainJson);
       } else if (isSceneRequest) {
         plainChanged = filterSceneTemplates(plainJson);
+      } else if (isPensionAdRequest) {
+        plainChanged = filterPensionAd(plainJson);
       }
       if (!plainChanged) {
         $done({});
