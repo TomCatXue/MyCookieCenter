@@ -2,8 +2,8 @@
 ------------------------------------------
 @Description: 移动爱家 · 全方位去广告与界面纯净增强脚本
 @Author: TomCatXue
-@Updated: 2026-10-23 23:30
-@Version: v1.1.5
+@Updated: 2026-10-23 21:10
+@Version: v1.1.0
 ------------------------------------------
 */
 (function () {
@@ -688,6 +688,7 @@
     return changed;
   }
 
+  // ==================== 4.3 和家亲原生 Banner / 首页楼层清洗 ====================
   function filterHjqBanner(url, payload) {
     if (!enabled("HideCarousel")) return false;
     if (payload === null || payload === undefined) return false;
@@ -702,17 +703,6 @@
     }
 
     if (typeof payload === "object") {
-      // 1. 如果接口顶层 data 或 body 直接就是 Banner 列表数组（如 getBannerContentList/all_975, LITE005）
-      if (Array.isArray(payload.data) && payload.data.length > 0) {
-        payload.data = [];
-        changed = true;
-      }
-      if (Array.isArray(payload.body) && payload.body.length > 0) {
-        payload.body = [];
-        changed = true;
-      }
-
-      // 2. 如果包含 banner 相关的列表字段
       var bannerKeys = ["bannerList", "bannerContentList", "bannerInfoList", "operationFloatList"];
       bannerKeys.forEach(function (k) {
         if (Array.isArray(payload[k]) && payload[k].length > 0) {
@@ -720,18 +710,10 @@
           changed = true;
         }
       });
-      if (payload.data && typeof payload.data === "object" && !Array.isArray(payload.data)) {
+      if (payload.data && typeof payload.data === "object") {
         bannerKeys.forEach(function (k) {
           if (Array.isArray(payload.data[k]) && payload.data[k].length > 0) {
             payload.data[k] = [];
-            changed = true;
-          }
-        });
-      }
-      if (payload.body && typeof payload.body === "object" && !Array.isArray(payload.body)) {
-        bannerKeys.forEach(function (k) {
-          if (Array.isArray(payload.body[k]) && payload.body[k].length > 0) {
-            payload.body[k] = [];
             changed = true;
           }
         });
@@ -747,7 +729,10 @@
     var changed = false;
 
     // 清理模板推荐和轮播推荐，但绝对保留用户的有效一键场景数据 (payload.data)
-    // 场景核心模板列表属于用户一键快捷场景模式，绝对保留不清理
+    if (Array.isArray(payload.ruleTemplateList) && payload.ruleTemplateList.length > 0) {
+      payload.ruleTemplateList = [];
+      changed = true;
+    }
     if (Array.isArray(payload.recommendRuleList) && payload.recommendRuleList.length > 0) {
       payload.recommendRuleList = [];
       changed = true;
@@ -838,7 +823,7 @@
           rj.heBaoWallet.marketActivityList = rj.heBaoWallet.marketActivityList.filter(function (act) {
             var jump = String(act && act.imageJumpUrl || "");
             var rem = String(act && act.imageRemarks || "");
-            return rem.indexOf("借") < 0 && rem.indexOf("贷") < 0 && jump.indexOf("loan") < 0 && jump.indexOf("crloan") < 0 && jump.indexOf("credit") < 0;
+            return rem.indexOf("借") < 0 && jump.indexOf("loan") < 0 && jump.indexOf("crloan") < 0;
           });
           if (rj.heBaoWallet.marketActivityList.length !== beforeAct) {
             payload.resultJson = isStrRj ? JSON.stringify(rj) : rj;
