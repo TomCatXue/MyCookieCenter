@@ -2,8 +2,8 @@
 ------------------------------------------
 @Description: 中国移动 · 移动爱家全方位净化增强脚本（含首页轮播、智能爱家、发现页音视频/文章、钱包充话费、借钱与信息流）
 @Author: Yuheng0101, anker1209, ccyykk666, sooyaaabo; 轮播与专区全方位净化 TomCatXue
-@Updated: 2026-10-24 13:13
-@Version: v1.1.3
+@Updated: 2026-10-25 10:58
+@Version: v1.1.4
 ------------------------------------------
 */
 (function () {
@@ -50,6 +50,7 @@
     WalletClean: true,
     DiscoverClean: true,
     SmartPageClean: true,
+    AggregationAdClean: true,
     HideTopFamily: false,
     HideTopAge: false,
     HideTopPhone: false,
@@ -71,7 +72,8 @@
     HideMyLifeServices: false,
     HideMyVideo: false,
     HideMyExclusiveServices: false,
-    HideMyNewCall: false
+    HideMyNewCall: false,
+    HideMySpecialServices: false
   };
 
   function enabled(name) {
@@ -106,8 +108,9 @@
   }
 
   var isRechargeRequest = /\/i\/v1\/cust\/(?:aiMainQry|iopBatchQry)\//.test(url);
+  var isFamilyCubeRequest = /\/DH\/MyPage\/getFamilyCube(?:\?|$)/.test(url);
   var isH5Request =
-    /\/(?:DH\/(?:message_query\/message\/query\/list|myCardVoucher\/getBannerList)|DA\/(?:commonBoard\/getCommonBoard|baseServiceFunction\/getAdverList))(?:\?|$)/.test(url) ||
+    /\/(?:DH\/(?:message_query\/message\/query\/list|myCardVoucher\/getBannerList|MyPage\/getFamilyCube)|DA\/(?:commonBoard\/getCommonBoard|baseServiceFunction\/getAdverList))(?:\?|$)/.test(url) ||
     /h\.app\.coc\.10086\.cn/.test(url);
   var isJfShopRequest = /app\.jf\.10086\.cn\/cmcc-h5-shop\//.test(url);
   var isMiguVideoRequest = /display-sc\.miguvideo\.com\/display\/v3\/static/.test(url);
@@ -603,7 +606,6 @@
       "20230908006": true, // 品牌入口
       "20260610006": true,
       "20250219002": true,
-      "20230721040": true,
       "20230721034": true
     };
     var pureAdCubeIds = {
@@ -629,6 +631,7 @@
       "20240624002": "HideMyCloudDrive",    // 我的云盘
       "20230721044": "HideMyToolbox",       // 百宝箱
       "20230928004": "HideMyLifeServices",  // 生活服务
+      "20230721040": "HideMySpecialServices", // 特色业务
       "20260423002": "HideMyVideo",         // 我的视频
       "20260508004": "HideMyExclusiveServices", // 我的专属服务
       "20260610004": "HideMyNewCall"        // 新通话
@@ -1074,36 +1077,27 @@
   }
 
   function filterAggregationData(payload) {
+    if (!enabled("AggregationAdClean")) return false;
     var body = payload && payload.rspBody;
     if (!body) return false;
     var changed = false;
 
-    if (Object.prototype.hasOwnProperty.call(body, "topPullSecond")) {
-      delete body.topPullSecond;
-      changed = true;
-    }
-
-    if (Object.prototype.hasOwnProperty.call(body, "notSufficientFundsAdver")) {
-      delete body.notSufficientFundsAdver;
-      changed = true;
-    }
-
-    // 彻底清空所有开屏弹窗与浮层广告（包含 isAdvert=0 的“幸运三日签”等各类商业活动弹窗）
+    // 商业营销弹窗与推荐流清理，服务提醒保留。
     if (Array.isArray(body.popUpList) && body.popUpList.length > 0) {
       body.popUpList = [];
       changed = true;
     }
 
-    // 彻底清空开屏全屏抽屉广告 (drawerOpens)
-    if (Array.isArray(body.drawerOpens) && body.drawerOpens.length > 0) {
-      body.drawerOpens = [];
-      changed = true;
+    if (Array.isArray(body.drawerOpens)) {
+      var drawerCount = body.drawerOpens.length;
+      body.drawerOpens = body.drawerOpens.filter(function (item) {
+        var subject = String(item && item.vSubject || "");
+        return subject.indexOf("关怀") < 0 && subject.indexOf("英文") < 0;
+      });
+      if (body.drawerOpens.length !== drawerCount) changed = true;
     }
 
-    if (body.englishPop && Object.keys(body.englishPop).length > 0) {
-      body.englishPop = {};
-      changed = true;
-    }
+    // englishPop 英文版切换属于系统能力入口，保留。
 
     if (body.cardPopup && Object.keys(body.cardPopup).length > 0) {
       body.cardPopup = {};
@@ -1130,9 +1124,18 @@
       changed = true;
     }
 
-    if (Object.prototype.hasOwnProperty.call(body, "suspensionAdver")) {
-      delete body.suspensionAdver;
-      changed = true;
+    if (body.suspensionAdver && typeof body.suspensionAdver === "object") {
+      if (Array.isArray(body.suspensionAdver.floatingWindow) && body.suspensionAdver.floatingWindow.length > 0) {
+        body.suspensionAdver.floatingWindow = [];
+        changed = true;
+      }
+      if (Array.isArray(body.suspensionAdver.pageList)) {
+        var pageCount = body.suspensionAdver.pageList.length;
+        body.suspensionAdver.pageList = body.suspensionAdver.pageList.filter(function (item) {
+          return String(item && item.activityName || "").indexOf("5元话费") < 0;
+        });
+        if (body.suspensionAdver.pageList.length !== pageCount) changed = true;
+      }
     }
 
     var provinceConfig = body.provinceCodeChanage;
@@ -1151,6 +1154,14 @@
     }
 
     return changed;
+  }
+
+  function filterToastNotifications(payload) {
+    if (!enabled("AggregationAdClean")) return false;
+    var body = payload && payload.rspBody;
+    if (!body || !Array.isArray(body.activity) || body.activity.length === 0) return false;
+    body.activity = [];
+    return true;
   }
 
   try {
@@ -1174,7 +1185,16 @@
         $done({});
         return;
       }
-      $done({ body: JSON.stringify(plainJson) });
+      var plainHeaders = {};
+      var originalHeaders = $response.headers || {};
+      for (var headerName in originalHeaders) {
+        if (Object.prototype.hasOwnProperty.call(originalHeaders, headerName)) {
+          plainHeaders[headerName] = originalHeaders[headerName];
+        }
+      }
+      deleteHeader(plainHeaders, "content-encoding");
+      deleteHeader(plainHeaders, "content-length");
+      $done({ body: JSON.stringify(plainJson), headers: plainHeaders });
       return;
     }
 
@@ -1234,6 +1254,8 @@
         h5Changed = filterRechargeCommonBoard(messagePayload);
       } else if (/\/DA\/baseServiceFunction\/getAdverList(?:\?|$)/.test(url)) {
         h5Changed = filterServicePages(messagePayload);
+      } else if (isFamilyCubeRequest) {
+        h5Changed = filterMyPage(messagePayload);
       } else {
         h5Changed = filterMessageRecommendations(messagePayload);
       }
@@ -1248,6 +1270,19 @@
         H5_AES_IV
       );
       var messageBody = JSON.stringify(messageEnvelope);
+      if (isFamilyCubeRequest) {
+        var familyHeaders = {};
+        var familyOriginalHeaders = $response.headers || {};
+        for (var familyHeaderName in familyOriginalHeaders) {
+          if (Object.prototype.hasOwnProperty.call(familyOriginalHeaders, familyHeaderName)) {
+            familyHeaders[familyHeaderName] = familyOriginalHeaders[familyHeaderName];
+          }
+        }
+        deleteHeader(familyHeaders, "content-encoding");
+        deleteHeader(familyHeaders, "content-length");
+        $done({ body: messageBody, headers: familyHeaders });
+        return;
+      }
       $done(signedResult(messageBody));
       return;
     }
@@ -1267,6 +1302,8 @@
       changed = filterMyPage(payload);
     } else if (/\/DN\/multipleInterfaces\/aggregationData(?:\?|$)/.test(url)) {
       changed = filterAggregationData(payload);
+    } else if (/\/DH\/toast\/august\/getToast(?:\?|$)/.test(url)) {
+      changed = filterToastNotifications(payload);
     } else if (/\/DN\/init\/getNavigation(?:\?|$)/.test(url)) {
       changed = filterNavigation(payload);
     } else if (/\/DN\/searchWord\/getSearchWordInfo(?:\?|$)/.test(url)) {
