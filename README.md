@@ -21,7 +21,6 @@ Loon 负责无感捕获与即时同步，呆呆面板 / 青龙面板负责脱机
 | :-: | :--- | :--- | :---: |
 | <img src="icons/daidai.png" height="16" /> | **呆呆面板** | 微信读书 / 中国电信 / 扫描全能王 / 中国移动 凭据捕获并自动同步 | <nobr><a href="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/loon/DaiDaiPanel.plugin"><strong>安装</strong></a>&nbsp;/&nbsp;<a href="./loon/README.md"><strong>说明</strong></a></nobr> |
 | <img src="icons/10086.png" height="16" /> | **中国移动** | 净化开屏、首页轮播、各专区横幅与「我的」弹窗 | <nobr><a href="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/loon/ChinaMobile.plugin"><strong>安装</strong></a>&nbsp;/&nbsp;<a href="./loon/README.md"><strong>说明</strong></a></nobr> |
-| <img src="https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/41/57/e5/4157e52f-d849-d15f-d210-d7bf93c7129e/AppIcon-0-0-1x_U007emarketing-0-6-0-sRGB-85-220.png/64x64bb.jpg" height="16" /> | **移动爱家** | 净化首页轮播、智能专区、短视频与钱包营销推荐 | <nobr><a href="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/loon/ChinaMobileAiJia.plugin"><strong>安装</strong></a>&nbsp;/&nbsp;<a href="./loon/README.md"><strong>说明</strong></a></nobr> |
 | <img src="icons/weread.png" height="16" /> | **微信读书** | 去广告、去更新弹窗、解除试听限制 | <nobr><a href="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/loon/WeReadEnhance.plugin"><strong>安装</strong></a>&nbsp;/&nbsp;<a href="./scripts/tools/wxread_enhance/"><strong>说明</strong></a></nobr> |
 | <img src="icons/qq.png" height="16" /> | **QQ空间** | 屏蔽空间广告与营销内容 | <nobr><a href="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/loon/QzoneAdBlock.plugin"><strong>安装</strong></a>&nbsp;/&nbsp;<a href="./loon/README.md"><strong>说明</strong></a></nobr> |
 | <img src="https://github.githubassets.com/favicons/favicon.png" height="16" /> | **GitHub** | 星标列表显示最近推送时间 | <nobr><a href="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/loon/GitHubPushTime.plugin"><strong>安装</strong></a>&nbsp;/&nbsp;<a href="./scripts/tools/github/"><strong>说明</strong></a></nobr> |
@@ -63,7 +62,7 @@ ql repo https://github.com/TomCatXue/MyCookieCenter.git "ql_script" "" "README" 
 
 > **验证状态：** 小程序脚本已通过本地契约与 HTTP mock；真实平台仍需账号实测。
 >
-> **已归档：** 惠省、海底捞已暂停维护并移出仓库，源码与图标保存在 `archive/2026-10-24-deprecated-wxapp/`。归档原因与复活路径见该目录的 `README.md`（技术细节另存于本地私有笔记，未随仓库发布）。
+> **已归档：** 惠省、海底捞、移动爱家去广告插件已暂停维护并移出仓库，源码、图标与逆向证据仅保存在本地 `archive/`（该目录已加入 `.gitignore`，不进公开仓库）。
 
 ## License
 

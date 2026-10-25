@@ -16,6 +16,9 @@ notes/
 docs/
 tests/
 
+# 本地归档（已放弃/暂停维护的插件、脚本与逆向证据，不进公开仓库）
+archive/
+
 # 依赖
 node_modules/
 

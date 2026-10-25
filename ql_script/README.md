@@ -59,7 +59,7 @@ python -m py_compile ql_script/linli.py ql_script/bibisheng.py ql_script/miniso.
 
 > **验证状态：** YYB 顶层 `result.code`、请求构造、登录字段、幂等分支和缓存曾在本地契约/HTTP mock 中验证通过；真实平台仍需账号实测。仓库已不再内置测试套件（`.gitignore` 已整体忽略 `tests/`）。
 > **林里限制：** `LINLI_STORE_ID` 与 `LINLI_ACTIVITY_ID` 属于业务参数，YYB 只提供登录 code，不能替代。
-> **已归档：** 惠省与海底捞已暂停维护并移出 `ql_script/`，源码保存在 `archive/2026-10-24-deprecated-wxapp/`，归档原因与复活路径见该目录的 `README.md`。
+> **已归档：** 惠省与海底捞已暂停维护并移出 `ql_script/`，源码仅保存在本地 `archive/`（该目录已加入 `.gitignore`，不进公开仓库）。
 
 ---
 
