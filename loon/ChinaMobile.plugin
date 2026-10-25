@@ -1,5 +1,5 @@
 #!name = 中国移动
-#!desc = 净化开屏、首页轮播、专区横幅与「我的」弹窗。
+#!desc = 净化开屏、首页轮播、专区横幅、钱包营销浮层与「我的」弹窗。
 #!openUrl = https://apps.apple.com/app/id583700738
 #!author = Yuheng0101, anker1209, ccyykk666, sooyaaabo; 轮播净化 TomCatXue
 #!tag = 去广告, 中国移动, 轮播净化
@@ -7,21 +7,22 @@
 #!loon_version = 3.5.2(1005)
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/ce/b7/2c/ceb72c6e-21c3-0c8b-a960-2fb8a547279f/AppIcon-0-0-1x_U007epad-0-1-0-sRGB-85-220.png/512x512bb.jpg
-#!version = 1.0.11
-#!date = 2026-10-25 10:58
+#!version = 1.0.16
+#!date = 2026-10-25 13:50
 
 # 核心升级说明（2026-10-22 v1.0.3）：
 # 1. 纯粹净屏与轮播消除：移除一切针对跳过支付 VPN 的多余网络规则，支付时请直接关闭 VPN 完成付款（iOS 端和包支付 SDK 在 Native 层扫描网络接口，开启代理时任何伪装规则均无效，关闭代理为唯一确定路径）。
 # 2. 开关参数格式严谨化：严格遵循 Loon 标准 key = type,default,tag=...,desc=... 格式，剔除多余空格，彻底解决 Loon UI 切换开关时只能关闭不能打开的异常。
 # 3. 轮播图物理级消除：在底层 AES 解密接口 (getAdverList / getTopAreaList) 中直接剔除「横幅轮播区」与四大目标推广，使前端轮播组件彻底消失而非仅阻断点击。
 # 4. 开关业务代码双向联动：全量打通 30 个开关在核心脚本中的双向联动逻辑，确保每一个开关开启/关闭均精准生效。
-# 5. 「我的」页按业务卡独立开关，营销内容固定关闭；开关名称与真实 areaId/cubeId 映射见脚本 v1.1.4。
+# 5. 「我的」页按业务卡独立开关，营销内容固定关闭；开关名称与真实 areaId/cubeId 映射见脚本 v1.1.5。
+# 6. v1.0.16 在 v1.0.14 基线上补充 `.financeDiv` 精确匹配，兼容「优享会员 / 会员优享」两种标题，只移除借钱和会员卡，保留充话费、账单与其他钱包功能。
 
 [Argument]
 HideCarousel = switch,true,tag=[轮播] 彻底移除轮播图,desc=移除首页与各专区横幅轮播图组件及四大落地推广（办宽带/智盒/摄像头/融合套餐），使其彻底消失而非仅阻断跳转
 HomeBasicClean = switch,true,tag=[首页] 基础净化,desc=清理首页瀑布流、推荐位与活动广告
 ServicePageClean = switch,true,tag=[专区] 专区横幅净化,desc=清理话费/余量等业务专区横幅推广
-WalletClean = switch,true,tag=[钱包] 充话费与钱包净化,desc=清理我的钱包中充话费下方轮播图、借钱、会员优享卡片与精彩推荐信息流
+WalletClean = switch,true,tag=[钱包] 充话费与钱包净化,desc=清理我的钱包中营销横幅、猜你喜欢、浮层、营销弹窗以及「借钱」「优享会员」卡片
 DiscoverClean = switch,true,tag=[发现] 发现页短视频与文章净化,desc=清空发现页短视频信息流、大轮播图与新闻资讯模块
 SmartPageClean = switch,true,tag=[智能] 智能专区浮层净化,desc=清理智能专区与爱家画布中的悬浮窗、营销弹窗与排行榜大图
 AggregationAdClean = switch,true,tag=[弹窗] 营销弹窗净化,desc=清理开屏营销弹窗、抽屉广告与营销 Toast，保留账单、业务提醒和版本切换提示
@@ -77,18 +78,21 @@ request if ${url} ~= /^https?:\/\/app\.jf\.10086\.cn\/cmcc-h5-shop\/cms\/(?:adve
 
 [Script]
 # 页面与轮播净化核心脚本（含 AES 动态解密、横幅轮播区整体移除、右上角广告清理与四大落地推广广告剔除）
-response if ${url} ~= /^https:\/\/(?:client\.app\.coc\.10086\.cn\/biz-orange\/(?:DN\/(?:homePage\/getTopAreaList|myPageNew\/getMyPageNew|multipleInterfaces\/aggregationData|init\/getNavigation|searchWord\/getSearchWordInfo|titleBar\/getIcon)|DH\/toast\/august\/getToast|DA\/baseServiceFunction\/getAdverList)|h\.app\.coc\.10086\.cn\/biz-orange\/(?:DA\/baseServiceFunction\/getAdverList|DH\/MyPage\/getFamilyCube))(?:\?.*)?$/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/cmcc/remove_ads.js?v=2026102511", {${HideCarousel}, ${HomeBasicClean}, ${ServicePageClean}, ${WalletClean}, ${DiscoverClean}, ${SmartPageClean}, ${AggregationAdClean}, ${HideTopFamily}, ${HideTopAge}, ${HideTopPhone}, ${HideTopNearby}, ${HideTopAI}, ${HideTopEnterprise}, ${HideMyHeaderEntry}, ${HideMyCheckIn}, ${HideMyServices}, ${HideMyFamilyCube}, ${HideMyDevicesCube}, ${HideMyMiniProgram}, ${HideMyDigitalHuman}, ${HideMySelections}, ${HideMyGroup}, ${HideMyRingtone}, ${HideMyCloudDrive}, ${HideMyToolbox}, ${HideMyLifeServices}, ${HideMySpecialServices}, ${HideMyVideo}, ${HideMyExclusiveServices}, ${HideMyNewCall}}) with tag="[中国移动]页面与轮播净化", timeout=10, requires_body=true
-response if ${url} ~= /^https:\/\/h\.app\.coc\.10086\.cn\/biz-orange\/DH\/(?:message_query\/message\/query\/list|myCardVoucher\/getBannerList)(?:\?.*)?$/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/cmcc/remove_ads.js?v=2026102511", {${HideCarousel}}) with tag="[中国移动]消息与卡券横幅净化", timeout=10, requires_body=true
-response if ${url} ~= /^https:\/\/app\.10086\.cn\/biz-orange\/DA\/commonBoard\/getCommonBoard(?:\?.*)?$/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/cmcc/remove_ads.js?v=2026102511", {${HideCarousel}}) with tag="[中国移动]横幅看板净化", timeout=10, requires_body=true
+response if ${url} ~= /^https:\/\/(?:client\.app\.coc\.10086\.cn\/biz-orange\/(?:DN\/(?:homePage\/getTopAreaList|myPageNew\/getMyPageNew|multipleInterfaces\/aggregationData|init\/getNavigation|searchWord\/getSearchWordInfo|titleBar\/getIcon)|DH\/toast\/august\/getToast|DA\/baseServiceFunction\/getAdverList)|h\.app\.coc\.10086\.cn\/biz-orange\/(?:DA\/baseServiceFunction\/getAdverList|DH\/MyPage\/getFamilyCube))(?:\?.*)?$/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/0b8cb9d/scripts/cmcc/remove_ads.js?v=2026102512", {${HideCarousel}, ${HomeBasicClean}, ${ServicePageClean}, ${WalletClean}, ${DiscoverClean}, ${SmartPageClean}, ${AggregationAdClean}, ${HideTopFamily}, ${HideTopAge}, ${HideTopPhone}, ${HideTopNearby}, ${HideTopAI}, ${HideTopEnterprise}, ${HideMyHeaderEntry}, ${HideMyCheckIn}, ${HideMyServices}, ${HideMyFamilyCube}, ${HideMyDevicesCube}, ${HideMyMiniProgram}, ${HideMyDigitalHuman}, ${HideMySelections}, ${HideMyGroup}, ${HideMyRingtone}, ${HideMyCloudDrive}, ${HideMyToolbox}, ${HideMyLifeServices}, ${HideMySpecialServices}, ${HideMyVideo}, ${HideMyExclusiveServices}, ${HideMyNewCall}}) with tag="[中国移动]页面与轮播净化", timeout=10, requires_body=true
+response if ${url} ~= /^https:\/\/h\.app\.coc\.10086\.cn\/biz-orange\/DH\/(?:message_query\/message\/query\/list|myCardVoucher\/getBannerList)(?:\?.*)?$/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/0b8cb9d/scripts/cmcc/remove_ads.js?v=2026102512", {${HideCarousel}}) with tag="[中国移动]消息与卡券横幅净化", timeout=10, requires_body=true
+response if ${url} ~= /^https:\/\/app\.10086\.cn\/biz-orange\/DA\/commonBoard\/getCommonBoard(?:\?.*)?$/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/0b8cb9d/scripts/cmcc/remove_ads.js?v=2026102512", {${HideCarousel}}) with tag="[中国移动]横幅看板净化", timeout=10, requires_body=true
 
 # 我的钱包与充话费专区净化（清空充话费下方轮播图、端AI推荐、爆品必抢、会员优享卡片、猜你喜欢信息流与借钱吧贷款卡片）
-response if ${url} ~= /^https:\/\/app\.jf\.10086\.cn\/cmcc-h5-shop\/(?:cms\/(?:contents|yourFavorite)|hePay\/all)(?:\?.*)?$/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/cmcc/remove_ads.js?v=2026102511", {${WalletClean}, ${HideCarousel}}) with tag="[中国移动]我的钱包与充话费净化", timeout=10, requires_body=true
+response if ${url} ~= /^https:\/\/app\.jf\.10086\.cn\/cmcc-h5-shop\/(?:cms\/(?:contents|yourFavorite)|hePay\/all)(?:\?.*)?$/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/0b8cb9d/scripts/cmcc/remove_ads.js?v=2026102512", {${WalletClean}, ${HideCarousel}}) with tag="[中国移动]我的钱包与充话费净化", timeout=10, requires_body=true
+
+# 和包钱包 H5（p.10086.cn）：清理营销横幅、猜你喜欢、浮层、营销弹窗与精确标题卡片
+response if ${url} ~= /^https:\/\/p\.10086\.cn\/waph5\/hebaoPay\/hbpayIndex(?:\?|$)/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/0b8cb9d/scripts/cmcc/remove_ads.js?v=2026102512", {${WalletClean}}) with tag="[中国移动]和包钱包营销净化", timeout=10, requires_body=true
 
 # 发现页短视频、大轮播图与新闻资讯文章流净化
-response if ${url} ~= /^https?:\/\/display-sc\.miguvideo\.com\/display\/v3\/static(?:\/.*)?$/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/cmcc/remove_ads.js?v=2026102511", {${DiscoverClean}, ${HideCarousel}}) with tag="[中国移动]发现页视频与文章净化", timeout=10, requires_body=true
+response if ${url} ~= /^https?:\/\/display-sc\.miguvideo\.com\/display\/v3\/static(?:\/.*)?$/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/0b8cb9d/scripts/cmcc/remove_ads.js?v=2026102512", {${DiscoverClean}, ${HideCarousel}}) with tag="[中国移动]发现页视频与文章净化", timeout=10, requires_body=true
 
 # 移动爱家与智能专区画布布局净化（剔除轮播图 Swiper、排行榜大图、悬浮窗动效与营销触点弹窗）
-response if ${url} ~= /^https:\/\/res\.coc\.10086\.cn\/res\/cdn\/coc1\/fixedPath\/production\.rightsmarket-h5-canvas\.online\.layout\..*\.json(?:\?.*)?$/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/cmcc/remove_ads.js?v=2026102511", {${HideCarousel}, ${SmartPageClean}}) with tag="[中国移动]智能专区与爱家画布净化", timeout=10, requires_body=true
+response if ${url} ~= /^https:\/\/res\.coc\.10086\.cn\/res\/cdn\/coc1\/fixedPath\/production\.rightsmarket-h5-canvas\.online\.layout\..*\.json(?:\?.*)?$/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/0b8cb9d/scripts/cmcc/remove_ads.js?v=2026102512", {${HideCarousel}, ${SmartPageClean}}) with tag="[中国移动]智能专区与爱家画布净化", timeout=10, requires_body=true
 
 [MITM]
-hostname = client.app.coc.10086.cn, h.app.coc.10086.cn, app.10086.cn, ad.mcloud.139.com, app.jf.10086.cn, display-sc.miguvideo.com, res.coc.10086.cn
+hostname = client.app.coc.10086.cn, h.app.coc.10086.cn, app.10086.cn, ad.mcloud.139.com, app.jf.10086.cn, p.10086.cn, display-sc.miguvideo.com, res.coc.10086.cn
