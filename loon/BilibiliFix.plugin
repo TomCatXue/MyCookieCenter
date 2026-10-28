@@ -1,12 +1,12 @@
 #!name = 哔哩哔哩 𝕏
-#!desc = 哔哩哔哩增强版：包含SponsorBlock空降助手、新版gRPC卡片分区与多级子分类优化(含港澳台及快捷访问)、扫码登录原生签名修复、新版多Tab分类收藏升级、1080P高码率画质解锁、大会员凭证解锁。
+#!desc = [白B专用] 哔哩哔哩增强版：包含SponsorBlock空降助手、新版gRPC卡片分区与多级子分类优化(含港澳台及快捷访问)、扫码登录原生签名修复、新版多Tab分类收藏升级、1080P高码率画质解锁、大会员凭证解锁。
 #!openUrl = https://apps.apple.com/app/id736536022
 #!author = TomCatXue
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
-#!icon = https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/c5/8d/9c/c58d9cbb-7d9c-8e05-4b81-74a950b559c9/AppIcon-0-0-1x_U007epad-0-1-0-sRGB-85-220.png/512x512bb.jpg
+#!icon = https://raw.githubusercontent.com/BlackSpacee/icon/main/Apps/BiliBili_White.png
 #!tag = 去广告,空降助手,画质解锁,Bilibili
-#!version = 2.8.2
-#!date = 2026-09-19 14:00
+#!version = 2.8.3
+#!date = 2026-10-28 15:45
 
 [Argument]
 quality = switch, true, tag = [画质] 解锁1080P高码率/4K, desc = 开启后非大会员也可直接选择并切换1080P高码率、1080P60、杜比视界等画质
