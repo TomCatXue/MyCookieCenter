@@ -25,8 +25,6 @@ ql repo https://github.com/TomCatXue/MyCookieCenter.git "ql_script" "" "README" 
 
 | 脚本文件 | 任务名称 | 内嵌定时 Cron | 任务标签 Tag | 核心环境变量 | 核心功能说明 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| [`cmcc_all.py`](./cmcc_all.py) | **中国移动** | `20 8 * * *`<br>(每天 08:20) | **中国移动** | **`CMCC_AUTH`** | **全功能默认全开**：签到 + 连签领奖 + AI豆任务 + AI豆顶格兑换话费券 + 拓展活动 + 周三充值日拼图 + AI豆苗 + 实时话费查询。单命令开箱即用，内置周三秒杀模式 `--wed-seckill`（定时 `58 7 * * 3`）。jwt 脱机自愈换票。 |
-| [`cmcc_seckill.py`](./cmcc_seckill.py) | **移动秒杀** | 无固定 cron<br>(时间/奖品轮换) | **中国移动** | **`CMCC_AUTH`** | 签到有礼场次独立秒杀。先 `--dry-run` 查看真实排期，脚本会自动推送下一场时间与建议 cron，按提示设置定时执行。 |
 | [`telecom_daily.py`](./telecom_daily.py) | **中国电信** | `0 9 * * *`<br>(每天 09:00) | **中国电信** | **`dxlin`** | **三合一整合版 (v2.0.0)**：掌厅打卡领豆 + 阶梯连签奖励 + 金豆转盘 + 浏览任务 + 宠物喂食 + 周三会员双抽奖(仅周三执行) + 权益商城幸运抽奖 + 权益包自动领取 + 权益币余额 + AI奇遇赢Pad。单次登录全业务共享。 |
 | [`telecom_midnight_equity.py`](./telecom_midnight_equity.py) | **电信秒杀** | `58 23 * * *`<br>(每天 23:58) | **中国电信** | **`dxlin`** | 毫秒级多线程并发抢兑每月等级专属特权（话费券/视频月卡等），当月抢中后自动休眠，未抢中每天持续抢购。 |
 | [`unicom_daily.py`](./unicom_daily.py) | **中国联通** | `30 10 * * *`<br>(每天 10:30) | **中国联通** | **`chinaUnicom_data`** | 首页签到红包 + 联通爱听赚积分 + 天天领现金 + 权益超市福利 + 沃云手机签到 + 通通乡村能量与安全管家。 |
@@ -59,11 +57,13 @@ python -m py_compile ql_script/linli.py ql_script/bibisheng.py ql_script/miniso.
 
 > **验证状态：** YYB 顶层 `result.code`、请求构造、登录字段、幂等分支和缓存曾在本地契约/HTTP mock 中验证通过；真实平台仍需账号实测。仓库已不再内置测试套件（`.gitignore` 已整体忽略 `tests/`）。
 > **林里限制：** `LINLI_STORE_ID` 与 `LINLI_ACTIVITY_ID` 属于业务参数，YYB 只提供登录 code，不能替代。
-> **已归档：** 惠省与海底捞已暂停维护并移出 `ql_script/`，源码仅保存在本地 `archive/`（该目录已加入 `.gitignore`，不进公开仓库）。
+> **已归档：** 惠省、海底捞、中国移动每日任务（cmcc_all.py）与移动秒杀（cmcc_seckill.py）已暂停维护并移出 `ql_script/`，源码仅保存在本地 `archive/`（该目录已加入 `.gitignore`，不进公开仓库）。
 
 ---
 
-## 📱 中国移动全功能配置指南
+## 📱 中国移动全功能配置（已归档至本地自用）
+
+> **说明**：中国移动日常自动续期、每日聚合与秒杀模块已整合至 Loon 本地插件 / 远程脚本，青龙 Python 脚本已归档至本地 `archive/`，不再上传提交公开仓库。以下文档供本地归档查阅。
 
 ### 1. 基础运行环境依赖
 确保青龙面板的「依赖管理」->「Python3」已安装以下基础库：

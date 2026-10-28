@@ -1,4 +1,4 @@
-# 哔哩哔哩·增强版 𝕏
+# 哔哩哔哩·增强版 𝕏 (白B专用)
 
 本目录收录哔哩哔哩相关的核心辅助与修复脚本：
 
@@ -11,7 +11,7 @@
 
 ## 对应 Loon 插件
 
-- [`loon/BilibiliFix.plugin`](../../loon/BilibiliFix.plugin)
+- [`loon/BilibiliFix.plugin`](../../loon/BilibiliFix.plugin) (白B专用，v2.8.3)
 
 ## 使用方法
 

@@ -43,3 +43,6 @@ _p.html
 
 .playwright-mcp/
 ql_script/.*_cache*.json
+
+# 中国移动青龙脚本本地归档（不再上传公开仓库）
+ql_script/cmcc_*.py

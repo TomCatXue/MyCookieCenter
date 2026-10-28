@@ -5,7 +5,7 @@
 | [**DaiDaiPanel.plugin**](./DaiDaiPanel.plugin) (v1.0.6) | **呆呆面板**：微信读书 / 扫描全能王 / 中国移动 / 中国电信凭据捕获并自动同步 | `weread` `cmcc_mark` `camscanner` `telecom` |
 | [**ChinaMobile.plugin**](./ChinaMobile.plugin) (v1.0.16) | **中国移动**：净化开屏、首页轮播、专区横幅、和包钱包营销浮层与「我的」弹窗 | HideCarousel 轮播总控及全功能细分开关 |
 | [`WeReadEnhance.plugin`](./WeReadEnhance.plugin) | 微信读书：去广告、去更新弹窗、解除试听限制 | 内置总开关 |
-| [`BilibiliFix.plugin`](./BilibiliFix.plugin) | 哔哩哔哩：空降助手、分区修复、扫码登录、画质解锁 | 内置总开关 |
+| [**BilibiliFix.plugin**](./BilibiliFix.plugin) (v2.8.3) | **哔哩哔哩 𝕏 (白B专用)**：空降助手、分区修复、扫码登录、画质解锁 | 内置总开关 |
 | [`PixivEnhanced.plugin`](./PixivEnhanced.plugin) | Pixiv：全页面汉化、AI 漫画翻译、设置中心 | 内置总开关 |
 | [`QzoneAdBlock.plugin`](./QzoneAdBlock.plugin) | QQ空间：广告与营销内容屏蔽 | 规则型，无需开关 |
 | [`GitHubPushTime.plugin`](./GitHubPushTime.plugin) | GitHub：星标列表显示最近推送时间 | 内置总开关 |
