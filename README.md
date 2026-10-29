@@ -19,7 +19,7 @@ Loon 负责无感捕获与即时同步，呆呆面板 / 青龙面板负责脱机
 
 | 图标 | 名称 | 功能 | <nobr>安装&nbsp;/&nbsp;说明</nobr> |
 | :-: | :--- | :--- | :---: |
-| <img src="icons/daidai.png" height="16" /> | **呆呆面板** | 微信读书 / 中国电信 / 扫描全能王 / 中国移动 凭据捕获并自动同步 | <nobr><a href="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/loon/DaiDaiPanel.plugin"><strong>安装</strong></a>&nbsp;/&nbsp;<a href="./loon/README.md"><strong>说明</strong></a></nobr> |
+| <img src="icons/daidai.png" height="16" /> | **呆呆面板** | 微信读书 / 中国电信 / 扫描全能王 凭据捕获并自动同步 | <nobr><a href="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/loon/DaiDaiPanel.plugin"><strong>安装</strong></a>&nbsp;/&nbsp;<a href="./loon/README.md"><strong>说明</strong></a></nobr> |
 | <img src="icons/10086.png" height="16" /> | **中国移动** | 净化开屏、首页轮播、各专区横幅与「我的」弹窗 | <nobr><a href="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/loon/ChinaMobile.plugin"><strong>安装</strong></a>&nbsp;/&nbsp;<a href="./loon/README.md"><strong>说明</strong></a></nobr> |
 | <img src="icons/weread.png" height="16" /> | **微信读书** | 去广告、去更新弹窗、解除试听限制 | <nobr><a href="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/loon/WeReadEnhance.plugin"><strong>安装</strong></a>&nbsp;/&nbsp;<a href="./scripts/tools/wxread_enhance/"><strong>说明</strong></a></nobr> |
 | <img src="icons/qq.png" height="16" /> | **QQ空间** | 屏蔽空间广告与营销内容 | <nobr><a href="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/loon/QzoneAdBlock.plugin"><strong>安装</strong></a>&nbsp;/&nbsp;<a href="./loon/README.md"><strong>说明</strong></a></nobr> |
