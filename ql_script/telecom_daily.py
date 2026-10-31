@@ -17,7 +17,7 @@ tag: 中国电信
   2. 会员双抽奖：山西甄选周三会员日 (hd76690472, 全周检测) + 山西抽奖新-每周三次 (hd92859166, 全周有效)
   3. 权益商城幸运抽奖：读取真实活动配置 + 走可达抽奖引擎真实抽奖并回显奖品
   4. 权益包自动领取：双通道扫描待领权益 → 真实领取 → 轮询确认到账
-  5. AI奇遇赢Pad：AI 视频制作赚点数 + 满千兑换话费
+  5. AI奇遇赢Pad：AI 视频制作赚点数 + 策略模式（draw 全抽奖 / auto 缺货转抽奖 / save 纯攒话费）+ 1元中奖话费自动提取
 
 
 环境变量 (dxlin)：
@@ -77,6 +77,8 @@ CONFIG = {
     "ENABLE_LUCKY_DRAW": True,      # 权益商城幸运抽奖 (每天执行)
     "ENABLE_AUTO_CLAIM": True,      # 权益包自动领取 (每天执行)
     "ENABLE_AI_PAD": True,          # AI奇遇赢Pad (每天执行)
+    "AI_PAD_MODE": "draw",          # AI奇遇策略: "draw"(全抽奖, 话费换完了推荐) / "auto"(优先兑话费,缺货转抽奖) / "save"(只攒分不抽奖)
+    "AI_PAD_MAX_DRAWS": 25,         # 单次运行最大抽奖次数上限 (每20点抽1次，防止超长循环)
 
     # --- 凭据与保活 ---
     "ENABLE_AUTO_TICKET": True,     # 自动换票 (电信登录→Ticket→SessionKey)
@@ -95,7 +97,7 @@ CONFIG = {
     "UA": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 MicroMessenger/8.0.38(0x1800262c) NetType/WIFI Language/zh_CN"
 }
 
-SCRIPT_VERSION = "v2.1.4"
+SCRIPT_VERSION = "v2.2.0"
 
 # ==================== 🌐 翼支付网关生产环境常量 ====================
 BESTPAY_H5_BASE = "https://mapi-h5.bestpay.com.cn"
@@ -145,6 +147,7 @@ DEFAULT_STAGE_ID = "ai119_5"
 TEMPLATE_ID = "ve_4352"
 DEFAULT_TEMPLATE_CONF_ID = "2T3B"
 DEFAULT_ARRANGE_ID = 643
+PHONE_AWARDS = {"16320105", "16320205", "16320305"}  # AI奇遇 1 元话费中奖券码标识
 
 # 内置固定活动入口链接 (静默使用，严格不向日志/通知输出任何相关信息)
 ACTIVITY_H5_URL = "https://ai.imusic.cn/h5v/fusion/ai-luck-winnew?cc=156000009079&isshare=0&invitationCode=322776c3fd21e3795674ed9194539adc7729b5b7eb2c111f7856d33bb552acce"
@@ -2666,6 +2669,109 @@ def query_my_tickets(sess: requests.Session, crypto_inst: ImCrypto, token: str, 
     return "0"
 
 
+
+def claim_imusic_prize_bills(sess: requests.Session, crypto_inst: ImCrypto, token: str, phone: str) -> Tuple[int, str]:
+    """
+    自动查询并提取 AI 奇遇中奖的 1 元话费。
+
+    返回 (claimed_count, token)
+    """
+    m_phone = mask(phone)
+    claimed_count = 0
+    try:
+        for page in range(1, 6):
+            r_rec, token = post_encrypted_api(sess, crypto_inst, token, "/hapi/en/api", {
+                "activityId": ACTIVITY_ID,
+                "mobile": phone,
+                "pageNo": page,
+                "pageSize": 10,
+                "apiName": "act/LaborApi/getOperationPrizeRecordList",
+                "channelId": CHANNEL_ID,
+                "portal": "45"
+            })
+            dec_rec = crypto_inst.decrypt(r_rec.text)
+            if not dec_rec.startswith("{"):
+                break
+            rec_obj = json.loads(dec_rec)
+            if str(rec_obj.get("code") or "") != "0000":
+                break
+            batch = (rec_obj.get("data") or {}).get("list") or []
+            if not batch:
+                break
+            for row in batch:
+                idx = str(row.get("awardIndex") or "")
+                name = str(row.get("prizeName") or row.get("awardName") or "")
+                # status == '0' 表示未提取/待核销
+                if (idx in PHONE_AWARDS or ("话费" in name and "10元" not in name)) and str(row.get("status")) == "0":
+                    award_id = row.get("awardId")
+                    if award_id:
+                        log(f"[{m_phone}] 发现未提取 1 元中奖话费: {name} (ID: {award_id})，正在申请提取...")
+                        r_ext, token = post_encrypted_api(sess, crypto_inst, token, "/hapi/en/api", {
+                            "activityId": ACTIVITY_ID,
+                            "awardId": str(award_id),
+                            "mobile": phone,
+                            "apiName": "act/LaborApi/extractPhoneBill",
+                            "channelId": CHANNEL_ID,
+                            "portal": "45"
+                        })
+                        dec_ext = crypto_inst.decrypt(r_ext.text)
+                        if '"code":"0000"' in dec_ext or '"code": "0000"' in dec_ext:
+                            log(f"[{m_phone}] 🎁 成功提交 1 元话费提取！")
+                            claimed_count += 1
+                        else:
+                            log(f"[{m_phone}] ⚠️ 1元话费提取返回: {dec_ext[:120]}")
+                        time.sleep(1)
+            if len(batch) < 10:
+                break
+    except Exception as e:
+        log(f"ℹ️ [{m_phone}] 查询/提取中奖话费异常: {str(e)[:100]}")
+    return claimed_count, token
+
+
+def draw_imusic_lottery(sess: requests.Session, crypto_inst: ImCrypto, token: str, phone: str,
+                        max_draws: int = 25) -> Tuple[int, List[str], str]:
+    """
+    执行 AI 奇遇 20 点/次 积分抽奖。
+
+    返回 (draw_count, prizes_list, token)
+    """
+    m_phone = mask(phone)
+    draw_count = 0
+    prizes = []
+
+    for i in range(max_draws):
+        try:
+            r_lot, token = post_encrypted_api(sess, crypto_inst, token, "/hapi/en/api", {
+                "activityId": ACTIVITY_ID,
+                "mobile": phone,
+                "apiName": "act/LaborApi/operationIntegralLottery",
+                "channelId": CHANNEL_ID,
+                "portal": "45"
+            })
+            dec_lot = crypto_inst.decrypt(r_lot.text)
+            if not dec_lot.startswith("{"):
+                log(f"[{m_phone}] 抽奖第 {i + 1} 次响应非 JSON，中断抽奖")
+                break
+            lot_obj = json.loads(dec_lot)
+            code = str(lot_obj.get("code") or "")
+            if code == "0000":
+                data = lot_obj.get("data") or {}
+                name = str(data.get("awardName") or data.get("prizeName") or "参与奖")
+                log(f"[{m_phone}] 🎁 抽奖第 {i + 1} 次中奖：{name}")
+                prizes.append(name)
+                draw_count += 1
+                time.sleep(1.5)
+            else:
+                desc = str(lot_obj.get("desc") or lot_obj.get("message") or "")
+                log(f"[{m_phone}] 抽奖停止 ({desc or code})")
+                break
+        except Exception as e:
+            log(f"[{m_phone}] 抽奖中断: {str(e)[:100]}")
+            break
+
+    return draw_count, prizes, token
+
+
 def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
     """
     AI奇遇赢Pad 总入口（完整还原旧 telecom_ai_pad.py 业务逻辑）：
@@ -2839,50 +2945,146 @@ def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
             available_chances = latest
             time.sleep(1.5)
 
-    # 兑换前重新查询真实点数，绝不凭空推演
+    # 兑换/抽奖前重新查询真实点数，绝不凭空推演
     total_score, remaining_score, token = query_server_score(sess, crypto, token, phone)
     log(f"[{m_phone}] 当前点数: {remaining_score}")
 
-    redeem_status_msg = ""
-    if remaining_score >= REDEEM_COST_SCORE:
-        log(f"[{m_phone}] 达到{REDEEM_COST_SCORE}点，开始兑换10元话费")
-        send_stat_message(sess, crypto, token, phone, "activity_2603AI-meet_1.12",
-                          f"activityID_{ACTIVITY_ID}_entrance_{CHANNEL_ID}")
-        time.sleep(0.1)
-        try:
-            r_rdm, token = post_encrypted_api(sess, crypto, token, "/hapi/en/api", {
-                "activityId": ACTIVITY_ID,
-                "mobile": phone,
-                "apiName": "act/LaborApi/operationIntegralRedeemPrize",
-                "channelId": CHANNEL_ID,
-                "portal": "45"
-            })
-            dec_rdm = crypto.decrypt(r_rdm.text)
-        except Exception as e:
-            dec_rdm = f'{{"code":"9999","desc":"网络超时: {str(e)}"}}'
+    ai_mode = (os.environ.get("AI_PAD_MODE") or os.environ.get("IMUSIC_MODE") or CONFIG.get("AI_PAD_MODE", "draw")).strip().lower()
+    max_draws_cfg = int(os.environ.get("AI_PAD_MAX_DRAWS") or os.environ.get("IMUSIC_MAX_DRAWS") or CONFIG.get("AI_PAD_MAX_DRAWS", 25))
 
-        if dec_rdm.startswith('{'):
-            try:
-                rdm_obj = json.loads(dec_rdm)
-                rdm_code = str(rdm_obj.get("code") or "")
-                rdm_desc = rdm_obj.get("desc") or rdm_obj.get("message") or ""
-                if rdm_code == "0000":
-                    log(f"[{m_phone}] 10元话费兑换成功")
-                    redeem_status_msg = "10元话费兑换成功 (已自动入账)"
-                    time.sleep(1)
-                    total_score, remaining_score, token = query_server_score(sess, crypto, token, phone)
-                elif any(k in rdm_desc for k in ["库存不足", "已兑完", "限量", "不足"]):
-                    redeem_status_msg = "兑换失败 (库存不足)"
-                elif "结束" in rdm_desc:
-                    redeem_status_msg = "兑换失败 (活动已结束)"
-                else:
-                    redeem_status_msg = f"兑换未通过 ({rdm_desc or rdm_code})"
-            except Exception:
-                redeem_status_msg = "兑换结果待确认"
+    status_line_msg = ""
+    pre_claimed, token = claim_imusic_prize_bills(sess, crypto, token, phone)
+    total_claimed = pre_claimed
+
+    if ai_mode == "draw":
+        log(f"[{m_phone}] 策略模式: 全抽奖 (当前可用点数: {remaining_score}，跳过 1000 点话费兑换)")
+        avail_draws = min(max_draws_cfg, max(0, remaining_score // LOTTERY_COST_SCORE))
+        if avail_draws > 0:
+            log(f"[{m_phone}] 准备执行积分抽奖，预计最多抽奖 {avail_draws} 次...")
+            draw_cnt, prizes, token = draw_imusic_lottery(sess, crypto, token, phone, avail_draws)
+            post_claimed, token = claim_imusic_prize_bills(sess, crypto, token, phone)
+            total_claimed += post_claimed
+            total_score, remaining_score, token = query_server_score(sess, crypto, token, phone)
+            if draw_cnt > 0:
+                p_map = {}
+                for p in prizes:
+                    p_map[p] = p_map.get(p, 0) + 1
+                p_str = "、".join(f"{k}x{v}" if v > 1 else k for k, v in list(p_map.items())[:3])
+                status_line_msg = f"完成 {draw_cnt} 次抽奖 (获得 {p_str}) · 全抽奖模式"
+                if total_claimed > 0:
+                    status_line_msg += f" (自动提取 {total_claimed} 元话费)"
+            else:
+                status_line_msg = "全抽奖模式 (抽奖未产出)"
+                if total_claimed > 0:
+                    status_line_msg += f" (自动提取 {total_claimed} 元话费)"
         else:
-            redeem_status_msg = "兑换结果待确认"
+            status_line_msg = "全抽奖模式 (可用点数不足 20 点)"
+            if total_claimed > 0:
+                status_line_msg += f" (自动提取 {total_claimed} 元话费)"
+
+    elif ai_mode == "auto":
+        stock_empty = False
+        if remaining_score >= REDEEM_COST_SCORE:
+            log(f"[{m_phone}] 达到{REDEEM_COST_SCORE}点，开始兑换10元话费")
+            send_stat_message(sess, crypto, token, phone, "activity_2603AI-meet_1.12",
+                              f"activityID_{ACTIVITY_ID}_entrance_{CHANNEL_ID}")
+            time.sleep(0.1)
+            try:
+                r_rdm, token = post_encrypted_api(sess, crypto, token, "/hapi/en/api", {
+                    "activityId": ACTIVITY_ID,
+                    "mobile": phone,
+                    "apiName": "act/LaborApi/operationIntegralRedeemPrize",
+                    "channelId": CHANNEL_ID,
+                    "portal": "45"
+                })
+                dec_rdm = crypto.decrypt(r_rdm.text)
+            except Exception as e:
+                dec_rdm = f'{{"code":"9999","desc":"网络超时: {str(e)}"}}'
+
+            if dec_rdm.startswith('{'):
+                try:
+                    rdm_obj = json.loads(dec_rdm)
+                    rdm_code = str(rdm_obj.get("code") or "")
+                    rdm_desc = rdm_obj.get("desc") or rdm_obj.get("message") or ""
+                    if rdm_code == "0000":
+                        log(f"[{m_phone}] 10元话费兑换成功")
+                        status_line_msg = "10元话费兑换成功 (已自动入账)"
+                        time.sleep(1)
+                        total_score, remaining_score, token = query_server_score(sess, crypto, token, phone)
+                    elif any(k in rdm_desc for k in ["库存不足", "已兑完", "限量", "不足", "10003"]):
+                        stock_empty = True
+                        log(f"[{m_phone}] 10元话费库存不足，自动转入积分抽奖")
+                    elif "结束" in rdm_desc:
+                        stock_empty = True
+                        log(f"[{m_phone}] 话费兑换活动已结束，自动转入积分抽奖")
+                    else:
+                        status_line_msg = f"兑换未通过 ({rdm_desc or rdm_code})"
+                except Exception:
+                    status_line_msg = "兑换结果待确认"
+            else:
+                status_line_msg = "兑换结果待确认"
+
+        if stock_empty:
+            avail_draws = min(max_draws_cfg, max(0, remaining_score // LOTTERY_COST_SCORE))
+            if avail_draws > 0:
+                log(f"[{m_phone}] 话费缺货，转入积分抽奖 (预计抽奖 {avail_draws} 次)...")
+                draw_cnt, prizes, token = draw_imusic_lottery(sess, crypto, token, phone, avail_draws)
+                post_claimed, token = claim_imusic_prize_bills(sess, crypto, token, phone)
+                total_claimed += post_claimed
+                total_score, remaining_score, token = query_server_score(sess, crypto, token, phone)
+                p_map = {}
+                for p in prizes:
+                    p_map[p] = p_map.get(p, 0) + 1
+                p_str = "、".join(f"{k}x{v}" if v > 1 else k for k, v in list(p_map.items())[:3])
+                status_line_msg = f"话费已兑完转抽奖: 完成 {draw_cnt} 次 ({p_str})"
+                if total_claimed > 0:
+                    status_line_msg += f" (自动提取 {total_claimed} 元话费)"
+            else:
+                status_line_msg = "兑换失败 (库存不足，积分不足20未抽奖)"
+        elif not status_line_msg:
+            status_line_msg = f"跨期累计中 (还差 {REDEEM_COST_SCORE - remaining_score} 点)"
+
     else:
-        redeem_status_msg = f"跨期累计中 (还差 {REDEEM_COST_SCORE - remaining_score} 点)"
+        # save 模式：原版纯攒分，不抽奖
+        if remaining_score >= REDEEM_COST_SCORE:
+            log(f"[{m_phone}] 达到{REDEEM_COST_SCORE}点，开始兑换10元话费")
+            send_stat_message(sess, crypto, token, phone, "activity_2603AI-meet_1.12",
+                              f"activityID_{ACTIVITY_ID}_entrance_{CHANNEL_ID}")
+            time.sleep(0.1)
+            try:
+                r_rdm, token = post_encrypted_api(sess, crypto, token, "/hapi/en/api", {
+                    "activityId": ACTIVITY_ID,
+                    "mobile": phone,
+                    "apiName": "act/LaborApi/operationIntegralRedeemPrize",
+                    "channelId": CHANNEL_ID,
+                    "portal": "45"
+                })
+                dec_rdm = crypto.decrypt(r_rdm.text)
+            except Exception as e:
+                dec_rdm = f'{{"code":"9999","desc":"网络超时: {str(e)}"}}'
+
+            if dec_rdm.startswith('{'):
+                try:
+                    rdm_obj = json.loads(dec_rdm)
+                    rdm_code = str(rdm_obj.get("code") or "")
+                    rdm_desc = rdm_obj.get("desc") or rdm_obj.get("message") or ""
+                    if rdm_code == "0000":
+                        log(f"[{m_phone}] 10元话费兑换成功")
+                        status_line_msg = "10元话费兑换成功 (已自动入账)"
+                        time.sleep(1)
+                        total_score, remaining_score, token = query_server_score(sess, crypto, token, phone)
+                    elif any(k in rdm_desc for k in ["库存不足", "已兑完", "限量", "不足"]):
+                        status_line_msg = "兑换失败 (库存不足)"
+                    elif "结束" in rdm_desc:
+                        status_line_msg = "兑换失败 (活动已结束)"
+                    else:
+                        status_line_msg = f"兑换未通过 ({rdm_desc or rdm_code})"
+                except Exception:
+                    status_line_msg = "兑换结果待确认"
+            else:
+                status_line_msg = "兑换结果待确认"
+        else:
+            status_line_msg = f"跨期累计中 (还差 {REDEEM_COST_SCORE - remaining_score} 点)"
 
     # 券码核验
     ticket_count = query_my_tickets(sess, crypto, token, phone)
@@ -2924,7 +3126,10 @@ def run_ai_pad_tasks(sess: requests.Session, user: dict) -> List[str]:
     else:
         bullets.append(f"• Pad抽奖券码: {issue_name}已持有 {ticket_count} 张券码 (每期送iPad·自动开奖)")
 
-    bullets.append(f"• 话费兑换状态: {redeem_status_msg}")
+    if ai_mode == "draw":
+        bullets.append(f"• 积分抽奖状态: {status_line_msg}")
+    else:
+        bullets.append(f"• 话费兑换状态: {status_line_msg}")
     bullets.append(f"• 账户当前点数: 剩余 {remaining_score} 点数 (累计总点数: {total_score})")
     # 诊断汇总（仅日志）：点数/券码均为 0 时便于快速定位是鉴权还是字段问题
     log(f"[AI奇遇] {m_phone} 汇总: 点数={remaining_score}/{total_score} 券码={ticket_count} "
@@ -3146,9 +3351,12 @@ def main():
 
     print(f"  📅 今天是 {today_name} | 周三会员日: {'启用' if CONFIG.get('ENABLE_WEDNESDAY', True) else '禁用'}"
           f" | 每周三次: {'启用' if CONFIG.get('ENABLE_WEEKLY_THRICE', True) else '禁用'}")
+    ai_mode_active = (os.environ.get("AI_PAD_MODE") or os.environ.get("IMUSIC_MODE") or CONFIG.get("AI_PAD_MODE", "draw")).strip().lower()
+    ai_mode_map = {"draw": "全抽奖", "auto": "自动(缺货转抽)", "save": "纯攒分"}
     print(f"  📝 签到金豆: {'启用' if CONFIG.get('ENABLE_DAILY_SIGN', True) else '禁用'}"
           f" | 幸运抽奖: {'启用' if CONFIG.get('ENABLE_LUCKY_DRAW', True) else '禁用'}"
-          f" | AI奇遇: {'启用' if CONFIG.get('ENABLE_AI_PAD', True) else '禁用'}")
+          f" | AI奇遇: {'启用' if CONFIG.get('ENABLE_AI_PAD', True) else '禁用'}"
+          f" ({ai_mode_map.get(ai_mode_active, ai_mode_active)})")
     if force_run:
         print("  ⚠️ FORCE_RUN 调试模式已开启，忽略星期限制")
     print("=" * 65)
