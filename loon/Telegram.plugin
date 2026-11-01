@@ -1,0 +1,79 @@
+#!name = Telegram增强
+#!desc = 将Telegram的垃圾IP转移到优质IP上减少转圈加载；支持外部 t.me 链接自动唤醒跳转至第三方客户端。
+#!openUrl = https://apps.apple.com/app/id686449807
+#!author = chaoscard (原作), sooyaaabo, Repcz / TomCatXue
+#!homepage = https://github.com/TomCatXue/MyCookieCenter
+#!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/telegram.png
+#!tag = Telegram,功能增强,分流优化
+#!version = 1.0.0
+#!date = 2026-11-01 12:48
+
+[Argument]
+t.me_redirect = select, "Telegram", "Swiftgram", "Turrit", "iMe", "Nicegram", "Lingogram", tag=跳转至对应客户端, desc=选择点击t.me链接时唤起的目标客户端
+
+[Host]
+91.108.56.100 = 91.108.56.130, use-in-proxy=true
+91.108.56.101 = 91.108.56.130, use-in-proxy=true
+91.108.56.104 = 91.108.56.130, use-in-proxy=true
+91.108.56.107 = 91.108.56.130, use-in-proxy=true
+91.108.56.109 = 91.108.56.130, use-in-proxy=true
+91.108.56.110 = 91.108.56.130, use-in-proxy=true
+91.108.56.113 = 91.108.56.130, use-in-proxy=true
+91.108.56.120 = 91.108.56.130, use-in-proxy=true
+91.108.56.125 = 91.108.56.130, use-in-proxy=true
+91.108.56.126 = 91.108.56.130, use-in-proxy=true
+91.108.56.128 = 91.108.56.130, use-in-proxy=true
+91.108.56.134 = 91.108.56.130, use-in-proxy=true
+91.108.56.138 = 91.108.56.130, use-in-proxy=true
+91.108.56.143 = 91.108.56.130, use-in-proxy=true
+91.108.56.145 = 91.108.56.130, use-in-proxy=true
+91.108.56.146 = 91.108.56.130, use-in-proxy=true
+91.108.56.156 = 91.108.56.130, use-in-proxy=true
+91.108.56.100 = 91.108.56.135, use-in-proxy=true
+91.108.56.101 = 91.108.56.135, use-in-proxy=true
+91.108.56.104 = 91.108.56.135, use-in-proxy=true
+91.108.56.107 = 91.108.56.135, use-in-proxy=true
+91.108.56.109 = 91.108.56.135, use-in-proxy=true
+91.108.56.110 = 91.108.56.135, use-in-proxy=true
+91.108.56.113 = 91.108.56.135, use-in-proxy=true
+91.108.56.120 = 91.108.56.135, use-in-proxy=true
+91.108.56.125 = 91.108.56.135, use-in-proxy=true
+91.108.56.126 = 91.108.56.135, use-in-proxy=true
+91.108.56.128 = 91.108.56.135, use-in-proxy=true
+91.108.56.134 = 91.108.56.135, use-in-proxy=true
+91.108.56.138 = 91.108.56.135, use-in-proxy=true
+91.108.56.143 = 91.108.56.135, use-in-proxy=true
+91.108.56.145 = 91.108.56.135, use-in-proxy=true
+91.108.56.146 = 91.108.56.135, use-in-proxy=true
+91.108.56.156 = 91.108.56.135, use-in-proxy=true
+91.108.56.100 = 91.108.56.147, use-in-proxy=true
+91.108.56.101 = 91.108.56.147, use-in-proxy=true
+91.108.56.104 = 91.108.56.147, use-in-proxy=true
+91.108.56.107 = 91.108.56.147, use-in-proxy=true
+91.108.56.109 = 91.108.56.147, use-in-proxy=true
+91.108.56.110 = 91.108.56.147, use-in-proxy=true
+91.108.56.113 = 91.108.56.147, use-in-proxy=true
+91.108.56.120 = 91.108.56.147, use-in-proxy=true
+91.108.56.125 = 91.108.56.147, use-in-proxy=true
+91.108.56.126 = 91.108.56.147, use-in-proxy=true
+91.108.56.128 = 91.108.56.147, use-in-proxy=true
+91.108.56.134 = 91.108.56.147, use-in-proxy=true
+91.108.56.138 = 91.108.56.147, use-in-proxy=true
+91.108.56.143 = 91.108.56.147, use-in-proxy=true
+91.108.56.145 = 91.108.56.147, use-in-proxy=true
+91.108.56.146 = 91.108.56.147, use-in-proxy=true
+91.108.56.156 = 91.108.56.147, use-in-proxy=true
+
+[Rule]
+DOMAIN-SUFFIX,swiftgram.app,PROXY
+DOMAIN-SUFFIX,iturrit.com,PROXY
+DOMAIN-SUFFIX,imem.app,PROXY
+DOMAIN-SUFFIX,nicegram.app,PROXY
+DOMAIN-SUFFIX,nicegram.cloud,PROXY
+DOMAIN-SUFFIX,intentchat.app,PROXY
+
+[Script]
+http-response (https:\/\/)?t\.me\/(.+) script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/telegram/t.me_redirect.js, argument=[{t.me_redirect}], timeout=20, tag=[Telegram]t.me重定向
+
+[MITM]
+hostname = t.me

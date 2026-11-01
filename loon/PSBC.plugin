@@ -1,0 +1,20 @@
+#!name = 邮储银行去广告
+#!desc = 屏蔽中国邮政储蓄银行手机银行开屏广告、摇一摇及静态广告资源。
+#!openUrl = https://apps.apple.com/app/id493489515
+#!author = chaoscard (原作) / TomCatXue
+#!homepage = https://github.com/TomCatXue/MyCookieCenter
+#!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/psbc.png
+#!tag = 邮储银行,去广告,开屏广告
+#!version = 1.0.0
+#!date = 2026-11-01 12:48
+
+[Rewrite]
+# 1.拦截获取静态广告图片的接口
+^https?:\/\/login-service\.mobile-bank\.psbc\.com\/.*\/getStartUpAdvPicture - reject-200
+# 2.拦截摇一摇开屏广告配置
+^https?:\/\/login-service\.mobile-bank\.psbc\.com\/.*\/qryShakeInfo - reject-200
+# 3.拦截广告图片静态资源域名
+^https?:\/\/static\.mobile-bank\.psbc\.com\/static\/index\/advertise\/ - reject
+
+[MITM]
+hostname = login-service.mobile-bank.psbc.com, static.mobile-bank.psbc.com
