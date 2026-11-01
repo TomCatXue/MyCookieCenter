@@ -5,8 +5,8 @@
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/pixiv.png
 #!tag = Pixiv,去广告,会员解锁
-#!version = 1.0.0
-#!date = 2026-11-01 12:48
+#!version = 1.0.1
+#!date = 2026-11-01 13:10
 
 [Rule]
 # 去除小说推荐页广告

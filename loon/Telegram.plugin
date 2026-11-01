@@ -1,70 +1,71 @@
 #!name = Telegram增强
-#!desc = 将Telegram的垃圾IP转移到优质IP上减少转圈加载；支持外部 t.me 链接自动唤醒跳转至第三方客户端。
+#!desc = 将Telegram的垃圾IP转移到优质IP上减少转圈加载；全量高精度拦截外部 t.me / telegram.me / telegram.dog 链接，支持直接唤醒跳转至官方或任意第三方客户端（消息贴文、群组频道邀请、Bot、MiniApp、代理、贴纸全兼容）。
 #!openUrl = https://apps.apple.com/app/id686449807
 #!author = chaoscard (原作), sooyaaabo, Repcz / TomCatXue
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/telegram.png
 #!tag = Telegram,功能增强,分流优化
-#!version = 1.0.0
-#!date = 2026-11-01 12:48
+#!version = 1.1.0
+#!date = 2026-11-01 13:10
 
 [Argument]
-t.me_redirect = select, "Telegram", "Swiftgram", "Turrit", "iMe", "Nicegram", "Lingogram", tag=跳转至对应客户端, desc=选择点击t.me链接时唤起的目标客户端
+t.me_redirect = select, "Telegram", "Swiftgram", "Nagram", "Turrit", "iMe", "Nicegram", "Lingogram", "Teleplus", tag=跳转至对应客户端, desc=选择点击t.me链接时唤起的目标客户端
 
 [Host]
-91.108.56.100 = 91.108.56.130, use-in-proxy=true
-91.108.56.101 = 91.108.56.130, use-in-proxy=true
-91.108.56.104 = 91.108.56.130, use-in-proxy=true
-91.108.56.107 = 91.108.56.130, use-in-proxy=true
-91.108.56.109 = 91.108.56.130, use-in-proxy=true
-91.108.56.110 = 91.108.56.130, use-in-proxy=true
-91.108.56.113 = 91.108.56.130, use-in-proxy=true
-91.108.56.120 = 91.108.56.130, use-in-proxy=true
-91.108.56.125 = 91.108.56.130, use-in-proxy=true
-91.108.56.126 = 91.108.56.130, use-in-proxy=true
-91.108.56.128 = 91.108.56.130, use-in-proxy=true
-91.108.56.134 = 91.108.56.130, use-in-proxy=true
-91.108.56.138 = 91.108.56.130, use-in-proxy=true
-91.108.56.143 = 91.108.56.130, use-in-proxy=true
-91.108.56.145 = 91.108.56.130, use-in-proxy=true
-91.108.56.146 = 91.108.56.130, use-in-proxy=true
-91.108.56.156 = 91.108.56.130, use-in-proxy=true
-91.108.56.100 = 91.108.56.135, use-in-proxy=true
-91.108.56.101 = 91.108.56.135, use-in-proxy=true
-91.108.56.104 = 91.108.56.135, use-in-proxy=true
-91.108.56.107 = 91.108.56.135, use-in-proxy=true
-91.108.56.109 = 91.108.56.135, use-in-proxy=true
-91.108.56.110 = 91.108.56.135, use-in-proxy=true
-91.108.56.113 = 91.108.56.135, use-in-proxy=true
-91.108.56.120 = 91.108.56.135, use-in-proxy=true
-91.108.56.125 = 91.108.56.135, use-in-proxy=true
-91.108.56.126 = 91.108.56.135, use-in-proxy=true
-91.108.56.128 = 91.108.56.135, use-in-proxy=true
-91.108.56.134 = 91.108.56.135, use-in-proxy=true
-91.108.56.138 = 91.108.56.135, use-in-proxy=true
-91.108.56.143 = 91.108.56.135, use-in-proxy=true
-91.108.56.145 = 91.108.56.135, use-in-proxy=true
-91.108.56.146 = 91.108.56.135, use-in-proxy=true
-91.108.56.156 = 91.108.56.135, use-in-proxy=true
-91.108.56.100 = 91.108.56.147, use-in-proxy=true
-91.108.56.101 = 91.108.56.147, use-in-proxy=true
-91.108.56.104 = 91.108.56.147, use-in-proxy=true
-91.108.56.107 = 91.108.56.147, use-in-proxy=true
-91.108.56.109 = 91.108.56.147, use-in-proxy=true
-91.108.56.110 = 91.108.56.147, use-in-proxy=true
-91.108.56.113 = 91.108.56.147, use-in-proxy=true
-91.108.56.120 = 91.108.56.147, use-in-proxy=true
-91.108.56.125 = 91.108.56.147, use-in-proxy=true
-91.108.56.126 = 91.108.56.147, use-in-proxy=true
-91.108.56.128 = 91.108.56.147, use-in-proxy=true
-91.108.56.134 = 91.108.56.147, use-in-proxy=true
-91.108.56.138 = 91.108.56.147, use-in-proxy=true
-91.108.56.143 = 91.108.56.147, use-in-proxy=true
-91.108.56.145 = 91.108.56.147, use-in-proxy=true
-91.108.56.146 = 91.108.56.147, use-in-proxy=true
-91.108.56.156 = 91.108.56.147, use-in-proxy=true
+public-ip-ufzfgayd = 91.108.56.130, use-in-proxy=true
+public-ip-tzvqsnru = 91.108.56.130, use-in-proxy=true
+public-ip-yntnqnjl = 91.108.56.130, use-in-proxy=true
+public-ip-ugstfpcn = 91.108.56.130, use-in-proxy=true
+public-ip-kcmxxpmi = 91.108.56.130, use-in-proxy=true
+public-ip-dichkegm = 91.108.56.130, use-in-proxy=true
+public-ip-vxptwmej = 91.108.56.130, use-in-proxy=true
+public-ip-mybaqjif = 91.108.56.130, use-in-proxy=true
+public-ip-ogxfdzwv = 91.108.56.130, use-in-proxy=true
+public-ip-cmrissak = 91.108.56.130, use-in-proxy=true
+public-ip-zrkbuivv = 91.108.56.130, use-in-proxy=true
+public-ip-dsdefrau = 91.108.56.130, use-in-proxy=true
+public-ip-wquonpje = 91.108.56.130, use-in-proxy=true
+public-ip-wvwqebqf = 91.108.56.130, use-in-proxy=true
+public-ip-boozxbfr = 91.108.56.130, use-in-proxy=true
+public-ip-bxvnlscb = 91.108.56.130, use-in-proxy=true
+public-ip-ebiwndsp = 91.108.56.130, use-in-proxy=true
+public-ip-ufzfgayd = 91.108.56.135, use-in-proxy=true
+public-ip-tzvqsnru = 91.108.56.135, use-in-proxy=true
+public-ip-yntnqnjl = 91.108.56.135, use-in-proxy=true
+public-ip-ugstfpcn = 91.108.56.135, use-in-proxy=true
+public-ip-kcmxxpmi = 91.108.56.135, use-in-proxy=true
+public-ip-dichkegm = 91.108.56.135, use-in-proxy=true
+public-ip-vxptwmej = 91.108.56.135, use-in-proxy=true
+public-ip-mybaqjif = 91.108.56.135, use-in-proxy=true
+public-ip-ogxfdzwv = 91.108.56.135, use-in-proxy=true
+public-ip-cmrissak = 91.108.56.135, use-in-proxy=true
+public-ip-zrkbuivv = 91.108.56.135, use-in-proxy=true
+public-ip-dsdefrau = 91.108.56.135, use-in-proxy=true
+public-ip-wquonpje = 91.108.56.135, use-in-proxy=true
+public-ip-wvwqebqf = 91.108.56.135, use-in-proxy=true
+public-ip-boozxbfr = 91.108.56.135, use-in-proxy=true
+public-ip-bxvnlscb = 91.108.56.135, use-in-proxy=true
+public-ip-ebiwndsp = 91.108.56.135, use-in-proxy=true
+public-ip-ufzfgayd = 91.108.56.147, use-in-proxy=true
+public-ip-tzvqsnru = 91.108.56.147, use-in-proxy=true
+public-ip-yntnqnjl = 91.108.56.147, use-in-proxy=true
+public-ip-ugstfpcn = 91.108.56.147, use-in-proxy=true
+public-ip-kcmxxpmi = 91.108.56.147, use-in-proxy=true
+public-ip-dichkegm = 91.108.56.147, use-in-proxy=true
+public-ip-vxptwmej = 91.108.56.147, use-in-proxy=true
+public-ip-mybaqjif = 91.108.56.147, use-in-proxy=true
+public-ip-ogxfdzwv = 91.108.56.147, use-in-proxy=true
+public-ip-cmrissak = 91.108.56.147, use-in-proxy=true
+public-ip-zrkbuivv = 91.108.56.147, use-in-proxy=true
+public-ip-dsdefrau = 91.108.56.147, use-in-proxy=true
+public-ip-wquonpje = 91.108.56.147, use-in-proxy=true
+public-ip-wvwqebqf = 91.108.56.147, use-in-proxy=true
+public-ip-boozxbfr = 91.108.56.147, use-in-proxy=true
+public-ip-bxvnlscb = 91.108.56.147, use-in-proxy=true
+public-ip-ebiwndsp = 91.108.56.147, use-in-proxy=true
 
 [Rule]
+DOMAIN-SUFFIX,nagram.app,PROXY
 DOMAIN-SUFFIX,swiftgram.app,PROXY
 DOMAIN-SUFFIX,iturrit.com,PROXY
 DOMAIN-SUFFIX,imem.app,PROXY
@@ -73,7 +74,7 @@ DOMAIN-SUFFIX,nicegram.cloud,PROXY
 DOMAIN-SUFFIX,intentchat.app,PROXY
 
 [Script]
-http-response (https:\/\/)?t\.me\/(.+) script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/telegram/t.me_redirect.js, argument=[{t.me_redirect}], timeout=20, tag=[Telegram]t.me重定向
+http-request ^https?:\/\/(t\.me|telegram\.(?:me|dog))\/.+ script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/telegram/t.me_redirect.js, argument=[{t.me_redirect}], timeout=10, tag=[Telegram]链接重定向
 
 [MITM]
-hostname = t.me
+hostname = t.me, telegram.me, telegram.dog
