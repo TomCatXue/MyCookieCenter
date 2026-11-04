@@ -1,0 +1,56 @@
+#!name = YouTube去广告
+#!desc = 移除广告/短片按钮/智能助手/商品/竖屏直播，解锁高码率画质/精彩跳转/通勤模式，内置画中画与后台播放，支持外语字幕中英机翻与QUIC防穿透。
+#!author = Maasea, gholts, RuCu6, devchristian1337
+#!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/youtube.png
+#!date = 2026-11-04 16:30
+#!version = 1.0.0
+#!loon_version = 3.5.1(983)
+
+[Argument]
+autoHd = switch, false, true, tag=自动最高画质, desc=自动选择 YouTube 最高画质（需根据当前网速与流量开启）
+jumpAhead = switch, false, true, tag=启用精彩跳转, desc=启用 YouTube Premium Jump Ahead 按钮（一键跳过枯燥片段）
+onTheGo = switch, false, true, tag=启用通勤模式, desc=启用 YouTube Premium On-the-go 通勤极简播放模式
+translation_enabled = switch, false, true, tag=启用字幕机翻, desc=将外语视频字幕自动机翻为目标语言（需原视频本身带有字幕轨）
+translation_target = select, "zh-CN", "zh-CN", "en-US", tag=字幕目标语言, desc=自动机翻的目标语言（简体中文 zh-CN 或美式英文 en-US）
+blockAi = switch, false, true, tag=隐藏智能助手, desc=用于隐藏 YouTube 界面中的 AI 智能助手按钮
+blockGames = switch, false, true, tag=隐藏游戏中心, desc=用于隐藏 YouTube 界面中的 Playables 游戏中心
+blockShorts = switch, false, true, tag=隐藏短片按钮, desc=用于隐藏 YouTube 底部导航栏的短片（Shorts）按钮
+blockStore = switch, false, true, tag=隐藏商品推荐, desc=用于隐藏视频下方以及 YouTuber 主页中的商品橱窗与推广
+blockUpload = switch, false, true, tag=隐藏上传按钮, desc=用于隐藏 YouTube 底部导航栏正中央的上传（+）按钮
+blockVerticalLive = switch, false, true, tag=隐藏竖屏直播, desc=用于隐藏 YouTube 首页信息流中穿插的竖屏直播卡片
+
+[Rule]
+# 封锁 YouTube 的 QUIC (UDP 443)，强迫客户端回退至 TCP/HTTPS，确保 MITM 规则 100% 捕获解密
+AND,((DOMAIN,youtubei.googleapis.com),(PROTOCOL,UDP),(DEST-PORT,443)),REJECT
+AND,((DOMAIN,youtubei-att.googleapis.com),(PROTOCOL,UDP),(DEST-PORT,443)),REJECT
+AND,((DOMAIN-SUFFIX,googlevideo.com),(PROTOCOL,QUIC)),REJECT
+AND,((DOMAIN-SUFFIX,googlevideo.com),(PROTOCOL,UDP),(DEST-PORT,443)),REJECT
+
+[Rewrite]
+# 剥离响应头 Alt-Svc，清除客户端对 HTTP/3 的升级协商，消除客户端反复尝试 QUIC 造成的起播延迟
+^https://(?:[\w-]+\.)*googlevideo\.com(?::443)?/ response-header-replace Alt-Svc clear
+# 拦截官方广告统计与跟踪上报
+request if ${url} ~= /^https:\/\/s\.youtube\.com\/api\/stats\/ads/i then reject(404)
+request if ${url} ~= /^https:\/\/www\.youtube\.com\/(pagead|pcs)\//i then reject(404)
+
+[Script]
+# 外语字幕实时中/英机翻（独立端点零冲突，轻量瞬发）
+request if ${url} ~= /^https:\/\/(?:www\.|m\.)?youtube\.com\/api\/timedtext\?[^#]+$/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/youtube/youtube_subtitle.js", {${translation_enabled}, ${translation_target}}) with enable=${translation_enabled}, tag="[YouTube]字幕机翻", timeout=10
+
+# 请求端点清洗：广告切片 (ad_break)、初始化媒体 (initplayback)、画质协商 (videoplayback)、事件上报 (log_event)
+request if ${url} ~= /^https:\/\/youtubei\.googleapis\.com\/youtubei\/v1\/player\/ad_break(?:\?.*)?$/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/youtube/youtube_request.js") with tag="[YouTube]广告切片拦截", requires_body=true, binary_body_mode=true
+request if ${url} ~= /^https?:\/\/[\w-]+\.googlevideo\.com\/initplayback(?:\?.*)?$/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/youtube/youtube_request.js") with tag="[YouTube]初始化播放请求", requires_body=true, binary_body_mode=true
+request if ${url} ~= /^https?:\/\/[\w-]+\.googlevideo\.com\/videoplayback(?:\?.*)?$/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/youtube/youtube_request.js", {${autoHd}}) with enable=${autoHd}, tag="[YouTube]画质协商", requires_body=true, binary_body_mode=true
+request if ${url} ~= /^https:\/\/youtubei\.googleapis\.com\/youtubei\/v1\/log_event(?:\?.*)?$/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/youtube/youtube_request.js") with tag="[YouTube]日志过滤", requires_body=true, binary_body_mode=true
+
+# 响应端点清洗：信息流/播放器/搜索/Shorts净化，解锁 Jump Ahead、On-The-Go 以及默认启用后台播放与画中画
+response if ${url} ~= /^https:\/\/youtubei\.googleapis\.com\/youtubei\/v1\/(?:navigation\/resolve_url|browse|next|player|search|reel\/reel_watch_sequence|guide|account\/get_setting|get_watch)(?:\?.*)?$/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/youtube/youtube_response.js", {${autoHd}, ${blockAi}, ${blockGames}, ${blockShorts}, ${blockStore}, ${blockUpload}, ${blockVerticalLive}, ${jumpAhead}, ${onTheGo}}) with tag="[YouTube]页面与播放净化", requires_body=true, binary_body_mode=true
+
+# 密钥与配置响应拦截
+response if ${url} ~= /^https:\/\/youtubei\.googleapis\.com\/youtubei\/v1\/(?:config|log_event)(?:\?.*)?$/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/youtube/youtube_key.js") with tag="[YouTube]密钥提取", requires_body=true, binary_body_mode=true
+
+# 流媒体 UMP 分块响应解析与初始化秒开
+response if ${url} ~= /^https?:\/\/[\w-]+\.googlevideo\.com\/initplayback(?:\?.*)?$/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/youtube/youtube_ump.js", {${autoHd}, ${blockAi}, ${blockGames}, ${blockStore}, ${blockVerticalLive}, ${jumpAhead}, ${onTheGo}}) with tag="[YouTube]分块流媒体清洗", requires_body=true, binary_body_mode=true
+
+[MITM]
+hostname = rr*.googlevideo.com, *.googlevideo.com, s.youtube.com, youtube.com, www.youtube.com, m.youtube.com, music.youtube.com, youtubei.googleapis.com, youtubei-att.googleapis.com
