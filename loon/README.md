@@ -14,6 +14,7 @@
 | [`PixivAdBlock.plugin`](./PixivAdBlock.plugin) (v1.0.0) | Pixiv：小说广告过滤、图片镜像与 Premium 属性注入 (chaoscard 原作) | 规则型，无需开关 |
 | [`PSBC.plugin`](./PSBC.plugin) (v1.0.0) | 邮储银行：屏蔽开屏广告、摇一摇与静态资源拦截 (chaoscard 原作) | 规则型，无需开关 |
 | [`Telegram.plugin`](./Telegram.plugin) (v1.0.0) | Telegram 增强：优质 IP 调度防转圈、外部 t.me 链接跳转客户端 (chaoscard 原作) | `t.me_redirect` 客户端选择 |
+| [**YouTube_Ad.plugin**](./YouTube_Ad.plugin) (v1.0.0) | **YouTube去广告**：移除广告、短片按钮/智能助手/商品/竖屏直播，解锁高码率画质/精彩跳转/通勤模式，内置画中画与后台播放，支持外语字幕中英机翻与QUIC防穿透 | `autoHd` `jumpAhead` `onTheGo` `translation_enabled` 等 11 项精细开关 |
 
 ## 使用
 
