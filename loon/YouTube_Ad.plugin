@@ -1,9 +1,9 @@
 #!name = YouTube去广告
-#!desc = 移除广告/短片按钮/智能助手/商品/竖屏直播，解锁高码率画质/精彩跳转/通勤模式，内置画中画与后台播放，支持外语字幕中英机翻与QUIC防穿透。
+#!desc = 移除广告/短片按钮/智能助手/商品/竖屏直播，解锁高码率画质/精彩跳转/通勤模式，内置画中画与后台播放，支持外语字幕智能识别中英机翻与QUIC防穿透。
 #!author = Maasea, gholts, RuCu6, devchristian1337
 #!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/youtube.png
-#!date = 2026-11-04 16:30
-#!version = 1.0.0
+#!date = 2026-11-04 17:00
+#!version = 1.1.0
 #!loon_version = 3.5.1(983)
 
 [Argument]
@@ -44,7 +44,7 @@ request if ${url} ~= /^https?:\/\/[\w-]+\.googlevideo\.com\/videoplayback(?:\?.*
 request if ${url} ~= /^https:\/\/youtubei\.googleapis\.com\/youtubei\/v1\/log_event(?:\?.*)?$/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/youtube/youtube_request.js") with tag="[YouTube]日志过滤", requires_body=true, binary_body_mode=true
 
 # 响应端点清洗：信息流/播放器/搜索/Shorts净化，解锁 Jump Ahead、On-The-Go 以及默认启用后台播放与画中画
-response if ${url} ~= /^https:\/\/youtubei\.googleapis\.com\/youtubei\/v1\/(?:navigation\/resolve_url|browse|next|player|search|reel\/reel_watch_sequence|guide|account\/get_setting|get_watch)(?:\?.*)?$/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/youtube/youtube_response.js", {${autoHd}, ${blockAi}, ${blockGames}, ${blockShorts}, ${blockStore}, ${blockUpload}, ${blockVerticalLive}, ${jumpAhead}, ${onTheGo}}) with tag="[YouTube]页面与播放净化", requires_body=true, binary_body_mode=true
+response if ${url} ~= /^https:\/\/youtubei\.googleapis\.com\/youtubei\/v1\/(?:navigation\/resolve_url|browse|next|player|search|reel\/reel_watch_sequence|guide|account\/get_setting|get_watch)(?:\?.*)?$/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/youtube/youtube_response.js", {${autoHd}, ${blockAi}, ${blockGames}, ${blockShorts}, ${blockStore}, ${blockUpload}, ${blockVerticalLive}, ${jumpAhead}, ${onTheGo}, ${translation_enabled}, ${translation_target}}) with tag="[YouTube]页面与播放净化", requires_body=true, binary_body_mode=true
 
 # 密钥与配置响应拦截
 response if ${url} ~= /^https:\/\/youtubei\.googleapis\.com\/youtubei\/v1\/(?:config|log_event)(?:\?.*)?$/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/youtube/youtube_key.js") with tag="[YouTube]密钥提取", requires_body=true, binary_body_mode=true

@@ -7,6 +7,45 @@
   const textEncoder = new TextEncoder();
   const utf8 = new TextDecoder("utf-8", { fatal: true });
   const schema = {
+    Captions: [
+      [51621377, "playerCaptionsTracklistRenderer", "PlayerCaptionsTracklistRenderer"],
+    ],
+    PlayerCaptionsTracklistRenderer: [
+      [1, "captionTracks", "CaptionTrack", true],
+      [2, "audioTracks", "AudioTrack", true],
+      [3, "translationLanguages", "TranslationLanguage", true],
+      [4, "defaultAudioTrackIndex", "uint"],
+      [6, "defaultCaptionTrackIndex", "uint"],
+    ],
+    CaptionTrack: [
+      [1, "baseUrl", "string"],
+      [2, "name", "Label"],
+      [3, "vssId", "string"],
+      [4, "languageCode", "string"],
+      [5, "kind", "string"],
+      [6, "rtl", "bool"],
+      [7, "isTranslatable", "bool"],
+    ],
+    AudioTrack: [
+      [2, "captionTrackIndices", "uint", true],
+      [3, "defaultCaptionTrackIndex", "uint"],
+      [4, "forcedCaptionTrackIndex", "uint"],
+      [5, "visibility", "uint"],
+      [6, "hasDefaultTrack", "bool"],
+      [7, "hasForcedTrack", "bool"],
+      [8, "audioTrackId", "string"],
+      [11, "captionsInitialState", "uint"],
+    ],
+    TranslationLanguage: [
+      [1, "languageCode", "string"],
+      [2, "languageName", "Label"],
+    ],
+    Label: [
+      [1, "runs", "LabelRun", true],
+    ],
+    LabelRun: [
+      [1, "text", "string"],
+    ],
     Browse: [
       [9, "content", "BrowseContent"],
       [10, "onResponseReceivedAction", "BrowseContent"],
@@ -96,6 +135,7 @@
     RelatedOverlay: [[29209665, "contents", "RelatedOverlayContents"]],
     RelatedOverlayContents: [[2, "contents", "RichItemContent", true]],
     Player: [
+      [10, "captions", "Captions"],
       [15, "playerConfig", "PlayerConfig"],
       [60, "overlayCollections", "OverlayCollection", true],
       [61, "paidPromotion", "bytes"],
@@ -1313,8 +1353,91 @@
       },
     );
   }
+    function translateCaptions(player, parameters) {
+    if (parameters.translation_enabled === false) return false;
+    const targetLang = parameters.translation_target === "en-US" ? "en" : "zh-Hans";
+    const targetLabel = parameters.translation_target === "en-US" ? "English (Auto-Translate)" : "中文（自动翻译）";
+
+    const captions = player.captions;
+    if (!captions) return false;
+    const renderer = captions.playerCaptionsTracklistRenderer;
+    if (!renderer) return false;
+    const tracks = renderer.captionTracks;
+    // 【智能识别零字幕守卫】：无任何外语字幕轨（如新闻快讯/纯音乐）时，直接静默退出，绝不报错
+    if (!Array.isArray(tracks) || tracks.length === 0) return false;
+
+    let candidateIndex = -1;
+    let targetExists = false;
+    for (let i = 0; i < tracks.length; i++) {
+      const code = tracks[i].languageCode?.toLowerCase();
+      if (targetLang === "zh-Hans" && (code === "zh-hans" || code === "zh-cn" || code === "zh")) {
+        targetExists = true;
+        break;
+      }
+      if (targetLang === "en" && (code === "en" || code === "en-us")) {
+        targetExists = true;
+        break;
+      }
+      if (candidateIndex === -1 || code === "en" || code === "en-us") {
+        candidateIndex = i;
+      }
+    }
+
+    if (targetExists || candidateIndex === -1) return false;
+    const baseTrack = tracks[candidateIndex];
+    if (!baseTrack?.baseUrl) return false;
+
+    for (const track of tracks) {
+      track.isTranslatable = true;
+    }
+
+    const newTrack = {
+      baseUrl: baseTrack.baseUrl + "&tlang=" + targetLang,
+      name: { runs: [{ text: targetLabel }] },
+      vssId: "." + targetLang,
+      languageCode: targetLang,
+      isTranslatable: true,
+    };
+    const newTracks = [...tracks, newTrack];
+    setField(renderer, "captionTracks", newTracks);
+
+    const audioTracks = renderer.audioTracks;
+    if (Array.isArray(audioTracks) && audioTracks.length > 0) {
+      const newTrackIdx = newTracks.length - 1;
+      for (const audio of audioTracks) {
+        const indices = audio.captionTrackIndices ? [...audio.captionTrackIndices] : [];
+        if (!indices.includes(newTrackIdx)) {
+          indices.push(newTrackIdx);
+          setField(audio, "captionTrackIndices", indices);
+        }
+        setField(audio, "defaultCaptionTrackIndex", newTrackIdx);
+        setField(audio, "captionsInitialState", 3);
+      }
+    }
+
+    const TRANSLATION_LANGS = [
+      ["zh-Hans", "中文（简体）"],
+      ["zh-Hant", "中文（繁體）"],
+      ["en", "English"],
+      ["ja", "日本語"],
+      ["ko", "한국어"],
+      ["fr", "Français"],
+      ["de", "Deutsch"],
+      ["ru", "Русский"],
+      ["es", "Español"],
+      ["vi", "Tiếng Việt"],
+    ];
+    setField(renderer, "translationLanguages", TRANSLATION_LANGS.map(([code, name]) => ({
+      languageCode: code,
+      languageName: { runs: [{ text: name }] },
+    })));
+
+    return true;
+  }
+
   function transformPlayer(player, parameters) {
     let changed = transformContent(player, parameters);
+    changed = translateCaptions(player, parameters) || changed;
     changed = removeField(player, "paidPromotion") || changed;
     for (const name of ["adPlacements", "adSlots"])
       if (player[name]?.length) {
@@ -1686,6 +1809,8 @@
       const options = readOptions({
         blockUpload: true,
         blockShorts: false,
+        translation_enabled: true,
+        translation_target: "zh-CN",
       });
       if (options.autoHd !== false) cacheQuality(responsePlayers(type, message));
       $done(transform(message, options) ? { body: messageCodec.toBinary(message) } : {});
