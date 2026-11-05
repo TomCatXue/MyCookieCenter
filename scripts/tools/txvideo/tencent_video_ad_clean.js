@@ -1,10 +1,10 @@
 /**
  * 腾讯视频 · 全量广告净化（Loon）
- * 版本: 2026-11-05.r4
+ * 版本: 2026-11-05.r5
  * 协议: tRPC / JCE / protobuf / gzip
  * 融合: ZenmoFeiShi/Qx TxvideoAD（tRPC 破坏、JCE 裁剪、简洁模式与底栏）
  */
-const SCRIPT_VERSION = "2026-11-05.r4";
+const SCRIPT_VERSION = "2026-11-05.r5";
 console.log(`[TencentVideo] ${SCRIPT_VERSION}`);
 
 (() => {
@@ -43,6 +43,15 @@ console.log(`[TencentVideo] ${SCRIPT_VERSION}`);
     if (argEnabled("HideVipTab")) out.push("VIP会员", "会员");
     if (argEnabled("HideGoods")) out.push("好物");
     return out;
+  }
+  function tabBarCutWhitelist() {
+    // 底栏固定 5 位：0=首页 1=短剧 2=VIP会员 3=好物 4=我的；QX 的 "0;2;4" 即隐藏 1、3。
+    const keep = [0, 1, 2, 3, 4];
+    const drop = [];
+    if (argEnabled("HideShortDrama")) drop.push(1);
+    if (argEnabled("HideVipTab")) drop.push(2);
+    if (argEnabled("HideGoods")) drop.push(3);
+    return keep.filter((n) => drop.indexOf(n) < 0).join(";");
   }
   const AD_ANY = ["AdResponseInfo", "InnerAdPromotionEventList", "InnerAdCommonPromotionEventActivityList", "LoadingConfig", "PreloadResourceInfo", "AdFeedInfo"];
   const DROP_MODULES = ["user_center_more_function"];
@@ -784,17 +793,18 @@ console.log(`[TencentVideo] ${SCRIPT_VERSION}`);
     try { o = JSON.parse(js); } catch (x) { return null; }
     if (!o || typeof o !== "object" || Array.isArray(o)) return null;
     const fc = o.feature_config && typeof o.feature_config === "object" ? o.feature_config : {};
-    if (o.enable === 1 && fc.enable === 1 && fc.tab_bar_cut_enable === 0 && !("tab_bar_cut_whitelist" in fc)) return null;
+    const whitelist = tabBarCutWhitelist();
+    if (o.enable === 1 && fc.enable === 1 && fc.tab_bar_cut_enable === 1 && fc.tab_bar_cut_whitelist === whitelist) return null;
     fc.enable = 1;
-    fc.tab_bar_cut_enable = 0;
-    delete fc.tab_bar_cut_whitelist;
+    fc.tab_bar_cut_enable = 1;
+    fc.tab_bar_cut_whitelist = whitelist;
     o.enable = 1;
     o.feature_config = fc;
     return JSON.stringify(o);
   }
 
   function simpleModeJson() {
-    return JSON.stringify({ enable: 1, launch_config: { enable: 1, delay_create_tab_enable: 1, delay_create_tab_whitelist: "" }, feature_config: { enable: 1, tab_bar_cut_enable: 0 } });
+    return JSON.stringify({ enable: 1, launch_config: { enable: 1, delay_create_tab_enable: 1, delay_create_tab_whitelist: "" }, feature_config: { enable: 1, tab_bar_cut_enable: 1, tab_bar_cut_whitelist: tabBarCutWhitelist() } });
   }
   function simpleModeEntry() {
     const v = concat([lenField(1, utf8(simpleModeJson())), ev(16), ev(11276), lenField(4, utf8(SIMPLE_KEY))]);
