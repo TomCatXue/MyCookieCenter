@@ -1,10 +1,10 @@
 /**
  * 腾讯视频 · 全量广告净化（Loon）
- * 版本: 2026-11-05.r3
+ * 版本: 2026-11-05.r4
  * 协议: tRPC / JCE / protobuf / gzip
  * 融合: ZenmoFeiShi/Qx TxvideoAD（tRPC 破坏、JCE 裁剪、简洁模式与底栏）
  */
-const SCRIPT_VERSION = "2026-11-05.r3";
+const SCRIPT_VERSION = "2026-11-05.r4";
 console.log(`[TencentVideo] ${SCRIPT_VERSION}`);
 
 (() => {
@@ -40,7 +40,7 @@ console.log(`[TencentVideo] ${SCRIPT_VERSION}`);
   function tabDropTitles() {
     const out = [];
     if (argEnabled("HideShortDrama")) out.push("短剧");
-    if (argEnabled("HideVipTab")) out.push("VIP会员", "VIP", "会员");
+    if (argEnabled("HideVipTab")) out.push("VIP会员", "会员");
     if (argEnabled("HideGoods")) out.push("好物");
     return out;
   }
@@ -89,7 +89,22 @@ console.log(`[TencentVideo] ${SCRIPT_VERSION}`);
     "/trpc.reward_ad_ssp.reward_judgment.reward_free_mode/GetRewardEntranceInfo",
     "/trpc.vip_ad_promotion.access_adaptor.Adaptor/VideoCardAdaptor",
     "/trpc.vip_ad_promotion.access_adaptor.CommonAccessService/AccessPromotion",
-    "/trpc.vip_ad_promotion.surprise_gift_send.SurpriseGiftSend/SendGift"
+    "/trpc.vip_ad_promotion.surprise_gift_send.SurpriseGiftSend/SendGift",
+    "/trpc.vipcontent.vipcenter.VIPCenterPage/UpgradeDialog",
+    "/trpc.vipcontent.vipcenter.VIPCenterPage/Promotion",
+    "/trpc.video_pay_ffgn.vipcenter.Vipcenter/GetPackagePromotion",
+    "/trpc.video_pay_ffgn.vipcenter.Vipcenter/GetUpgradeMsg",
+    "/trpc.video_pay_ffgn.vipcenter.Vipcenter/VCOtherTabCards",
+    "/trpc.video_pay_ffgn.vipcenter.Vipcenter/GetPackageHintMsg",
+    "/trpc.video_pay_ffgn.vipcenter.Vipcenter/GetCouponUpdateMsg",
+    "/trpc.video_pay_ffgn.vipcenter.VCLVIP/getBanner",
+    "/trpc.video_pay_ffgn.knowledge_detail.KnowledgeDetail/GetPayBarCoupon",
+    "/trpc.growth_raptor.generic_task.GenericTask/QueryUnlockModuleAdInfos",
+    "/trpc.growth_raptor.generic_task.GenericTask/BatchQueryBizAdInfos",
+    "/trpc.growth_raptor.generic_task.GenericTask/BatchPullBizAdInfosForWeb",
+    "/trpc.growth_raptor.generic_task.GenericTask/BatchPullDynamicVideoAdInfos",
+    "/trpc.growth_raptor.generic_task.GenericTask/QueryWelfareTaskAdInfo",
+    "/trpc.get_toast.privilege_toast.VipToast/GetPrivilegeToast"
   ];
   const JCE_TEEN_CONFIG = 89738;
   const JCE_PLAY_TIPS = 126577;
@@ -426,18 +441,27 @@ console.log(`[TencentVideo] ${SCRIPT_VERSION}`);
     if (f6 && FEED_MODULE_TAGS.indexOf(ascii(b, f6.vs, f6.e)) >= 0 && has("AdFeedInfo", x.vs, x.e) && adOnlyAtPath(b, kids)) return true;
     return false;
   }
-  function tabItemInfo(b, it) {
+  function tabTitle(b, it) {
     const ik = parse(b, it.vs, it.e);
-    if (!ik) return null;
-    let title = "", key = "";
+    if (!ik) return "";
     for (const r of ik) {
-      if (r.f === 3 && r.w === 2) title = text(b, r.vs, r.e) || "";
-      if (r.f === 20 && r.w === 2) key = ascii(b, r.vs, r.e) || "";
+      if (r.f === 3 && r.w === 2) return text(b, r.vs, r.e) || ascii(b, r.vs, r.e) || "";
     }
-    return { title, key };
+    return "";
+  }
+  function shouldDropTab(b, it, keys, titles) {
+    for (const key of keys) {
+      if (find(b, utf8(key), it.vs, it.e) >= 0) return true;
+    }
+    const title = tabTitle(b, it);
+    for (const t of titles) {
+      if (t && title.indexOf(t) >= 0) return true;
+    }
+    return false;
   }
   function tabFix(b, x) {
-    if (anyName(b, x.vs, x.e) !== "GetTabListRsp") return null;
+    const tabType = anyName(b, x.vs, x.e);
+    if (!tabType || !/GetTabListRsp$/.test(tabType)) return null;
     const rest = parse(b, ANYV, x.e);
     const v = rest && rest.find(r => r.f === 2 && r.w === 2);
     if (!v) return null;
@@ -449,9 +473,7 @@ console.log(`[TencentVideo] ${SCRIPT_VERSION}`);
     let dropped = 0;
     for (const it of vf) {
       if (it.w !== 2 || (it.f !== 1 && it.f !== 5 && it.f !== 6)) continue;
-      const info = tabItemInfo(b, it);
-      if (!info) continue;
-      if (dropKeys.indexOf(info.key) >= 0 || dropTitles.indexOf(info.title) >= 0) {
+      if (shouldDropTab(b, it, dropKeys, dropTitles)) {
         edits.set(it, DROP);
         dropped++;
       }

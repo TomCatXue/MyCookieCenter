@@ -4,22 +4,22 @@
 
 ## 覆盖范围
 
-- **tRPC 请求级拦截 40 条**：开屏、推送、倍速面板、前贴/中插、暂停、后贴、锚点、详情页横幅、信息流、搜索、下载页、个人中心、直播角标、激励广告、会员推广、活动浮层、运营商推广、ASA 归因、惊喜礼包。
+- **tRPC 请求级拦截 55 条**：开屏、推送、倍速面板、前贴/中插、暂停、后贴、锚点、详情页横幅、信息流、搜索、下载页、个人中心、直播角标、激励广告、会员推广、SVIP/会员升级弹窗与播放页推广、活动浮层、运营商推广、ASA 归因、惊喜礼包。
 - **JCE 响应裁剪 5 个广告命令 + 青少年配置**：`129279` 开屏、`129278` / `130273` 前贴中插、`129196` 暂停、`126577` 播放提示、`89738` 青少年弹窗。
 - **开屏 QUIC 主机拒绝**：`iacc.stgw.qq.com`、`tacc.video.qq.com`；同时对 `i.video.qq.com` / `pre.video.qq.com` / `iacc.qq.com` 的 QUIC/UDP 443 直接拒绝，强制走 TCP 以保证 MITM 命中。
 - **GDT 广告联盟与遥测**：`DOMAIN-SUFFIX,gdt.qq.com` 直拒；`p.l.qq.com`、`dp3.qq.com`、`otheve.beacon.qq.com` 直拒。
 - **前贴/广告服务器**：IPA 标记为 `prerollAdDomain` 的 `lives.l.qq.com` 与 `adServerDomain` 的 `news.l.qq.com` 直拒。
-- **去底栏与简洁模式**：`simple_mode_config` 强制启用，但显式关闭 `tab_bar_cut_enable`，不再按位置裁剪；`GetTabListRsp` 只删除短剧（`data_key=smallvideo_entrance`）、VIP 会员（`vip_entrance` / `member_entrance` / `whole_ad_vip_entrance`）、好物（`goods_entrance`）的整条 tab 记录，其余 tab 记录逐字节原样保留，不重写 `request_type` / `return_tab_name` 等字段。
+- **去底栏与简洁模式**：`simple_mode_config` 强制启用，但显式关闭 `tab_bar_cut_enable`，不再按位置裁剪；`GetTabListRsp` 按开关字节匹配短剧（`smallvideo_entrance`）、VIP 会员（`vip_entrance` / `member_entrance` / `whole_ad_vip_entrance`）、好物（`goods_entrance`）的整条 tab 记录（字段号无关，标题 `tab_name` 作兜底），其余 tab 记录逐字节原样保留，不重写 `request_type` / `return_tab_name` 等字段。
 - **响应级兜底**：`AdFeedInfo`、`AdResponseInfo`、`InnerAd`、`LoadingConfig`、`PreloadResourceInfo`、`GetTabListRsp`、`personal_center_page`、`outerPaster` 等标记节点递归清理。
 
 ## 文件
 
 - Loon 插件：`loon/TencentVideo.plugin`
 - 脚本：`scripts/tools/txvideo/tencent_video_ad_clean.js`
-- 本地自测：`work/txvideo_loon_selftest.js`（35 项）
+- 本地自测：`work/txvideo_loon_selftest.js`（37 项）
 - 插件静态校验：`work/validate_txvideo_plugin.py`（33 项）
 
-> v1.0.2 修复：v1.0.1 曾沿用 QX 的 tab 重排逻辑，把 9.04.75 的 `request_type`（字段 2）当成索引删除、并把 `return_tab_name`（字段 16）改写成 varint，导致底栏错乱。现改为整条记录删除，剩余字段不再改动。
+> v1.0.2 修复：v1.0.1 曾沿用 QX 的 tab 重排逻辑，把 9.04.75 的 `request_type`（字段 2）当成索引删除、并把 `return_tab_name`（字段 16）改写成 varint，导致底栏错乱。现改为整条记录删除，剩余字段不再改动。v1.0.4 进一步改为对整条 tab 记录做 key 字节匹配，不再依赖固定字段号。
 
 ## 底栏开关
 
@@ -82,7 +82,7 @@ node work\txvideo_loon_selftest.js
 python work\validate_txvideo_plugin.py
 ```
 
-当前结果：脚本自测 **35/35 PASS**；插件静态校验 **33/33 PASS**。
+当前结果：脚本自测 **37/37 PASS**；插件静态校验 **33/33 PASS**。
 
 ## 真机验证
 
