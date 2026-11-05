@@ -1,10 +1,10 @@
 /**
  * 腾讯视频 · 全量广告净化（Loon）
- * 版本: 2026-11-05.r2
+ * 版本: 2026-11-05.r3
  * 协议: tRPC / JCE / protobuf / gzip
  * 融合: ZenmoFeiShi/Qx TxvideoAD（tRPC 破坏、JCE 裁剪、简洁模式与底栏）
  */
-const SCRIPT_VERSION = "2026-11-05.r2";
+const SCRIPT_VERSION = "2026-11-05.r3";
 console.log(`[TencentVideo] ${SCRIPT_VERSION}`);
 
 (() => {
@@ -43,10 +43,6 @@ console.log(`[TencentVideo] ${SCRIPT_VERSION}`);
     if (argEnabled("HideVipTab")) out.push("VIP会员", "VIP", "会员");
     if (argEnabled("HideGoods")) out.push("好物");
     return out;
-  }
-  function tabBarCutWhitelist() {
-    // Keep every position; exact tab removal is handled by tabFix's key/title switches.
-    return "0;1;2;3;4;5;6;7;8;9";
   }
   const AD_ANY = ["AdResponseInfo", "InnerAdPromotionEventList", "InnerAdCommonPromotionEventActivityList", "LoadingConfig", "PreloadResourceInfo", "AdFeedInfo"];
   const DROP_MODULES = ["user_center_more_function"];
@@ -430,6 +426,16 @@ console.log(`[TencentVideo] ${SCRIPT_VERSION}`);
     if (f6 && FEED_MODULE_TAGS.indexOf(ascii(b, f6.vs, f6.e)) >= 0 && has("AdFeedInfo", x.vs, x.e) && adOnlyAtPath(b, kids)) return true;
     return false;
   }
+  function tabItemInfo(b, it) {
+    const ik = parse(b, it.vs, it.e);
+    if (!ik) return null;
+    let title = "", key = "";
+    for (const r of ik) {
+      if (r.f === 3 && r.w === 2) title = text(b, r.vs, r.e) || "";
+      if (r.f === 20 && r.w === 2) key = ascii(b, r.vs, r.e) || "";
+    }
+    return { title, key };
+  }
   function tabFix(b, x) {
     if (anyName(b, x.vs, x.e) !== "GetTabListRsp") return null;
     const rest = parse(b, ANYV, x.e);
@@ -437,33 +443,22 @@ console.log(`[TencentVideo] ${SCRIPT_VERSION}`);
     if (!v) return null;
     const vf = parse(b, v.vs, v.e);
     if (!vf) return null;
-    const items = vf.filter(r => r.f === 1 && r.w === 2), drop = new Set();
     const dropKeys = tabDropKeys(), dropTitles = tabDropTitles();
-    for (const it of items) {
-      const ik = parse(b, it.vs, it.e);
-      if (!ik) return null;
-      let key = "", title = "";
-      for (const r of ik) {
-        if (r.f === 3 && r.w === 2) title = text(b, r.vs, r.e) || "";
-        if (r.f === 22 && r.w === 2) {
-          const rk = parse(b, r.vs, r.e), k1 = rk && rk.find(z => z.f === 1 && z.w === 2);
-          if (k1) key = ascii(b, k1.vs, k1.e) || "";
-        }
-      }
-      if (dropKeys.indexOf(key) >= 0 || dropTitles.indexOf(title) >= 0) drop.add(it);
-    }
-    if (!drop.size) return null;
+    if (!dropKeys.length && !dropTitles.length) return null;
     const edits = new Map();
-    let idx = 0;
-    for (const it of items) {
-      if (drop.has(it)) { edits.set(it, DROP); continue; }
-      const ik = parse(b, it.vs, it.e), parts = [];
-      if (idx > 0) parts.push(ev(16), ev(idx));
-      for (const r of ik) if (!(r.f === 2 && r.w === 0)) parts.push(b.subarray(r.s, r.e));
-      edits.set(it, lenField(1, concat(parts)));
-      idx++;
+    let dropped = 0;
+    for (const it of vf) {
+      if (it.w !== 2 || (it.f !== 1 && it.f !== 5 && it.f !== 6)) continue;
+      const info = tabItemInfo(b, it);
+      if (!info) continue;
+      if (dropKeys.indexOf(info.key) >= 0 || dropTitles.indexOf(info.title) >= 0) {
+        edits.set(it, DROP);
+        dropped++;
+      }
     }
+    if (!dropped) return null;
     const nv = rebuild(b, v.vs, v.e, vf, edits);
+    if (!nv) return null;
     return lenField(x.f, concat([b.subarray(x.vs, v.s), lenField(2, nv), b.subarray(v.e, x.e)]));
   }
   function clean(b, s, e, depth) {
@@ -767,18 +762,17 @@ console.log(`[TencentVideo] ${SCRIPT_VERSION}`);
     try { o = JSON.parse(js); } catch (x) { return null; }
     if (!o || typeof o !== "object" || Array.isArray(o)) return null;
     const fc = o.feature_config && typeof o.feature_config === "object" ? o.feature_config : {};
-    const whitelist = tabBarCutWhitelist();
-    if (o.enable === 1 && fc.enable === 1 && fc.tab_bar_cut_enable === 1 && fc.tab_bar_cut_whitelist === whitelist) return null;
+    if (o.enable === 1 && fc.enable === 1 && fc.tab_bar_cut_enable === 0 && !("tab_bar_cut_whitelist" in fc)) return null;
     fc.enable = 1;
-    fc.tab_bar_cut_enable = 1;
-    fc.tab_bar_cut_whitelist = whitelist;
+    fc.tab_bar_cut_enable = 0;
+    delete fc.tab_bar_cut_whitelist;
     o.enable = 1;
     o.feature_config = fc;
     return JSON.stringify(o);
   }
 
   function simpleModeJson() {
-    return JSON.stringify({ enable: 1, launch_config: { enable: 1, delay_create_tab_enable: 1, delay_create_tab_whitelist: "" }, feature_config: { enable: 1, tab_bar_cut_enable: 1, tab_bar_cut_whitelist: tabBarCutWhitelist() } });
+    return JSON.stringify({ enable: 1, launch_config: { enable: 1, delay_create_tab_enable: 1, delay_create_tab_whitelist: "" }, feature_config: { enable: 1, tab_bar_cut_enable: 0 } });
   }
   function simpleModeEntry() {
     const v = concat([lenField(1, utf8(simpleModeJson())), ev(16), ev(11276), lenField(4, utf8(SIMPLE_KEY))]);
