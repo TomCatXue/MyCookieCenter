@@ -12,13 +12,14 @@
 - **去底栏与简洁模式**：`simple_mode_config` 启用 `tab_bar_cut_enable=1`，`tab_bar_cut_whitelist` 按开关动态计算（底栏 5 位：0=首页、1=短剧、2=VIP会员、3=好物、4=我的；QX 的 `0;2;4` 即隐藏 1/3）。同时保留 `GetTabListRsp` 的 key 字节匹配兜底，不重写剩余字段。
 - **播放页 SVIP/特惠/升级按钮**：MITM `vip.video.qq.com`，将 `rpc/trpc.vip_ad_promotion.accessor.Accessor/Access`、`SvipPriceLogic/GetSvipPrices`、`GetVipUpdateInfos` 响应分别改写为空广告位、空价格表、空升级信息。
 - **预鉴权 VIP 推广按钮**：`VideoPreAuthService` 响应内 `PayBgGradientTitleBtn`（`开通SVIP` / `升级SVIP` 按钮，`ptag=ad.page.detail.vipbtn`）按 `right_top` / `right` 位置整体删除，保留 `PayText` 说明文字与重播/退出按钮。
+- **详情页 VIP 营销卡片**：`VideoDetailService` 响应内 `vip_bar_section` 区块（含 `VIPActivityEntry`）整体删除，移除视频下方随视频变化的 SVIP/营销条。
 - **响应级兜底**：`AdFeedInfo`、`AdResponseInfo`、`InnerAd`、`LoadingConfig`、`PreloadResourceInfo`、`GetTabListRsp`、`personal_center_page`、`outerPaster` 等标记节点递归清理。
 
 ## 文件
 
 - Loon 插件：`loon/TencentVideo.plugin`
 - 脚本：`scripts/tools/txvideo/tencent_video_ad_clean.js`
-- 本地自测：`work/txvideo_loon_selftest.js`（40 项）
+- 本地自测：`work/txvideo_loon_selftest.js`（41 项）
 - 插件静态校验：`work/validate_txvideo_plugin.py`（34 项）
 
 > v1.0.2 修复：v1.0.1 曾沿用 QX 的 tab 重排逻辑，把 9.04.75 的 `request_type`（字段 2）当成索引删除、并把 `return_tab_name`（字段 16）改写成 varint，导致底栏错乱。v1.0.5 改为 `tab_bar_cut_whitelist` 位置白名单动态计算，并据 HAR 补上 `vip.video.qq.com` 的 SVIP 推广改写。
@@ -84,7 +85,7 @@ node work\txvideo_loon_selftest.js
 python work\validate_txvideo_plugin.py
 ```
 
-当前结果：脚本自测 **40/40 PASS**；插件静态校验 **34/34 PASS**。
+当前结果：脚本自测 **41/41 PASS**；插件静态校验 **34/34 PASS**。
 
 ## 真机验证
 

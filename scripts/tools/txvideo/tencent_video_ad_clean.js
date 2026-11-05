@@ -1,10 +1,10 @@
 /**
  * 腾讯视频 · 全量广告净化（Loon）
- * 版本: 2026-11-05.r6
+ * 版本: 2026-11-05.r7
  * 协议: tRPC / JCE / protobuf / gzip
  * 融合: ZenmoFeiShi/Qx TxvideoAD（tRPC 破坏、JCE 裁剪、简洁模式与底栏）
  */
-const SCRIPT_VERSION = "2026-11-05.r6";
+const SCRIPT_VERSION = "2026-11-05.r7";
 console.log(`[TencentVideo] ${SCRIPT_VERSION}`);
 
 (() => {
@@ -57,7 +57,7 @@ console.log(`[TencentVideo] ${SCRIPT_VERSION}`);
   const DROP_MODULES = ["user_center_more_function"];
   const AD_MODULE_IDS = ["outerPaster"];
   const FEED_MODULE_TAGS = ["waterfall_feeds_module_mergeid"];
-  const MARKERS = ["AdFeedInfo", "AdResponseInfo", "InnerAd", "LoadingConfig", "PreloadResourceInfo", "GetTabListRsp", "_ad", "teenager_popup_ctrl", "PayBgGradientTitleBtn", "ad.page.detail.vipbtn"].concat(DROP_MODULES);
+  const MARKERS = ["AdFeedInfo", "AdResponseInfo", "InnerAd", "LoadingConfig", "PreloadResourceInfo", "GetTabListRsp", "_ad", "teenager_popup_ctrl", "PayBgGradientTitleBtn", "ad.page.detail.vipbtn", "VIPActivityEntry"].concat(DROP_MODULES);
   const BLOCK_FUNCS = [
     "/trpc.business_splash.ad_ssp_splash.splashService/GetSplashPreload",
     "/trpc.business_splash.ad_ssp_splash.splashService/GetSplashRealtimePoll",
@@ -456,6 +456,12 @@ console.log(`[TencentVideo] ${SCRIPT_VERSION}`);
     if (!/^(right_top|right)$/.test(name)) return false;
     return find(b, utf8("PayBgGradientTitleBtn"), x.vs, x.e) >= 0;
   }
+  function isVipBarSection(b, x, kids) {
+    if (find(b, utf8("VIPActivityEntry"), x.vs, x.e) < 0) return false;
+    const f4 = kids.find(k => k.f === 4 && k.w === 2);
+    const name = f4 ? (ascii(b, f4.vs, f4.e) || "") : "";
+    return name === "vip_bar_section" || /_section$/.test(name);
+  }
   function tabTitle(b, it) {
     const ik = parse(b, it.vs, it.e);
     if (!ik) return "";
@@ -507,6 +513,7 @@ console.log(`[TencentVideo] ${SCRIPT_VERSION}`);
       if (x.w !== 2 || x.e - x.vs < 2 || !has(null, x.vs, x.e)) continue;
       const kids = parse(b, x.vs, x.e);
       if (!kids || !kids.length) continue;
+      if (isVipBarSection(b, x, kids)) { edits.set(x, DROP); continue; }
       if (isVipPayButton(b, x, kids)) { edits.set(x, DROP); continue; }
       if (isAdElement(b, x, kids)) { edits.set(x, DROP); continue; }
       if (has("GetTabListRsp", x.vs, x.e)) {
