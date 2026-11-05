@@ -10,7 +10,7 @@
 - **GDT 广告联盟与遥测**：`DOMAIN-SUFFIX,gdt.qq.com` 直拒；`p.l.qq.com`、`dp3.qq.com`、`otheve.beacon.qq.com` 直拒。
 - **前贴/广告服务器**：IPA 标记为 `prerollAdDomain` 的 `lives.l.qq.com` 与 `adServerDomain` 的 `news.l.qq.com` 直拒。
 - **去底栏与简洁模式**：`simple_mode_config` 启用 `tab_bar_cut_enable=1`，`tab_bar_cut_whitelist` 按开关动态计算（底栏 5 位：0=首页、1=短剧、2=VIP会员、3=好物、4=我的；QX 的 `0;2;4` 即隐藏 1/3）。同时保留 `GetTabListRsp` 的 key 字节匹配兜底，不重写剩余字段。
-- **播放页 SVIP 推广**：MITM `vip.video.qq.com`，将 `rpc/trpc.vip_ad_promotion.accessor.Accessor/Access` 响应改写为 `{"trace_id":"","map_ads":{},"ext_info":""}`。
+- **播放页 SVIP/特惠/升级按钮**：MITM `vip.video.qq.com`，将 `rpc/trpc.vip_ad_promotion.accessor.Accessor/Access`、`SvipPriceLogic/GetSvipPrices`、`GetVipUpdateInfos` 响应分别改写为空广告位、空价格表、空升级信息。
 - **响应级兜底**：`AdFeedInfo`、`AdResponseInfo`、`InnerAd`、`LoadingConfig`、`PreloadResourceInfo`、`GetTabListRsp`、`personal_center_page`、`outerPaster` 等标记节点递归清理。
 
 ## 文件
@@ -18,7 +18,7 @@
 - Loon 插件：`loon/TencentVideo.plugin`
 - 脚本：`scripts/tools/txvideo/tencent_video_ad_clean.js`
 - 本地自测：`work/txvideo_loon_selftest.js`（39 项）
-- 插件静态校验：`work/validate_txvideo_plugin.py`（33 项）
+- 插件静态校验：`work/validate_txvideo_plugin.py`（34 项）
 
 > v1.0.2 修复：v1.0.1 曾沿用 QX 的 tab 重排逻辑，把 9.04.75 的 `request_type`（字段 2）当成索引删除、并把 `return_tab_name`（字段 16）改写成 varint，导致底栏错乱。v1.0.5 改为 `tab_bar_cut_whitelist` 位置白名单动态计算，并据 HAR 补上 `vip.video.qq.com` 的 SVIP 推广改写。
 
@@ -83,7 +83,7 @@ node work\txvideo_loon_selftest.js
 python work\validate_txvideo_plugin.py
 ```
 
-当前结果：脚本自测 **39/39 PASS**；插件静态校验 **33/33 PASS**。
+当前结果：脚本自测 **39/39 PASS**；插件静态校验 **34/34 PASS**。
 
 ## 真机验证
 

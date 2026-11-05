@@ -15,7 +15,7 @@
 | [`PSBC.plugin`](./PSBC.plugin) (v1.0.0) | 邮储银行：屏蔽开屏广告、摇一摇与静态资源拦截 (chaoscard 原作) | 规则型，无需开关 |
 | [`Telegram.plugin`](./Telegram.plugin) (v1.0.0) | Telegram 增强：优质 IP 调度防转圈、外部 t.me 链接跳转客户端 (chaoscard 原作) | `t.me_redirect` 客户端选择 |
 | [**YouTube_Ad.plugin**](./YouTube_Ad.plugin) (v1.0.0) | **YouTube去广告**：移除广告、短片按钮/智能助手/商品/竖屏直播，解锁高码率画质/精彩跳转/通勤模式，内置画中画与后台播放，支持外语字幕中英机翻与QUIC防穿透 | `autoHd` `jumpAhead` `onTheGo` `translation_enabled` 等 11 项精细开关 |
-| [**TencentVideo.plugin**](./TencentVideo.plugin) (v1.0.5) | **腾讯视频 · 全量净化**：开屏/前贴/中插/暂停/后贴/锚点/详情页/信息流/搜索/下载页/个人中心/激励/会员推广/播放页 SVIP 推广全量移除，融合简洁模式、底栏开关与 QUIC 防穿透 | `HideShortDrama` `HideVipTab` `HideGoods` 三个底栏开关；按位置白名单裁剪底栏 |
+| [**TencentVideo.plugin**](./TencentVideo.plugin) (v1.0.6) | **腾讯视频 · 全量净化**：开屏/前贴/中插/暂停/后贴/锚点/详情页/信息流/搜索/下载页/个人中心/激励/会员推广/播放页 SVIP·特惠·升级按钮全量移除，融合简洁模式、底栏开关与 QUIC 防穿透 | `HideShortDrama` `HideVipTab` `HideGoods` 三个底栏开关；按位置白名单裁剪底栏 |
 
 ## 使用
 

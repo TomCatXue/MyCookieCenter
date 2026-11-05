@@ -4,8 +4,8 @@
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/tencent_video.png
 #!system = iOS,iPadOS
-#!version = 1.0.5
-#!date = 2026-11-05 15:16
+#!version = 1.0.6
+#!date = 2026-11-05 19:19
 #!loon_version = 3.5.1(983)
 #!tag = 腾讯视频
 
@@ -40,6 +40,10 @@ AND,((DOMAIN,iacc.qq.com),(PROTOCOL,UDP),(DEST-PORT,443)),REJECT
 ^https?:\/\/iacc\.qq\.com\/ response-header-replace Alt-Svc clear
 # 播放页 SVIP 推广：返回空广告位（HAR 证据 vip.video.qq.com/rpc/trpc.vip_ad_promotion.accessor.Accessor/Access）
 response if ${url} ~= /^https?:\/\/vip\.video\.qq\.com\/rpc\/trpc\.vip_ad_promotion\.accessor\.Accessor\/Access(?:\?|$)/ then response.body.mock("text", "{\"trace_id\":\"\",\"map_ads\":{},\"ext_info\":\"\"}", 200)
+# 播放页特惠 VIP 价格：返回空价格表（HAR 证据 GetSvipPrices）
+response if ${url} ~= /^https?:\/\/vip\.video\.qq\.com\/rpc\/trpc\.vip_price_group\.svip_price_logic\.SvipPriceLogic\/GetSvipPrices(?:\?|$)/ then response.body.mock("text", "{\"prices\":{}}", 200)
+# 播放页升级 VIP 信息：返回空升级信息（HAR 证据 GetVipUpdateInfos）
+response if ${url} ~= /^https?:\/\/vip\.video\.qq\.com\/rpc\/rpc\/trpc\.svip_proj\.trpc_vip_update\.GetVipUpdateInfos\/GetVipUpdateInfos(?:\?|$)/ then response.body.mock("text", "{\"update_infos\":{}}", 200)
 
 [Script]
 # tRPC：请求侧破坏广告函数名，响应侧清理 AdFeedInfo / GetTabListRsp / 个人中心广告
