@@ -32,6 +32,7 @@ Loon 负责无感捕获与即时同步，呆呆面板 / 青龙面板负责脱机
 | <img src="icons/psbc.png" height="16" /> | **邮储银行** | 屏蔽手机银行开屏广告、摇一摇及静态推广资源 (chaoscard 原作) | <nobr><a href="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/loon/PSBC.plugin"><strong>安装</strong></a>&nbsp;/&nbsp;<a href="./loon/README.md"><strong>说明</strong></a></nobr> |
 | <img src="icons/telegram.png" height="16" /> | **Telegram 增强** | 优质 IP 调度防转圈、外部 t.me 链接跳转客户端 (chaoscard 原作) | <nobr><a href="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/loon/Telegram.plugin"><strong>安装</strong></a>&nbsp;/&nbsp;<a href="./scripts/tools/telegram/"><strong>说明</strong></a></nobr> |
 | <img src="icons/youtube.png" height="16" /> | **YouTube去广告** | 移除广告 · 解锁画质/精彩跳转/通勤 · 内置画中画与后台播放 · 字幕机翻 | <nobr><a href="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/loon/YouTube_Ad.plugin"><strong>安装</strong></a>&nbsp;/&nbsp;<a href="./loon/YouTube_Ad.plugin"><strong>说明</strong></a></nobr> |
+| <img src="icons/tencent_video.png" height="16" /> | **腾讯视频** | 全量去广告 · 暂停/后贴/锚点/激励 · 简洁模式与底栏裁剪 | <nobr><a href="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/loon/TencentVideo.plugin"><strong>安装</strong></a>&nbsp;/&nbsp;<a href="./scripts/tools/txvideo/"><strong>说明</strong></a></nobr> |
 
 > `DaiDaiPanel.plugin` 的开关默认开启，可单独关闭不需要的业务；微信读书要先打开「我」的页面，再打开「周二翻牌」页面才能捕获完整凭据。
 

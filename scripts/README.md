@@ -8,3 +8,4 @@
 | [`cmcc/`](./cmcc/) | 中国移动：长期 app_token 捕获与同步 + 净屏与轮播净化 | [`DaiDaiPanel.plugin`](../loon/DaiDaiPanel.plugin) · [`ChinaMobile.plugin`](../loon/ChinaMobile.plugin) · [`ql_script/cmcc_all.py`](../ql_script/cmcc_all.py) |
 | [`telecom/`](./telecom/) | 中国电信：捕获 + 抽奖 + 0 点权益 + 山西福利 | [`DaiDaiPanel.plugin`](../loon/DaiDaiPanel.plugin) · [`ql_script/`](../ql_script/) |
 | [`tools/`](./tools/) | 独立单功能工具（哔哩哔哩、Pixiv、GitHub、扫描全能王等） | 见各子目录下的说明与专属 `.plugin` |
+| [`tools/txvideo/`](./tools/txvideo/) | 腾讯视频：全量广告净化 + 简洁模式 / 底栏裁剪 | [`TencentVideo.plugin`](../loon/TencentVideo.plugin) |
