@@ -50,10 +50,10 @@ IPA 内 `com.tencent.kmm.tabbar.data.model.TabBarData` 的默认表已确认包�
    ```
 4. 脚本地址指向：
    ```text
-   https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/txvideo/tencent_video_ad_clean.js
+   https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/926cfe9/scripts/tools/txvideo/tencent_video_ad_clean.js
    ```
 
-> 当前改动尚未推送到 GitHub 时，Loon 无法下载脚本；需要先推送，或把 `script-path` 改成你自己的可访问 URL。
+> 插件当前把脚本固定到提交 `926cfe9`，用于规避 GitHub raw 的 5 分钟 CDN 缓存；后续更新脚本时同步更新该提交号与 `?v=` 参数。
 
 ## 副作用与边界
 
