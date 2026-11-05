@@ -9,15 +9,29 @@
 - **开屏 QUIC 主机拒绝**：`iacc.stgw.qq.com`、`tacc.video.qq.com`；同时对 `i.video.qq.com` / `pre.video.qq.com` / `iacc.qq.com` 的 QUIC/UDP 443 直接拒绝，强制走 TCP 以保证 MITM 命中。
 - **GDT 广告联盟与遥测**：`DOMAIN-SUFFIX,gdt.qq.com` 直拒；`p.l.qq.com`、`dp3.qq.com`、`otheve.beacon.qq.com` 直拒。
 - **前贴/广告服务器**：IPA 标记为 `prerollAdDomain` 的 `lives.l.qq.com` 与 `adServerDomain` 的 `news.l.qq.com` 直拒。
-- **去底栏与简洁模式**：`simple_mode_config` 强制启用、`tab_bar_cut_whitelist=0;2;4`；`GetTabListRsp` 删除 `smallvideo_entrance`、`goods_entrance` 以及标题为「短剧」「好物」的 tab。
+- **去底栏与简洁模式**：`simple_mode_config` 强制启用；`tab_bar_cut_whitelist=0;1;2;3;4;5;6;7;8;9` 保留全部位置，避免按索引误切其他 tab；`GetTabListRsp` 再按开关精确删除短剧（`smallvideo_entrance`）、VIP 会员（`vip_entrance` / `member_entrance` / `whole_ad_vip_entrance`）、好物（`goods_entrance`）及对应标题。
 - **响应级兜底**：`AdFeedInfo`、`AdResponseInfo`、`InnerAd`、`LoadingConfig`、`PreloadResourceInfo`、`GetTabListRsp`、`personal_center_page`、`outerPaster` 等标记节点递归清理。
 
 ## 文件
 
 - Loon 插件：`loon/TencentVideo.plugin`
 - 脚本：`scripts/tools/txvideo/tencent_video_ad_clean.js`
-- 本地自测：`work/txvideo_loon_selftest.js`（30 项）
-- 插件静态校验：`work/validate_txvideo_plugin.py`（30 项）
+- 本地自测：`work/txvideo_loon_selftest.js`（33 项）
+- 插件静态校验：`work/validate_txvideo_plugin.py`（32 项）
+
+## 底栏开关
+
+Loon → 配置 → 插件 → 腾讯视频 · 全量净化 → 编辑参数：
+
+| 参数 | 默认 | 说明 |
+|---|---|---|
+| `HideShortDrama` | 开 | 隐藏「短剧」tab；关闭后恢复显示 |
+| `HideVipTab` | 开 | 隐藏「VIP会员」tab；关闭后恢复显示 |
+| `HideGoods` | 开 | 隐藏「好物」tab；关闭后恢复显示 |
+
+三个开关互相独立，修改后杀掉腾讯视频进程重启生效。首页、推荐、我的等其他 tab 不受影响；开关全关时 `GetTabListRsp` 原样放行。
+
+IPA 内 `com.tencent.kmm.tabbar.data.model.TabBarData` 的默认表已确认包含 `main_entrance`、`smallvideo_entrance`、`vip_entrance`、`personal_entrance`、`goods_entrance` 等 key；脚本按 key 精确删除，`member_entrance` / `whole_ad_vip_entrance` 作为 VIP 兼容别名一并处理。
 
 ## 安装
 
@@ -64,13 +78,13 @@ node work\txvideo_loon_selftest.js
 python work\validate_txvideo_plugin.py
 ```
 
-当前结果：脚本自测 **30/30 PASS**；插件静态校验 **30/30 PASS**。
+当前结果：脚本自测 **33/33 PASS**；插件静态校验 **32/32 PASS**。
 
 ## 真机验证
 
 1. 杀掉腾讯视频进程，冷启动，确认开屏广告消失。
 2. 播放非 VIP 长视频，确认前贴/中插/暂停/后贴广告消失。
-3. 查看底部 tab，确认「短剧」「好物」等入口被裁剪。
+3. 查看底部 tab：默认「短剧」「VIP会员」「好物」均消失；逐个关闭三个开关并重启，确认对应 tab 恢复显示。
 4. 进入「我的」页面，确认顶部横幅、营销卡片、推广浮层消失。
 5. 打开信息流/搜索/下载页，确认广告卡片不再出现。
 6. 若出现白屏/网络错误，关闭插件开关回退；再按 `Content-Encoding`/host 二分排查。

@@ -1,16 +1,53 @@
 /**
  * 腾讯视频 · 全量广告净化（Loon）
- * 版本: 2026-11-05.r1
+ * 版本: 2026-11-05.r2
  * 协议: tRPC / JCE / protobuf / gzip
  * 融合: ZenmoFeiShi/Qx TxvideoAD（tRPC 破坏、JCE 裁剪、简洁模式与底栏）
  */
-const SCRIPT_VERSION = "2026-11-05.r1";
+const SCRIPT_VERSION = "2026-11-05.r2";
 console.log(`[TencentVideo] ${SCRIPT_VERSION}`);
 
 (() => {
-  const TAB_DROP_KEYS = ["smallvideo_entrance", "goods_entrance"];
-  const TAB_DROP_TITLES = ["短剧", "好物"];
-  const TAB_CUT_WHITELIST = "0;2;4";
+  const ARG_DEFAULTS = { HideShortDrama: true, HideVipTab: true, HideGoods: true };
+  function readArguments() {
+    if (typeof $argument === "object" && $argument !== null) return $argument;
+    if (typeof $argument === "string" && $argument.trim()) {
+      try {
+        return JSON.parse($argument);
+      } catch (e) {
+        const out = {};
+        $argument.split("&").forEach((pair) => {
+          const parts = pair.split("=");
+          if (parts.length === 2) out[parts[0].trim()] = parts[1].trim();
+        });
+        return out;
+      }
+    }
+    return {};
+  }
+  function argEnabled(name) {
+    const args = readArguments();
+    const value = Object.prototype.hasOwnProperty.call(args, name) ? args[name] : ARG_DEFAULTS[name];
+    return value === true || value === "true" || value === 1 || value === "1";
+  }
+  function tabDropKeys() {
+    const out = [];
+    if (argEnabled("HideShortDrama")) out.push("smallvideo_entrance");
+    if (argEnabled("HideVipTab")) out.push("vip_entrance", "member_entrance", "whole_ad_vip_entrance");
+    if (argEnabled("HideGoods")) out.push("goods_entrance");
+    return out;
+  }
+  function tabDropTitles() {
+    const out = [];
+    if (argEnabled("HideShortDrama")) out.push("短剧");
+    if (argEnabled("HideVipTab")) out.push("VIP会员", "VIP", "会员");
+    if (argEnabled("HideGoods")) out.push("好物");
+    return out;
+  }
+  function tabBarCutWhitelist() {
+    // Keep every position; exact tab removal is handled by tabFix's key/title switches.
+    return "0;1;2;3;4;5;6;7;8;9";
+  }
   const AD_ANY = ["AdResponseInfo", "InnerAdPromotionEventList", "InnerAdCommonPromotionEventActivityList", "LoadingConfig", "PreloadResourceInfo", "AdFeedInfo"];
   const DROP_MODULES = ["user_center_more_function"];
   const AD_MODULE_IDS = ["outerPaster"];
@@ -401,6 +438,7 @@ console.log(`[TencentVideo] ${SCRIPT_VERSION}`);
     const vf = parse(b, v.vs, v.e);
     if (!vf) return null;
     const items = vf.filter(r => r.f === 1 && r.w === 2), drop = new Set();
+    const dropKeys = tabDropKeys(), dropTitles = tabDropTitles();
     for (const it of items) {
       const ik = parse(b, it.vs, it.e);
       if (!ik) return null;
@@ -412,7 +450,7 @@ console.log(`[TencentVideo] ${SCRIPT_VERSION}`);
           if (k1) key = ascii(b, k1.vs, k1.e) || "";
         }
       }
-      if (TAB_DROP_KEYS.indexOf(key) >= 0 || TAB_DROP_TITLES.indexOf(title) >= 0) drop.add(it);
+      if (dropKeys.indexOf(key) >= 0 || dropTitles.indexOf(title) >= 0) drop.add(it);
     }
     if (!drop.size) return null;
     const edits = new Map();
@@ -729,17 +767,18 @@ console.log(`[TencentVideo] ${SCRIPT_VERSION}`);
     try { o = JSON.parse(js); } catch (x) { return null; }
     if (!o || typeof o !== "object" || Array.isArray(o)) return null;
     const fc = o.feature_config && typeof o.feature_config === "object" ? o.feature_config : {};
-    if (o.enable === 1 && fc.enable === 1 && fc.tab_bar_cut_enable === 1 && fc.tab_bar_cut_whitelist === TAB_CUT_WHITELIST) return null;
+    const whitelist = tabBarCutWhitelist();
+    if (o.enable === 1 && fc.enable === 1 && fc.tab_bar_cut_enable === 1 && fc.tab_bar_cut_whitelist === whitelist) return null;
     fc.enable = 1;
     fc.tab_bar_cut_enable = 1;
-    fc.tab_bar_cut_whitelist = TAB_CUT_WHITELIST;
+    fc.tab_bar_cut_whitelist = whitelist;
     o.enable = 1;
     o.feature_config = fc;
     return JSON.stringify(o);
   }
 
   function simpleModeJson() {
-    return JSON.stringify({ enable: 1, launch_config: { enable: 1, delay_create_tab_enable: 1, delay_create_tab_whitelist: "" }, feature_config: { enable: 1, tab_bar_cut_enable: 1, tab_bar_cut_whitelist: TAB_CUT_WHITELIST } });
+    return JSON.stringify({ enable: 1, launch_config: { enable: 1, delay_create_tab_enable: 1, delay_create_tab_whitelist: "" }, feature_config: { enable: 1, tab_bar_cut_enable: 1, tab_bar_cut_whitelist: tabBarCutWhitelist() } });
   }
   function simpleModeEntry() {
     const v = concat([lenField(1, utf8(simpleModeJson())), ev(16), ev(11276), lenField(4, utf8(SIMPLE_KEY))]);
