@@ -1,10 +1,10 @@
 /**
  * 腾讯视频 · 全量广告净化（Loon）
- * 版本: 2026-11-05.r8
+ * 版本: 2026-11-08.r9
  * 协议: tRPC / JCE / protobuf / gzip
  * 融合: ZenmoFeiShi/Qx TxvideoAD（tRPC 破坏、JCE 裁剪、简洁模式与底栏）
  */
-const SCRIPT_VERSION = "2026-11-05.r8";
+const SCRIPT_VERSION = "2026-11-08.r9";
 console.log(`[TencentVideo] ${SCRIPT_VERSION}`);
 
 (() => {
@@ -875,20 +875,27 @@ console.log(`[TencentVideo] ${SCRIPT_VERSION}`);
     if (!out) return null;
     return gz ? gzip(out) : out;
   }
-  const VIP_TAB_TOGGLES = ["tab_vip_toggle_enable_viptab_kmm_ios", "tab_vip_toggle_enable_viptab_kmm_ipad", "tab_vip_toggle_enable_viptab_kmm_harmony"];
+  const VIP_TAB_IMPL_TOGGLES = ["tab_vip_toggle_enable_viptab_kmm_ios", "tab_vip_toggle_enable_viptab_kmm_ipad", "tab_vip_toggle_enable_viptab_kmm_harmony"];
+  const VIP_TAB_EXIST_TOGGLES = ["enable_new_home_bottom_tab", "tab_vip_toggle_enable_viptab_h5_channel_kmm_platform", "tab_vip_toggle_enable_viptab_h5_channel_refresh", "tab_vip_toggle_enable_viptab_tec_record"];
+  function vipTabToggles() {
+    const out = VIP_TAB_IMPL_TOGGLES.slice();
+    if (argEnabled("HideVipTab")) out.push.apply(out, VIP_TAB_EXIST_TOGGLES);
+    return out;
+  }
   function onTabToggle(raw) {
     let u8 = raw, gz = false;
     if (u8[0] === 0x1f && u8[1] === 0x8b) { u8 = gunzip(u8); gz = true; }
     const top = parse(u8, 0, u8.length);
     if (!top) return null;
     const edits = new Map();
+    const toggles = vipTabToggles();
     for (const x of top) {
       if (x.f !== 3 || x.w !== 2) continue;
       const ef = parse(u8, x.vs, x.e);
       if (!ef) continue;
       const kf = ef.find(z => z.f === 1 && z.w === 2);
       const key = kf ? ascii(u8, kf.vs, kf.e) : null;
-      if (!key || VIP_TAB_TOGGLES.indexOf(key) < 0) continue;
+      if (!key || toggles.indexOf(key) < 0) continue;
       const vf = ef.find(z => z.f === 2 && z.w === 2);
       if (!vf) continue;
       const sub = parse(u8, vf.vs, vf.e);
