@@ -4,8 +4,8 @@
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/tencent_video.png
 #!system = iOS,iPadOS
-#!version = 1.0.8
-#!date = 2026-11-05 20:24
+#!version = 1.0.9
+#!date = 2026-11-08 09:25
 #!loon_version = 3.5.1(983)
 #!tag = 腾讯视频
 
@@ -47,18 +47,18 @@ response if ${url} ~= /^https?:\/\/vip\.video\.qq\.com\/rpc\/rpc\/trpc\.svip_pro
 
 [Script]
 # tRPC：请求侧破坏广告函数名，响应侧清理 AdFeedInfo / GetTabListRsp / 个人中心广告
-request if ${url} ~= /^https?:\/\/(?:i|pre)\.video\.qq\.com\/(?:\?.*)?$/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/3cccc52/scripts/tools/txvideo/tencent_video_ad_clean.js?v=202611052024", {${HideShortDrama}, ${HideVipTab}, ${HideGoods}}) with tag="腾讯视频·请求拦截", requires_body=true, binary_body_mode=true
-response if ${url} ~= /^https?:\/\/(?:i|pre)\.video\.qq\.com\/(?:\?.*)?$/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/3cccc52/scripts/tools/txvideo/tencent_video_ad_clean.js?v=202611052024", {${HideShortDrama}, ${HideVipTab}, ${HideGoods}}) with tag="腾讯视频·tRPC净化", requires_body=true, binary_body_mode=true
+request if ${url} ~= /^https?:\/\/(?:i|pre)\.video\.qq\.com\/(?:\?.*)?$/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/c5359d5/scripts/tools/txvideo/tencent_video_ad_clean.js?v=202611080925", {${HideShortDrama}, ${HideVipTab}, ${HideGoods}}) with tag="腾讯视频·请求拦截", requires_body=true, binary_body_mode=true
+response if ${url} ~= /^https?:\/\/(?:i|pre)\.video\.qq\.com\/(?:\?.*)?$/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/c5359d5/scripts/tools/txvideo/tencent_video_ad_clean.js?v=202611080925", {${HideShortDrama}, ${HideVipTab}, ${HideGoods}}) with tag="腾讯视频·tRPC净化", requires_body=true, binary_body_mode=true
 
 # JCE：开屏/前贴/中插/暂停/播放提示/青少年弹窗
-response if ${url} ~= /^https?:\/\/iacc\.qq\.com\/(?:\?.*)?$/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/3cccc52/scripts/tools/txvideo/tencent_video_ad_clean.js?v=202611052024", {${HideShortDrama}, ${HideVipTab}, ${HideGoods}}) with tag="腾讯视频·JCE净化", requires_body=true, binary_body_mode=true
+response if ${url} ~= /^https?:\/\/iacc\.qq\.com\/(?:\?.*)?$/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/c5359d5/scripts/tools/txvideo/tencent_video_ad_clean.js?v=202611080925", {${HideShortDrama}, ${HideVipTab}, ${HideGoods}}) with tag="腾讯视频·JCE净化", requires_body=true, binary_body_mode=true
 
-# AB 配置：简洁模式、关闭按位置裁剪、QUIC/预解析关闭
-response if ${url} ~= /^https?:\/\/(?:config|tconfig)\.ab\.qq\.com\/tab\/GetTabRemoteConfig/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/3cccc52/scripts/tools/txvideo/tencent_video_ad_clean.js?v=202611052024", {${HideShortDrama}, ${HideVipTab}, ${HideGoods}}) with tag="腾讯视频·简洁模式", requires_body=true, binary_body_mode=true
-response if ${url} ~= /^https?:\/\/tab\.video\.qq\.com\/tab\/GetTabRemoteConfig/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/3cccc52/scripts/tools/txvideo/tencent_video_ad_clean.js?v=202611052024", {${HideShortDrama}, ${HideVipTab}, ${HideGoods}}) with tag="腾讯视频·播放器配置", requires_body=true, binary_body_mode=true
+# AB 配置：简洁模式、底栏裁剪、VIP tab 关闭、QUIC/预解析关闭
+response if ${url} ~= /^https?:\/\/(?:config|tconfig)\.ab\.qq\.com\/tab\/GetTab(?:RemoteConfig|Toggle)/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/c5359d5/scripts/tools/txvideo/tencent_video_ad_clean.js?v=202611080925", {${HideShortDrama}, ${HideVipTab}, ${HideGoods}}) with tag="腾讯视频·简洁模式", requires_body=true, binary_body_mode=true
+response if ${url} ~= /^https?:\/\/tab\.video\.qq\.com\/tab\/GetTabRemoteConfig/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/c5359d5/scripts/tools/txvideo/tencent_video_ad_clean.js?v=202611080925", {${HideShortDrama}, ${HideVipTab}, ${HideGoods}}) with tag="腾讯视频·播放器配置", requires_body=true, binary_body_mode=true
 
 # RDelivery 灰度：tab_gray 置 false
-response if ${url} ~= /^https?:\/\/rdelivery\.qq\.com\/v1\/sdkconfig\/get/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/3cccc52/scripts/tools/txvideo/tencent_video_ad_clean.js?v=202611052024", {${HideShortDrama}, ${HideVipTab}, ${HideGoods}}) with tag="腾讯视频·灰度开关", requires_body=true, binary_body_mode=true
+response if ${url} ~= /^https?:\/\/rdelivery\.qq\.com\/v1\/sdkconfig\/get/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/c5359d5/scripts/tools/txvideo/tencent_video_ad_clean.js?v=202611080925", {${HideShortDrama}, ${HideVipTab}, ${HideGoods}}) with tag="腾讯视频·灰度开关", requires_body=true, binary_body_mode=true
 
 [MITM]
 hostname = i.video.qq.com, pre.video.qq.com, iacc.qq.com, config.ab.qq.com, tconfig.ab.qq.com, tab.video.qq.com, rdelivery.qq.com, vip.video.qq.com
