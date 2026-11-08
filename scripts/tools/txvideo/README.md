@@ -10,6 +10,7 @@
 - **GDT 广告联盟与遥测**：`DOMAIN-SUFFIX,gdt.qq.com` 直拒；`p.l.qq.com`、`dp3.qq.com`、`otheve.beacon.qq.com` 直拒。
 - **前贴/广告服务器**：IPA 标记为 `prerollAdDomain` 的 `lives.l.qq.com` 与 `adServerDomain` 的 `news.l.qq.com` 直拒。
 - **去底栏与简洁模式**：`simple_mode_config` 启用 `tab_bar_cut_enable=1`，`tab_bar_cut_whitelist` 按开关动态计算（底栏 5 位：0=首页、1=短剧、2=VIP会员、3=好物、4=我的；QX 的 `0;2;4` 即隐藏 1/3）。同时保留 `GetTabListRsp` 的 key 字节匹配兜底，不重写剩余字段。
+- **VIP 会员底栏**：`config.ab.qq.com/tab/GetTabToggle` 中 `tab_vip_toggle_enable_viptab_kmm_ios`（及 ipad/harmony 变体）置 0，关闭 KMM 底栏的 VIP 会员 tab。
 - **播放页 SVIP/特惠/升级按钮**：MITM `vip.video.qq.com`，将 `rpc/trpc.vip_ad_promotion.accessor.Accessor/Access`、`SvipPriceLogic/GetSvipPrices`、`GetVipUpdateInfos` 响应分别改写为空广告位、空价格表、空升级信息。
 - **预鉴权 VIP 推广按钮**：`VideoPreAuthService` 响应内 `PayBgGradientTitleBtn`（`开通SVIP` / `升级SVIP` 按钮，`ptag=ad.page.detail.vipbtn`）按 `right_top` / `right` 位置整体删除，保留 `PayText` 说明文字与重播/退出按钮。
 - **详情页 VIP 营销卡片**：`VideoDetailService` 响应内 `vip_bar_section` 区块（含 `VIPActivityEntry`）整体删除，移除视频下方随视频变化的 SVIP/营销条。

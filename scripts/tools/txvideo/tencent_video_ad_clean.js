@@ -1,10 +1,10 @@
 /**
  * 腾讯视频 · 全量广告净化（Loon）
- * 版本: 2026-11-05.r7
+ * 版本: 2026-11-05.r8
  * 协议: tRPC / JCE / protobuf / gzip
  * 融合: ZenmoFeiShi/Qx TxvideoAD（tRPC 破坏、JCE 裁剪、简洁模式与底栏）
  */
-const SCRIPT_VERSION = "2026-11-05.r7";
+const SCRIPT_VERSION = "2026-11-05.r8";
 console.log(`[TencentVideo] ${SCRIPT_VERSION}`);
 
 (() => {
@@ -875,6 +875,39 @@ console.log(`[TencentVideo] ${SCRIPT_VERSION}`);
     if (!out) return null;
     return gz ? gzip(out) : out;
   }
+  const VIP_TAB_TOGGLES = ["tab_vip_toggle_enable_viptab_kmm_ios", "tab_vip_toggle_enable_viptab_kmm_ipad", "tab_vip_toggle_enable_viptab_kmm_harmony"];
+  function onTabToggle(raw) {
+    let u8 = raw, gz = false;
+    if (u8[0] === 0x1f && u8[1] === 0x8b) { u8 = gunzip(u8); gz = true; }
+    const top = parse(u8, 0, u8.length);
+    if (!top) return null;
+    const edits = new Map();
+    for (const x of top) {
+      if (x.f !== 3 || x.w !== 2) continue;
+      const ef = parse(u8, x.vs, x.e);
+      if (!ef) continue;
+      const kf = ef.find(z => z.f === 1 && z.w === 2);
+      const key = kf ? ascii(u8, kf.vs, kf.e) : null;
+      if (!key || VIP_TAB_TOGGLES.indexOf(key) < 0) continue;
+      const vf = ef.find(z => z.f === 2 && z.w === 2);
+      if (!vf) continue;
+      const sub = parse(u8, vf.vs, vf.e);
+      if (!sub) continue;
+      const val = sub.find(z => z.f === 2 && z.w === 0);
+      if (!val || val.v === 0) continue;
+      const vm = new Map();
+      vm.set(val, concat([ev(16), ev(0)]));
+      const nv = rebuild(u8, vf.vs, vf.e, sub, vm);
+      if (!nv) continue;
+      const em = new Map();
+      em.set(vf, lenField(2, nv));
+      const ne = rebuild(u8, x.vs, x.e, ef, em);
+      if (ne) edits.set(x, lenField(3, ne));
+    }
+    if (!edits.size) return null;
+    const out = rebuild(u8, 0, u8.length, top, edits);
+    return gz ? gzip(out) : out;
+  }
 
   function main() {
     const url = $request.url || "", host = (url.split("/")[2] || "").split(":")[0];
@@ -975,6 +1008,11 @@ console.log(`[TencentVideo] ${SCRIPT_VERSION}`);
       }
       if ((host === "config.ab.qq.com" || host === "tconfig.ab.qq.com" || host === "tab.video.qq.com") && url.split("?")[0].endsWith("/tab/GetTabRemoteConfig")) {
         const r = b && b.length ? onAbConfig(b) : null;
+        $done(r ? binaryResult(r, $response.headers, inputGzip) : {});
+        return;
+      }
+      if ((host === "config.ab.qq.com" || host === "tconfig.ab.qq.com") && url.split("?")[0].endsWith("/tab/GetTabToggle")) {
+        const r = b && b.length ? onTabToggle(b) : null;
         $done(r ? binaryResult(r, $response.headers, inputGzip) : {});
         return;
       }
