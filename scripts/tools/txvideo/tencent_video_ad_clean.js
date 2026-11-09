@@ -1,14 +1,14 @@
 /**
  * 腾讯视频 · 全量广告净化（Loon）
- * 版本: 2026-11-08.r9
+ * 版本: 2026-11-09.r10
  * 协议: tRPC / JCE / protobuf / gzip
  * 融合: ZenmoFeiShi/Qx TxvideoAD（tRPC 破坏、JCE 裁剪、简洁模式与底栏）
  */
-const SCRIPT_VERSION = "2026-11-08.r9";
+const SCRIPT_VERSION = "2026-11-09.r10";
 console.log(`[TencentVideo] ${SCRIPT_VERSION}`);
 
 (() => {
-  const ARG_DEFAULTS = { HideShortDrama: true, HideVipTab: true, HideGoods: true };
+  const ARG_DEFAULTS = { HideShortDrama: true, HideVipTab: false, HideGoods: true };
   function readArguments() {
     if (typeof $argument === "object" && $argument !== null) return $argument;
     if (typeof $argument === "string" && $argument.trim()) {
