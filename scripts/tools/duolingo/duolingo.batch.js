@@ -29,7 +29,7 @@ if (typeof $response === "undefined" || !$response.body) {
         var now = Math.floor(Date.now() / 1000);
         var expire = now + 10 * 365 * 24 * 3600;
         var uid = innerBody.id || 0;
-        var productId = "com.duolingo.DuolingoMobile.subscription.Premium.TwelveMonth.26Q2RtrExtFTFam30D.Trial30.120";
+        var productId = "com.duolingo.DuolingoMobile.subscription.Premium.TwelveMonth.26Q2RtrExtFTFam30D.Trial30.144";
 
         var shopMaxSub = {
           "purchaseId": "duo-premium-injected",
@@ -40,6 +40,13 @@ if (typeof $response === "undefined" || !$response.body) {
           "expectedExpirationDate": expire,
           "id": "premium_subscription",
           "xpBoostMultiplier": 1.0,
+          "familyPlanInfo": {
+            "ownerId": uid,
+            "secondaryMembers": [],
+            "inviteToken": "",
+            "pendingInvites": [],
+            "pendingInviteSuggestions": []
+          },
           "subscriptionInfo": {
             "currency": "USD",
             "expectedExpiration": expire,
@@ -52,7 +59,7 @@ if (typeof $response === "undefined" || !$response.body) {
             "promotionalOfferId": "",
             "renewer": "VENDOR_APP_STORE",
             "renewing": true,
-            "renewingIsFamilyPlan": false,
+            "renewingIsFamilyPlan": true,
             "renewingProductId": null,
             "renewingType": "premium",
             "tier": "twelve_month",
