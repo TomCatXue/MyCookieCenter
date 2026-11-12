@@ -29,7 +29,7 @@ ql repo https://github.com/TomCatXue/MyCookieCenter.git "ql_script" "" "README" 
 | [`telecom_midnight_equity.py`](./telecom_midnight_equity.py) | **电信秒杀** | `58 23 * * *`<br>(每天 23:58) | **中国电信** | **`dxlin`** | 毫秒级多线程并发抢兑每月等级专属特权（话费券/视频月卡等），当月抢中后自动休眠，未抢中每天持续抢购。 |
 | [`unicom_daily.py`](./unicom_daily.py) | **中国联通** | `30 10 * * *`<br>(每天 10:30) | **中国联通** | **`chinaUnicom_data`** | 首页签到红包 + 联通爱听赚积分 + 天天领现金 + 权益超市福利 + 沃云手机签到 + 通通乡村能量与安全管家。 |
 | [`weread.js`](./weread.js) | **微信读书** | `0 23 * * *`<br>(每天 23:00) | **微信读书** | **`WEREAD_AUTH`** | 每日阅读时长领卡 + 周二翻牌抽奖 + 周五限免图书入架。内置纯 JS S-box 逆向签名引擎，长效脱机自愈换票。 |
-| [`migu_music.js`](./migu_music.js) | **咪咕音乐** | `0 8 * * *`<br>(每天 08:00) | **咪咕音乐** | **`migu_data`** | 每日签到 + 社区入口 + 听歌领 AI 豆 + 歌曲评论（默认从 10 句诗句随机取一句）。默认全开，仅彩铃设置默认关闭。 |
+| [`migu_music.js`](./migu_music.js) | **咪咕音乐** | `0 8 * * *`<br>(每天 08:00) | **咪咕音乐** | **`MIGU_AUTH`** | 每日签到 + 社区入口 + 听歌领 AI 豆 + 歌曲评论（默认从 10 句诗句随机取一句）。默认全开，仅彩铃设置默认关闭。 |
 | [`linli.py`](./linli.py) | **林里** | `10 10 * * *`<br>(每天 10:10) | **微信小程序** | **`YYB_SERVER`**<br>+ `LINLI_STORE_ID`<br>+ `LINLI_ACTIVITY_ID` | YYB 取码 → 企迈静默登录 → 林里签到。门店和签到活动是企迈业务参数，取码不能替代；需从签到页请求中抓取一次。 |
 | [`bibisheng.py`](./bibisheng.py) | **笔笔省** | `30 7 * * *`<br>(每天 07:30) | **微信小程序** | **`YYB_SERVER`** | YYB 取码 → `jscode` 会话 → 天天领券列表 → 领取每日免费券。 |
 | [`miniso.py`](./miniso.py) | **名创优品** | `30 8 * * *`<br>(每天 08:30) | **微信小程序** | **`YYB_SERVER`** | YYB 取码 → AES 登录 → skey 缓存 → 每日签到与 mini 币差值。 |
@@ -41,7 +41,7 @@ ql repo https://github.com/TomCatXue/MyCookieCenter.git "ql_script" "" "README" 
 青龙专版只需配置一个账号密码环境变量：
 
 ```text
-migu_data = 手机号@密码
+MIGU_AUTH = 手机号@密码
 ```
 
 - 多账号每行一条或用 `&` 分隔；密码含 `&` 或 `@` 时改用 JSON：`[{"phone":"138...","password":"..."}]`。

@@ -6,7 +6,7 @@
  * new Env('咪咕音乐')
  *
  * 青龙专版：环境变量只需填一个账号密码
- *   migu_data = 手机号@密码
+ *   MIGU_AUTH = 手机号@密码
  *   （多账号可用换行或 & 分隔，密码含 & / @ 时用 JSON 数组）
  * 默认全开（签到/社区/听歌/评论），仅「设置彩铃」默认关闭；
  * 评论正文默认从 10 句诗句中每次随机取一句。
@@ -14,7 +14,7 @@
 /**
  * 脚本名称：咪咕音乐签到
  * 活动规则：咪咕音乐 AI豆中心：每日签到、社区入口、歌曲评论、彩铃、听歌领 AI豆
- * 脚本说明：账号由 boxjs migu_data 提供（手机号@密码），脚本按官方网页登录链路
+ * 脚本说明：账号由环境变量 MIGU_AUTH 提供（手机号@密码），脚本按官方网页登录链路
  *          passport.migu.cn（RSA 加密手机号/密码）→ c.musicapp.migu.cn 换 pacmtoken → 用户资料，
  *          再用 uid/手机号/本机出口 IP/deviceId 生成安卓 8.9.5 原生 ce，逐账号缓存复用。
  *          日常任务走同账号 H5 接口；原生接口按 V005 现场签名（请求路径+ce+13位时间戳+请求体）。
@@ -22,7 +22,7 @@
  *          听歌开启后按 MP3 实际时长真实计时、每 10 秒上报一次并独立核对服务端增量；
  *          评论与彩铃是真实副作用（公开评论/改变本人铃音），彩铃默认关闭。
  * 配置说明：boxjs「咪咕音乐签到」中：
- *          - migu_data          手机号@密码，多个用 & 或换行分隔；密码含 & / @ 时用 JSON：[{"phone":"138...","password":"..."}]
+ *          - MIGU_AUTH         手机号@密码，多个用 & 或换行分隔；密码含 & / @ 时用 JSON：[{"phone":"138...","password":"..."}]
  *          - migu_listen        默认 true：真实计时听歌上报（需能取到音频二进制，Node / Quantumult X 可解析 MP3）
  *          - migu_listen_seconds 本次最多实播秒数，默认 1800（1..1800），全部档位达标提前结束
  *          - migu_comment       默认 true：公开发一条歌曲评论（每天最多一条）；歌曲自动从「咪咕尖叫榜·全网热歌榜」公开接口读取（取带 songId 的条目、优先非 VIP）
@@ -51,9 +51,7 @@ cron "0 8 * * *" script-path=https://raw.githubusercontent.com/jy0703/scripts/ma
  */
 
 const $ = new Env('咪咕音乐');
-$.Messages = [];   // 通知正文：只放成功项
 $.daidaiTasks = [];
-$.Subtitle = [];   // 通知副标题：登录失效/任务失败
 
 // ---- 业务常量（照 py 源码逐一搬运） ----
 const API_ORIGIN = 'https://app.c.nf.migu.cn';
@@ -438,12 +436,12 @@ function debugLog(content, title) {
 // ---- 账号与缓存 ----
 
 function loadAccounts() {
-    const raw = String(getEnv('migu_data') || '').trim();
+    const raw = String(getEnv('MIGU_AUTH', 'migu_data') || '').trim();
     if (!raw) return [];
     let list = [];
     if (raw.charAt(0) === '[') {
         const arr = $.toObj(raw, null);
-        if (!Array.isArray(arr)) throw new MiguError('migu_data 不是有效 JSON 数组');
+        if (!Array.isArray(arr)) throw new MiguError('MIGU_AUTH 不是有效 JSON 数组');
         list = arr.map(function (x) { return { phone: String(x.phone || '').trim(), password: String(x.password || '') }; });
     } else {
         raw.split(/[\n\r&]+/).forEach(function (item) {
@@ -1537,42 +1535,40 @@ async function runAccount(account, index) {
     $.log('只读核验：听歌 ' + secText(info.ms) + '，任务 ' + info.taskCount + ' 项，AI豆 ' + info.balance);
 
     const lines = [];
-    const fail = function (name, e) {
-        $.log('❌ ' + name + '：' + e.message);
-        $.Subtitle.push('❌ ' + maskPhone(account.phone) + ' ' + name + '：' + e.message);
-    };
+    const ok = function (name, text) { lines.push('• ' + name + ': ' + text); };
+    const fail = function (name, e) { $.log('❌ ' + name + '：' + e.message); lines.push('• ' + name + ': ' + e.message); };
 
-    try { lines.push('✅ 签到: ' + await client.sign()); } catch (e) { fail('签到', e); }
-    try { lines.push('✅ 社区: ' + await client.community()); } catch (e) { fail('社区', e); }
+    try { ok('签到', await client.sign()); } catch (e) { fail('签到', e); }
+    try { ok('社区', await client.community()); } catch (e) { fail('社区', e); }
 
     if ($.commentOn) {
         try {
             const pool = await fetchRankSongs();
             $.log('已从咪咕尖叫榜·全网热歌榜取到 ' + pool.length + ' 首可评论歌曲');
-            lines.push('✅ 评论: ' + await client.publishComment($.commentList, pool));
+            ok('评论', await client.publishComment($.commentList, pool));
         } catch (e) { fail('评论', e); }
     }
 
-    try {
-        await client.ringtoneCheck();
-        if ($.ringtoneOn) {
+    if ($.ringtoneOn) {
+        try {
+            await client.ringtoneCheck();
             const title = await client.setDailyRingtone(journal);
-            if (title) lines.push('✅ 彩铃: 已设置「' + title + '」');
-        }
-    } catch (e) { fail('彩铃', e); }
+            if (title) ok('彩铃', '已设置「' + title + '」');
+        } catch (e) { fail('彩铃', e); }
+    }
 
     try {
         if ($.listenOn) {
             const r = await client.listen($.seconds);
             const claimed = claimText(r.claimed);
             if (r.skipped) {
-                lines.push('✅ 听歌: 已达标，跳过播放' + claimed);
+                ok('听歌', '已达标，跳过播放' + claimed);
             } else {
-                lines.push('✅ 听歌: 实播 ' + secText(r.added) + '，服务端 ' + secText(r.after) + claimed);
+                ok('听歌', '实播 ' + secText(r.added) + '，服务端 ' + secText(r.after) + claimed);
             }
         } else {
             const claimed = await client.claimListening();
-            lines.push('✅ 听歌:' + (claimed.length ? claimText(claimed) : ' 无待领档位'));
+            ok('听歌', claimed.length ? claimText(claimed) : '无待领档位');
         }
     } catch (e) { fail('听歌', e); }
 
@@ -1580,11 +1576,11 @@ async function runAccount(account, index) {
         const afterBalance = await client.balance();
         const delta = afterBalance - info.balance;
         const sign = delta >= 0 ? '+' : '';
-        lines.push('✅ AI豆: ' + info.balance + ' → ' + afterBalance + '（' + sign + delta + '）');
+        ok('AI豆', info.balance + ' → ' + afterBalance + '（' + sign + delta + '）');
         $.log('AI豆：' + info.balance + ' → ' + afterBalance + '（' + sign + delta + '）');
     } catch (e) { fail('AI豆', e); }
 
-    return { label: label, lines: lines };
+    return { mask: maskPhone(account.phone), lines: lines };
 }
 
 // ---- 通知 ----
@@ -1675,18 +1671,18 @@ function getEnv() {
     return '';
 }
 
-async function sendMsg(message, subtitle) {
+async function sendMsg(subtitle, message) {
     if (!message && !subtitle) return;
     try {
         if ($.isNode()) {
             let notify;
             try { notify = require('./sendNotify'); } catch (e) { notify = require('./utils/sendNotify'); }
-            await notify.sendNotify($.name, [subtitle, message].filter(Boolean).join('\n'));
+            await notify.sendNotify($.name, [subtitle, message].filter(Boolean).join('\n\n'));
         } else {
             $.msg($.name, subtitle || '', message || '');
         }
     } catch (e) {
-        $.log('\n' + [subtitle, message].filter(Boolean).join('\n'));
+        $.log('\n' + [subtitle, message].filter(Boolean).join('\n\n'));
     }
 }
 
@@ -1702,28 +1698,34 @@ async function sendMsg(message, subtitle) {
     if (!(($.seconds >= 1 && $.seconds <= 1800))) throw new MiguError('migu_listen_seconds 需在 1..1800');
 
     const accounts = loadAccounts();
-    if (!accounts.length) throw new MiguError('未找到 migu_data 变量，请填写 手机号@密码 ❌');
+    if (!accounts.length) throw new MiguError('未找到 MIGU_AUTH 变量，请填写 手机号@密码 ❌');
 
     $.log('共 ' + accounts.length + ' 个账号；听歌' + ($.listenOn ? '开启' : '关闭') +
         '，评论' + ($.commentOn ? '开启' : '关闭') + '，彩铃设置' + ($.ringtoneOn ? '开启' : '关闭'));
+    const summary = [];
     for (let i = 0; i < accounts.length; i++) {
         try {
             const result = await runAccount(accounts[i], i + 1);
-            if (result.lines.length) $.Messages.push('🔹 ' + result.label + '\n' + result.lines.join('\n'));
+            if (result.lines.length) {
+                summary.push(accounts.length > 1
+                    ? '【账号 ' + (i + 1) + ': ' + result.mask + '】\n' + result.lines.join('\n')
+                    : result.lines.join('\n'));
+            }
         } catch (e) {
             $.log('账号 ' + maskPhone(accounts[i].phone) + ' 停止：' + e.message);
-            $.Subtitle.push('❌ ' + maskPhone(accounts[i].phone) + '：' + e.message);
+            summary.push((accounts.length > 1 ? '【账号 ' + (i + 1) + ': ' + maskPhone(accounts[i].phone) + '】\n' : '') +
+                '• 执行失败: ' + e.message);
         }
+    }
+    if (summary.length) {
+        const subtitle = accounts.length === 1 ? '执行完成 (1个账号)' : '执行完成 (' + accounts.length + '个账号)';
+        await sendMsg(subtitle, summary.join('\n\n'));
     }
 })()
     .catch(function (e) {
         $.logErr(e);
-        $.Subtitle.push('❌ ' + (e.message || e));
     })
     .finally(async function () {
-        if ($.Messages.length || $.Subtitle.length) {
-            await sendMsg($.Messages.join('\n\n'), $.Subtitle.join('\n'));
-        }
         // 抓包即时推送是异步 POST：必须等它落地再 $.done()，Loon/Surge 在 $done() 后会丢弃未完成请求
         if ($.daidaiTasks && $.daidaiTasks.length) await Promise.all($.daidaiTasks);
         $.isNode() || $.done();

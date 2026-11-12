@@ -58,13 +58,13 @@ ql repo https://github.com/TomCatXue/MyCookieCenter.git "ql_script" "" "README" 
 | <img src="./icons/linli.png" height="16" /> | **林里** | 取码并签到 | `YYB_SERVER` |
 | <img src="./icons/bibisheng.png" height="16" /> | **笔笔省** | 每日领券 | `YYB_SERVER` |
 | <img src="./icons/miniso.png" height="16" /> | **名创优品** | 每日签到 | `YYB_SERVER` |
-| <img src="./icons/migu.png" height="16" /> | **咪咕音乐** | 签到、听歌与评论领 AI 豆 | `migu_data` |
+| <img src="./icons/migu.png" height="16" /> | **咪咕音乐** | 签到、听歌与评论领 AI 豆 | `MIGU_AUTH` |
 
 > **变量说明：**
 >
 > - `dxlin` 格式：`手机号#服务密码#AndroidID[#SessionKey]`，多账号换行或 `&` 分隔；
 > - `WEREAD_AUTH`：微信读书抓包 JSON，含 `refreshToken` 永久脱机自愈；
-> - `migu_data` 格式：`手机号@密码`，多账号换行或 `&` 分隔；默认全开（签到/社区/听歌/评论），仅彩铃设置默认关闭；
+> - `MIGU_AUTH` 格式：`手机号@密码`，多账号换行或 `&` 分隔；默认全开（签到/社区/听歌/评论），仅彩铃设置默认关闭；
 > - `YYB_SERVER`：YYB-Go-Enhanced 取码服务，格式 `地址@账号ID`，每行一个账号；林里另需 `LINLI_STORE_ID`、`LINLI_ACTIVITY_ID`，详见 [ql_script/README.md](./ql_script/README.md)。
 
 > **验证状态：** 小程序脚本已通过本地契约与 HTTP mock；真实平台仍需账号实测。
