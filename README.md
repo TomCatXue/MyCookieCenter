@@ -33,8 +33,11 @@ Loon 负责无感捕获与即时同步，呆呆面板 / 青龙面板负责脱机
 | <img src="icons/telegram.png" height="16" /> | **Telegram 增强** | 优质 IP 调度防转圈、外部 t.me 链接跳转客户端 (chaoscard 原作) | <nobr><a href="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/loon/Telegram.plugin"><strong>安装</strong></a>&nbsp;/&nbsp;<a href="./scripts/tools/telegram/"><strong>说明</strong></a></nobr> |
 | <img src="icons/youtube.png" height="16" /> | **YouTube去广告** | 移除广告 · 解锁画质/精彩跳转/通勤 · 内置画中画与后台播放 · 字幕机翻 | <nobr><a href="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/loon/YouTube_Ad.plugin"><strong>安装</strong></a>&nbsp;/&nbsp;<a href="./loon/YouTube_Ad.plugin"><strong>说明</strong></a></nobr> |
 | <img src="icons/tencent_video.png" height="16" /> | **腾讯视频** | 全量去广告 · 暂停/后贴/锚点/激励 · 短剧/VIP/好物底栏独立开关 | <nobr><a href="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/loon/TencentVideo.plugin"><strong>安装</strong></a>&nbsp;/&nbsp;<a href="./scripts/tools/txvideo/"><strong>说明</strong></a></nobr> |
+| <img src="icons/testflight.png" height="16" /> | **TestFlight 中转** | 跟随上游脚本 · 多账号索引合并 · 详情缓存 | <nobr><a href="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/loon/TestFlightRelay.plugin"><strong>安装</strong></a>&nbsp;/&nbsp;<a href="./scripts/tools/testflight-relay/"><strong>说明</strong></a></nobr> |
 
 > `DaiDaiPanel.plugin` 的开关默认开启，可单独关闭不需要的业务；微信读书要先打开「我」的页面，再打开「周二翻牌」页面才能捕获完整凭据。
+
+> **TestFlight 中转**：请求本地应答 `http://tf-relay.test`、多账号索引合并与详情缓存，并每 5 分钟自动续期会话；脚本运行时跟随 [ScriptingApp 原版](https://github.com/ScriptingApp/Community-Scripts) 并自动修补 Loon 兼容层，要求 Loon `>= 3.5.1 (983)`。多账号中转可能违反 Apple 服务条款，账号风险由使用者自行承担。详见 [`scripts/tools/testflight-relay/`](./scripts/tools/testflight-relay/)。
 
 > `camscanner.plugin` 与 `DaiDaiPanel.plugin` 含相同抓取规则，只保留一个即可。
 
@@ -55,11 +58,13 @@ ql repo https://github.com/TomCatXue/MyCookieCenter.git "ql_script" "" "README" 
 | <img src="./icons/linli.png" height="16" /> | **林里** | 取码并签到 | `YYB_SERVER` |
 | <img src="./icons/bibisheng.png" height="16" /> | **笔笔省** | 每日领券 | `YYB_SERVER` |
 | <img src="./icons/miniso.png" height="16" /> | **名创优品** | 每日签到 | `YYB_SERVER` |
+| <img src="./icons/migu.png" height="16" /> | **咪咕音乐** | 签到、听歌与评论领 AI 豆 | `migu_data` |
 
 > **变量说明：**
 >
 > - `dxlin` 格式：`手机号#服务密码#AndroidID[#SessionKey]`，多账号换行或 `&` 分隔；
 > - `WEREAD_AUTH`：微信读书抓包 JSON，含 `refreshToken` 永久脱机自愈；
+> - `migu_data` 格式：`手机号@密码`，多账号换行或 `&` 分隔；默认全开（签到/社区/听歌/评论），仅彩铃设置默认关闭；
 > - `YYB_SERVER`：YYB-Go-Enhanced 取码服务，格式 `地址@账号ID`，每行一个账号；林里另需 `LINLI_STORE_ID`、`LINLI_ACTIVITY_ID`，详见 [ql_script/README.md](./ql_script/README.md)。
 
 > **验证状态：** 小程序脚本已通过本地契约与 HTTP mock；真实平台仍需账号实测。
