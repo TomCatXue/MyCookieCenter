@@ -1,17 +1,17 @@
 #!name = 多邻国 𝕏
-#!desc = 多邻国会员功能解锁（Super / Max）
+#!desc = 多邻国会员功能解锁（Gold 家庭套餐）
 #!openUrl = https://apps.apple.com/app/id570060128
 #!author = j4gm4g (原作) / TomCatXue (修复)
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/df/0c/5f/df0c5f65-4c7c-8680-79f3-510ba742364a/AppIcon-0-0-1x_U007epad-0-1-85-220.png/460x0w.webp
 #!tag = 多邻国,Duolingo,会员,解锁
-#!version = 2.0.2
-#!date = 2026-11-12 22:51
+#!version = 2.0.3
+#!date = 2026-11-12 22:56
 
 [Script]
-http-response ^https?:\/\/(?:ios-api-[^.]+|api[^.]+)\.duolingo\.[a-z.]+\/.*\/users\/.*\?fields=subscriberLevel script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/duolingo/duolingo.level.js?v=20261112, requires-body=true, timeout=60, tag=订购等级
+http-response ^https?:\/\/(?:ios-api-[^.]+|api[^.]+)\.duolingo\.[a-z.]+\/.*\/users\/.*\?fields=subscriberLevel script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/duolingo/duolingo.level.js?v=20261112c, requires-body=true, timeout=60, tag=订购等级
 http-response ^https?:\/\/(?:ios-api-[^.]+|api[^.]+)\.duolingo\.[a-z.]+\/.*\/users\/.*\/(?:available-features|advertisable-features).*$ script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/duolingo/duolingo.features.js?v=20261112, requires-body=true, timeout=60, tag=订购配置
-http-response ^https?:\/\/(?:ios-api-[^.]+|api[^.]+)\.duolingo\.[a-z.]+\/\d{4}-\d{1,2}-\d{1,2}\/batch script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/duolingo/duolingo.batch.js?v=20261112, requires-body=true, timeout=60, tag=订购信息
+http-response ^https?:\/\/(?:ios-api-[^.]+|api[^.]+)\.duolingo\.[a-z.]+\/\d{4}-\d{1,2}-\d{1,2}\/batch script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/duolingo/duolingo.batch.js?v=20261112c, requires-body=true, timeout=60, tag=订购信息
 
 [MITM]
 hostname = ios-api-*.duolingo.*, api*.duolingo.*
