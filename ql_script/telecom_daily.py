@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 ===================================================================
-📌 版本: v2.1.1 (2026-10-17 修复 C005 信封参数污染 + 完善 YYB 与 Ticket 换票诊断)
+📌 版本: v2.2.1 (2026-11-12 接入我的奖券·天天有礼大转盘)
 中国电信 · 每日任务聚合脚本 (单一脚本统一管理全系电信业务)
 ===================================================================
 new Env('中国电信');
@@ -14,6 +14,7 @@ tag: 中国电信
 
 功能矩阵：
   1. 每日签到与金豆：掌厅打卡 + 阶梯连签奖励 + 金豆转盘 + 浏览任务 + 宠物喂食 + 金豆核验
+     + 我的奖券·天天有礼大转盘（每天 3 次，20 金豆/次）
   2. 会员双抽奖：山西甄选周三会员日 (hd76690472, 全周检测) + 山西抽奖新-每周三次 (hd92859166, 全周有效)
   3. 权益商城幸运抽奖：读取真实活动配置 + 走可达抽奖引擎真实抽奖并回显奖品
   4. 权益包自动领取：双通道扫描待领权益 → 真实领取 → 轮询确认到账
@@ -76,6 +77,8 @@ CONFIG = {
     "ENABLE_WEEKLY_THRICE": True,   # 每周三次抽奖 (★全周有效，按周累计3次机会)
     "ENABLE_LUCKY_DRAW": True,      # 权益商城幸运抽奖 (每天执行)
     "ENABLE_AUTO_CLAIM": True,      # 权益包自动领取 (每天执行)
+    "ENABLE_WELFARE_WHEEL": True,   # 我的奖券·天天有礼大转盘 (每天3次，20金豆/次)
+    "WELFARE_WHEEL_MAX_DRAWS": 3,   # 单次运行最大抽奖次数 (服务端每日上限3次)
     "ENABLE_AI_PAD": True,          # AI奇遇赢Pad (每天执行)
     "AI_PAD_MODE": "draw",          # AI奇遇策略: "draw"(全抽奖, 话费换完了推荐) / "auto"(优先兑话费,缺货转抽奖) / "save"(只攒分不抽奖)
     "AI_PAD_MAX_DRAWS": 25,         # 单次运行最大抽奖次数上限 (每20点抽1次，防止超长循环)
@@ -97,7 +100,7 @@ CONFIG = {
     "UA": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 MicroMessenger/8.0.38(0x1800262c) NetType/WIFI Language/zh_CN"
 }
 
-SCRIPT_VERSION = "v2.2.0"
+SCRIPT_VERSION = "v2.2.1"
 
 # ==================== 🌐 翼支付网关生产环境常量 ====================
 BESTPAY_H5_BASE = "https://mapi-h5.bestpay.com.cn"
@@ -107,6 +110,14 @@ BESTPAY_WX_SECRET = "aad694264fcb9411fdd887e0c988156b"
 EQUITY_MALL_AGREE_ID = "20211223030100213484984697094168"
 TELECOM_MEMBER_AGREE_ID = "20200827030100038416476813657090"
 AUTH_AGREE_ID = "20200914030100044906094048314418"
+
+# ==================== 🎡 我的奖券·天天有礼大转盘 ====================
+# 页面: https://wapact.189.cn:9001/flcj1/
+# 登录: POST /yzf1/dispatch/login  {appType:"02", authCode:<ticket>, loginType:"1"}
+# 说明: 页面 Axios 层只加 userId/sessionKey；zgk12BhG 为瑞数动态头，
+#       2026-11-12 实测服务端未强制校验，脚本无需复现。
+WELFARE_API_BASE = "https://wapact.189.cn:9001/yzf1"
+WELFARE_REFERER = "https://wapact.189.cn:9001/flcj1/"
 
 # ==================== 🤖 AI奇遇赢Pad 活动常量 ====================
 CHANNEL_ID = "156000009079"
@@ -345,6 +356,57 @@ def get_cached_session_key(phone: str) -> str:
     return str(rec.get('session_key') or '').strip()
 
 
+def fetch_sso_ticket(sess: requests.Session, phone: str, login_user_id: str,
+                     app_token: str, m_phone: str = "") -> str:
+    """用已登录的 app token 签发一枚新的 SSO Ticket（不重复登录）。
+
+    0716 登录后的 app token 可再次调用 map/clientXML 换票。奖券大转盘在
+    其它任务之后执行，旧 Ticket 可能已被消费，因此需要时重新签发，避免
+    复用失效票据影响奖券会话。
+    """
+    phone = str(phone or '').strip()
+    login_user_id = str(login_user_id or '').strip()
+    app_token = str(app_token or '').strip()
+    if not (phone and login_user_id and app_token):
+        return ""
+
+    xml_data = f'''<Request>
+        <HeaderInfos>
+            <Code>getSingle</Code>
+            <Timestamp>{ts()}</Timestamp>
+            <BroadAccount></BroadAccount>
+            <BroadToken></BroadToken>
+            <ClientType>#9.6.1#channel50#iPhone 14 Pro Max#</ClientType>
+            <ShopId>20002</ShopId>
+            <Source>110003</Source>
+            <SourcePassword>Sid98s</SourcePassword>
+            <Token>{app_token}</Token>
+            <UserLoginName>{phone}</UserLoginName>
+        </HeaderInfos>
+        <Content>
+            <Attach>test</Attach>
+            <FieldData>
+                <TargetId>{encrypt_des3(login_user_id)}</TargetId>
+                <Url>4a6862274835b451</Url>
+            </FieldData>
+        </Content>
+    </Request>'''
+
+    xml_res = api_req(sess, 'https://appgologin.189.cn:9031/map/clientXML',
+                      data=xml_data.encode('utf-8'),
+                      headers={'Content-Type': 'application/xml'}, raw=True)
+    if '<Ticket>' not in str(xml_res):
+        log(f"❌ [换取Ticket失败] {m_phone}: 响应未包含有效 Ticket 节点")
+        return ""
+
+    try:
+        raw_ticket = str(xml_res).split('<Ticket>')[1].split('</Ticket>')[0]
+        return encrypt_des3(raw_ticket, 'dec')
+    except Exception as e:
+        log(f"❌ [解析Ticket异常] {m_phone}: {str(e)}")
+        return ""
+
+
 # ==================== 🚪 电信官方登录与凭据链 ====================
 def login_telecom(sess: requests.Session, phone: str, password: str, android_id: str = "") -> Optional[Dict[str, Any]]:
     """
@@ -440,40 +502,8 @@ def login_telecom(sess: requests.Session, phone: str, password: str, android_id:
     app_token = login_data.get('token', '')
     user_id = login_data.get('userId', '')
 
-    xml_data = f'''<Request>
-        <HeaderInfos>
-            <Code>getSingle</Code>
-            <Timestamp>{ts()}</Timestamp>
-            <BroadAccount></BroadAccount>
-            <BroadToken></BroadToken>
-            <ClientType>#9.6.1#channel50#iPhone 14 Pro Max#</ClientType>
-            <ShopId>20002</ShopId>
-            <Source>110003</Source>
-            <SourcePassword>Sid98s</SourcePassword>
-            <Token>{app_token}</Token>
-            <UserLoginName>{phone}</UserLoginName>
-        </HeaderInfos>
-        <Content>
-            <Attach>test</Attach>
-            <FieldData>
-                <TargetId>{encrypt_des3(user_id)}</TargetId>
-                <Url>4a6862274835b451</Url>
-            </FieldData>
-        </Content>
-    </Request>'''
-
-    xml_res = api_req(sess, 'https://appgologin.189.cn:9031/map/clientXML',
-                      data=xml_data.encode('utf-8'),
-                      headers={'Content-Type': 'application/xml'}, raw=True)
-    if '<Ticket>' not in xml_res:
-        log(f"❌ [换取Ticket失败] {m_phone}: 响应未包含有效 Ticket 节点")
-        return None
-
-    try:
-        raw_ticket = xml_res.split('<Ticket>')[1].split('</Ticket>')[0]
-        ticket = encrypt_des3(raw_ticket, 'dec')
-    except Exception as e:
-        log(f"❌ [解析Ticket异常] {m_phone}: {str(e)}")
+    ticket = fetch_sso_ticket(sess, phone, user_id, app_token, m_phone)
+    if not ticket:
         return None
 
     user_info = {
@@ -1467,6 +1497,223 @@ def sign_tasks(sess: requests.Session, user: dict) -> List[str]:
 
     log(f"[任务全部完成] {m}")
     return bullets
+
+
+# ==================== 🎡 业务B0：我的奖券·天天有礼大转盘 ====================
+WELFARE_SESSION_ERRORS = ("API100003", "API333333")
+
+
+def _welfare_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(float(str(value).strip()))
+    except (TypeError, ValueError):
+        return default
+
+
+def _welfare_headers(info: dict) -> dict:
+    return {
+        "Content-Type": "application/json;charset=UTF-8",
+        "appType": "02",
+        "userId": str(info.get("userId") or ""),
+        "sessionKey": str(info.get("sessionKey") or ""),
+        "Origin": "https://wapact.189.cn:9001",
+        "Referer": WELFARE_REFERER,
+    }
+
+
+def _welfare_login(sess: requests.Session, user: dict, m_phone: str) -> dict:
+    """用 Ticket 直接登录奖券域；失败时重新签票再试一次。"""
+    ticket = str(user.get("ticket") or "").strip()
+    refreshed = False
+    for attempt in range(2):
+        if not ticket:
+            if refreshed:
+                break
+            ticket = fetch_sso_ticket(
+                sess,
+                user.get("phoneNbr") or user.get("phone"),
+                user.get("userId"),
+                user.get("token"),
+                m_phone,
+            )
+            refreshed = True
+        if not ticket:
+            break
+
+        res = api_req(
+            sess,
+            f"{WELFARE_API_BASE}/dispatch/login",
+            json={"appType": "02", "authCode": ticket, "loginType": "1"},
+            headers={
+                "Content-Type": "application/json;charset=UTF-8",
+                "appType": "02",
+                "Origin": "https://wapact.189.cn:9001",
+                "Referer": WELFARE_REFERER,
+            },
+        )
+        if isinstance(res, dict) and res.get("success") and isinstance(res.get("result"), dict):
+            info = res["result"]
+            log(f"✅ [{m_phone}] 我的奖券会话已建立")
+            return info
+
+        err_code = str((res or {}).get("errorCode") or "")
+        err_msg = str((res or {}).get("errorMsg") or "登录失败")
+        if attempt == 0 and not refreshed:
+            ticket = ""
+            continue
+        log(f"ℹ️ [{m_phone}] 我的奖券登录失败: {err_code} {err_msg}")
+        break
+    return {}
+
+
+def _welfare_status(sess: requests.Session, info: dict) -> dict:
+    return api_req(
+        sess,
+        f"{WELFARE_API_BASE}/welfare/getWheelStatusAndInfo",
+        json={
+            "phone": info.get("productNo"),
+            "provinceCode": info.get("provinceCode"),
+            "authorId": info.get("authorId"),
+        },
+        headers=_welfare_headers(info),
+    )
+
+
+def _welfare_submit(sess: requests.Session, info: dict) -> dict:
+    return api_req(
+        sess,
+        f"{WELFARE_API_BASE}/welfare/wheelRewardSubmit",
+        json={
+            "phone": info.get("productNo"),
+            "provinceCode": info.get("provinceCode"),
+            "province": info.get("province") or "",
+            "cityCode": info.get("cityCode") or "",
+            "city": info.get("city") or "",
+            "authorId": info.get("authorId"),
+        },
+        headers=_welfare_headers(info),
+    )
+
+
+def _welfare_error(res: Any, default: str = "接口未返回有效结果") -> str:
+    if not isinstance(res, dict):
+        return default
+    return str(res.get("errorMsg") or res.get("errorCode") or default)
+
+
+def _welfare_session_expired(res: Any) -> bool:
+    return isinstance(res, dict) and str(res.get("errorCode") or "") in WELFARE_SESSION_ERRORS
+
+
+def run_welfare_wheel(sess: requests.Session, user: dict) -> List[str]:
+    """我的奖券·天天有礼大转盘：每天最多 3 次，每次消耗 20 金豆。"""
+    m = mask(user.get("phoneNbr") or user.get("phone") or "")
+    info = _welfare_login(sess, user, m)
+    if not info:
+        return ["• 天天有礼大转盘: 未获取到奖券会话，已跳过"]
+
+    status = _welfare_status(sess, info)
+    if _welfare_session_expired(status):
+        info = _welfare_login(sess, user, m)
+        if info:
+            status = _welfare_status(sess, info)
+    if not isinstance(status, dict) or not status.get("success"):
+        return [f"• 天天有礼大转盘: 查询失败 ({_welfare_error(status)})"]
+
+    if not isinstance(status.get("result"), dict):
+        return ["• 天天有礼大转盘: 活动数据为空"]
+    result = status["result"]
+    name = str(result.get("name") or "天天有礼大转盘").strip() or "天天有礼大转盘"
+    remain = _welfare_int(result.get("remainCount"), 0)
+    beans = _welfare_int(result.get("beanAmount"), 0)
+    cost = _welfare_int(result.get("amount"), 20)
+    if cost <= 0:
+        cost = 20
+    log(f"[我的奖券] {m} 剩余 {remain} 次，金豆 {beans:,}，单次消耗 {cost}")
+
+    if remain <= 0:
+        tail = f"，余额 {beans:,} 金豆" if beans > 0 else ""
+        return [f"• {name}: 今日已抽完 (剩 0 次{tail})"]
+    if beans < cost:
+        return [f"• {name}: 金豆不足 (需 {cost}/次，当前 {beans:,} 金豆)"]
+
+    configured_max = _welfare_int(CONFIG.get("WELFARE_WHEEL_MAX_DRAWS"), 3)
+    if configured_max < 0:
+        configured_max = 3
+    max_draws = max(0, min(remain, configured_max))
+    if max_draws <= 0:
+        return [f"• {name}: 配置已限制本次不抽奖 (剩 {remain} 次)"]
+
+    prizes: List[str] = []
+    spent = 0
+    gained = 0
+    stop_err = ""
+
+    for idx in range(max_draws):
+        if beans - spent < cost:
+            break
+        res = _welfare_submit(sess, info)
+        if _welfare_session_expired(res):
+            # 提交后会话失效：先重新登录并回查剩余次数，避免重复扣次。
+            info2 = _welfare_login(sess, user, m)
+            if info2:
+                check = _welfare_status(sess, info2)
+                if isinstance(check, dict) and check.get("success"):
+                    check_result = check.get("result") if isinstance(check.get("result"), dict) else {}
+                    now_remain = _welfare_int(check_result.get("remainCount"), remain)
+                    stop_err = "提交后会话失效，奖项待确认" if now_remain < remain - idx else "会话失效，未确认扣次"
+                else:
+                    stop_err = "提交后会话失效，结果待确认"
+            else:
+                stop_err = "提交后会话失效，结果待确认"
+            break
+        if not isinstance(res, dict) or not res.get("success"):
+            stop_err = _welfare_error(res, "抽奖失败")
+            break
+
+        if not isinstance(res.get("result"), dict):
+            stop_err = "抽奖返回结果为空"
+            break
+        prize = res["result"]
+        pname = str(prize.get("prizeName") or "").strip()
+        ptype = str(prize.get("prizeType") or "").strip()
+        if not pname:
+            pname = f"奖品({ptype})" if ptype else "奖品"
+        prizes.append(pname)
+        spent += cost
+        if ptype == "9":
+            match = re.search(r"(\d+)\s*(?:金豆|颗)", pname) or re.search(r"(?:金豆|颗)\s*(\d+)", pname)
+            if match:
+                gained += int(match.group(1))
+        log(f"[我的奖券] {m} 第{idx + 1}次: {pname}")
+        if idx + 1 < max_draws:
+            time.sleep(CONFIG.get("DELAY_SEC", 2))
+
+    # 抽后回查服务端真实余额与剩余次数
+    final = _welfare_status(sess, info)
+    final_beans = None
+    final_ok = False
+    if isinstance(final, dict) and final.get("success"):
+        final_result = final.get("result") if isinstance(final.get("result"), dict) else {}
+        final_beans = _welfare_int(final_result.get("beanAmount"), -1)
+        if final_beans >= 0:
+            final_ok = True
+        else:
+            final_beans = None
+    if final_beans is None:
+        final_beans = max(0, beans - spent + gained)
+
+    if not prizes:
+        if stop_err:
+            return [f"• {name}: 抽奖失败 ({stop_err})"]
+        return [f"• {name}: 今日无可用抽奖次数"]
+
+    parts = "；".join(prizes)
+    gain_txt = f"，累计 +{gained} 金豆" if gained > 0 else ""
+    balance_txt = f"，抽后余额{'约' if not final_ok else ''} {final_beans:,} 金豆"
+    stop_txt = f"，第{len(prizes) + 1}次失败: {stop_err}" if stop_err else ""
+    return [f"• {name}: 抽 {len(prizes)} 次 — {parts} "
+            f"(消耗 {spent} 金豆{gain_txt}{balance_txt}{stop_txt})"]
 
 
 # ==================== 🎁 业务B：翼支付权益领取与抽奖 ====================
@@ -3357,6 +3604,8 @@ def main():
           f" | 幸运抽奖: {'启用' if CONFIG.get('ENABLE_LUCKY_DRAW', True) else '禁用'}"
           f" | AI奇遇: {'启用' if CONFIG.get('ENABLE_AI_PAD', True) else '禁用'}"
           f" ({ai_mode_map.get(ai_mode_active, ai_mode_active)})")
+    print(f"  🎡 我的奖券转盘: {'启用' if CONFIG.get('ENABLE_WELFARE_WHEEL', True) else '禁用'}"
+          f" | 单次上限: {CONFIG.get('WELFARE_WHEEL_MAX_DRAWS', 3)} 次")
     if force_run:
         print("  ⚠️ FORCE_RUN 调试模式已开启，忽略星期限制")
     print("=" * 65)
@@ -3509,6 +3758,14 @@ def main():
             except Exception as e:
                 log(f"⚠️ [{m_phone}] AI奇遇业务异常: {str(e)}")
                 bullets.append(f"• AI奇遇赢Pad: 执行异常 ({str(e)[:40]})")
+
+        # ---- 业务D：我的奖券·天天有礼大转盘 ----
+        if CONFIG.get("ENABLE_WELFARE_WHEEL", True):
+            try:
+                bullets.extend(run_welfare_wheel(sess, user))
+            except Exception as e:
+                log(f"⚠️ [{m_phone}] 我的奖券大转盘异常: {str(e)}")
+                bullets.append(f"• 天天有礼大转盘: 执行异常 ({str(e)[:40]})")
 
         summary_blocks.append(
             f"【账号 {idx}: {m_phone}】\n" + "\n".join(bullets) if len(accounts) > 1 else "\n".join(bullets))
