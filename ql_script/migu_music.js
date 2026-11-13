@@ -29,8 +29,8 @@
  *          - migu_comment_text  评论正文，支持用 | 或换行写多条，每次随机取一条；留空默认使用 10 句诗句（每条 1..120 字，不含链接/@）
  *          - migu_ringtone      默认 false：从「一日一铃」免费库随机设置一条，会改变本人彩铃
  *          - migu_ip            可选：生成 ce 时使用的客户端地址，留空用本机/出口 IP
- *          - migu_dgdd          默认 true：动感地带1314粉丝节（主会场访问/浏览/分享/视频 + 分会场报名/签到/抽奖）
- *          - migu_dgdd_prize    可选：主会场抽奖 prizeId（格式 FSJ_YYMM_XXXX，如 2026-11 为 FSJ_2611_BDWPYK）；留空则只做任务不抽主会场奖
+ *          - migu_dgdd          默认 true：动感地带1314粉丝节（主会场每日访问 + 全部免费任务自动上报 + 每日抽奖；分会场报名/签到/抽奖）
+ *          - migu_dgdd_prize    可选：主会场抽奖 prizeId；留空自动按 FSJ_YYMM_BDWPYK 拼接（如 2026-11 为 FSJ_2611_BDWPYK）
  *          - migu_debug         调试模式
  *          Node 环境变量同名可用
  * 更新时间：2026-11-13
@@ -1092,45 +1092,62 @@ class MiguClient {
         }
         const d = st.data;
         const dgddUser = d.isDgdd === true;
-        const score = typeof d.scoreTotal === 'number' ? d.scoreTotal : null;
-        parts.push('主会场' + (score !== null ? ' 次数' + score : '') + (dgddUser ? '·动感' : '·非动感'));
+        const tasks = d.tasks || {};
+        const keys = Object.keys(tasks);
+        $.log('1314节任务：' + keys.map(function (k) {
+            const t = tasks[k];
+            return (t && t.taskTitle ? t.taskTitle : k) + '(' + k + ' ' + (t && typeof t.time === 'number' ? t.time : 0) + '/' + (t && typeof t.needTime === 'number' ? t.needTime : '?') + ')';
+        }).join('，'));
 
         const visit = await this.dgddVisit();
         parts.push('访问' + (visit && String(visit.code) === '000000' ? '✓' : (visit && visit.code) || '?'));
 
-        const order = [['preview', '浏览'], ['share', '分享'], ['video', '视频']];
-        const tasks = d.tasks || {};
-        for (let i = 0; i < order.length; i++) {
-            const key = order[i][0];
-            const label = order[i][1];
+        // 动态上报免费任务（跳过购买/注册类），type 与服务端 task key 一致，自动覆盖“浏览页面15s”等动感专属任务
+        const skip = { szzj: 1, member: 1, kyOrder: 1, workbuddy: 1 };
+        for (let i = 0; i < keys.length; i++) {
+            const key = keys[i];
+            if (skip[key]) continue;
             const t = tasks[key];
             if (!t) continue;
+            const title = t.taskTitle || key;
             const done = typeof t.time === 'number' ? t.time : 0;
-            const need = typeof t.needTime === 'number' ? t.needTime : 0;
+            const need = typeof t.needTime === 'number' ? t.needTime : 1;
             if (need >= 0 && done >= need) {
-                parts.push(label + '已达标');
+                parts.push(title + '已达标');
                 continue;
             }
             const r = await this.dgddReport(key);
-            if (r && String(r.code) === '000000') parts.push(label + '✓');
-            else parts.push(label + ' ' + (r && r.code ? r.code : '?'));
+            if (r && String(r.code) === '000000') parts.push(title + '✓');
+            else parts.push(title + ' ' + (r && r.code ? r.code : '?'));
         }
 
-        const prizeId = String(getEnv('migu_dgdd_prize') || '').trim();
-        if (prizeId) {
+        // 主会场每日抽奖：scoreTotal=可用次数，逐次抽，抽完为止（未中奖 200012 也消耗次数）
+        const prizeId = String(getEnv('migu_dgdd_prize') || '').trim() || ('FSJ_' + (function () {
+            const iso = todayBeijing();
+            return iso.slice(2, 4) + iso.slice(5, 7);
+        })() + '_BDWPYK');
+        let st2 = await this.dgddState();
+        let score = (st2 && st2.data && typeof st2.data.scoreTotal === 'number') ? st2.data.scoreTotal : 0;
+        let draws = 0, wins = 0, noWin = 0;
+        while (score > 0 && draws < 30) {
             const p = await this.dgddPrize(prizeId);
+            draws++;
             if (p && String(p.code) === '000000') {
+                wins++;
                 const name = p.data && (p.data.prizeName || p.data.name || p.data.prize);
-                parts.push('抽奖✓' + (name ? '：' + name : ''));
+                parts.push('主会场中奖' + (name ? '：' + name : ''));
             } else if (p && String(p.code) === '200012') {
-                parts.push('抽奖未中奖');
+                noWin++;
             } else {
-                parts.push('抽奖 ' + (p && p.code ? p.code : '?'));
+                parts.push('主会场抽奖 ' + (p && p.code ? p.code : '?'));
+                break;
             }
-        } else {
-            parts.push('主会场抽奖跳过(未配prizeId)');
+            st2 = await this.dgddState();
+            score = (st2 && st2.data && typeof st2.data.scoreTotal === 'number') ? st2.data.scoreTotal : 0;
         }
+        parts.push('主会场' + (dgddUser ? '·动感' : '·非动感') + ' 抽奖' + draws + '次' + (wins ? '中' + wins : '') + (noWin ? '未中' + noWin : ''));
 
+        // 分会场（抽大音联赛总决赛门票）
         try {
             await this.dgddJoin();
             const sub = await this.dgddSubTasks();
@@ -1150,17 +1167,20 @@ class MiguClient {
             } else if (sub && String(sub.code) !== '000000') {
                 parts.push('门票状态 ' + sub.code);
             }
-            const times = await this.dgddTimes();
-            if (times && String(times.code) === '000000' && times.data) {
-                const rest = typeof times.data.restTime === 'number' ? times.data.restTime : 0;
-                if (rest > 0) {
-                    const dr = await this.dgddDraw();
-                    if (dr && String(dr.code) === '000000') parts.push('门票抽奖✓');
-                    else parts.push('门票抽奖 ' + (dr && dr.code ? dr.code : '?'));
-                } else {
-                    parts.push('门票抽奖次数0');
+            let times = await this.dgddTimes();
+            let rest = (times && String(times.code) === '000000' && times.data && typeof times.data.restTime === 'number') ? times.data.restTime : 0;
+            let subDraws = 0;
+            while (rest > 0 && subDraws < 20) {
+                const dr = await this.dgddDraw();
+                subDraws++;
+                if (!(dr && String(dr.code) === '000000')) {
+                    parts.push('门票抽奖 ' + (dr && dr.code ? dr.code : '?'));
+                    break;
                 }
+                times = await this.dgddTimes();
+                rest = (times && String(times.code) === '000000' && times.data && typeof times.data.restTime === 'number') ? times.data.restTime : 0;
             }
+            parts.push('门票抽奖' + subDraws + '次');
         } catch (e) {
             parts.push('门票 ' + e.message);
         }
