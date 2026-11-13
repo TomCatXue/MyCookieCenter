@@ -1,0 +1,10 @@
+{
+  "name": "mycookiecenter",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "verify": "node tools/verify.mjs",
+    "sync-docs": "node tools/sync-doc-versions.mjs",
+    "sync-docs:write": "node tools/sync-doc-versions.mjs --write"
+  }
+}
