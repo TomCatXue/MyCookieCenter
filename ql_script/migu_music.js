@@ -1128,7 +1128,7 @@ class MiguClient {
                 parts.push('抽奖 ' + (p && p.code ? p.code : '?'));
             }
         } else {
-            parts.push('主会场未配prizeId');
+            parts.push('主会场抽奖跳过(未配prizeId)');
         }
 
         try {
@@ -1165,7 +1165,9 @@ class MiguClient {
             parts.push('门票 ' + e.message);
         }
 
-        return parts.join(' ');
+        const summary = parts.join(' ');
+        $.log('1314节：' + summary);
+        return summary;
     }
 
     // ---- 评论 ----
