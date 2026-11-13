@@ -1,0 +1,37 @@
+#!name = 咪咕音乐 · 去广告净化
+#!desc = 净化咪咕音乐 iOS 客户端，去除开屏广告与营销弹窗：\n• 关闭开屏广告总开关 (noAdvert) 与启动广告弹窗 (launch_ad_pop)\n• 清空营销弹窗、营销广告位、策略弹窗列表\n• 拦截咪咕视频广告 SDK、穿山甲/火山引擎广告 SDK、讯飞广告投放与咪咕游戏埋点\n• 开启客户端去广告权益 (no_ads)\n静态域名由 Loon 内核直接拦截，开屏/营销开关零脚本改写，畅享纯净听歌体验。\n说明：会员曲库、演唱会、专区、1080P 等版权内容由服务端按账号真实会员态校验，本插件不伪造会员身份。
+#!openUrl = https://apps.apple.com/cn/app/id725215315
+#!author = TomCatXue
+#!homepage = https://github.com/TomCatXue/MyCookieCenter
+#!icon = https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/11/f6/9d/11f69d19-2981-ab3e-f5cf-63ab6ff7e6aa/app_default_icon-0-1x_U007epad-0-1-0-sRGB-85-220-0.jpeg/512x512bb.jpg
+#!tag = 咪咕音乐,去广告
+#!version = 1.0.0
+#!date = 2026-11-13 13:01
+
+[Rule]
+# 广告 SDK 与营销埋点域名直接拦截 (零脚本开销)
+DOMAIN, ggx07.miguvideo.com, REJECT
+DOMAIN-SUFFIX, volces.com, REJECT
+DOMAIN-SUFFIX, zijieapi.com, REJECT
+DOMAIN, ggc.cmvideo.cn, REJECT
+DOMAIN, report.migufun.com, REJECT
+DOMAIN, betagame.migufun.com, REJECT
+
+[Rewrite]
+# 关闭开屏广告总开关
+response if ${url} ~= /^https?:\/\/app\.c\.nf\.migu\.cn\/rule\/engine\/api\/no-open-advert\/v1\.0/ then response.json.jq(".data.noAdvert = true")
+# 关闭启动广告弹窗
+response if ${url} ~= /key=launch_ad_pop/ then response.json.jq(".data = \"0\"")
+# 清空营销弹窗
+response if ${url} ~= /bmw\/marketing-popup\/lists\/v1\.0/ then response.json.jq(".data = []")
+# 清空营销广告位
+response if ${url} ~= /column\/marketing\/advertising\/v1\.0/ then response.json.jq(".data = []")
+# 清空策略弹窗
+response if ${url} ~= /MIGUM3\.0\/strategy\/popup\/list\/v1\.0/ then response.json.jq(".data = []")
+
+[Script]
+# 客户端去广告权益 (no_ads)
+http-response ^https?:\/\/app\.c\.nf\.migu\.cn\/member\/api\/rights\/user\/have\/v1\.0 script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/migu/migu.js?v=20261113-1301, requires-body=true, timeout=60, tag=咪咕去广告权益
+
+[MITM]
+hostname = app.c.nf.migu.cn, app.pd.nf.migu.cn
