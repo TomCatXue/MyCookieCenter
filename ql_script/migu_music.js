@@ -29,9 +29,11 @@
  *          - migu_comment_text  评论正文，支持用 | 或换行写多条，每次随机取一条；留空默认使用 10 句诗句（每条 1..120 字，不含链接/@）
  *          - migu_ringtone      默认 false：从「一日一铃」免费库随机设置一条，会改变本人彩铃
  *          - migu_ip            可选：生成 ce 时使用的客户端地址，留空用本机/出口 IP
+ *          - migu_dgdd          默认 true：动感地带1314粉丝节（主会场访问/浏览/分享/视频 + 分会场报名/签到/抽奖）
+ *          - migu_dgdd_prize    可选：主会场抽奖 prizeId（格式 FSJ_YYMM_XXXX，如 2026-11 为 FSJ_2611_BDWPYK）；留空则只做任务不抽主会场奖
  *          - migu_debug         调试模式
  *          Node 环境变量同名可用
- * 更新时间：2026-10-30
+ * 更新时间：2026-11-13
 
 ------------------ Surge 配置 ------------------
 
@@ -90,6 +92,18 @@ const RBT_SET_TO_PLAY = '/ringbacktone/vrbt-set-to-play/v2.0';
 const RBT_PAGE_ID = '69df566b1dec4544e9c1ca00';
 const COMMENT_RANK_ID = '83048887';
 const RANK_INFO = '/pc/bmw/rank/rank-info/v1.0';
+// ---- 动感地带1314粉丝节（每月13/14号） ----
+const DGDD_MAIN = 'MAC_KF_HS_DGDD1314FSJ';
+const DGDD_SUB = 'MAC_WJ_MB_DGDD1314FSJCDYLSMP';
+const DGDD_REFERER = 'https://h5.nf.migu.cn/app/gm/v1/index.html?id=100266';
+const DGDD_SUB_REFERER = 'https://h5.nf.migu.cn/app/gm/v1/index.html?id=103804';
+const DGDD_STATE = '/act-dgddbayfsj/taskState';
+const DGDD_VISIT = '/act-dgddbayfsj/visit-activity';
+const DGDD_REPORT = '/act-dgddbayfsj/report';
+const DGDD_PRIZE = '/act-dgddbayfsj/prize';
+const DGDD_JOIN = '/act-task/join-activity';
+const DRAW_TIMES = '/act-draw/query-times';
+const DRAW_DO = '/act-draw/draw';
 
 // 官方 APK 签名证书字符（公开常量）、App 侧静态编码表，均为 py 源码原值
 const APK_CERT_PREFIX = '308202333082019ca00302010202044d';
@@ -151,6 +165,13 @@ allow('GET', SONGS, API_ORIGIN, true);
 allow('GET', LISTEN_URL, API_ORIGIN, true);
 allow('POST', SONG_REPORT, API_ORIGIN, true);
 allow('POST', RECEIVE_REWARD, API_ORIGIN, true);
+allow('GET', DGDD_STATE, API_ORIGIN, false);
+allow('POST', DGDD_VISIT, API_ORIGIN, false);
+allow('POST', DGDD_REPORT, API_ORIGIN, false);
+allow('POST', DGDD_PRIZE, API_ORIGIN, false);
+allow('GET', DGDD_JOIN, API_ORIGIN, false);
+allow('POST', DRAW_TIMES, API_ORIGIN, false);
+allow('POST', DRAW_DO, API_ORIGIN, false);
 
 class MiguError extends Error { }
 
@@ -850,7 +871,10 @@ class MiguClient {
         const native = !!opts.native;
         if (!native && spec.native) throw new MiguError('该接口必须使用原生签名');
         if (native && !spec.native) throw new MiguError('该接口不接受原生签名');
-        if (path === '/act-task/task-report' && JSON.stringify(opts.payload) !== '{"taskId":"qsq"}') throw new MiguError('社区上报只允许 qsq');
+        if (path === '/act-task/task-report') {
+            const reportTaskId = opts.payload && opts.payload.taskId;
+            if (reportTaskId !== 'qsq' && reportTaskId !== 'sign') throw new MiguError('任务上报只允许 qsq/sign');
+        }
         if (path === NEW_SIGN || path === NORMAL_SIGN) {
             if (opts.payload !== undefined || opts.params !== undefined) throw new MiguError('签到不接受自定义参数');
         }
@@ -881,12 +905,12 @@ class MiguClient {
         if (!native) {
             headers.uid = this.ctx.uid;
             headers.deviceId = this.ctx.deviceId;
-            headers.activityId = 'MAC_KF_CBH_JBZX';
+            headers.activityId = opts.activityId || 'MAC_KF_CBH_JBZX';
             headers.platform = 'H5';
             headers.IMEI = 'h5page';
             headers.IMSI = 'h5page';
             headers.Origin = 'https://h5.nf.migu.cn';
-            headers.Referer = 'https://h5.nf.migu.cn/app/v4/n/gold-coin-center/index.html?rightScreen=T&hideMiniPlayer=1';
+            headers.Referer = opts.referer || 'https://h5.nf.migu.cn/app/v4/n/gold-coin-center/index.html?rightScreen=T&hideMiniPlayer=1';
         }
         if (bodyStr !== null) headers['Content-Type'] = opts.contentType || 'application/json';
         if (native) {
@@ -897,7 +921,7 @@ class MiguClient {
         }
         debugLog({ method: method, url: origin + target, bodyLength: bodyStr ? bodyStr.length : 0 }, 'request');
         const res = await httpCall(method, origin + target, headers, bodyStr);
-        return this.consume(res, path, !!opts.decodeHex);
+        return this.consume(res, path, !!opts.decodeHex, !!opts.raw);
     }
 
     async sendRaw(method, origin, path, bodyStr, contentType, extraHeaders) {
@@ -913,7 +937,7 @@ class MiguClient {
         return this.consume(res, path, false);
     }
 
-    consume(res, path, decodeHex) {
+    consume(res, path, decodeHex, raw) {
         const status = statusOf(res);
         if (status !== 200) throw new MiguError(path + ' 未返回 200（HTTP ' + status + '）');
         let text = bodyOf(res);
@@ -925,6 +949,7 @@ class MiguClient {
             if (e instanceof MiguError) throw e;
             throw new MiguError(path + ' 返回无法解析');
         }
+        if (raw) return obj;
         const marker = hget(res.headers, 'sign-result') !== undefined ? hget(res.headers, 'sign-result') : hget(res.headers, 'sign_result');
         if (String(obj.code) !== '000000' || (marker !== undefined && marker !== null && marker !== '' && marker !== '000000')) {
             const code = /^[A-Za-z0-9]{1,12}$/.test(String(obj.code)) ? String(obj.code) : 'hidden';
@@ -1028,6 +1053,119 @@ class MiguClient {
             }
         }
         throw new MiguError('社区上报后服务端未确认完成（不重复上报）');
+    }
+
+    // ---- 动感地带1314粉丝节 ----
+    async dgddState() {
+        return await this.send('GET', API_ORIGIN, DGDD_STATE, { activityId: DGDD_MAIN, referer: DGDD_REFERER, raw: true });
+    }
+    async dgddVisit() {
+        return await this.send('POST', API_ORIGIN, DGDD_VISIT, { activityId: DGDD_MAIN, referer: DGDD_REFERER, raw: true, payload: {} });
+    }
+    async dgddReport(type) {
+        return await this.send('POST', API_ORIGIN, DGDD_REPORT, { activityId: DGDD_MAIN, referer: DGDD_REFERER, raw: true, payload: { type: type } });
+    }
+    async dgddPrize(prizeId) {
+        return await this.send('POST', API_ORIGIN, DGDD_PRIZE, { activityId: DGDD_MAIN, referer: DGDD_REFERER, raw: true, payload: { prizeId: prizeId } });
+    }
+    async dgddJoin() {
+        return await this.send('GET', API_ORIGIN, DGDD_JOIN, { activityId: DGDD_SUB, referer: DGDD_SUB_REFERER, raw: true });
+    }
+    async dgddSubTasks() {
+        return await this.send('GET', API_ORIGIN, '/act-task/query-tasks', { activityId: DGDD_SUB, referer: DGDD_SUB_REFERER, raw: true });
+    }
+    async dgddSubReport(taskId) {
+        return await this.send('POST', API_ORIGIN, '/act-task/task-report', { activityId: DGDD_SUB, referer: DGDD_SUB_REFERER, raw: true, payload: { taskId: taskId } });
+    }
+    async dgddTimes() {
+        return await this.send('POST', API_ORIGIN, DRAW_TIMES, { activityId: DGDD_SUB, referer: DGDD_SUB_REFERER, raw: true, payload: {}, params: [['activityId', DGDD_SUB]] });
+    }
+    async dgddDraw() {
+        return await this.send('POST', API_ORIGIN, DRAW_DO, { activityId: DGDD_SUB, referer: DGDD_SUB_REFERER, raw: true, payload: {} });
+    }
+
+    async dgdd() {
+        const parts = [];
+        const st = await this.dgddState();
+        if (!st || String(st.code) !== '000000' || !st.data || typeof st.data !== 'object') {
+            throw new MiguError('主会场状态异常（code=' + (st && st.code) + '）');
+        }
+        const d = st.data;
+        const dgddUser = d.isDgdd === true;
+        const score = typeof d.scoreTotal === 'number' ? d.scoreTotal : null;
+        parts.push('主会场' + (score !== null ? ' 次数' + score : '') + (dgddUser ? '·动感' : '·非动感'));
+
+        const visit = await this.dgddVisit();
+        parts.push('访问' + (visit && String(visit.code) === '000000' ? '✓' : (visit && visit.code) || '?'));
+
+        const order = [['preview', '浏览'], ['share', '分享'], ['video', '视频']];
+        const tasks = d.tasks || {};
+        for (let i = 0; i < order.length; i++) {
+            const key = order[i][0];
+            const label = order[i][1];
+            const t = tasks[key];
+            if (!t) continue;
+            const done = typeof t.time === 'number' ? t.time : 0;
+            const need = typeof t.needTime === 'number' ? t.needTime : 0;
+            if (need >= 0 && done >= need) {
+                parts.push(label + '已达标');
+                continue;
+            }
+            const r = await this.dgddReport(key);
+            if (r && String(r.code) === '000000') parts.push(label + '✓');
+            else parts.push(label + ' ' + (r && r.code ? r.code : '?'));
+        }
+
+        const prizeId = String(getEnv('migu_dgdd_prize') || '').trim();
+        if (prizeId) {
+            const p = await this.dgddPrize(prizeId);
+            if (p && String(p.code) === '000000') {
+                const name = p.data && (p.data.prizeName || p.data.name || p.data.prize);
+                parts.push('抽奖✓' + (name ? '：' + name : ''));
+            } else if (p && String(p.code) === '200012') {
+                parts.push('抽奖未中奖');
+            } else {
+                parts.push('抽奖 ' + (p && p.code ? p.code : '?'));
+            }
+        } else {
+            parts.push('主会场未配prizeId');
+        }
+
+        try {
+            await this.dgddJoin();
+            const sub = await this.dgddSubTasks();
+            if (sub && String(sub.code) === '000000' && Array.isArray(sub.data)) {
+                const song = sub.data.filter(function (x) { return x.id === 'song'; })[0];
+                const sign = sub.data.filter(function (x) { return x.id === 'sign'; })[0];
+                if (song) parts.push('听歌' + (song.completeTime || 0) + '/' + (song.needCompleteTime || 0));
+                if (sign) {
+                    if (sign.rceiveTime >= sign.needCompleteTime) {
+                        parts.push('门票签到已领');
+                    } else {
+                        const sr = await this.dgddSubReport('sign');
+                        if (sr && String(sr.code) === '000000') parts.push('门票签到✓');
+                        else parts.push('门票签到 ' + (sr && sr.code ? sr.code : '?'));
+                    }
+                }
+            } else if (sub && String(sub.code) !== '000000') {
+                parts.push('门票状态 ' + sub.code);
+            }
+            const times = await this.dgddTimes();
+            if (times && String(times.code) === '000000' && times.data) {
+                const rest = typeof times.data.restTime === 'number' ? times.data.restTime : 0;
+                if (rest > 0) {
+                    const dr = await this.dgddDraw();
+                    if (dr && String(dr.code) === '000000') parts.push('门票抽奖✓');
+                    else parts.push('门票抽奖 ' + (dr && dr.code ? dr.code : '?'));
+                } else {
+                    parts.push('门票抽奖次数0');
+                }
+            }
+        } catch (e) {
+            parts.push('门票 ' + e.message);
+        }
+
+        return parts.join(' ');
     }
 
     // ---- 评论 ----
@@ -1541,6 +1679,10 @@ async function runAccount(account, index) {
     try { ok('签到', await client.sign()); } catch (e) { fail('签到', e); }
     try { ok('社区', await client.community()); } catch (e) { fail('社区', e); }
 
+    if ($.dgddOn) {
+        try { ok('1314节', await client.dgdd()); } catch (e) { fail('1314节', e); }
+    }
+
     if ($.commentOn) {
         try {
             const pool = await fetchRankSongs();
@@ -1693,6 +1835,7 @@ async function sendMsg(subtitle, message) {
     $.commentOn = !/^(false|0|no|off)$/i.test(String(getEnv('migu_comment') || ''));
     $.ringtoneOn = /^(true|1|yes|on)$/i.test(String(getEnv('migu_ringtone') || ''));
     $.listenOn = !/^(false|0|no|off)$/i.test(String(getEnv('migu_listen') || ''));
+    $.dgddOn = !/^(false|0|no|off)$/i.test(String(getEnv('migu_dgdd') || ''));
     $.seconds = parseInt(getEnv('migu_listen_seconds') || '1800', 10);
     $.commentList = parseCommentList(getEnv('migu_comment_text'));
     if (!(($.seconds >= 1 && $.seconds <= 1800))) throw new MiguError('migu_listen_seconds 需在 1..1800');
@@ -1701,7 +1844,8 @@ async function sendMsg(subtitle, message) {
     if (!accounts.length) throw new MiguError('未找到 MIGU_AUTH 变量，请填写 手机号@密码 ❌');
 
     $.log('共 ' + accounts.length + ' 个账号；听歌' + ($.listenOn ? '开启' : '关闭') +
-        '，评论' + ($.commentOn ? '开启' : '关闭') + '，彩铃设置' + ($.ringtoneOn ? '开启' : '关闭'));
+        '，评论' + ($.commentOn ? '开启' : '关闭') + '，彩铃设置' + ($.ringtoneOn ? '开启' : '关闭') +
+        '，1314节' + ($.dgddOn ? '开启' : '关闭'));
     const summary = [];
     for (let i = 0; i < accounts.length; i++) {
         try {
