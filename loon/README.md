@@ -18,6 +18,7 @@
 | [**TencentVideo.plugin**](./TencentVideo.plugin) (v1.0.9) | **腾讯视频 · 全量净化**：开屏/前贴/中插/暂停/后贴/锚点/详情页/信息流/搜索/下载页/个人中心/激励/会员推广/播放页 SVIP·特惠·升级按钮·详情页 VIP 营销卡片·VIP 会员底栏全量移除，融合简洁模式、底栏开关与 QUIC 防穿透 | `HideShortDrama` `HideVipTab` `HideGoods` 三个底栏开关；VIP 会员底栏已关闭 |
 | [**TestFlightRelay.plugin**](./TestFlightRelay.plugin) (v1.0.0) | **TestFlight 中转**：请求本地应答、多账号索引合并与详情缓存，Loon 原生适配 | 内置请求脚本 + 5 分钟会话刷新 |
 | [**Duolingo.plugin**](./Duolingo.plugin) (v2.0.3) | **多邻国 𝕏**：拦截 `/batch`、`/available-features` 响应注入 Gold 家庭订阅，解锁免广告、无限心、AI 功能（j4gm4g 原作 / TomCatXue 修复） | 规则型，无需开关 |
+| [**MiguMusic.plugin**](./MiguMusic.plugin) (v1.0.0) | **咪咕音乐 · 去广告净化**：关闭开屏与运营广告（noAdvert / launch_ad_pop）、屏蔽运营位、注入客户端 no_ads 权益、拦截推广 SDK | 规则型，无需开关 |
 
 ## 使用
 
