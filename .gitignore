@@ -46,3 +46,14 @@ ql_script/.*_cache*.json
 
 # 中国移动青龙脚本本地归档（不再上传公开仓库）
 ql_script/cmcc_*.py
+
+# 中国移动自动续期插件（远程 Cloudflare Worker 驱动，仅本地留存，不进公开仓库）
+loon/ChinaMobileRenew.plugin
+
+# Apifox 项目批量管理工具（依赖本地 docs/ 目录，仅自用，不进公开仓库）
+scripts/tools/create_app_project.py
+scripts/tools/sync_apifox.py
+
+# Alma 本地工作区（快照缓存与项目卡会话，不进公开仓库）
+.alma-snapshots/
+.alma/
