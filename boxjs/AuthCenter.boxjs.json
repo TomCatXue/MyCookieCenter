@@ -1,0 +1,127 @@
+{
+  "id": "authcenter.app.sub",
+  "name": "AuthCenter · 凭据获取",
+  "author": "@TomCatXue",
+  "icon": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/daidai.png",
+  "icons": [
+    "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/daidai.png",
+    "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/daidai.png"
+  ],
+  "repo": "https://github.com/TomCatXue/MyCookieCenter",
+  "apps": [
+    {
+      "id": "authcenter.weread",
+      "name": "微信读书 · 票据获取",
+      "keys": [
+        "weread_auth",
+        "prefer_coin"
+      ],
+      "author": "@TomCatXue",
+      "icon": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/weread.png",
+      "icons": [
+        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/weread.png",
+        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/weread.png"
+      ],
+      "repo": "https://github.com/TomCatXue/MyCookieCenter",
+      "settings": [
+        {
+          "id": "weread_auth",
+          "name": "📋【WEREAD_AUTH】App + Web 票据",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 5,
+          "desc": "由 WeReadAuth.plugin 自动写入，包含 vid、skey、refreshToken、deviceId。整段复制到青龙 WEREAD_AUTH。"
+        },
+        {
+          "id": "prefer_coin",
+          "name": "阅读达标奖励偏好",
+          "val": "2",
+          "type": "selects",
+          "items": [
+            { "key": "1", "label": "优先领体验卡" },
+            { "key": "2", "label": "优先领书币 (推荐)" }
+          ],
+          "desc": "每周阅读时长达标奖励偏好。"
+        }
+      ],
+      "descs_html": [
+        "<span><b>抓取：</b>启用 WeReadAuth.plugin 后，先进入微信读书 App「我」，再打开「翻牌/限免」活动页。</span>",
+        "<span><b>复制：</b>点击当前会话中的 <code>weread_auth</code> 行复制，粘贴到青龙 <code>WEREAD_AUTH</code>。</span>"
+      ]
+    },
+    {
+      "id": "authcenter.yundisk",
+      "name": "移动云盘 · 凭据获取",
+      "keys": [
+        "@tools.address",
+        "@tools.token",
+        "@daidai.device",
+        "ydyp_data",
+        "ydyp_device_id",
+        "ydyp_cache"
+      ],
+      "author": "@TomCatXue",
+      "icon": "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/10086.png",
+      "icons": [
+        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/10086.png",
+        "https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/10086.png"
+      ],
+      "repo": "https://github.com/TomCatXue/MyCookieCenter",
+      "settings": [
+        {
+          "id": "@tools.address",
+          "name": "取凭证网关地址",
+          "val": "",
+          "type": "text",
+          "desc": "例如 http://192.168.1.10:5700。抓包成功后立即 POST /api/daidai/env/sync 到呆呆面板。"
+        },
+        {
+          "id": "@tools.token",
+          "name": "取凭证网关 Token",
+          "val": "",
+          "type": "text",
+          "desc": "tools 服务启动日志中的 X-Token；仅保存在本机 BoxJS。"
+        },
+        {
+          "id": "@daidai.device",
+          "name": "本机来源标识",
+          "val": "",
+          "type": "text",
+          "desc": "多台手机请各填一个唯一标识；留空自动生成 dev_*。面板同名变量按来源分行，互不覆盖。"
+        },
+        {
+          "id": "ydyp_data",
+          "name": "📋【YDYP_AUTH】移动云盘数据",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 4,
+          "desc": "JSON 数组：Authorization、phone、deviceId。可直接复制到青龙 YDYP_AUTH。"
+        },
+        {
+          "id": "ydyp_device_id",
+          "name": "全局设备 ID",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 2,
+          "desc": "由捕获脚本维护；也可手动抓包填入，留空由脚本自动生成。"
+        },
+        {
+          "id": "ydyp_cache",
+          "name": "Token / 设备缓存",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 6,
+          "desc": "脚本自维护缓存；同步到呆呆面板可避免云端首跑重新生成 deviceId。"
+        }
+      ],
+      "descs_html": [
+        "<span><b>抓取：</b>启用 YunDiskAuth.plugin 后，打开移动云盘 App 首页即可。</span>",
+        "<span><b>多账号：</b>逐个登录账号并打开首页，系统按手机号合并到 <code>ydyp_data</code>；抓包后立即按来源同步为呆呆面板 <code>YDYP_AUTH</code>，同时同步 <code>ydyp_cache</code>。</span>"
+      ]
+    }
+  ]
+}

@@ -44,9 +44,10 @@ function safeHost(raw) {
 
 function parseSyncMap(raw) {
     const defaults = [
-        { key: "weread_auth_v2", name: "WEREAD_AUTH", group: "微信读书", enabled: true },
+        { key: "weread_auth", name: "WEREAD_AUTH", group: "微信读书", enabled: true },
         { key: "cmcc_auth", name: "CMCC_AUTH", group: "中国移动", enabled: true },
         { key: "camscanner_data", name: "camscanner_data", group: "扫描全能王", enabled: true },
+        { key: "ydyp_data", name: "YDYP_AUTH", group: "移动云盘", enabled: true },
         { key: "telecom_draw_session_key", name: "TELECOM_DRAW_SESSION_KEY", group: "中国电信", enabled: false },
         { key: "telecom_rights_auth", name: "TELECOM_RIGHTS_AUTH", group: "中国电信", enabled: false },
         { key: "sx_benefit_cookie", name: "SX_BENEFIT_COOKIE", group: "中国电信", enabled: false }
@@ -251,6 +252,12 @@ function extractAccountIdentifier(name, value) {
         if (name === "CMCC_AUTH" && obj && obj.phone) {
             return { type: "phone", val: String(obj.phone) };
         }
+        if (name === "YDYP_AUTH" && Array.isArray(obj)) {
+            const phones = obj.map(item => item && item.phone).filter(Boolean);
+            if (phones.length) {
+                return { type: "phone", val: phones.join("|") };
+            }
+        }
         if (name === "camscanner_data" && obj && (obj.client_id || obj.token)) {
             const val = String(obj.client_id || obj.token.slice(0, 12));
             return { type: "client_id", val };
@@ -355,7 +362,7 @@ async function main() {
             continue;
         }
         try {
-            if (mapping.name === "WEREAD_AUTH" && mapping.key === "weread_auth_v2") {
+            if (mapping.name === "WEREAD_AUTH" && mapping.key === "weread_auth") {
                 const auth = readJson(value, null);
                 const preferCoin = String($.getdata("prefer_coin") || "2").trim();
                 if (auth && preferCoin === "2" && auth.prefer_coin !== "2") {

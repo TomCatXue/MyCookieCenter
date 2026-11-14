@@ -22,6 +22,10 @@ Loon 负责无感捕获与即时同步，呆呆面板 / 青龙面板负责脱机
 | <img src="icons/daidai.png" height="16" /> | **呆呆面板** | 微信读书 / 中国电信 / 扫描全能王 凭据捕获并自动同步 | <nobr><a href="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/loon/DaiDaiPanel.plugin"><strong>安装</strong></a>&nbsp;/&nbsp;<a href="./loon/README.md"><strong>说明</strong></a></nobr> |
 | <img src="icons/10086.png" height="16" /> | **中国移动** | 净化开屏、首页轮播、各专区横幅与「我的」弹窗 | <nobr><a href="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/loon/ChinaMobile.plugin"><strong>安装</strong></a>&nbsp;/&nbsp;<a href="./loon/README.md"><strong>说明</strong></a></nobr> |
 | <img src="icons/weread.png" height="16" /> | **微信读书** | 去广告、去更新弹窗、解除试听限制 | <nobr><a href="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/loon/WeReadEnhance.plugin"><strong>安装</strong></a>&nbsp;/&nbsp;<a href="./scripts/tools/wxread_enhance/"><strong>说明</strong></a></nobr> |
+| <img src="icons/weread.png" height="16" /> | **微信读书凭据获取** | 捕获 App / Web 票据并写入 BoxJS `weread_auth` | <nobr><a href="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/loon/WeReadAuth.plugin"><strong>安装</strong></a>&nbsp;/&nbsp;<a href="./scripts/weread/"><strong>说明</strong></a></nobr> |
+| <img src="icons/weread.png" height="16" /> | **微信读书活动任务** | 每日阅读奖励、周二翻牌、周五限免入架 | <nobr><a href="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/loon/WeReadTasks.plugin"><strong>安装</strong></a>&nbsp;/&nbsp;<a href="./scripts/weread/"><strong>说明</strong></a></nobr> |
+| <img src="icons/10086.png" height="16" /> | **移动云盘凭据获取** | 捕获移动云盘 Authorization 并写入 BoxJS `ydyp_data` | <nobr><a href="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/loon/YunDiskAuth.plugin"><strong>安装</strong></a>&nbsp;/&nbsp;<a href="./scripts/tools/yundisk/"><strong>说明</strong></a></nobr> |
+| <img src="icons/10086.png" height="16" /> | **移动云盘活动任务** | 每日签到云朵领取与 0/10/16 点商品抢兑 | <nobr><a href="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/loon/YunDiskTasks.plugin"><strong>安装</strong></a>&nbsp;/&nbsp;<a href="./scripts/tools/yundisk/"><strong>说明</strong></a></nobr> |
 | <img src="icons/qq.png" height="16" /> | **QQ空间** | 屏蔽空间广告与营销内容 | <nobr><a href="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/loon/QzoneAdBlock.plugin"><strong>安装</strong></a>&nbsp;/&nbsp;<a href="./loon/README.md"><strong>说明</strong></a></nobr> |
 | <img src="https://github.githubassets.com/favicons/favicon.png" height="16" /> | **GitHub** | 星标列表显示最近推送时间 | <nobr><a href="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/loon/GitHubPushTime.plugin"><strong>安装</strong></a>&nbsp;/&nbsp;<a href="./scripts/tools/github/"><strong>说明</strong></a></nobr> |
 | <img src="icons/pixiv.png" height="16" /> | **Pixiv** | 日文深度汉化 · AI 漫画翻译 · 设置中心 | <nobr><a href="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/loon/PixivEnhanced.plugin"><strong>安装</strong></a>&nbsp;/&nbsp;<a href="./scripts/tools/pixiv/"><strong>说明</strong></a></nobr> |
@@ -54,6 +58,8 @@ ql repo https://github.com/TomCatXue/MyCookieCenter.git "ql_script" "" "README" 
 | 图标 | 任务 | 功能 | 变量 |
 | :-: | :--- | :--- | :---: |
 | <img src="icons/weread.png" height="16" /> | **微信读书** | 阅读领卡、翻牌与限免 | `WEREAD_AUTH` |
+| <img src="icons/10086.png" height="16" /> | **移动云盘签到** | 签到、云朵领取与 Token 自愈 | `YDYP_AUTH` |
+| <img src="icons/10086.png" height="16" /> | **移动云盘抢兑** | 0/10/16 点商品抢兑，抢兑前 1 分钟预热 | `YDYP_AUTH` |
 | <img src="icons/189.png" height="16" /> | **中国电信** | 签到、抽奖与权益领取 | `dxlin` |
 | <img src="icons/189.png" height="16" /> | **电信秒杀** | 等级权益抢兑 | `dxlin` |
 | <img src="https://github.com/ChinaTelecomOperators/ChinaUnicom/releases/download/Prerelease-Alpha/icon.png" height="16" /> | **中国联通** | 签到、积分与权益 | `chinaUnicom_data` |
@@ -66,6 +72,7 @@ ql repo https://github.com/TomCatXue/MyCookieCenter.git "ql_script" "" "README" 
 >
 > - `dxlin` 格式：`手机号#服务密码#AndroidID[#SessionKey]`，多账号换行或 `&` 分隔；
 > - `WEREAD_AUTH`：微信读书抓包 JSON，含 `refreshToken` 永久脱机自愈；
+> - `YDYP_AUTH`：移动云盘多账号凭据 JSON，支持数组或换行分隔；抢兑需另配 `YDYP_EXCHANGE_PRIZES`；
 > - `MIGU_AUTH` 格式：`手机号@密码`，多账号换行或 `&` 分隔；默认全开（签到/社区/听歌/评论），仅彩铃设置默认关闭；
 > - `YYB_SERVER`：YYB-Go-Enhanced 取码服务，格式 `地址@账号ID`，每行一个账号；林里另需 `LINLI_STORE_ID`、`LINLI_ACTIVITY_ID`，详见 [ql_script/README.md](./ql_script/README.md)。
 

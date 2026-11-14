@@ -17,7 +17,8 @@
 因此不会出现「抓到了却完全没反馈」，也不会被多次命中刷屏。
 */
 
-const AUTH_KEY = "weread_auth_v2";
+const AUTH_KEY = "weread_auth";
+const DAI_DAI_AUTH_KEY = "weread_auth_v2";
 const $ = new Env("WeRead · Cookie捕获");
 
 function getHeader(headers, name) {
@@ -202,6 +203,22 @@ function syncToDaidai({ name, value, ident, group }, cb) {
 
 function saveAuthAndNotify(auth, tag, title, defaultSub, detailLines) {
     $.setdata(JSON.stringify(auth), AUTH_KEY);
+    $.setdata(JSON.stringify(auth), DAI_DAI_AUTH_KEY);
+
+    if (!isFullWeReadAuth(auth)) {
+        $.log("[WeRead] 凭据尚未抓全，已本地保存，等待补齐 App 登录票据与 Web 活动票据后统一通知/同步");
+        return;
+    }
+    saveAndSyncFullAuth(auth, tag, title, defaultSub, detailLines);
+}
+
+function isFullWeReadAuth(auth) {
+    return Boolean(auth && auth.refreshToken && auth.deviceId && auth.wrVid && auth.wrSkey);
+}
+
+function saveAndSyncFullAuth(auth, tag, title, defaultSub, detailLines) {
+    $.setdata(JSON.stringify(auth), AUTH_KEY);
+    $.setdata(JSON.stringify(auth), DAI_DAI_AUTH_KEY);
 
     const payload = Object.assign({}, auth || {});
     const preferCoin = String($.getdata("prefer_coin") || "2").trim();
@@ -484,3 +501,5 @@ function Env(name) {
     };
     this.log = function (msg) { console.log(msg); };
 }
+
+export { isFullWeReadAuth, saveAuthAndNotify as saveCompleteAuthForTest };

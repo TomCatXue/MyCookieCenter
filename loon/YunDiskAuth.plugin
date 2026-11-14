@@ -1,0 +1,17 @@
+#!name = 移动云盘凭据获取
+#!desc = 打开移动云盘 App 自动捕获 Authorization，写入 ydyp_data / ydyp_device_id / ydyp_cache，并可经取凭证网关同步呆呆面板。
+#!author = TomCatXue
+#!homepage = https://github.com/TomCatXue/MyCookieCenter
+#!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/10086.png
+#!tag = Cookie, 凭据捕获, 中国移动, 移动云盘
+#!version = 1.0.0
+#!date = 2026-11-14 16:35
+
+[Argument]
+capture = switch,false,tag=Authorization捕获,desc=打开后进入移动云盘 App 首页自动抓取 Authorization，抓取完成后建议关闭
+
+[Script]
+request if ${url} ~= /^https?:\/\/user-njs\.yun\.139\.com\/user\//i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/yundisk/yundisk.cookie.js?v=944eb970") with enable=${capture}, tag="移动云盘·凭据捕获", img_url="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/10086.png"
+
+[MITM]
+hostname = user-njs.yun.139.com

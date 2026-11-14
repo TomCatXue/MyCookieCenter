@@ -3,6 +3,10 @@
 | 插件 | 功能 | 独立业务开关 |
 | :--- | :--- | :--- |
 | [**DaiDaiPanel.plugin**](./DaiDaiPanel.plugin) (v1.0.7) | **呆呆面板**：微信读书 / 扫描全能王 / 中国电信凭据捕获并自动同步 | `weread` `camscanner` `telecom` |
+| [**WeReadAuth.plugin**](./WeReadAuth.plugin) (v1.0.0) | **微信读书凭据获取**：独立捕获 App / Web 票据并写入 `weread_auth` | `capture` |
+| [**WeReadTasks.plugin**](./WeReadTasks.plugin) (v1.0.0) | **微信读书活动任务**：每日阅读奖励、周二翻牌、周五限免入架 | `capture` `claim` `flip` `free` |
+| [**YunDiskAuth.plugin**](./YunDiskAuth.plugin) (v1.0.0) | **移动云盘凭据获取**：捕获 Authorization 并写入 `ydyp_data` / `ydyp_cache` | `capture` |
+| [**YunDiskTasks.plugin**](./YunDiskTasks.plugin) (v1.0.0) | **移动云盘活动任务**：每日签到云朵领取与 0/10/16 点商品抢兑 | `capture` `sign` `exchange` |
 | [**ChinaMobile.plugin**](./ChinaMobile.plugin) (v1.0.16) | **中国移动**：净化开屏、首页轮播、专区横幅、和包钱包营销浮层与「我的」弹窗 | HideCarousel 轮播总控及全功能细分开关 |
 | [`WeReadEnhance.plugin`](./WeReadEnhance.plugin) (v4.2.1) | 微信读书：去广告、去更新弹窗、解除试听限制 | 内置总开关 |
 | [**BilibiliFix.plugin**](./BilibiliFix.plugin) (v2.8.3) | **哔哩哔哩 𝕏 (白B专用)**：空降助手、分区修复、扫码登录、画质解锁 | 内置总开关 |

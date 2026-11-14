@@ -1,0 +1,24 @@
+#!name = 微信读书活动任务
+#!desc = 抓取完整票据后每日阅读奖励、翻牌抽奖、限免入架自动执行。
+#!author = TomCatXue
+#!homepage = https://github.com/TomCatXue/MyCookieCenter
+#!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/weread.png
+#!tag = 微信读书,签到,自动化
+#!version = 1.0.0
+#!date = 2026-11-14 18:20
+
+[Argument]
+capture = switch,false,tag=票据捕获,desc=打开微信读书「我」和「翻牌/限免」页面补齐完整票据，抓完建议关闭
+claim = switch,true,tag=每日阅读奖励,desc=每天23:05自动领取阅读时长与连续阅读奖励
+flip = switch,true,tag=翻牌抽奖,desc=每周二20:05自动翻牌抽奖并更新Web票据
+free = switch,true,tag=限免入架,desc=每周五10:05自动领取/助力限免好书入架
+
+[Script]
+request if ${url} ~= /^https?:\/\/(i\.)?weread\.qq\.com\/(flip-card-game|user\/|feature|free\/library|checkfreequalify|login)/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/weread/weread_cookie.js?v=7a55ec4b") with enable=${capture}, tag="微信读书·票据捕获", requires_body=true, img_url="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/weread.png"
+response if ${url} ~= /^https?:\/\/i\.weread\.qq\.com\/login/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/weread/weread_cookie.js?v=7a55ec4b") with enable=${capture}, tag="微信读书·登录回填", requires_body=true, img_url="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/weread.png"
+cron "5 23 * * *" then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/weread/weread_claim.js?v=a4dd2ca1") with enable=${claim}, tag="微信读书·阅读奖励", img_url="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/weread.png"
+cron "5 20 * * 2" then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/weread/weread_flip.js?v=983807c6") with enable=${flip}, tag="微信读书·翻牌抽奖", img_url="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/weread.png"
+cron "5 10 * * 5" then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/weread/weread_free.js?v=96f2c3a2") with enable=${free}, tag="微信读书·限免入架", img_url="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/weread.png"
+
+[MITM]
+hostname = weread.qq.com, i.weread.qq.com

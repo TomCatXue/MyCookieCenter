@@ -23,8 +23,8 @@ daidai_secret = input,"",tag=呆呆面板AppSecret(可选),desc=填入 Open API 
 
 [Script]
 # --- 1. 【微信读书】凭据捕获与就地同步 (联动 weread 开关) ---
-request if ${url} ~= /^https?:\/\/(i\.)?weread\.qq\.com\/(flip-card-game|user\/|feature|free\/library|checkfreequalify|login)/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/weread/weread_cookie.js?v=0123c261") with enable=${weread}, tag="微信读书·凭据捕获", requires_body=true, img_url="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/weread.png"
-response if ${url} ~= /^https?:\/\/i\.weread\.qq\.com\/login/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/weread/weread_cookie.js?v=0123c261") with enable=${weread}, tag="微信读书·登录回填", requires_body=true, img_url="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/weread.png"
+request if ${url} ~= /^https?:\/\/(i\.)?weread\.qq\.com\/(flip-card-game|user\/|feature|free\/library|checkfreequalify|login)/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/weread/weread_cookie.js?v=7a55ec4b") with enable=${weread}, tag="微信读书·凭据捕获", requires_body=true, img_url="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/weread.png"
+response if ${url} ~= /^https?:\/\/i\.weread\.qq\.com\/login/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/weread/weread_cookie.js?v=7a55ec4b") with enable=${weread}, tag="微信读书·登录回填", requires_body=true, img_url="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/weread.png"
 
 # --- 2. 【扫描全能王】凭据捕获与就地同步 (联动 camscanner 开关) ---
 request if ${url} ~= /^https:\/\/api-cs\.intsig\.net\/user\/cs\/get_user_attribute/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/camscanner/camscanner.cookie.js?v=4b221ef6") with enable=${camscanner}, tag="扫描全能王·凭据捕获", img_url="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/camscanner.png"

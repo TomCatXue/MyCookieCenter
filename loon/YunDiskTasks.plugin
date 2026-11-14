@@ -1,0 +1,21 @@
+#!name = 移动云盘活动任务
+#!desc = 抓取 Authorization 后每日签到、云朵领取与商品抢兑自动执行。
+#!author = TomCatXue
+#!homepage = https://github.com/TomCatXue/MyCookieCenter
+#!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/10086.png
+#!tag = 中国移动,移动云盘,签到,自动化
+#!version = 1.0.0
+#!date = 2026-11-14 18:20
+
+[Argument]
+capture = switch,false,tag=Authorization捕获,desc=打开移动云盘App首页抓取Authorization，抓完建议关闭
+sign = switch,true,tag=每日签到,desc=每天08:05自动签到并领取云朵
+exchange = switch,true,tag=商品抢兑,desc=每天00:00/10:00/16:00补货后立即查询商品并按YDYP_EXCHANGE_PRIZES抢兑
+
+[Script]
+request if ${url} ~= /^https?:\/\/user-njs\.yun\.139\.com\/user\//i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/yundisk/yundisk.cookie.js?v=944eb970") with enable=${capture}, tag="移动云盘·凭据捕获", img_url="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/10086.png"
+cron "5 8 * * *" then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/yundisk/yundisk.sign.js?v=a3a55d62") with enable=${sign}, tag="移动云盘·每日签到", img_url="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/10086.png"
+cron "59 9,15,23 * * *" then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/yundisk/yundisk.exchange.js?v=3303045d") with enable=${exchange}, tag="移动云盘·商品抢兑", img_url="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/10086.png"
+
+[MITM]
+hostname = user-njs.yun.139.com
