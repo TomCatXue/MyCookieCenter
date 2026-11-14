@@ -4,13 +4,13 @@
 | :--- | :--- | :--- |
 | [**DaiDaiPanel.plugin**](./DaiDaiPanel.plugin) (v1.0.7) | **呆呆面板**：微信读书 / 扫描全能王 / 中国电信凭据捕获并自动同步 | `weread` `camscanner` `telecom` |
 | [**ChinaMobile.plugin**](./ChinaMobile.plugin) (v1.0.16) | **中国移动**：净化开屏、首页轮播、专区横幅、和包钱包营销浮层与「我的」弹窗 | HideCarousel 轮播总控及全功能细分开关 |
-| [`WeReadEnhance.plugin`](./WeReadEnhance.plugin) | 微信读书：去广告、去更新弹窗、解除试听限制 | 内置总开关 |
+| [`WeReadEnhance.plugin`](./WeReadEnhance.plugin) (v4.2.1) | 微信读书：去广告、去更新弹窗、解除试听限制 | 内置总开关 |
 | [**BilibiliFix.plugin**](./BilibiliFix.plugin) (v2.8.3) | **哔哩哔哩 𝕏 (白B专用)**：空降助手、分区修复、扫码登录、画质解锁 | 内置总开关 |
-| [`PixivEnhanced.plugin`](./PixivEnhanced.plugin) | Pixiv：全页面汉化、AI 漫画翻译、设置中心 | 内置总开关 |
-| [`QzoneAdBlock.plugin`](./QzoneAdBlock.plugin) | QQ空间：广告与营销内容屏蔽 | 规则型，无需开关 |
-| [`GitHubPushTime.plugin`](./GitHubPushTime.plugin) | GitHub：星标列表显示最近推送时间 | 内置总开关 |
-| [`LoonMonitor.plugin`](./LoonMonitor.plugin) | 为 iOS 桌面小组件提供运行状态与流量数据 | 内置总开关 |
-| [`camscanner.plugin`](./camscanner.plugin) | 扫描全能王：抓取 + 每日签到 | `cookie_capture` `sign_in` |
+| [`PixivEnhanced.plugin`](./PixivEnhanced.plugin) (v4.5.8) | Pixiv：全页面汉化、AI 漫画翻译、设置中心 | 内置总开关 |
+| [`QzoneAdBlock.plugin`](./QzoneAdBlock.plugin) (v1.1.0) | QQ空间：广告与营销内容屏蔽 | 规则型，无需开关 |
+| [`GitHubPushTime.plugin`](./GitHubPushTime.plugin) (v1.2.0) | GitHub：星标列表显示最近推送时间 | 内置总开关 |
+| [`LoonMonitor.plugin`](./LoonMonitor.plugin) (v1.5.0) | 为 iOS 桌面小组件提供运行状态与流量数据 | 内置总开关 |
+| [`camscanner.plugin`](./camscanner.plugin) (v1.5.0) | 扫描全能王：抓取 + 每日签到 | `cookie_capture` `sign_in` |
 | [`PixivAdBlock.plugin`](./PixivAdBlock.plugin) (v1.0.1) | Pixiv：小说广告过滤、图片镜像与 Premium 属性注入 (chaoscard 原作) | 规则型，无需开关 |
 | [`PSBC.plugin`](./PSBC.plugin) (v1.0.0) | 邮储银行：屏蔽开屏广告、摇一摇与静态资源拦截 (chaoscard 原作) | 规则型，无需开关 |
 | [`Telegram.plugin`](./Telegram.plugin) (v1.1.0) | Telegram 增强：优质 IP 调度防转圈、外部 t.me 链接跳转客户端 (chaoscard 原作) | `t.me_redirect` 客户端选择 |
