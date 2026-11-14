@@ -22,6 +22,24 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const README_SKIP_PLUGINS = ['ChinaMobileRenew.plugin'];
 
 /**
+ * 允许「已声明但规则未引用」的 switch 开关（未来预留用途）。
+ * 格式：{ 'PluginName.plugin': ['switchName'] }，空对象表示当前不允许任何死开关。
+ */
+const DANGLING_SWITCH_WHITELIST = {};
+
+/**
+ * 跳过「#!date 新鲜度」检查的插件。
+ * ChinaMobileRenew 不在公开仓库，且引用的脚本全为远程 Worker 地址，无本仓库历史可查。
+ */
+const DATE_FRESHNESS_SKIP_PLUGINS = ['ChinaMobileRenew.plugin'];
+
+/**
+ * 视为「实际规则行」的行首关键字。
+ * 只有这些行里出现的 ${开关名} 才算接线，注释行与 [Argument] 段本身都不算。
+ */
+const RULE_LINE_PREFIXES = ['request', 'response', 'cron', 'http-request', 'http-response'];
+
+/**
  * 每个 loon/*.plugin 必须声明的头部字段。
  * author / homepage 属于可选项，见 OPTIONAL_PLUGIN_FIELDS。
  */
@@ -555,6 +573,134 @@ function checkCacheBusting(plugins) {
   };
 }
 
+/**
+ * 解析插件 [Argument] 段。
+ * 段边界：从 [Argument] 行开始，到下一个以 [ 开头的行（如 [MITM]）或文件结束。
+ * 返回 { switches: 声明的 switch 名, ruleLines: 段之后的所有行 }；没有 [Argument] 段返回 null。
+ */
+function parseArgumentSection(content) {
+  const lines = content.split(/\r?\n/);
+  const start = lines.findIndex((line) => /^\s*\[Argument\]\s*$/.test(line));
+  if (start === -1) return null;
+
+  let end = lines.length;
+  for (let index = start + 1; index < lines.length; index += 1) {
+    if (/^\s*\[/.test(lines[index])) {
+      end = index;
+      break;
+    }
+  }
+
+  const switches = [];
+  for (const line of lines.slice(start + 1, end)) {
+    // 只检查 switch 类型；select / input 可能由用户手工填到别处（如 Authorization），不强制接线
+    const match = /^([A-Za-z0-9_.-]+)\s*=\s*switch\b/.exec(line.trim());
+    if (match) switches.push(match[1]);
+  }
+
+  return { switches, ruleLines: lines.slice(end) };
+}
+
+function checkArgumentSwitches(plugins) {
+  const failures = [];
+
+  for (const plugin of plugins) {
+    const section = parseArgumentSection(plugin.content);
+    if (!section || !section.switches.length) continue;
+
+    const whitelist = new Set(DANGLING_SWITCH_WHITELIST[plugin.name] || []);
+    const ruleText = section.ruleLines
+      .map((line) => line.trim())
+      .filter((line) => line && !line.startsWith('#'))
+      .filter((line) => RULE_LINE_PREFIXES.some((prefix) => line.startsWith(prefix)))
+      .join('\n');
+
+    for (const name of section.switches) {
+      if (whitelist.has(name)) continue;
+      // Loon 语法：${开关名} 中间不能有空格
+      if (!ruleText.includes(`\${${name}}`)) {
+        failures.push(`${plugin.name}  声明但规则未引用：${name}`);
+      }
+    }
+  }
+
+  return {
+    status: failures.length ? 'fail' : 'pass',
+    summary: `${plugins.length} 个插件`,
+    details: failures.map((line) => red(line)),
+  };
+}
+
+/**
+ * 取某个仓库相对路径的最后一次提交时间（作者日期，保留提交时区）。
+ * 返回 { time }；文件尚无提交时 time 为 null；git 不可用时返回 { error }。
+ */
+function gitLastCommitTime(relativePath) {
+  const result = spawnSync(
+    'git',
+    ['log', '-1', '--format=%ad', '--date=format:%Y-%m-%d %H:%M', '--', relativePath],
+    { cwd: ROOT, encoding: 'utf8' },
+  );
+
+  if (result.error) return { error: result.error.message };
+  if (result.status !== 0) {
+    const message = (result.stderr || '').trim().split(/\r?\n/).filter(Boolean)[0];
+    return { error: message || `git log 退出码 ${result.status}` };
+  }
+
+  const time = (result.stdout || '').trim();
+  return { time: time || null };
+}
+
+function checkPluginDateFreshness(plugins) {
+  const failures = [];
+
+  for (const plugin of plugins) {
+    if (DATE_FRESHNESS_SKIP_PLUGINS.includes(plugin.name)) continue;
+
+    const pluginDate = plugin.headers.get('date');
+    if (!pluginDate) continue; // 缺失交给「插件元数据」检查报告
+
+    // 只比较本仓库脚本；第三方 URL 由「第三方 URL 可达性」检查覆盖
+    const scriptPaths = [
+      ...new Set(
+        extractScriptUrls(plugin.content)
+          .map((url) => rawUrlToRepoPath(url))
+          .filter((resolved) => resolved && !resolved.error && resolved.relativePath)
+          .map((resolved) => resolved.relativePath)
+          .filter((relativePath) => repoPathExists(relativePath)),
+      ),
+    ];
+    if (!scriptPaths.length) continue; // 未引用本仓库脚本（PSBC / PixivAdBlock 等）
+
+    const times = [];
+    for (const relativePath of scriptPaths) {
+      const result = gitLastCommitTime(relativePath);
+      // 无 git 环境（或非仓库目录）时优雅降级，不判失败
+      if (result.error) {
+        return {
+          status: 'warn',
+          summary: '跳过（无 git 历史）',
+          details: [yellow(`${plugin.name}  ${result.error}`)],
+        };
+      }
+      if (result.time) times.push(result.time);
+    }
+    if (!times.length) continue; // 脚本尚未提交，无从比较
+
+    const latest = times.sort().pop();
+    if (latest > pluginDate) {
+      failures.push(`${plugin.name}  插件 date=${pluginDate}，脚本最新改动=${latest}`);
+    }
+  }
+
+  return {
+    status: failures.length ? 'fail' : 'pass',
+    summary: `${plugins.length} 个插件`,
+    details: failures.map((line) => red(line)),
+  };
+}
+
 function checkPluginMetadata(plugins) {
   const failures = [];
   const notes = [];
@@ -767,6 +913,8 @@ const checks = [
   { name: '文档死链', run: checkDeadLinks },
   { name: '表格宽度', run: checkTableWidth },
   { name: '第三方 URL 可达性', run: () => checkThirdPartyUrls(pluginList) },
+  { name: '[Argument] 开关接线', run: () => checkArgumentSwitches(pluginList) },
+  { name: '插件日期新鲜度', run: () => checkPluginDateFreshness(pluginList) },
 ];
 
 const pluginList = listPlugins();

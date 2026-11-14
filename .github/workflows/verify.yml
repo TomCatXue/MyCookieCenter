@@ -10,6 +10,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # 「插件日期新鲜度」检查需要 git log 读取脚本最后提交时间，
+          # 浅克隆（默认 fetch-depth: 1）只能拿到 1 个提交，会导致该项假绿。
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
