@@ -5,6 +5,8 @@
   "scripts": {
     "verify": "node tools/verify.mjs",
     "sync-docs": "node tools/sync-doc-versions.mjs",
-    "sync-docs:write": "node tools/sync-doc-versions.mjs --write"
+    "sync-docs:write": "node tools/sync-doc-versions.mjs --write",
+    "sync-cache-bust": "node tools/sync-cache-bust.mjs",
+    "sync-cache-bust:write": "node tools/sync-cache-bust.mjs --write"
   }
 }

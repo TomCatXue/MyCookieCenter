@@ -74,7 +74,7 @@ DOMAIN-SUFFIX,nicegram.cloud,PROXY
 DOMAIN-SUFFIX,intentchat.app,PROXY
 
 [Script]
-http-request ^https?:\/\/(t\.me|telegram\.(?:me|dog))\/.+ script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/telegram/t.me_redirect.js, argument=[{t.me_redirect}], timeout=10, tag=[Telegram]链接重定向
+http-request ^https?:\/\/(t\.me|telegram\.(?:me|dog))\/.+ script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/telegram/t.me_redirect.js?v=83f8d9f3, argument=[{t.me_redirect}], timeout=10, tag=[Telegram]链接重定向
 
 [MITM]
 hostname = t.me, telegram.me, telegram.dog

@@ -31,7 +31,7 @@ response if ${url} ~= /MIGUM3\.0\/strategy\/popup\/list\/v1\.0/ then response.js
 
 [Script]
 # 客户端去广告权益 (no_ads)
-http-response ^https?:\/\/app\.c\.nf\.migu\.cn\/member\/api\/rights\/user\/have\/v1\.0 script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/migu/migu.js?v=20261113-1301, requires-body=true, timeout=60, tag=咪咕去广告权益
+http-response ^https?:\/\/app\.c\.nf\.migu\.cn\/member\/api\/rights\/user\/have\/v1\.0 script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/migu/migu.js?v=ac347c0d, requires-body=true, timeout=60, tag=咪咕去广告权益
 
 [MITM]
 hostname = app.c.nf.migu.cn, app.pd.nf.migu.cn

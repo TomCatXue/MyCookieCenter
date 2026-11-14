@@ -9,9 +9,9 @@
 #!date = 2026-11-12 22:56
 
 [Script]
-http-response ^https?:\/\/(?:ios-api-[^.]+|api[^.]+)\.duolingo\.[a-z.]+\/.*\/users\/.*\?fields=subscriberLevel script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/duolingo/duolingo.level.js?v=20261112c, requires-body=true, timeout=60, tag=订购等级
-http-response ^https?:\/\/(?:ios-api-[^.]+|api[^.]+)\.duolingo\.[a-z.]+\/.*\/users\/.*\/(?:available-features|advertisable-features).*$ script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/duolingo/duolingo.features.js?v=20261112, requires-body=true, timeout=60, tag=订购配置
-http-response ^https?:\/\/(?:ios-api-[^.]+|api[^.]+)\.duolingo\.[a-z.]+\/\d{4}-\d{1,2}-\d{1,2}\/batch script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/duolingo/duolingo.batch.js?v=20261112c, requires-body=true, timeout=60, tag=订购信息
+http-response ^https?:\/\/(?:ios-api-[^.]+|api[^.]+)\.duolingo\.[a-z.]+\/.*\/users\/.*\?fields=subscriberLevel script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/duolingo/duolingo.level.js?v=5dc76fcb, requires-body=true, timeout=60, tag=订购等级
+http-response ^https?:\/\/(?:ios-api-[^.]+|api[^.]+)\.duolingo\.[a-z.]+\/.*\/users\/.*\/(?:available-features|advertisable-features).*$ script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/duolingo/duolingo.features.js?v=cc30c397, requires-body=true, timeout=60, tag=订购配置
+http-response ^https?:\/\/(?:ios-api-[^.]+|api[^.]+)\.duolingo\.[a-z.]+\/\d{4}-\d{1,2}-\d{1,2}\/batch script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/duolingo/duolingo.batch.js?v=5f0305d2, requires-body=true, timeout=60, tag=订购信息
 
 [MITM]
 hostname = ios-api-*.duolingo.*, api*.duolingo.*

@@ -22,4 +22,4 @@ hostname = i.weread.qq.com, weread.qq.com
 
 [Script]
 # 拦截全局初始化配置与发现流推广（去除福利场与版本更新，锁定 68 年嗅探周期）
-response if ${url} ~= /^https?:\/\/(i\.)?weread\.qq\.com\/(feature|config|reconf|app\/upgrade|mobileSync|discoverfeed\/new)/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/wxread_enhance/wxread.js?v=20261003-1000") with tag="微信读书·防强更去广告", requires_body=true
+response if ${url} ~= /^https?:\/\/(i\.)?weread\.qq\.com\/(feature|config|reconf|app\/upgrade|mobileSync|discoverfeed\/new)/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/wxread_enhance/wxread.js?v=34c8fbb4") with tag="微信读书·防强更去广告", requires_body=true

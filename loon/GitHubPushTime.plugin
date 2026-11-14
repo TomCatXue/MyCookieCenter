@@ -21,7 +21,7 @@ hostname = api.github.com
 
 [Script]
 # 请求增强：给 StarredRepositoriesForUser 查询补充 pushedAt/updatedAt
-request if ${url} ~= /^https?:\/\/api\.github\.com\/graphql/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/github/github_push_time.js?v=20260818-12") with enable=${github_push_time}, tag="GitHub 推送时间-查询增强", timeout=10, requires_body=true
+request if ${url} ~= /^https?:\/\/api\.github\.com\/graphql/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/github/github_push_time.js?v=0d75ca9c") with enable=${github_push_time}, tag="GitHub 推送时间-查询增强", timeout=10, requires_body=true
 
 # 响应注入：在星标列表语言后显示推送时间
-response if ${url} ~= /^https?:\/\/api\.github\.com\/graphql/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/github/github_push_time.js?v=20260818-12") with enable=${github_push_time}, tag="GitHub 推送时间-列表注入", timeout=10, requires_body=true
+response if ${url} ~= /^https?:\/\/api\.github\.com\/graphql/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/github/github_push_time.js?v=0d75ca9c") with enable=${github_push_time}, tag="GitHub 推送时间-列表注入", timeout=10, requires_body=true

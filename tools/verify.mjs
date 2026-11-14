@@ -8,6 +8,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
@@ -20,8 +21,14 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 /** 允许不收录进公开文档的插件（.gitignore 排除、故意隐藏） */
 const README_SKIP_PLUGINS = ['ChinaMobileRenew.plugin'];
 
-/** 每个 loon/*.plugin 必须声明的头部字段 */
-const REQUIRED_PLUGIN_FIELDS = ['name', 'desc', 'author', 'version', 'date', 'homepage'];
+/**
+ * 每个 loon/*.plugin 必须声明的头部字段。
+ * author / homepage 属于可选项，见 OPTIONAL_PLUGIN_FIELDS。
+ */
+const REQUIRED_PLUGIN_FIELDS = ['name', 'desc', 'version', 'date'];
+
+/** 可选头部字段：缺失不算失败，仅在 --verbose 时以次级样式提示 */
+const OPTIONAL_PLUGIN_FIELDS = ['author', 'homepage'];
 
 /** 本仓库 raw 地址前缀 */
 const REPO_RAW_PREFIX = 'raw.githubusercontent.com/TomCatXue/MyCookieCenter/';
@@ -31,6 +38,9 @@ const TABLE_WIDTH_LIMITS = { name: 16, desc: 68 };
 
 /** 遍历时跳过的目录 */
 const IGNORED_DIRS = new Set(['node_modules', '.git', '__pycache__', '.alma', '.alma-snapshots']);
+
+/** --verbose 时输出可选字段缺失等次级提示 */
+const VERBOSE = process.argv.includes('--verbose');
 
 // ---------------------------------------------------------------------------
 // 输出工具
@@ -118,7 +128,7 @@ function listPlugins() {
  * 支持三种前缀：refs/heads/main/、main/、<40位或7位 SHA>/
  * 返回 null 表示不是本仓库地址，返回 { error } 表示无法识别的形式。
  */
-function rawUrlToRepoPath(url) {
+export function rawUrlToRepoPath(url) {
   const marker = `https://${REPO_RAW_PREFIX}`;
   const index = url.indexOf(marker);
   if (index === -1) return null;
@@ -140,7 +150,7 @@ function rawUrlToRepoPath(url) {
 }
 
 /** 提取插件里所有脚本 URL：script-path=... 与 script("...") */
-function extractScriptUrls(content) {
+export function extractScriptUrls(content) {
   const urls = [];
   const patterns = [
     /script-path\s*=\s*([^,\s]+)/g,
@@ -151,6 +161,26 @@ function extractScriptUrls(content) {
     for (const match of content.matchAll(pattern)) urls.push(match[1]);
   }
   return [...new Set(urls)];
+}
+
+/**
+ * 脚本内容哈希：SHA-256 前 8 位十六进制。
+ * 先把 CRLF 归一为 LF —— raw 分发的是 git blob 字节，而 Windows 工作区
+ * 可能因 core.autocrlf 出现 CRLF，不归一会导致不同机器 / CI 算出不同哈希。
+ * 与 tools/sync-cache-bust.mjs 中的实现必须保持一致。
+ */
+export function scriptHash(relativePath) {
+  try {
+    const buffer = fs.readFileSync(abs(...relativePath.split('/')));
+    const normalized = buffer.toString('latin1').replace(/\r\n/g, '\n');
+    return crypto
+      .createHash('sha256')
+      .update(Buffer.from(normalized, 'latin1'))
+      .digest('hex')
+      .slice(0, 8);
+  } catch {
+    return null;
+  }
 }
 
 /** 提取插件里所有 img_url 引用（兼容带引号与不带引号两种写法） */
@@ -370,33 +400,54 @@ function checkCacheBusting(plugins) {
       const resolved = rawUrlToRepoPath(url);
       if (!resolved || resolved.error) continue;
       checked += 1;
-      if (!/[?&]v=/.test(url)) {
-        failures.push(`${plugin.name}  缺少 ?v= 缓存参数：${url}`);
+
+      // 文件不存在的情况交给「插件脚本引用完整性」报告
+      const expected = scriptHash(resolved.relativePath);
+      if (expected === null) continue;
+
+      const match = /[?&]v=([^&#]*)/.exec(url);
+      if (!match) {
+        failures.push(`${plugin.name}  ${resolved.relativePath}  缺少 ?v=（应为 ${expected}）`);
+      } else if (match[1] !== expected) {
+        failures.push(
+          `${plugin.name}  ${resolved.relativePath}  ?v= 过期（当前 ${match[1] || '(空)'}，应为 ${expected}）`,
+        );
       }
     }
   }
 
+  const details = failures.map((line) => red(line));
+  if (failures.length) details.push(dim('运行 npm run sync-cache-bust:write 自动修复'));
+
   return {
     status: failures.length ? 'fail' : 'pass',
     summary: `检查了 ${checked} 个本仓库脚本地址`,
-    details: failures.map((line) => red(line)),
+    details,
   };
 }
 
 function checkPluginMetadata(plugins) {
   const failures = [];
+  const notes = [];
 
   for (const plugin of plugins) {
     const missing = REQUIRED_PLUGIN_FIELDS.filter((field) => !plugin.headers.get(field));
     if (missing.length) {
       failures.push(`${plugin.name}  缺少：${missing.map((field) => `#!${field}`).join(', ')}`);
     }
+
+    // 可选字段缺失不算故障，仅在 --verbose 时提示
+    if (VERBOSE) {
+      for (const field of OPTIONAL_PLUGIN_FIELDS) {
+        if (!plugin.headers.get(field)) notes.push(`${plugin.name}  未标 #!${field}`);
+      }
+    }
   }
 
   return {
     status: failures.length ? 'fail' : 'pass',
     summary: `${plugins.length} 个插件`,
-    details: failures.map((line) => red(line)),
+    details: [...failures.map((line) => red(line)), ...notes.map((line) => dim(line))],
   };
 }
 
@@ -593,33 +644,47 @@ const pluginList = listPlugins();
 console.log();
 console.log(bold(cyan('MyCookieCenter 仓库校验')));
 console.log(dim(`仓库根目录：${ROOT}`));
-console.log();
+/**
+ * 仅当作为入口脚本直接运行时才执行校验。
+ * 被 tools/sync-cache-bust.mjs 等模块 import 时应保持静默，只提供导出的工具函数。
+ */
+function runChecks() {
+  console.log();
 
-const results = [];
-for (const check of checks) {
-  let result;
-  try {
-    result = check.run();
-  } catch (error) {
-    result = { status: 'fail', summary: '检查执行异常', details: [red(error.stack || String(error))] };
+  const results = [];
+  for (const check of checks) {
+    let result;
+    try {
+      result = check.run();
+    } catch (error) {
+      result = { status: 'fail', summary: '检查执行异常', details: [red(error.stack || String(error))] };
+    }
+    results.push({ ...check, ...result });
+
+    const icon =
+      result.status === 'pass' ? green('✓') : result.status === 'warn' ? yellow('⚠') : red('✗');
+    const title = result.status === 'fail' ? red(check.name) : check.name;
+    console.log(`${icon} ${title}  ${dim('—')} ${result.summary}`);
+    for (const line of new Set(result.details || [])) console.log(`    ${line}`);
   }
-  results.push({ ...check, ...result });
 
-  const icon =
-    result.status === 'pass' ? green('✓') : result.status === 'warn' ? yellow('⚠') : red('✗');
-  const title = result.status === 'fail' ? red(check.name) : check.name;
-  console.log(`${icon} ${title}  ${dim('—')} ${result.summary}`);
-  for (const line of new Set(result.details || [])) console.log(`    ${line}`);
+  const failed = results.filter((result) => result.status === 'fail').length;
+  const warned = results.filter((result) => result.status === 'warn').length;
+
+  console.log();
+  const summaryParts = [`${results.length} checks`, `${failed} failed`];
+  if (warned) summaryParts.push(`${warned} warned`);
+  const summaryText = summaryParts.join(', ');
+  console.log(failed ? red(bold(summaryText)) : green(bold(summaryText)));
+  console.log();
+
+  process.exitCode = failed ? 1 : 0;
 }
 
-const failed = results.filter((result) => result.status === 'fail').length;
-const warned = results.filter((result) => result.status === 'warn').length;
-
-console.log();
-const summaryParts = [`${results.length} checks`, `${failed} failed`];
-if (warned) summaryParts.push(`${warned} warned`);
-const summaryText = summaryParts.join(', ');
-console.log(failed ? red(bold(summaryText)) : green(bold(summaryText)));
-console.log();
-
-process.exitCode = failed ? 1 : 0;
+// 入口保护：只有直接执行才跑，被 import 时不跑。
+// 注意不能用 realpath 比较：Windows 下 argv[1] 可能是短路径或大小写不同。
+// 用「本文件路径是否出现在 argv[1]」+ 文件名后缀判断更稳。
+const __selfPath = fileURLToPath(import.meta.url).replace(/\\/g, '/').toLowerCase();
+const __argvPath = (process.argv[1] || '').replace(/\\/g, '/').toLowerCase();
+const invokedDirectly = __argvPath.endsWith('tools/verify.mjs') || __argvPath === __selfPath;
+if (invokedDirectly) runChecks();
