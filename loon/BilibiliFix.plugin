@@ -9,7 +9,6 @@
 #!date = 2026-10-28 15:45
 
 [Argument]
-quality = switch, true, tag = [画质] 解锁1080P高码率/4K, desc = 开启后非大会员也可直接选择并切换1080P高码率、1080P60、杜比视界等画质
 sponsorBlock = switch, true, tag = [空降助手] 跳过视频内插播广告, desc = 自动跳过视频内的赞助插播、片头、片尾等片段
 displayUpList = select, "auto", "show", "hide", tag = [动态] 最常访问显示方式, desc = auto: 仅当列表中存在直播状态时显示; show: 始终显示; hide: 始终隐藏;
 purifyComment = switch, true, tag = [评论区] 过滤置顶广告, desc = 过滤评论区置顶广告及引流链接

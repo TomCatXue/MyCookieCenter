@@ -6,7 +6,7 @@
 #!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/duolingo.webp
 #!tag = 多邻国,Duolingo,会员,解锁
 #!version = 2.0.3
-#!date = 2026-11-12 22:56
+#!date = 2026-11-12 22:57
 
 [Script]
 http-response ^https?:\/\/(?:ios-api-[^.]+|api[^.]+)\.duolingo\.[a-z.]+\/.*\/users\/.*\?fields=subscriberLevel script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/duolingo/duolingo.level.js?v=5dc76fcb, requires-body=true, timeout=60, tag=订购等级

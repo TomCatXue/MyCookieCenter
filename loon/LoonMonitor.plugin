@@ -5,7 +5,7 @@
 #!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/loon.png
 #!tag = Loon, 监控, 小组件, VPN
 #!version = 1.5.0
-#!date = 2026-10-18 11:10
+#!date = 2026-10-20 01:35
 
 # =================== 1. 本地解析 ===================
 # 虚拟域名在本地解析至 Fake-IP 保留网段 (198.18.0.1)，保证流量进入 TUN 虚拟网卡触发本地脚本短路。

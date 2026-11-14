@@ -6,7 +6,7 @@
 #!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/migu_app.jpg
 #!tag = 咪咕音乐,去广告
 #!version = 1.0.0
-#!date = 2026-11-13 13:01
+#!date = 2026-11-13 13:17
 
 [Rule]
 # 广告 SDK 与营销埋点域名直接拦截 (零脚本开销)

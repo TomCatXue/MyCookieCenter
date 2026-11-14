@@ -5,7 +5,7 @@
 #!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/wechat_read_app.jpg
 #!tag = 微信读书,防强更,去弹窗,去广告,AI听书
 #!version = 4.2.1
-#!date = 2026-10-03 10:00
+#!date = 2026-10-08 11:32
 
 [Rule]
 # 阻断腾讯 APM 性能监控与 CLS 日志上报通道

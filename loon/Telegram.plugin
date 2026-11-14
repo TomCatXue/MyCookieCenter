@@ -6,7 +6,7 @@
 #!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/telegram.png
 #!tag = Telegram,功能增强,分流优化
 #!version = 1.1.0
-#!date = 2026-11-01 13:10
+#!date = 2026-11-01 13:27
 
 [Argument]
 t.me_redirect = select, "Telegram", "Swiftgram", "Nagram", "Turrit", "iMe", "Nicegram", "Lingogram", "Teleplus", tag=跳转至对应客户端, desc=选择点击t.me链接时唤起的目标客户端

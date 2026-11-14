@@ -4,14 +4,14 @@
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/camscanner.jpg
 #!tag = 扫描全能王,Cookie,签到
-#!version = 1.6.0
-#!date = 2026-11-14 09:50
+#!version = 1.6.1
+#!date = 2026-11-14 09:52
 
 # =================== 独立开关 ===================
 
 [Argument]
 cookie_capture = switch,true,tag=抓取Cookie,desc=打开扫描全能王触发用户属性接口抓取Cookie
-sign_in = switch,true,tag=每日签到,desc=每天10:15自动签到
+sign_in = switch,true,tag=每日签到,desc=每天08:15自动签到抽奖
 auto_renew = switch,true,tag=自动换票,desc=每天08:05用长效种子自动换新token
 
 # =================== MITM ===================
@@ -33,4 +33,4 @@ request if ${url} ~= /^https:\/\/api-cs\.intsig\.net\/user\/cs\/update_token_by_
 cron "5 8 * * *" then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/camscanner/camscanner.renew.js?v=bc548c8c") with enable=${auto_renew}, tag="扫描全能王换票", img_url="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/camscanner.png"
 
 # 每日签到（抽奖）：每天 08:15 自动执行 · 脚本已本地化，不再依赖 MaYIHEI/paperclip
-cron "15 8 * * *" then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/camscanner/camscanner.sign.js?v=4453f04c") with tag="扫描全能王签到", img_url="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/camscanner.png"
+cron "15 8 * * *" then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/camscanner/camscanner.sign.js?v=4453f04c") with enable=${sign_in}, tag="扫描全能王签到", img_url="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/camscanner.png"
