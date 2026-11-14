@@ -5,7 +5,7 @@
 #!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/10086.png
 #!tag = 中国移动,移动云盘,签到,自动化
 #!version = 1.1.0
-#!date = 2026-11-14 16:07
+#!date = 2026-11-14 16:27
 
 [Argument]
 capture = switch,false,tag=Authorization捕获,desc=打开移动云盘App首页抓取Authorization，抓完建议关闭
