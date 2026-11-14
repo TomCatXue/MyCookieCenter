@@ -19,13 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
----
-
-## 关于第三方代码
-
-This repository contains scripts collected and adapted from various
-open-source authors. Original copyrights are retained by their respective
-authors and noted in each script's header comments and the corresponding
-README files. The MIT license above applies to the modifications and the
-repository structure made by the project maintainer.
