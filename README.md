@@ -73,6 +73,17 @@ ql repo https://github.com/TomCatXue/MyCookieCenter.git "ql_script" "" "README" 
 >
 > **已归档：** 惠省、海底捞、移动爱家去广告插件，以及中国移动每日任务与移动秒杀青龙脚本已暂停维护并移出公开仓库，源码、图标与逆向证据仅保存在本地 `archive/`（该目录已加入 `.gitignore`，不进公开仓库）。
 
+## 第三方依赖
+
+以下插件在运行时需要访问上游仓库，上游若改动或删除会影响功能：
+
+| 插件 | 上游仓库 | 依赖内容 |
+| :--- | :--- | :--- |
+| BilibiliFix | [kokoryh/Sparkle](https://github.com/kokoryh/Sparkle) | 空降助手 / ProtoBuf 净化脚本 |
+| TestFlightRelay | [ScriptingApp/Community-Scripts](https://github.com/ScriptingApp/Community-Scripts) | TestFlight 中转原版脚本（运行时跟随） |
+
+其余插件的脚本与图标均在本仓库内，不依赖外部。
+
 ## License
 
 [MIT](./LICENSE)

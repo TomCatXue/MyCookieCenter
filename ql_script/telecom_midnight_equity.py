@@ -55,6 +55,8 @@ from Crypto.Cipher import PKCS1_v1_5
 from Crypto.Util.Padding import pad, unpad
 from concurrent.futures import ThreadPoolExecutor, wait
 
+SCRIPT_VERSION = "2.7.1"
+
 # ==================== 🛠️ 脚本功能开关配置 ====================
 CONFIG = {
     "FORCE_RUN": False,         # 平日测试模式: False=仅夜间23:55~23:59准备并抢购; True=平时任何时间均可运行全链路测试

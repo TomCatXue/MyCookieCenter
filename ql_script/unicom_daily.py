@@ -88,7 +88,7 @@ from requests.packages.urllib3.util.retry import Retry
 from Crypto.Cipher import AES, PKCS1_v1_5
 from Crypto.PublicKey import RSA
 from Crypto.Util.Padding import pad, unpad
-SCRIPT_VERSION = "v1.4.1"
+SCRIPT_VERSION = "1.4.1"
 # ========================================
 # 全局配置 (globalConfig)
 # true=开启, false=关闭

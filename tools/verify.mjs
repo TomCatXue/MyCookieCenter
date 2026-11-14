@@ -33,6 +33,18 @@ const OPTIONAL_PLUGIN_FIELDS = ['author', 'homepage'];
 /** 本仓库 raw 地址前缀 */
 const REPO_RAW_PREFIX = 'raw.githubusercontent.com/TomCatXue/MyCookieCenter/';
 
+/** 本仓库 GitHub 仓库标识（第三方 URL 检查时排除） */
+const REPO_GITHUB_SLUG = 'tomcatxue/mycookiecenter';
+
+/** 第三方 URL 探测超时（毫秒） */
+const NETWORK_CHECK_TIMEOUT_MS = 10_000;
+
+/** 第三方 URL 失败后的重试间隔（毫秒） */
+const NETWORK_CHECK_RETRY_DELAY_MS = 1_000;
+
+/** SKIP_NETWORK_CHECK=1 时跳过第三方 URL 可达性检查（离线开发用） */
+const SKIP_NETWORK_CHECK = process.env.SKIP_NETWORK_CHECK === '1';
+
 /** 表格显示宽度阈值（超出仅警告，不算失败） */
 const TABLE_WIDTH_LIMITS = { name: 16, desc: 68 };
 
@@ -391,6 +403,123 @@ function checkPluginReferences(plugins) {
   };
 }
 
+/**
+ * 解析 GitHub raw 地址，返回第三方仓库信息；本仓库地址或非 raw 地址返回 null。
+ * 只用于「第三方 URL 可达性」检查，不参与本仓库文件校验。
+ */
+function parseThirdPartyRawUrl(url) {
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return null;
+  }
+
+  if (parsed.hostname.toLowerCase() !== 'raw.githubusercontent.com') return null;
+
+  const segments = parsed.pathname.split('/').filter(Boolean);
+  if (segments.length < 3) return null;
+
+  const [owner, repo, ...rest] = segments;
+  if (`${owner}/${repo}`.toLowerCase() === REPO_GITHUB_SLUG) return null;
+
+  return {
+    label: `${owner}/${repo}`,
+    file: rest[rest.length - 1] || parsed.pathname,
+  };
+}
+
+/** 汇总所有插件里的第三方脚本地址（按 URL 去重） */
+function collectThirdPartyUrls(plugins) {
+  const unique = new Map();
+
+  for (const plugin of plugins) {
+    for (const url of extractScriptUrls(plugin.content)) {
+      const info = parseThirdPartyRawUrl(url);
+      if (!info || unique.has(url)) continue;
+      unique.set(url, { url, ...info });
+    }
+  }
+
+  return [...unique.values()].sort(
+    (left, right) => left.label.localeCompare(right.label) || left.file.localeCompare(right.file),
+  );
+}
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * HEAD 探测单个 URL。
+ * 失败后间隔 1 秒重试 1 次，两次都失败才判定失败，避免网络抖动造成假失败。
+ * network=true 表示请求根本没拿到 HTTP 响应（断网 / DNS 失败 / 超时）。
+ */
+async function probeUrl(url) {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const response = await fetch(url, {
+        method: 'HEAD',
+        redirect: 'follow',
+        signal: AbortSignal.timeout(NETWORK_CHECK_TIMEOUT_MS),
+        headers: { 'user-agent': 'MyCookieCenter-verify' },
+      });
+      if (response.status === 200) return { ok: true, status: 200, network: false };
+      if (attempt === 1) return { ok: false, status: response.status, network: false };
+    } catch (error) {
+      if (attempt === 1) {
+        const cause = error && error.cause ? error.cause.code || error.cause.message : '';
+        return {
+          ok: false,
+          status: null,
+          network: true,
+          error: cause || error.name || String(error),
+        };
+      }
+    }
+    await sleep(NETWORK_CHECK_RETRY_DELAY_MS);
+  }
+
+  return { ok: false, status: null, network: true, error: 'unknown' };
+}
+
+async function checkThirdPartyUrls(plugins) {
+  if (SKIP_NETWORK_CHECK) {
+    return { status: 'warn', summary: '跳过（SKIP_NETWORK_CHECK=1）', details: [] };
+  }
+
+  const targets = collectThirdPartyUrls(plugins);
+  if (!targets.length) return { status: 'pass', summary: '0 个第三方地址', details: [] };
+
+  const results = await Promise.all(
+    targets.map(async (target) => ({ ...target, ...(await probeUrl(target.url)) })),
+  );
+
+  const failures = results.filter((result) => !result.ok);
+
+  // 所有地址都没拿到 HTTP 响应 → 视为整个环境无网络，降级为跳过而不是失败
+  if (failures.length === results.length && results.every((result) => result.network)) {
+    return {
+      status: 'warn',
+      summary: '跳过（无网络）',
+      details: results.map((result) => dim(`${result.label}  ${result.file}`)),
+    };
+  }
+
+  const details = results.map((result) => {
+    const line = `${result.label}  ${result.file}`;
+    if (result.ok) return dim(line);
+    const reason = result.status ? `HTTP ${result.status}` : result.error || '网络错误';
+    return red(`✗ ${line}  ${reason}`);
+  });
+
+  return {
+    status: failures.length ? 'fail' : 'pass',
+    summary: failures.length
+      ? `${results.length} 个地址，${failures.length} 个失败`
+      : `${results.length} 个地址`,
+    details,
+  };
+}
+
 function checkCacheBusting(plugins) {
   const failures = [];
   let checked = 0;
@@ -637,6 +766,7 @@ const checks = [
   { name: '插件在 README 中被收录', run: () => checkPluginsInReadme(pluginList) },
   { name: '文档死链', run: checkDeadLinks },
   { name: '表格宽度', run: checkTableWidth },
+  { name: '第三方 URL 可达性', run: () => checkThirdPartyUrls(pluginList) },
 ];
 
 const pluginList = listPlugins();
@@ -648,14 +778,15 @@ console.log(dim(`仓库根目录：${ROOT}`));
  * 仅当作为入口脚本直接运行时才执行校验。
  * 被 tools/sync-cache-bust.mjs 等模块 import 时应保持静默，只提供导出的工具函数。
  */
-function runChecks() {
+async function runChecks() {
   console.log();
 
   const results = [];
   for (const check of checks) {
     let result;
     try {
-      result = check.run();
+      // 同步检查直接返回对象，异步检查（第三方 URL 探测）返回 Promise
+      result = await check.run();
     } catch (error) {
       result = { status: 'fail', summary: '检查执行异常', details: [red(error.stack || String(error))] };
     }
@@ -687,4 +818,4 @@ function runChecks() {
 const __selfPath = fileURLToPath(import.meta.url).replace(/\\/g, '/').toLowerCase();
 const __argvPath = (process.argv[1] || '').replace(/\\/g, '/').toLowerCase();
 const invokedDirectly = __argvPath.endsWith('tools/verify.mjs') || __argvPath === __selfPath;
-if (invokedDirectly) runChecks();
+if (invokedDirectly) await runChecks();

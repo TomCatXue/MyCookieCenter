@@ -100,7 +100,7 @@ CONFIG = {
     "UA": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 MicroMessenger/8.0.38(0x1800262c) NetType/WIFI Language/zh_CN"
 }
 
-SCRIPT_VERSION = "v2.2.1"
+SCRIPT_VERSION = "2.2.1"
 
 # ==================== 🌐 翼支付网关生产环境常量 ====================
 BESTPAY_H5_BASE = "https://mapi-h5.bestpay.com.cn"
