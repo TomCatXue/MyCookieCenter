@@ -4,7 +4,7 @@
 | :--- | :--- | :--- |
 | [**DaiDaiPanel.plugin**](./DaiDaiPanel.plugin) (v1.0.7) | **呆呆面板**：微信读书 / 扫描全能王 / 中国电信凭据捕获并自动同步 | `weread` `camscanner` `telecom` |
 | [**WeReadTasks.plugin**](./WeReadTasks.plugin) (v1.0.0) | **微信读书活动任务**：每日阅读奖励、周二翻牌、周五限免入架 | `capture` `claim` `flip` `free` |
-| [**YunDiskTasks.plugin**](./YunDiskTasks.plugin) (v1.0.0) | **移动云盘活动任务**：每日签到云朵领取与 0/10/16 点商品抢兑 | `capture` `sign` `exchange` |
+| [**YunDiskTasks.plugin**](./YunDiskTasks.plugin) (v1.1.0) | **移动云盘活动任务**：每日签到云朵领取与 0/10/16 点商品抢兑 | `capture` `sign` `exchange` |
 | [**ChinaMobile.plugin**](./ChinaMobile.plugin) (v1.0.16) | **中国移动**：净化开屏、首页轮播、专区横幅、和包钱包营销浮层与「我的」弹窗 | HideCarousel 轮播总控及全功能细分开关 |
 | [`WeReadEnhance.plugin`](./WeReadEnhance.plugin) (v4.2.1) | 微信读书：去广告、去更新弹窗、解除试听限制 | 内置总开关 |
 | [**BilibiliFix.plugin**](./BilibiliFix.plugin) (v2.8.3) | **哔哩哔哩 𝕏 (白B专用)**：空降助手、分区修复、扫码登录、画质解锁 | 内置总开关 |
@@ -16,11 +16,11 @@
 | [`PixivAdBlock.plugin`](./PixivAdBlock.plugin) (v1.0.1) | Pixiv：小说广告过滤、图片镜像与 Premium 属性注入 (chaoscard 原作) | 规则型，无需开关 |
 | [`PSBC.plugin`](./PSBC.plugin) (v1.0.0) | 邮储银行：屏蔽开屏广告、摇一摇与静态资源拦截 (chaoscard 原作) | 规则型，无需开关 |
 | [`Telegram.plugin`](./Telegram.plugin) (v1.1.0) | Telegram 增强：优质 IP 调度防转圈、外部 t.me 链接跳转客户端 (chaoscard 原作) | `t.me_redirect` 客户端选择 |
-| [**YouTube_Ad.plugin**](./YouTube_Ad.plugin) (v1.1.1) | **YouTube去广告**：移除广告、短片按钮/智能助手/商品/竖屏直播，解锁高码率画质/精彩跳转/通勤模式，内置画中画与后台播放，支持外语字幕中英机翻与QUIC防穿透 | `autoHd` `jumpAhead` `onTheGo` `translation_enabled` 等 11 项精细开关 |
-| [**TencentVideo.plugin**](./TencentVideo.plugin) (v1.0.11) | **腾讯视频 · 全量净化**：开屏/前贴/中插/暂停/后贴/锚点/详情页/信息流/搜索/下载页/个人中心/激励/会员推广/播放页 SVIP·特惠·升级按钮·详情页 VIP 营销卡片·VIP 会员底栏全量移除，融合简洁模式、底栏开关与 QUIC 防穿透 | `HideShortDrama` `HideVipTab` `HideGoods` 三个底栏开关；VIP 会员底栏已关闭 |
+| [**YouTube_Ad.plugin**](./YouTube_Ad.plugin) (v1.1.1) | **去广告**：广告 / 短片按钮 / 商品 / 竖屏直播尽除；高码率、通勤模式、画中画、字幕机翻俱备 | `autoHd` `jumpAhead` `onTheGo` `translation_enabled` 等 11 项精细开关 |
+| [**TencentVideo.plugin**](./TencentVideo.plugin) (v1.0.11) | **全量净化**：开屏 / 前贴 / 中插 / 暂停 / 后贴 / 激励 / VIP 营销尽数移除 | `HideShortDrama` `HideVipTab` `HideGoods` 三个底栏开关；VIP 会员底栏已关闭 |
 | [**TestFlightRelay.plugin**](./TestFlightRelay.plugin) (v1.0.0) | **TestFlight 中转**：请求本地应答、多账号索引合并与详情缓存，Loon 原生适配 | 内置请求脚本 + 5 分钟会话刷新 |
-| [**Duolingo.plugin**](./Duolingo.plugin) (v2.0.3) | **多邻国 𝕏**：拦截 `/batch`、`/available-features` 响应注入 Gold 家庭订阅，解锁免广告、无限心、AI 功能（j4gm4g 原作 / TomCatXue 修复） | 规则型，无需开关 |
-| [**MiguMusic.plugin**](./MiguMusic.plugin) (v1.0.0) | **咪咕音乐 · 去广告净化**：关闭开屏与运营广告（noAdvert / launch_ad_pop）、屏蔽运营位、注入客户端 no_ads 权益、拦截推广 SDK | 规则型，无需开关 |
+| [**Duolingo.plugin**](./Duolingo.plugin) (v2.0.3) | **订阅解锁**：三处响应注入 Gold 家庭订阅，解锁免广告 / 无限心 / AI 功能 (j4gm4g 原作) | 规则型，无需开关 |
+| [**MiguMusic.plugin**](./MiguMusic.plugin) (v1.0.0) | **去广告**：关闭开屏与运营广告、清空营销位、注入 no_ads 权益、拦截推广 SDK | 规则型，无需开关 |
 
 ## 使用
 
