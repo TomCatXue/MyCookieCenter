@@ -1,6 +1,6 @@
 #!name = TestFlight Relay
 #!desc = TestFlight 多账号中转：运行时跟随 ScriptingApp 原版脚本并自动修补 Loon 兼容层；账号索引合并与详情缓存。
-#!icon = https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/b3/ed/fb/b3edfb91-3ac2-080e-f4a1-49b5f93c7f31/AppIcon-0-1x_U007epad-0-1-0-P3-85-220-0.png/512x512bb.jpg
+#!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/testflight_app.jpg
 #!system = iOS,iPadOS
 #!version = 1.0.0
 #!date = 2026-11-11 01:30
@@ -11,7 +11,7 @@
 # 请求中转：TestFlight 访问 http://tf-relay.test:8799/... 时由脚本本地应答。
 # 本脚本是上游跟随加载器：运行时读取 ScriptingApp 原版 TestFlight-Relay.js，仅打 Loon 兼容补丁。
 # 超时按 Loon 插件语法使用秒；对应本地脚本 UI 的 30000ms。
-request if ${url} ~= /^http:\/\/tf-relay\.test(?::8799)?\//i then script("https://raw.githubusercontent.com/ScriptingApp/Community-Scripts/refs/heads/main/module/scripts/TestFlight-Relay.js") with tag="TestFlight-Relay", timeout=30, requires_body=true, binary_body_mode=false, img_url="https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/b3/ed/fb/b3edfb91-3ac2-080e-f4a1-49b5f93c7f31/AppIcon-0-1x_U007epad-0-1-0-P3-85-220-0.png/512x512bb.jpg"
+request if ${url} ~= /^http:\/\/tf-relay\.test(?::8799)?\//i then script("https://raw.githubusercontent.com/ScriptingApp/Community-Scripts/refs/heads/main/module/scripts/TestFlight-Relay.js") with tag="TestFlight-Relay", timeout=30, requires_body=true, binary_body_mode=false, img_url="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/testflight_app.jpg"
 
 # 每 5 分钟续期一次账号会话；不需要多账号保活时可在插件内单独关闭此项。
-cron "0 */5 * * *" then script("https://raw.githubusercontent.com/ScriptingApp/Community-Scripts/refs/heads/main/module/scripts/TestFlight-Relay.js") with tag="TestFlight-Relay-Refresh", timeout=300, img_url="https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/b3/ed/fb/b3edfb91-3ac2-080e-f4a1-49b5f93c7f31/AppIcon-0-1x_U007epad-0-1-0-P3-85-220-0.png/512x512bb.jpg"
+cron "0 */5 * * *" then script("https://raw.githubusercontent.com/ScriptingApp/Community-Scripts/refs/heads/main/module/scripts/TestFlight-Relay.js") with tag="TestFlight-Relay-Refresh", timeout=300, img_url="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/testflight_app.jpg"

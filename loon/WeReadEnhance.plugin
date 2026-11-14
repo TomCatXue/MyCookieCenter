@@ -2,7 +2,7 @@
 #!desc = 净化微信读书界面，去除各类广告、弹窗及商业营销：\n• 去除书城横幅推广与轮播营销 (Banner)\n• 去除阅读器底部特惠推广浮层 (Tips)\n• 去除发现页及阅读流「新福利场」年卡促销卡片\n• 锁定 68 年嗅探周期彻底阻断版本更新弹窗、升级公告与强更红点提示 (不影响系统 App Store 正常搜索)\n• 拦截腾讯 APM 性能监控与 CLS 日志上报通道\n• 释放试听时长限制 (消除试听倒计时)\n静态推广由 Loon 内核级 Reject-Dict 秒拒，动态流毫秒级过滤，畅享纯净无扰阅读体验。
 #!author = TomCatXue
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
-#!icon = https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/35/92/e6/3592e6f4-0b0b-f2e4-7968-7033b281e1f5/AppIcon-0-1x_U007epad-0-11-0-85-220-0.png/512x512bb.jpg
+#!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/wechat_read_app.jpg
 #!tag = 微信读书,防强更,去弹窗,去广告,AI听书
 #!version = 4.2.1
 #!date = 2026-10-03 10:00

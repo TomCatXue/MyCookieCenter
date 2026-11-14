@@ -2,7 +2,7 @@
 #!desc = 专为 iOS 哑巴面板 (MutePanel) 小组件提供 Loon 运行状态。机场订阅流量由小组件直接请求用户填写的订阅链接，本插件只返回运行模式、策略组数量、活跃节点、出口 IP、归属地与延迟。
 #!author = TomCatXue
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
-#!icon = https://raw.githubusercontent.com/luestr/IconResource/main/App_icon/120px/Loon.png
+#!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/loon.png
 #!tag = Loon, 监控, 小组件, VPN
 #!version = 1.5.0
 #!date = 2026-10-18 11:10

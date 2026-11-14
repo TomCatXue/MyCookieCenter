@@ -6,7 +6,7 @@
 #!system = iOS,iPadOS
 #!loon_version = 3.5.2(1005)
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
-#!icon = https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/ce/b7/2c/ceb72c6e-21c3-0c8b-a960-2fb8a547279f/AppIcon-0-0-1x_U007epad-0-1-0-sRGB-85-220.png/512x512bb.jpg
+#!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/10086.jpg
 #!version = 1.0.16
 #!date = 2026-10-25 13:50
 
