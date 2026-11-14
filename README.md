@@ -77,6 +77,8 @@ ql repo https://github.com/TomCatXue/MyCookieCenter.git "ql_script" "" "README" 
 
 [MIT](./LICENSE)
 
+本仓库包含从各开源作者处收集与改编的脚本，原始版权归各自作者所有，已在每个脚本文档头部注释及对应 README 中标注。上述 MIT 许可适用于本项目维护者所做的修改与仓库结构。
+
 ## 免责声明
 
 本项目仅供**个人学习研究与自用自动化**，请勿用于商业用途、批量操作或违反平台服务条款的行为。
