@@ -395,7 +395,7 @@ class Exchange {
     const data = await this.requestMarketJson(`${MARKET_BASE_URL}/ycloud/signin/page/exchangeV3`, {
       method: 'POST',
       data: { prizeId: Number(prizeId), client: 'app', clientVersion: CLIENT_VERSION, puzzleOffset: offset, smsCode: '', deviceId: this.deviceId },
-      headers: { isdeviceId: 'true' },
+      headers: { 'Content-Type': 'application/json', isdeviceId: 'true' },
     });
     if (data && data.code === 0) {
       this.log(`• 兑换: 成功 ${data.result.prizeName || prizeName}`, { notify: true });
