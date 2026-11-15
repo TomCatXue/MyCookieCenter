@@ -26,7 +26,8 @@ const ENTRY_MODE = 'exchange'; // entry-mode
 const ARGUMENT = readArgument();
 const MODE = resolveMode(ARGUMENT);
 
-const TOKEN_VALID_TIME = 72 * 3600 * 1000;
+// 接口 expireTime 实测返回 2592000 秒（30 天）；此处为解析失败时的兜底值
+const TOKEN_VALID_TIME = 30 * 24 * 3600 * 1000;
 const TOKEN_REFRESH_ADVANCE = 12 * 3600 * 1000;
 const MARKET_BASE_URL = 'https://m.mcloud.139.com';
 const MARKET_SOURCE_ID = '1097';
@@ -913,8 +914,19 @@ function buildXDeviceInfo(deviceId, netType = 'wifi', terminalType = '8', versio
 }
 
 function parseExpireTimeToMillis(expireTime) {
-  const parsed = Date.parse(String(expireTime || ''));
-  return Number.isFinite(parsed) ? parsed : Date.now() + TOKEN_VALID_TIME;
+  const raw = String(expireTime === undefined || expireTime === null ? '' : expireTime).trim();
+  if (!raw) return Date.now() + TOKEN_VALID_TIME;
+  if (/^\d+$/.test(raw)) {
+    const numeric = Number(raw);
+    // 13 位及以上视为毫秒时间戳
+    if (numeric > 1e12) return numeric;
+    // 接口返回的是有效秒数（如 2592000 = 30 天），不是日期字符串
+    if (numeric > 0) return Date.now() + numeric * 1000;
+  }
+  // 兼容 ISO 日期格式
+  const parsed = Date.parse(raw);
+  if (Number.isFinite(parsed)) return parsed;
+  return Date.now() + TOKEN_VALID_TIME;
 }
 
 async function runSign(accounts) {
