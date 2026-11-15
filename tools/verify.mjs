@@ -652,6 +652,23 @@ function gitLastCommitTime(relativePath) {
   return { time: time || null };
 }
 
+/** 该路径是否有未提交改动（含暂存与未暂存） */
+function hasUncommittedChanges(relativePath) {
+  const result = spawnSync('git', ['status', '--porcelain', '--', relativePath], {
+    cwd: ROOT,
+    encoding: 'utf8',
+  });
+  if (result.error || result.status !== 0) return false;
+  return Boolean((result.stdout || '').trim());
+}
+
+/** 当前本地时间，与 git 的 %Y-%m-%d %H:%M 同格式，便于字符串比较 */
+function formatLocalNow() {
+  const now = new Date();
+  const pad = (value) => String(value).padStart(2, '0');
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+}
+
 function checkPluginDateFreshness(plugins) {
   const failures = [];
 
@@ -685,6 +702,10 @@ function checkPluginDateFreshness(plugins) {
         };
       }
       if (result.time) times.push(result.time);
+      // 工作区有未提交改动时按当前时间计，避免本地校验误报为通过
+      if (hasUncommittedChanges(relativePath)) {
+        times.push(formatLocalNow());
+      }
     }
     if (!times.length) continue; // 脚本尚未提交，无从比较
 
