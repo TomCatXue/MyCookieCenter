@@ -69,7 +69,15 @@ const CONFIG = {
 
     // 9. 【限免好书排除关键词】(选填)：支持面板环境变量 WEREAD_EXCLUDE_KEYWORDS 配置
     //    多个关键词用 | 或逗号隔开，书名包含则自动跳过（例如 "套装|白话版|卷全|全译|真题" 可过滤大部头古籍）
-    FREE_EXCLUDE_KEYWORDS: ""
+    FREE_EXCLUDE_KEYWORDS: "",
+
+    // 10. 【限免优选口碑门槛】：评价人数下限 + 好评率下限（百分制×10，850 = 85.0%）
+    //     人数太少则评分无统计意义；好评率太低则是"很多人读了但评价一般"的书
+    FREE_MIN_COUNT: 500,
+    FREE_MIN_RATING: 850,
+
+    // 11. 【限免优选人数上限】：0 = 不限制。设为 15000 可避开烂大街畅销书，专挑小众高分书
+    FREE_MAX_COUNT: 0
 };
 
 // ================================================================================
@@ -1339,7 +1347,8 @@ async function runFreeTask(auth, helperAuth) {
                                 price: priceInCoins,
                                 newRating,
                                 newRatingCount,
-                                ratingTitle
+                                ratingTitle,
+                                cat: (bInfo.categories && bInfo.categories[0] && bInfo.categories[0].title) || ""
                             });
                         } else {
                             let exist = booksMap.get(bid);
@@ -1350,6 +1359,9 @@ async function runFreeTask(auth, helperAuth) {
                             if (newRating > exist.newRating) exist.newRating = newRating;
                             if (newRatingCount > exist.newRatingCount) exist.newRatingCount = newRatingCount;
                             if (ratingTitle && !exist.ratingTitle) exist.ratingTitle = ratingTitle;
+                            if (!exist.cat) {
+                                exist.cat = (bInfo.categories && bInfo.categories[0] && bInfo.categories[0].title) || "";
+                            }
                         }
                     }
                 });
@@ -1457,6 +1469,56 @@ async function runFreeTask(auth, helperAuth) {
         return result;
     }
 
+    // 补齐评分元数据（/free/library/list 不含评分，需逐本查 /book/info）
+    async function enrichRatings(list, authRef) {
+        let filled = 0;
+        for (let b of list) {
+            // 已经有评分就跳过
+            if (b.newRating > 0 && b.newRatingCount > 0) continue;
+            // 本地缓存命中（7 天）
+            let ck = `weread_rating_${b.bookId}`;
+            let cached = $.getdata(ck);
+            if (cached) {
+                try {
+                    let c = JSON.parse(cached);
+                    if (c && c.ts && (Date.now() - c.ts) < 7 * 24 * 3600 * 1000 && c.rating > 0) {
+                        b.newRating = c.rating;
+                        b.newRatingCount = c.count;
+                        b.ratingTitle = c.title || "";
+                        b.cat = c.cat || b.cat || "";
+                        filled++;
+                        continue;
+                    }
+                } catch (e) { }
+            }
+            try {
+                let r = await get(API + `/book/info?bookId=${b.bookId}`, getHeaders(authRef));
+                if (r.status === 401 || r.status === 499) {
+                    let rf = await tryRefreshLogin(authRef);
+                    if (rf) { authRef = rf; r = await get(API + `/book/info?bookId=${b.bookId}`, getHeaders(authRef)); }
+                }
+                if (r.status === 200) {
+                    let o = decode(r.body);
+                    if (o && o.bookId) {
+                        b.newRating = Number(o.newRating || 0);
+                        b.newRatingCount = Number(o.newRatingCount || 0);
+                        b.ratingTitle = (o.newRatingDetail && o.newRatingDetail.title) || "";
+                        if (o.price) b.price = Number(o.price);
+                        let cats = (o.categories || []).map(c => c.title || "").filter(Boolean);
+                        b.cat = cats[0] || b.cat || "";
+                        $.setdata(JSON.stringify({ ts: Date.now(), rating: b.newRating, count: b.newRatingCount, title: b.ratingTitle, cat: b.cat || "" }), ck);
+                        filled++;
+                    }
+                }
+            } catch (e) { }
+            await new Promise(res => setTimeout(res, 110));
+        }
+        $.log(`[WeRead] 📊 评分补齐完成：${filled}/${list.length} 本`);
+        return authRef;
+    }
+
+    auth = await enrichRatings(rawCandidates, auth);
+
     // 智能优选偏好与关键词过滤配置
     let freeMode = (process.env.WEREAD_FREE_MODE || process.env.FREE_PREFER_MODE || CONFIG.FREE_PREFER_MODE || "balanced").toLowerCase().trim();
     let excludeRaw = (process.env.WEREAD_EXCLUDE_KEYWORDS || process.env.FREE_EXCLUDE_KEYWORDS || CONFIG.FREE_EXCLUDE_KEYWORDS || "").trim();
@@ -1476,69 +1538,45 @@ async function runFreeTask(auth, helperAuth) {
         }
     }
 
-    // 智能权重计算函数 (权重体系：模式感知 + 殿堂神作/好评如潮分级 + 杜绝 0 评分虚高)
-    function calculateBookPriorityScore(b, mode = "balanced") {
-        let hasRating = (b.newRating > 0 && b.newRatingCount > 0);
-        let isGodTier = b.ratingTitle.includes("神作") || (b.newRating >= 920 && b.newRatingCount >= 200) || (b.newRating >= 900 && b.newRatingCount >= 1000);
-        let isOverwhelming = b.ratingTitle.includes("好评如潮") || (b.newRating >= 900 && b.newRatingCount >= 20);
-        let isVeryGood = b.ratingTitle.includes("特别好评") || (b.newRating >= 850 && b.newRatingCount >= 10);
-        let isGood = b.newRating >= 750;
+    // 口碑门槛（供打分函数与后续排序/日志共用）
+    let MIN_COUNT = Number(process.env.WEREAD_MIN_COUNT || CONFIG.FREE_MIN_COUNT || 500);
+    let MIN_RATING = Number(process.env.WEREAD_MIN_RATING || CONFIG.FREE_MIN_RATING || 850);
+    let MAX_COUNT = Number(process.env.WEREAD_MAX_COUNT || CONFIG.FREE_MAX_COUNT || 0);
 
-        let price = b.price || 0;
+    // 智能权重计算函数 (权重体系：以评价人数为主排序，好评率为次排序)
+    function calculateBookPriorityScore(b, mode = "balanced") {
         let count = b.newRatingCount || 0;
+        let rating = b.newRating || 0;
+
+        // 硬门槛：人数太少 = 评分无统计意义；好评率太低 = 很多人读过但评价一般
+        if (count < MIN_COUNT || rating < MIN_RATING) return -1;   // -1 表示不合格
+
+        // 人数上限（防止全是烂大街畅销书，0 = 不限制）
+        if (MAX_COUNT > 0 && count > MAX_COUNT) return -1;
+
+        // 主排序：人数对数（跨越 3 个数量级，必须取对数才不会被单本压死）
+        // 次排序：好评率（±约 100 分影响，不足以颠倒人数量级）
+        let countScore = Math.log10(count) * 1000;
+        let ratingScore = (rating - 850) * 2;
 
         if (mode === "price") {
-            // 【最贵白嫖模式】：售价绝对优先，同等价格下神作/高分者优先
-            let priceScore = price * 100000;
-            let ratingScore = hasRating ? (b.newRating * 100) : 0;
-            let tierBonus = isGodTier ? 50000 : 0;
-            let countBonus = Math.min(count, 1000) * 10;
-            return priceScore + ratingScore + tierBonus + countBonus;
+            // 价格模式：价格主排序，人数与好评作为细调，但门槛依然生效
+            return Math.min(b.price || 0, 200) * 10000 + countScore + ratingScore;
         }
-
-        if (mode === "hot") {
-            // 【热门畅销模式】：读者基数与神作/高口碑优先，专挑大热出圈的好书
-            let countScore = Math.min(count, 50000) * 100;
-            let ratingScore = hasRating ? (b.newRating * 2000) : 0;
-            let tierBonus = isGodTier ? 5000000 : (isOverwhelming ? 2000000 : (isVeryGood ? 1000000 : 0));
-            let priceBonus = price * 100;
-            return countScore + ratingScore + tierBonus + priceBonus;
-        }
-
-        // 【智能综合模式（balanced，默认）】：神作与高口碑第一，绝不允许无评分/生僻书反超精品好书
-        // 梯队划分：
-        // - 殿堂神作 (官方神作标识 / ≥92%且数百人 / ≥90%且千人)：500万分基底 (至高无上)
-        // - 好评如潮 (≥90%)：300万分基底
-        // - 特别好评 (≥85%)：200万分基底
-        // - 口碑推荐 (≥75%)：100万分基底
-        // - 普通评级 (>0%)：newRating * 1000 (最高 75万分)
-        // - 暂无评分 (0分)：0分基底 (绝对垫底，无法反超真实口碑图书)
-        let tierScore = 0;
-        if (isGodTier) {
-            tierScore = 5000000;
-        } else if (isOverwhelming) {
-            tierScore = 3000000;
-        } else if (isVeryGood) {
-            tierScore = 2000000;
-        } else if (isGood) {
-            tierScore = 1000000;
-        } else if (hasRating) {
-            tierScore = b.newRating * 1000;
-        } else {
-            tierScore = 0; // 0评分垫底，杜绝反超优质书
-        }
-
-        // 价格得分：每 1 书币赋 2000 分（100 书币 = 20万分，同梯队内价格高者优先，但无法跨越百万级品质梯队）
-        let priceMultiplier = hasRating ? 2000 : 1000;
-        let priceScore = price * priceMultiplier;
-
-        // 评价人数加成 (置信度微调，满 10000 人最高加 10万分)
-        let countBonus = Math.min(count, 10000) * 10;
-
-        return tierScore + priceScore + countBonus;
+        return countScore + ratingScore;
     }
 
-    candidates.sort((a, b) => calculateBookPriorityScore(b, freeMode) - calculateBookPriorityScore(a, freeMode));
+    // 先剔除不合格（返回 -1）的书
+    let scored = candidates.map(c => ({ c, s: calculateBookPriorityScore(c, freeMode) })).filter(x => x.s >= 0);
+    if (scored.length === 0) {
+        $.log(`[WeRead] ⚠️ 全部候选均未达到门槛 (人数>=${MIN_COUNT} 且 好评>=${MIN_RATING}%)，本周放弃领取，不浪费名额`);
+        result.success = true;
+        result.allClaimed = true;
+        result.details = "本期候选均未达到口碑门槛，本周不领取";
+        return result;
+    }
+    scored.sort((a, b) => b.s - a.s);
+    candidates = scored.map(x => x.c);
 
     let modeDesc = freeMode === "price" ? "最贵白嫖优先" : (freeMode === "hot" ? "热门畅销优先" : "智能综合口碑优先");
     $.log(`[WeRead] 📚 智能优选候选池（模式: ${modeDesc}，已排除已购/在架，前 3 本）：`);
@@ -1560,7 +1598,19 @@ async function runFreeTask(auth, helperAuth) {
         $.log(`  ${idx + 1}. 《${c.title}》 ${ratingTag} 官方售价: ${c.price.toFixed(1)}书币 (得分: ${calculateBookPriorityScore(c, freeMode)})`);
     });
 
-    let targetBooks = candidates.slice(0, needCount);
+    // 分类多样化：第 2 本强制换一级分类，避免两本都是同类（本期历史占 60%）
+    let pickList = [];
+    if (candidates.length > 0) {
+        pickList.push(candidates[0]);
+        if (needCount > 1) {
+            let c1 = (candidates[0].cat || "").split("-")[0];
+            let alt = candidates.slice(1).find(c => (c.cat || "").split("-")[0] !== c1);
+            let second = alt || candidates[1];
+            if (second) pickList.push(second);
+        }
+    }
+
+    let targetBooks = pickList;
 
     // 7. 路径A：小号助力点击全自动兑换 (支持多小号轮替助力，解决每小号每周限1本的官方限制)
     let helperList = Array.isArray(helperAuth) ? helperAuth : (helperAuth ? [helperAuth] : []);
