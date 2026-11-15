@@ -491,18 +491,31 @@ async function main() {
   }
   if (failedAccounts.length) messages.push(`❌ 失效账号: ${failedAccounts.join('、')}`);
   if (taskLogs.length) messages.push(taskLogs.join('\n\n'));
-  await notify(messages.join('\n').trim());
+  await notify('移动云盘签到', messages.join('\n').trim());
 }
 
-async function notify(message) {
+function loadNotifier() {
+  for (const candidate of ['./sendNotify', './utils/sendNotify']) {
+    try {
+      const mod = require(candidate);
+      if (mod && typeof mod.sendNotify === 'function') return mod;
+    } catch (error) { /* 该位置没有 sendNotify，继续找下一个 */ }
+  }
+  return null;
+}
+
+async function notify(title, message) {
   if (!message) return;
-  const title = '移动云盘签到';
+  log(`\n----- ${title} -----\n${message}`);
+  const notifier = loadNotifier();
+  if (!notifier) {
+    log('(未安装 sendNotify，本次仅输出日志；在青龙「通知设置」里配好推送即可收到)');
+    return;
+  }
   try {
-    const moduleName = fs.existsSync(path.join(process.cwd(), 'sendNotify.js')) ? './sendNotify' : './utils/sendNotify';
-    const notifyModule = require(moduleName);
-    await notifyModule.sendNotify(title, message);
+    await notifier.sendNotify(title, message);
   } catch (error) {
-    log(`\n----- ${title} -----\n${message}`);
+    log(`(推送失败: ${String(error && error.message || error).split('\n')[0]}；完整结果见上方日志)`);
   }
 }
 

@@ -283,8 +283,14 @@ class Exchange {
     this.exchangeSkipped = [];
   }
 
-  log(content) {
-    log(String(content));
+  log(content, { notify = false } = {}) {
+    const text = String(content);
+    log(text);
+    if (notify) {
+      const last = this.messages.length - 1;
+      if (last >= 0 && this.messages[last].endsWith('▶')) this.messages[last] = `${this.messages[last]}\n${text}`;
+      else this.messages.push(text);
+    }
   }
 
   async guard(fn) {
@@ -352,14 +358,21 @@ class Exchange {
   async getCloudInfo() {
     const data = await this.requestMarketJson(`${MARKET_BASE_URL}/market/signin/page/infoV3`, { params: { client: 'app' } });
     if (!data || data.code !== 0) return;
-    this.log(`• 云朵: ${data.result.total || 0}朵 / 待领取${data.result.toReceive || 0}朵`);
+    this.log(`• 云朵: ${data.result.total || 0}朵 / 待领取${data.result.toReceive || 0}朵`, { notify: true });
   }
 
   async getExchangeList() {
     const data = await this.requestMarketJson(`${MARKET_BASE_URL}/ycloud/signin/page/exchangeList`, { params: { client: 'app', clientVersion: CLIENT_VERSION } });
     if (!data || data.code !== 0) return [];
     const result = data.result || {};
-    return Object.keys(result).flatMap(key => Array.isArray(result[key]) ? result[key] : []);
+    const items = [];
+    for (const key of Object.keys(result)) {
+      if (!Array.isArray(result[key])) continue;
+      for (const item of result[key]) {
+        if (item && item.prizeId !== undefined) items.push({ ...item, groupId: item.groupId !== undefined ? item.groupId : key });
+      }
+    }
+    return items.sort((a, b) => (Number(a.groupId) - Number(b.groupId)) || (Number(b.dailyRemainderCount || 0) - Number(a.dailyRemainderCount || 0)));
   }
 
   async getSlide() {
@@ -385,10 +398,10 @@ class Exchange {
       headers: { isdeviceId: 'true' },
     });
     if (data && data.code === 0) {
-      this.log(`• 兑换: 成功 ${data.result.prizeName || prizeName}`);
+      this.log(`• 兑换: 成功 ${data.result.prizeName || prizeName}`, { notify: true });
       return true;
     }
-    this.log(`• 兑换: ${prizeName || prizeId} 失败 (${(data && data.msg) || '接口无响应'})`);
+    this.log(`• 兑换: ${prizeName || prizeId} 失败 (${(data && data.msg) || '接口无响应'})`, { notify: true });
     return false;
   }
 
@@ -396,14 +409,16 @@ class Exchange {
     const data = await this.requestMarketJson(`${MARKET_BASE_URL}/ycloud/prizeApi/checkPrize/getUserPrizeLogPageV2`, { params: { currPage: 1, pageSize: 100 } });
     if (!data || data.code !== 0) return;
     const pending = (data.result && data.result.result || []).filter(item => item.flag === 1);
-    if (pending.length) this.log(`• 待领取奖品: ${pending.map(item => item.prizeName).join('、')}`);
+    if (pending.length) this.log(`• 待领取奖品: ${pending.map(item => item.prizeName).join('、')}`, { notify: true });
   }
 
   async run() {
     await this.getCloudInfo();
     const items = await this.getExchangeList();
     if (!prizeIds.length) {
-      this.log(`• 商品(${items.length}): ${formatExchangeProducts(items) || '暂无可查询商品'}`);
+      const listing = formatExchangeProducts(items) || '暂无可查询商品';
+      log(`• 商品(${items.length}):\n${listing}`);
+      this.messages.push(`• 商品(${items.length}):\n${listing}`);
       await this.queryReceivedPrizes();
       return;
     }
@@ -429,11 +444,17 @@ function estimateSlideOffset() {
   return randomInteger(120, 360);
 }
 
-function formatExchangeProducts(items) {
+function formatExchangeProducts(items, columns = 2) {
   if (!Array.isArray(items) || !items.length) return '';
-  return items
-    .map(item => `${item.prizeId}: ${item.prizeName || '未命名'}（余量${item.dailyRemainderCount || 0}）`)
-    .join(' / ');
+  const inStock = items.filter(item => (Number(item.dailyRemainderCount) || 0) > 0);
+  const soldOut = items.length - inStock.length;
+  const cell = item => `${item.prizeId} ${item.prizeName || '未命名'} (余${item.dailyRemainderCount || 0})`;
+  const lines = [];
+  for (let index = 0; index < inStock.length; index += columns) {
+    lines.push(inStock.slice(index, index + columns).map(cell).join('  |  '));
+  }
+  if (soldOut) lines.push(`(另有 ${soldOut} 个已抢光)`);
+  return lines.join('\n');
 }
 
 async function runAccount(user) {
@@ -468,7 +489,10 @@ async function main() {
     await runAccount(accounts[index]);
     if (index < accounts.length - 1) await sleep(randomInteger(1000, 3000));
   }
-  await notify([failedAccounts.length ? `❌ 失效账号: ${failedAccounts.join('、')}` : '', ...messages].filter(Boolean).join('\n'));
+  await notify('移动云盘商品抢兑', [
+    failedAccounts.length ? `❌ 失效账号: ${failedAccounts.join('、')}` : '',
+    ...messages,
+  ].filter(Boolean).join('\n'));
 }
 
 function delayUntilExchangeSlot(now = new Date()) {
@@ -487,13 +511,28 @@ function shouldDelayToExchangeSlot(now = new Date()) {
   return delay > 0 && delay <= 60 * 1000;
 }
 
-async function notify(message) {
+function loadNotifier() {
+  for (const candidate of ['./sendNotify', './utils/sendNotify']) {
+    try {
+      const mod = require(candidate);
+      if (mod && typeof mod.sendNotify === 'function') return mod;
+    } catch (error) { /* 该位置没有 sendNotify，继续找下一个 */ }
+  }
+  return null;
+}
+
+async function notify(title, message) {
   if (!message) return;
+  log(`\n----- ${title} -----\n${message}`);
+  const notifier = loadNotifier();
+  if (!notifier) {
+    log('(未安装 sendNotify，本次仅输出日志；在青龙「通知设置」里配好推送即可收到)');
+    return;
+  }
   try {
-    const moduleName = fs.existsSync(path.join(process.cwd(), 'sendNotify.js')) ? './sendNotify' : './utils/sendNotify';
-    await require(moduleName).sendNotify('移动云盘商品抢兑', message);
+    await notifier.sendNotify(title, message);
   } catch (error) {
-    log(`\n----- 移动云盘商品抢兑 -----\n${message}`);
+    log(`(推送失败: ${String(error && error.message || error).split('\n')[0]}；完整结果见上方日志)`);
   }
 }
 

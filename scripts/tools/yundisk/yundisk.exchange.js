@@ -1040,11 +1040,14 @@ class ExchangeTask {
     const result = data.result || {};
     const items = [];
     for (const key in result) {
-      if (Array.isArray(result[key])) {
-        for (const item of result[key]) items.push(item);
+      if (!Array.isArray(result[key])) continue;
+      for (const item of result[key]) {
+        if (!item || item.prizeId === undefined) continue;
+        if (item.groupId === undefined) item.groupId = key;
+        items.push(item);
       }
     }
-    return items;
+    return items.sort((a, b) => (Number(a.groupId) - Number(b.groupId)) || (Number(b.dailyRemainderCount || 0) - Number(a.dailyRemainderCount || 0)));
   }
 
   async getSlide() {
@@ -1101,7 +1104,9 @@ class ExchangeTask {
     this.productCount = this.items.length;
 
     if (!prizeIds.length) {
-      this.log(`• 商品(${this.items.length}): ${formatExchangeProducts(this.items) || '暂无可查询商品'}`);
+      const listing = formatExchangeProducts(this.items) || '暂无可查询商品';
+      this.log(`• 商品(${this.items.length}):`);
+      this.log(listing);
       await this.queryReceivedPrizes();
       return;
     }
@@ -1125,18 +1130,24 @@ class ExchangeTask {
   notificationLine() {
     if (!this.prizeIds.length) {
       const products = formatExchangeProducts(this.items);
-      return `• ${this.encryptAccount}: ${products ? `商品 ${shorten(products, 70)}` : '暂无可抢兑商品'}`;
+      return products ? `• ${this.encryptAccount}: 商品 ${this.items.length} 个\n${products}` : `• ${this.encryptAccount}: 暂无可抢兑商品`;
     }
     const skipped = this.exchangeSkipped.length ? ` / 跳过 ${this.exchangeSkipped.join('、')}` : '';
     return `• ${this.encryptAccount}: 成功${this.exchangeSuccess}个${skipped}`;
   }
 }
 
-function formatExchangeProducts(items) {
+function formatExchangeProducts(items, columns = 2) {
   if (!Array.isArray(items) || !items.length) return '';
-  return items
-    .map(item => `${item.prizeId}:${item.prizeName || '未命名'}(${item.dailyRemainderCount || 0})`)
-    .join(' / ');
+  const inStock = items.filter(item => (Number(item.dailyRemainderCount) || 0) > 0);
+  const soldOut = items.length - inStock.length;
+  const cell = item => `${item.prizeId} ${item.prizeName || '未命名'} (余${item.dailyRemainderCount || 0})`;
+  const rows = [];
+  for (let index = 0; index < inStock.length; index += columns) {
+    rows.push(inStock.slice(index, index + columns).map(cell).join('  |  '));
+  }
+  if (soldOut) rows.push(`(另有 ${soldOut} 个已抢光)`);
+  return rows.join('\n');
 }
 
 function loadPrizeIds() {
