@@ -313,9 +313,20 @@ class YP {
     const stored = getStorageInfo(this.account);
     const expiresAt = Number(stored.expiresAt || 0);
     if (!stored.token) return [true, '本地无缓存Token'];
-    if (Date.now() >= expiresAt) return [true, '缓存Token已过期'];
-    if (expiresAt - Date.now() <= TOKEN_REFRESH_ADVANCE) return [true, `将在 ${((expiresAt - Date.now()) / 3600000).toFixed(1)} 小时后过期`];
-    return [false, `Token 状态良好（剩余 ${((expiresAt - Date.now()) / 86400000).toFixed(1)} 天）`];
+    // 旧版本把有效期写死成 72 小时，导致天数永远显示 3.0。
+    // 只就地校准本地时间戳，绝不为此额外发一次刷新请求（刷新是有次数限制的）
+    let effectiveExpiresAt = expiresAt;
+    if (stored.expiresAtSource !== 'api' && stored.lastRefreshAt) {
+      const calibrated = Number(stored.lastRefreshAt) + TOKEN_VALID_TIME;
+      if (calibrated > expiresAt) {
+        effectiveExpiresAt = calibrated;
+        patchStorage(this.account, { expiresAt: calibrated, expiresAtSource: 'recomputed' });
+      }
+    }
+    if (Date.now() >= effectiveExpiresAt) return [true, '缓存Token已过期'];
+    const remaining = effectiveExpiresAt - Date.now();
+    if (remaining <= TOKEN_REFRESH_ADVANCE) return [true, `将在 ${(remaining / 3600000).toFixed(1)} 小时后过期`];
+    return [false, `Token 状态良好（剩余 ${(remaining / 86400000).toFixed(1)} 天）`];
   }
 
   async refreshAuthorizationToken(force = false) {
@@ -352,7 +363,14 @@ class YP {
     }
     this.Authorization = buildAuthorization(this.account, rawToken);
     this.authToken = rawToken;
-    patchStorage(this.account, { token: this.Authorization, authToken: rawToken, refreshed: true, expiresAt: parseExpireTimeToMillis(data.data.expireTime), lastRefreshAt: Date.now() });
+    patchStorage(this.account, {
+      token: this.Authorization,
+      authToken: rawToken,
+      refreshed: true,
+      expiresAt: parseExpireTimeToMillis(data.data.expireTime),
+      expiresAtSource: 'api',
+      lastRefreshAt: Date.now(),
+    });
     this.log('-Authorization自动刷新成功');
     return true;
   }

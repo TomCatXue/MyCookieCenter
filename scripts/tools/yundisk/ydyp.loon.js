@@ -708,11 +708,12 @@ class SignTask {
   shouldRefreshAuthorization(force = false) {
     if (force) return [true, '强制刷新'];
     const stored = getStorageInfo(this.account);
-    const expiresAt = Number(stored.expiresAt || 0);
     if (!stored.token) return [true, '本地无缓存Token'];
-    if (Date.now() >= expiresAt) return [true, '缓存Token已过期'];
-    if (expiresAt - Date.now() <= TOKEN_REFRESH_ADVANCE) return [true, `将在 ${((expiresAt - Date.now()) / 3600000).toFixed(1)} 小时后过期`];
-    return [false, `Token 状态良好（剩余 ${((expiresAt - Date.now()) / 86400000).toFixed(1)} 天）`];
+    const effectiveExpiresAt = calibrateExpiresAt(stored, this.account);
+    if (Date.now() >= effectiveExpiresAt) return [true, '缓存Token已过期'];
+    const remaining = effectiveExpiresAt - Date.now();
+    if (remaining <= TOKEN_REFRESH_ADVANCE) return [true, `将在 ${(remaining / 3600000).toFixed(1)} 小时后过期`];
+    return [false, `Token 状态良好（剩余 ${(remaining / 86400000).toFixed(1)} 天）`];
   }
 
   async refreshAuthorizationToken(force = false) {
@@ -754,6 +755,7 @@ class SignTask {
       authToken: rawToken,
       refreshed: true,
       expiresAt: parseExpireTimeToMillis(data.data.expireTime),
+      expiresAtSource: 'api',
       lastRefreshAt: Date.now(),
     });
     this.log('-Authorization自动刷新成功');
@@ -921,6 +923,18 @@ function parseExpireTimeToMillis(expireTime) {
   const parsed = Date.parse(raw);
   if (Number.isFinite(parsed)) return parsed;
   return Date.now() + TOKEN_VALID_TIME;
+}
+
+// 旧版本把有效期写死成 72 小时（天数恒显示 3.0）。
+// 只就地校准本地时间戳，绝不为此额外发一次刷新请求（刷新有次数限制）
+function calibrateExpiresAt(record, account) {
+  if (!record || !record.token) return Number((record && record.expiresAt) || 0);
+  const expiresAt = Number(record.expiresAt || 0);
+  if (record.expiresAtSource === 'api' || !record.lastRefreshAt) return expiresAt;
+  const calibrated = Number(record.lastRefreshAt) + TOKEN_VALID_TIME;
+  if (calibrated <= expiresAt) return expiresAt;
+  if (account) patchStorage(account, { expiresAt: calibrated, expiresAtSource: 'recomputed' });
+  return calibrated;
 }
 
 async function runSign(accounts) {
