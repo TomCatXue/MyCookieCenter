@@ -78,16 +78,18 @@ function patchStorage(account, fields) {
 
 function normalizeAuthorization(token) {
   const value = String(token || '').trim().replace(/^@/, '').replace(/^Basic(%20|\s+)/i, '');
-  return value ? `Basic%20${encodeURIComponent(value)}` : '';
+  return value ? `Basic ${value}` : '';
 }
 
 function extractRawToken(token) {
   const value = String(token || '').trim();
-  return value.startsWith('Basic%20') ? decodeURIComponent(value.slice(8)) : value;
+  if (/^Basic%20/i.test(value)) return decodeURIComponent(value.slice(8));
+  if (/^Basic\s+/i.test(value)) return value.replace(/^Basic\s+/i, '');
+  return value;
 }
 
 function buildAuthorization(account, rawToken) {
-  return `Basic%20${encodeURIComponent(`${account}:${rawToken}`)}`;
+  return `Basic ${Buffer.from(`pc:${account}:${rawToken}`, 'utf8').toString('base64')}`;
 }
 
 function normalizePhone(value) {
@@ -164,7 +166,8 @@ function parseExpireTimeToMillis(expireTime) {
   return Number.isFinite(parsed) ? parsed : Date.now() + TOKEN_VALID_TIME;
 }
 
-function appendParams(url, params = {}) {
+function appendParams(url, params) {
+  if (!params || typeof params !== 'object') return url;
   const query = Object.keys(params)
     .filter(key => params[key] !== undefined && params[key] !== null)
     .map(key => `${key}=${encodeURIComponent(params[key])}`)
@@ -403,7 +406,12 @@ class YP {
   }
 
   static getTodaySignState(result) {
-    return Boolean(result && result.todaySignIn);
+    if (!result) return false;
+    if (typeof result.todaySignIn === 'boolean') return result.todaySignIn;
+    const today = new Date(Date.now() + 8 * 3600 * 1000).getUTCDate();
+    const item = toArray(result.cal).find(day => day.currentMonth === 1 && Number(day.d) === today);
+    if (item) return Boolean(item.s);
+    return Number(result.signCount || 0) > 0;
   }
 
   async signinStatus() {
@@ -435,19 +443,25 @@ class YP {
     const result = info.result || {};
     const records = toArray(result.receiveList);
     let claimed = 0;
+    const skipped = [];
     for (const record of records) {
       const receive = await this.requestMarketJson(`${MARKET_BASE_URL}/ycloud/signin/page/receiveV3`, {
         method: 'POST',
         data: { client: 'app', cloudId: record.recordId, cloudType: record.cloudType || 0, deviceId: this.marketDeviceId },
-        headers: { showLoading: 'true' },
+        headers: { 'Content-Type': 'application/json', showLoading: 'true' },
       });
-      if (receive && receive.code === 0) claimed += (receive.result && receive.result.receive) || record.cloudNum || 0;
+      if (receive && receive.code === 0) {
+        claimed += (receive.result && receive.result.receive) || record.cloudNum || 0;
+      } else if (receive) {
+        skipped.push(`${record.cloudNum || 0}朵(${receive.msg || receive.code})`);
+      }
       await sleep(300);
     }
     const latest = await this.requestMarketJson(`${MARKET_BASE_URL}/market/signin/page/infoV3`, { params: { client: 'app' } });
     const total = (latest && latest.result && latest.result.total) || result.total || 0;
     const pending = (latest && latest.result && latest.result.toReceive) || result.toReceive || 0;
     this.log(`• 云朵: 领取${claimed || 0}朵 / 当前${total}朵 / 待领取${pending}朵`);
+    if (skipped.length) this.log(`• 未领到: ${skipped.join('；')}`);
   }
 
   async run() {

@@ -53,7 +53,7 @@ const cache = loadStorage();
 
 function normalizeAuthorization(token) {
   const value = String(token || '').trim().replace(/^@/, '').replace(/^Basic(%20|\s+)/i, '');
-  return value ? `Basic%20${encodeURIComponent(value)}` : '';
+  return value ? `Basic ${value}` : '';
 }
 
 function extractPhoneFromAuthorization(authorization) {
@@ -107,7 +107,8 @@ function randomInteger(min, max) {
   return min + Math.floor(Math.random() * (max - min + 1));
 }
 
-function appendParams(url, params = {}) {
+function appendParams(url, params) {
+  if (!params || typeof params !== 'object') return url;
   const query = Object.keys(params)
     .filter(key => params[key] !== undefined && params[key] !== null)
     .map(key => `${key}=${encodeURIComponent(params[key])}`)

@@ -550,16 +550,18 @@ async function buildAuthSignHeaders() {
 
 function normalizeAuthorization(token) {
   const value = String(token || '').trim().replace(/^@/, '').replace(/^Basic(%20|\s+)/i, '');
-  return value ? `Basic%20${encodeURIComponent(value)}` : '';
+  return value ? `Basic ${value}` : '';
 }
 
 function extractRawToken(token) {
   const value = String(token || '').trim();
-  return value.indexOf('Basic%20') === 0 ? decodeURIComponent(value.slice(8)) : value;
+  if (/^Basic%20/i.test(value)) return decodeURIComponent(value.slice(8));
+  if (/^Basic\s+/i.test(value)) return value.replace(/^Basic\s+/i, '');
+  return value;
 }
 
 function buildAuthorization(account, rawToken) {
-  return `Basic%20${encodeURIComponent(`${account}:${rawToken}`)}`;
+  return `Basic ${base64Encode(utf8Bytes(`pc:${account}:${rawToken}`))}`;
 }
 
 function normalizePhone(value) {
@@ -577,6 +579,16 @@ function extractPhoneFromAuthorization(authorization) {
   }
   const parts = raw.split(':');
   return parts.length >= 3 ? normalizePhone(parts[1]) : '';
+}
+
+function getTodaySignState(result) {
+  if (!result) return false;
+  if (typeof result.todaySignIn === 'boolean') return result.todaySignIn;
+  const today = new Date(Date.now() + 8 * 3600 * 1000).getUTCDate();
+  const list = Array.isArray(result.cal) ? result.cal : [];
+  const item = list.filter(day => day.currentMonth === 1 && Number(day.d) === today)[0];
+  if (item) return Boolean(item.s);
+  return Number(result.signCount || 0) > 0;
 }
 
 function parseYdypAccounts(raw) {
@@ -825,7 +837,7 @@ class SignTask {
       this.failed = true;
       return false;
     }
-    if (info.result && info.result.todaySignIn) {
+    if (getTodaySignState(info.result)) {
       this.log('✅签到: 今日已签');
       this.result = 'already';
       return true;
@@ -833,8 +845,8 @@ class SignTask {
     const signin = await this.requestMarketJson(`${MARKET_BASE_URL}/market/signin/page/startSignIn`, { params: { client: 'app' } });
     const latest = await this.requestMarketJson(infoUrl, { params: { client: 'app' } });
     const success = Boolean(
-      (signin && signin.code === 0 && signin.result && signin.result.todaySignIn) ||
-      (latest && latest.code === 0 && latest.result && latest.result.todaySignIn)
+      (signin && signin.code === 0 && getTodaySignState(signin.result)) ||
+      (latest && latest.code === 0 && getTodaySignState(latest.result))
     );
     if (success) {
       this.result = 'success';
@@ -859,7 +871,7 @@ class SignTask {
       const receive = await this.requestMarketJson(`${MARKET_BASE_URL}/ycloud/signin/page/receiveV3`, {
         method: 'POST',
         data: { client: 'app', cloudId: record.recordId, cloudType: record.cloudType || 0, deviceId: this.marketDeviceId },
-        headers: { showLoading: 'true' },
+        headers: { 'Content-Type': 'application/json', showLoading: 'true' },
       });
       if (receive && receive.code === 0) claimed += (receive.result && receive.result.receive) || record.cloudNum || 0;
       await sleep(300);
