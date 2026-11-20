@@ -5,7 +5,7 @@
 #!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/weread.png
 #!tag = 微信读书,签到,自动化
 #!version = 1.1.0
-#!date = 2026-11-20 14:20
+#!date = 2026-11-20 15:30
 
 [Argument]
 capture = switch,false,tag=票据捕获,desc=打开微信读书「我」和「翻牌/限免」页面补齐完整票据，抓完建议关闭
