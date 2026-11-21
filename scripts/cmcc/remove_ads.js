@@ -74,8 +74,7 @@
     HideMyExclusiveServices: false,
     HideMyNewCall: false,
     HideMySpecialServices: false,
-    HideBottomVideo: false,
-    HideBottomShop: false
+    HideBottomVideo: false
   };
 
   function enabled(name) {
@@ -104,8 +103,7 @@
     !enabled("HideTopNearby") &&
     !enabled("HideTopAI") &&
     !enabled("HideTopEnterprise") &&
-    !enabled("HideBottomVideo") &&
-    !enabled("HideBottomShop")
+    !enabled("HideBottomVideo")
   ) {
     $done({});
     return;
@@ -578,19 +576,19 @@
   }
 
   // ==================== 底栏（TabBar）净化 ====================
-  // 底栏固定 6 槽，由 iconType 定位（1~6）。但各省内容与叫法差异极大，实测：
-  //   槽 1 首页 CT00033
-  //   槽 2 通信 CT00113 / 视频 CT00108 / 探索 CT00032 —— 真机上还有叫「娱乐」的
-  //   槽 3、6 灵犀占位 qw2305190519（同 id 出现两次）
-  //   槽 4 移动爱购 CT00038 / CT00111 / CT00112（有的省标题是「权益」）
-  //   槽 5 我的 ZF10001
-  // 因此判定顺序：先按 navigationId 认，id 认不出再按标题兜底，不依赖槽位。
-  var BOTTOM_SHOP_IDS = { CT00038: true, CT00111: true, CT00112: true };
-  // CT00108 = 视频；CT00032 = 探索；真机叫「娱乐」的也是这个 native 容器
-  var BOTTOM_VIDEO_IDS = { CT00108: true, CT00032: true };
+  // 只处理一个目标：视频 / 探索 / 娱乐（同一个 native 页 CT00032，各省叫法不同）。
+  // 爱购、灵犀已全部下线，不再支持（多次线上事故后决定）。
+  //
+  // 识别依据（按优先级）：
+  //   1) navigationId ∈ CT00115 / CT00108 / CT00032
+  //   2) navigationUrl 含 /native/common/CT00032 或 /native/common/CT00115
+  //   3) navigationTitle/Name 恰为 视频 / 探索 / 娱乐
+  //
+  // ⚠️ 2026-11-21 实测：CT00032 只是 url 路径，真实 id 在陕西是 CT00115。
+  var BOTTOM_VIDEO_IDS = { CT00115: true, CT00108: true, CT00032: true };
+  var BOTTOM_VIDEO_URL_HINTS = ["/native/common/CT00032", "/native/common/CT00115"];
   var BOTTOM_VIDEO_NAMES = ["视频", "探索", "娱乐"];
-  var BOTTOM_SHOP_NAMES = ["移动爱购", "爱购", "权益"];
-  // 首页 / 通信 / 我的 恒定保留，任何开关都不动，防止省份差异误伤
+  // 首页 / 通信(通话) / 我的 恒定保留，任何开关都不动
   var BOTTOM_RISK_IDS = { CT00033: true, CT00113: true, ZF10001: true };
   var BOTTOM_RISK_NAMES = ["首页", "通信", "通话", "通信顶标", "我的"];
 
@@ -602,20 +600,16 @@
     var navId = String(tab && tab.navigationId || "");
     if (BOTTOM_VIDEO_IDS[navId]) return true;
     if (BOTTOM_RISK_IDS[navId]) return false;
+
+    // url 兜底：服务端换 id 时靠 native 页路径识别
+    var navUrl = String(tab && tab.navigationUrl || "");
+    for (var u = 0; u < BOTTOM_VIDEO_URL_HINTS.length; u++) {
+      if (navUrl.indexOf(BOTTOM_VIDEO_URL_HINTS[u]) >= 0) return true;
+    }
+
     var title = bottomTitle(tab);
     for (var i = 0; i < BOTTOM_VIDEO_NAMES.length; i++) {
       if (title === BOTTOM_VIDEO_NAMES[i]) return true;
-    }
-    return false;
-  }
-
-  function isBottomShopTab(tab) {
-    var navId = String(tab && tab.navigationId || "");
-    if (BOTTOM_SHOP_IDS[navId]) return true;
-    if (BOTTOM_RISK_IDS[navId]) return false;
-    var title = bottomTitle(tab);
-    for (var i = 0; i < BOTTOM_SHOP_NAMES.length; i++) {
-      if (title === BOTTOM_SHOP_NAMES[i]) return true;
     }
     return false;
   }
@@ -624,28 +618,58 @@
     var navId = String(tab && tab.navigationId || "");
     var title = bottomTitle(tab);
 
-    // 首页 / 通信 / 我的 恒定保留，优先于一切开关
+    // 首页 / 通信(通话) / 我的 恒定保留，优先于一切开关
     if (BOTTOM_RISK_IDS[navId]) return false;
     for (var i = 0; i < BOTTOM_RISK_NAMES.length; i++) {
       if (title === BOTTOM_RISK_NAMES[i]) return false;
     }
 
-    // 灵犀占位已下线：删除 tab 会让 iconType 断裂（1,2,5,6 中间空 3、4），
-    // 客户端按 1~6 全量遍历时越界闪退，服务端随后判异常并风控。不可再删。
-    if (isBottomVideoTab(tab)) return enabled("HideBottomVideo");
-    if (isBottomShopTab(tab)) return enabled("HideBottomShop");
-    return false;
+    if (!isBottomVideoTab(tab)) return false;
+    return enabled("HideBottomVideo");
   }
 
-  // ⚠️ 绝不可删元素。实测教训（2026-11-21 线上事故）：
-  // 删掉槽 3、4 的 tab 后，下发的 iconType 变成 [1,2,5,6]，
-  // 客户端按 1~6 全量下标遍历，取到缺失槽位即越界 → App 闪退
-  // → 服务端判定异常客户端 → 强制退出登录并拦截短信验证码。
-  // 所以只能把 tab 就地「软隐藏」：保留对象与 iconType，清空可点击目标。
-  function softHideBottomTab(tab) {
-    var title = String(tab && tab.navigationTitle || "");
-    var name = String(tab && tab.navigationName || "");
+  // ⚠️ 两类 tab 处理方式不同（2026-11-21 真机实测结论）：
+  //
+  //   H5 tab（navigationType=1，走 url）：整条删掉安全。实测删「娱乐」后无任何异常。
+  //   原生 tab（nativeFunc=3944，走原生渲染器）：**绝不能删**。
+  //     删掉后客户端按槽位取对象得到 null → App 闪退 → 服务端风控强制登出、拦截短信。
+  //     灵犀占位（qw2305190519）就属于这一类。
+  //
+  // 所以：H5 tab 真删，原生 tab 一律不动。
+  function isNativeBottomTab(tab) {
+    var nativeFunc = String(tab && tab.nativeFunc || "");
+    if (nativeFunc !== "" && nativeFunc !== "0") return true;
+    // navigationType=3 是原生页，=1 是 H5/URL
+    return String(tab && tab.navigationType || "") === "3";
+  }
 
+  // 判断一组 iconType 是否从 1 起连续无缺口
+  function isSlotSequenceContinuous(list) {
+    var seen = {};
+    for (var i = 0; i < list.length; i++) {
+      var t = String(list[i] && list[i].iconType || "");
+      if (t !== "") seen[t] = true;
+    }
+    var max = 0;
+    for (var k in seen) {
+      if (Object.prototype.hasOwnProperty.call(seen, k)) {
+        var n = parseInt(k, 10);
+        if (isNaN(n)) continue;
+        if (n > max) max = n;
+      }
+    }
+    for (var s = 1; s <= max; s++) {
+      if (!seen[String(s)]) return false;
+    }
+    return true;
+  }
+
+  // ⚠️ 核心安全策略（2026-11-21 两次线上事故后确定）：
+  //  1) 原生 tab（nativeFunc=3944 / navigationType=3）绝不删，删了必闪退并被风控
+  //  2) 删除后 iconType 若出现断口（如 [1,2,3,5,6]），客户端按槽位取值会拿到 null，
+  //     同样有闪退风险 → 此时降级为「软隐藏」：保留对象与 iconType，只清空可点击目标
+  //  3) 只有删除后 iconType 仍从 1 连续（典型是删末尾槽），才真正从数组移除
+  function softHideBottomTab(tab) {
     tab.navigationUrl = "";
     tab.navigationType = "0";
     tab.nativeFunc = "";
@@ -664,20 +688,43 @@
     tab.bubbleText5 = "";
     tab.imgSelected = "";
     tab.imgUnSelected = "";
-    // 标题留空，避免底栏仍显示「移动爱购 / 视频」等文字
     tab.navigationTitle = "";
     tab.navigationName = "";
   }
 
   function filterBottomList(list) {
-    var changed = false;
-    for (var i = 0; i < list.length; i++) {
-      var tab = list[i];
-      if (!tab || !shouldHideBottomTab(tab)) continue;
-      softHideBottomTab(tab);
-      changed = true;
+    var before = list.length;
+
+    // 第一步：只把「可以真删」的挑出来（非原生 + 删后槽位仍连续）
+    // 做法是逐个尝试删除，删完立刻校验 iconType 连续性，连续才接受。
+    var working = list.slice();
+    var removedAny = false;
+
+    for (var i = working.length - 1; i >= 0; i--) {
+      var tab = working[i];
+      if (!tab) continue;
+      if (!shouldHideBottomTab(tab)) continue;
+      if (isNativeBottomTab(tab)) continue;   // 原生 tab 永不删
+
+      var trial = working.slice(0, i).concat(working.slice(i + 1));
+      if (isSlotSequenceContinuous(trial)) {
+        working = trial;
+        removedAny = true;
+      }
     }
-    return { list: list, changed: changed };
+
+    // 第二步：剩下的、命中开关但没被删掉的，做软隐藏（保留槽位，清空可点击目标）
+    var softChanged = false;
+    for (var k = 0; k < working.length; k++) {
+      var t = working[k];
+      if (!t || !shouldHideBottomTab(t)) continue;
+      if (isNativeBottomTab(t)) continue;
+      softHideBottomTab(t);
+      softChanged = true;
+    }
+
+    if (!removedAny && !softChanged) return { list: list, changed: false };
+    return { list: working, changed: true };
   }
 
   function filterBottomNavigation(payload) {
