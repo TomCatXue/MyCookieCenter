@@ -4,7 +4,7 @@
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/wechat_read_app.jpg
 #!tag = 微信读书,防强更,去弹窗,去广告,AI听书
-#!source = 8d2f503f179a08e34ec40d2aef51c246475f1ad7df318e3d3ec70539a7b7865f
+#!source = 8d2f503f179a08e34ec40d2aef51c246475f1ad7df318e3d3ec70539a7b7865f, f17ae1ebfd5a6b6b5014995fb7ab6620b065992b8d57c9b43791e9cbcf175fa8
 #!type = normal
 #!version = 4.2.1
 #!date = 2026-11-21 14:40

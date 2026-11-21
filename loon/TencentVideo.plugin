@@ -4,7 +4,7 @@
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/tencent_video.png
 #!system = iOS,iPadOS
-#!source = 7bfba78f42805f13679cd950b0161fec9fac49ee6cd907c46f9563784912a414
+#!source = 7bfba78f42805f13679cd950b0161fec9fac49ee6cd907c46f9563784912a414, c6c3ff0e9904e80f15cd323c9082878b8b46f030fc455602feb1193aff9e60d1
 #!type = normal
 #!version = 1.0.11
 #!date = 2026-11-21 14:40

@@ -4,7 +4,7 @@
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/weread.png
 #!tag = 微信读书,签到,自动化
-#!source = 3468eae567f3021d456dfe6ebb6b5ff32b81bf702ed599b6ee551e46e615df8a
+#!source = 3468eae567f3021d456dfe6ebb6b5ff32b81bf702ed599b6ee551e46e615df8a, ac9bde2aaf7375f970b8c7fbb790e616e5d970a2b475095dad42834706afffb5
 #!type = normal
 #!version = 1.1.0
 #!date = 2026-11-21 14:40
