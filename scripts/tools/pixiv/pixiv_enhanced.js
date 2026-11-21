@@ -1,10 +1,10 @@
 /*
 --------------------------------------------------------------------------------
 @Name: Pixiv 全局增强翻译 (Pixiverse Enhanced)
-@Version: 4.5.8
+@Version: 4.5.9
 @Desc: Pixiv 全页面日文深度汉化 · AI 视觉多模态漫翻 · 仿 Biliverse 内置设置中心
 @Author: TomCatXue
-@Date: 2026-10-06
+@Date: 2026-11-21 17:53
 --------------------------------------------------------------------------------
 架构说明：
   1. 全页面 JSON 汉化：拦截 recommended/ranking/detail/comments/user/spotlight 等端点；
@@ -1017,7 +1017,7 @@ async function handleApiRewrite(cfg) {
 
 // ─── 6. 小说阅读器 & 页面注入 iOS SF Symbols「文/A」悬浮按钮与排版引擎 ────────
 const SF_TRANSLATE_SVG = `
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
   <path d="m5 8 6 6"/>
   <path d="m4 14 6-6 2-3"/>
   <path d="M2 5h12"/>
@@ -1030,12 +1030,12 @@ const SF_TRANSLATE_SVG = `
 const INJECT_CSS = `
 #px-fab {
   position: fixed;
-  right: 12px;
-  bottom: 150px;
+  right: 20px;
+  bottom: calc(env(safe-area-inset-bottom, 20px) + 96px);
   z-index: 2147483647;
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
+  width: 56px;
+  height: 56px;
+  border-radius: 28px;
   border: 0.5px solid rgba(255, 255, 255, 0.4);
   background: #007aff;
   color: #ffffff;
