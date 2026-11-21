@@ -5,8 +5,10 @@
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/pixiv.png
 #!tag = Pixiv,去广告,会员解锁
+#!source = c65fff5765a90252d247be2df974dda7493fa017db1f827ebc152c29ba335e06
+#!type = normal
 #!version = 1.0.1
-#!date = 2026-11-01 13:10
+#!date = 2026-11-21 14:40
 
 [Rule]
 # 去除小说推荐页广告
@@ -19,5 +21,5 @@ DOMAIN,i.pixiv.re,PROXY
 [Rewrite]
 response if ${url} ~= /^https:\/\/oauth\.secure\.pixiv\.net\/auth\/token/i then response.json.replace(["response.user.is_premium", "user.is_premium"], [true, true])
 
-[MITM]
+[MitM]
 hostname = oauth.secure.pixiv.net

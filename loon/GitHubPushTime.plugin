@@ -4,8 +4,10 @@
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/github_push.jpg
 #!tag = GitHub,星标,推送时间
+#!source = a595491b42323202099751d42f953c4510a27d362e46ccd8005653779b6f7506
+#!type = normal
 #!version = 1.2.0
-#!date = 2026-10-08 11:32
+#!date = 2026-11-21 14:40
 
 # ===== 独立开关 =====
 
@@ -14,7 +16,7 @@ github_push_time = switch,false,tag=星标推送时间,desc=在 GitHub App 星�
 
 # ===== MITM =====
 
-[MITM]
+[MitM]
 hostname = api.github.com
 
 # ===== 脚本规则 =====

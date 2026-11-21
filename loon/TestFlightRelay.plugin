@@ -2,8 +2,10 @@
 #!desc = TestFlight 多账号中转：运行时跟随 ScriptingApp 原版脚本并自动修补 Loon 兼容层；账号索引合并与详情缓存。
 #!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/testflight_app.jpg
 #!system = iOS,iPadOS
+#!source = a50fa61219cab13730fc6243b0b143d8dd91cc25496000c208133c90b4cb457b
+#!type = normal
 #!version = 1.0.0
-#!date = 2026-11-11 01:30
+#!date = 2026-11-21 14:40
 #!loon_version = 3.5.1(983)
 #!tag = TestFlight
 

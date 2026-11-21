@@ -7,8 +7,10 @@
 #!loon_version = 3.5.2(1005)
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/10086.jpg
+#!source = 455af3e478ae00fc4a7bedba2c036595fe91f285c563fba53b8a11ff78d1bb8b
+#!type = normal
 #!version = 1.0.19
-#!date = 2026-11-21 10:20
+#!date = 2026-11-21 14:40
 
 # 核心升级说明（2026-11-21 v1.0.19）：
 # 底栏只保留「视频 / 探索 / 娱乐」一个开关，爱购与灵犀全部下线。
@@ -116,5 +118,5 @@ response if ${url} ~= /^https?:\/\/display-sc\.miguvideo\.com\/display\/v3\/stat
 # 移动爱家与智能专区画布布局净化（剔除轮播图 Swiper、排行榜大图、悬浮窗动效与营销触点弹窗）
 response if ${url} ~= /^https:\/\/res\.coc\.10086\.cn\/res\/cdn\/coc1\/fixedPath\/production\.rightsmarket-h5-canvas\.online\.layout\..*\.json(?:\?.*)?$/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/29a59e1/scripts/cmcc/remove_ads.js?v=dd47727d", {${HideCarousel}, ${SmartPageClean}}) with tag="[中国移动]智能专区与爱家画布净化", timeout=10, requires_body=true
 
-[MITM]
+[MitM]
 hostname = client.app.coc.10086.cn, h.app.coc.10086.cn, app.10086.cn, ad.mcloud.139.com, app.jf.10086.cn, p.10086.cn, display-sc.miguvideo.com, res.coc.10086.cn

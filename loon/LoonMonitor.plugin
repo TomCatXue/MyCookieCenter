@@ -4,8 +4,10 @@
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/loon.png
 #!tag = Loon, 监控, 小组件, VPN
+#!source = 6e74c285332ab002e884697f8370939c48ef7ac4a5f66a6e56b796b193aa234e
+#!type = normal
 #!version = 1.5.0
-#!date = 2026-10-20 01:35
+#!date = 2026-11-21 14:40
 
 # =================== 1. 本地解析 ===================
 # 虚拟域名在本地解析至 Fake-IP 保留网段 (198.18.0.1)，保证流量进入 TUN 虚拟网卡触发本地脚本短路。
@@ -38,5 +40,5 @@ request if ${url} ~= /^https?:\/\/(?:(?:api\.)?loon\.(?:box|local)|198\.18\.0\.1
 cron "0 */2 * * *" then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/loon/loon_monitor.js?v=c5f5b311") with timeout=20, tag="Loon监控·定时同步"
 
 # =================== 4. MITM 解密 ===================
-[MITM]
+[MitM]
 hostname = loon.box, *.loon.box, api.loon.box, loon.local, *.loon.local

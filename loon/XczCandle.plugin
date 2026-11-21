@@ -5,12 +5,14 @@
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/xcz.png
 #!tag = 西窗烛,会员解锁
+#!source = 9d42a5b6f3d6405341d5986ef32a40d2eece5213bab5ea50288943d1f8128d5c
+#!type = normal
 #!version = 1.0.0
-#!date = 2026-11-21 14:16
+#!date = 2026-11-21 14:40
 
 [Script]
 # 会员标记注入
-http-response ^https?:\/\/lchttpapi\.xczim\.com\/ script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/xcz/xcz.js?v=555689a7, requires-body=true, timeout=60, tag=西窗烛会员解锁
+response if ${url} ~= /^https?:\/\/lchttpapi\.xczim\.com\// then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/xcz/xcz.js?v=555689a7") with tag="西窗烛会员解锁", timeout=60, requires_body=true
 
-[MITM]
+[MitM]
 hostname = lchttpapi.xczim.com

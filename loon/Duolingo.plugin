@@ -5,13 +5,15 @@
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/duolingo.webp
 #!tag = 多邻国,Duolingo,会员,解锁
+#!source = 268d0596b1943dfdcc84c4fd909f22968f5c6067121d3e91d9c80a9735387f5b
+#!type = normal
 #!version = 2.0.3
-#!date = 2026-11-12 22:57
+#!date = 2026-11-21 14:40
 
 [Script]
-http-response ^https?:\/\/(?:ios-api-[^.]+|api[^.]+)\.duolingo\.[a-z.]+\/.*\/users\/.*\?fields=subscriberLevel script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/duolingo/duolingo.level.js?v=5dc76fcb, requires-body=true, timeout=60, tag=订购等级
-http-response ^https?:\/\/(?:ios-api-[^.]+|api[^.]+)\.duolingo\.[a-z.]+\/.*\/users\/.*\/(?:available-features|advertisable-features).*$ script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/duolingo/duolingo.features.js?v=cc30c397, requires-body=true, timeout=60, tag=订购配置
-http-response ^https?:\/\/(?:ios-api-[^.]+|api[^.]+)\.duolingo\.[a-z.]+\/\d{4}-\d{1,2}-\d{1,2}\/batch script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/duolingo/duolingo.batch.js?v=5f0305d2, requires-body=true, timeout=60, tag=订购信息
+response if ${url} ~= /^https?:\/\/(?:ios-api-[^.]+|api[^.]+)\.duolingo\.[a-z.]+\/.*\/users\/.*\?fields=subscriberLevel/ then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/duolingo/duolingo.level.js?v=5dc76fcb") with tag="订购等级", timeout=60, requires_body=true
+response if ${url} ~= /^https?:\/\/(?:ios-api-[^.]+|api[^.]+)\.duolingo\.[a-z.]+\/.*\/users\/.*\/(?:available-features|advertisable-features).*$/ then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/duolingo/duolingo.features.js?v=cc30c397") with tag="订购配置", timeout=60, requires_body=true
+response if ${url} ~= /^https?:\/\/(?:ios-api-[^.]+|api[^.]+)\.duolingo\.[a-z.]+\/\d{4}-\d{1,2}-\d{1,2}\/batch/ then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/duolingo/duolingo.batch.js?v=5f0305d2") with tag="订购信息", timeout=60, requires_body=true
 
-[MITM]
+[MitM]
 hostname = ios-api-*.duolingo.*, api*.duolingo.*

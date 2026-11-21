@@ -4,8 +4,10 @@
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/daidai.png
 #!tag = 签到, Cookie, 凭据捕获, 呆呆面板, Dumb-Panel
+#!source = 984839a0f1415b0ecadb23343041b45ca2752804d82828ccca6c3ea66219cc2d
+#!type = normal
 #!version = 1.0.7
-#!date = 2026-11-14 15:25
+#!date = 2026-11-21 14:40
 
 # =================== 1. 独立业务开关 (开启即代表捕获并就地同步) ===================
 
@@ -35,5 +37,5 @@ response if ${url} ~= /^https?:\/\/(waphub|wappark)\.189\.cn\/(jt-sign|gateway)\
 
 # =================== 3. MITM 解密域名 ===================
 
-[MITM]
+[MitM]
 hostname = weread.qq.com, i.weread.qq.com, waphub.189.cn, wappark.189.cn, wx.sx.189.cn, mapi.bestpay.com.cn, mapi-h5.bestpay.com.cn, cdn.bestpay.cn, spanner.bestpay.com.cn, activity.bestpay.cn, h5.bestpay.cn, api-cs.intsig.net

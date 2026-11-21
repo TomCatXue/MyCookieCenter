@@ -4,8 +4,10 @@
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/10086.png
 #!tag = 中国移动,移动云盘,签到,自动化
+#!source = 4b7af8ab035b1cc7d626332dd622a93729aea97df07fd17f3eb9736195b4a0b5
+#!type = normal
 #!version = 1.1.5
-#!date = 2026-11-15 16:03
+#!date = 2026-11-21 14:40
 
 [Argument]
 capture = switch,false,tag=Authorization捕获,desc=打开移动云盘App首页抓取Authorization，抓完建议关闭
@@ -16,8 +18,8 @@ prizes = input,"",tag=抢兑商品ID(可选),desc=英文逗号分隔的prizeId�
 
 [Script]
 request if ${url} ~= /^https?:\/\/user-njs\.yun\.139\.com\/user\//i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/yundisk/yundisk.cookie.js?v=944eb970") with enable=${capture}, tag="移动云盘·凭据捕获", img_url="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/10086.png"
-cron "5 8 * * *" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/yundisk/ydyp.loon.js?v=8a3a7613, argument="mode=sign&auth=${auth}", enable=${sign}, timeout=180, tag="移动云盘·每日签到", img-url="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/10086.png"
-cron "59 9,15,23 * * *" script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/yundisk/ydyp.loon.js?v=8a3a7613, argument="mode=exchange&auth=${auth}&prizes=${prizes}", enable=${exchange}, timeout=300, tag="移动云盘·商品抢兑", img-url="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/10086.png"
+cron "5 8 * * *" then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/yundisk/ydyp.loon.js?v=8a3a7613", "mode=sign&auth=${auth}") with enable=${sign}, timeout=180, tag="移动云盘·每日签到", img_url="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/10086.png"
+cron "59 9,15,23 * * *" then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/yundisk/ydyp.loon.js?v=8a3a7613", "mode=exchange&auth=${auth}&prizes=${prizes}") with enable=${exchange}, timeout=300, tag="移动云盘·商品抢兑", img_url="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/10086.png"
 
-[MITM]
+[MitM]
 hostname = user-njs.yun.139.com

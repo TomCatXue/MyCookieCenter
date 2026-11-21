@@ -5,8 +5,10 @@
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/telegram.png
 #!tag = Telegram,功能增强,分流优化
+#!source = 169271c66a9a0a34a9183e8967f55c55e3d15003c44635afdc6f338403ff9859
+#!type = normal
 #!version = 1.1.0
-#!date = 2026-11-01 13:27
+#!date = 2026-11-21 14:40
 
 [Argument]
 t.me_redirect = select, "Telegram", "Swiftgram", "Nagram", "Turrit", "iMe", "Nicegram", "Lingogram", "Teleplus", tag=跳转至对应客户端, desc=选择点击t.me链接时唤起的目标客户端
@@ -74,7 +76,7 @@ DOMAIN-SUFFIX,nicegram.cloud,PROXY
 DOMAIN-SUFFIX,intentchat.app,PROXY
 
 [Script]
-http-request ^https?:\/\/(t\.me|telegram\.(?:me|dog))\/.+ script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/telegram/t.me_redirect.js?v=83f8d9f3, argument=[{t.me_redirect}], timeout=10, tag=[Telegram]链接重定向
+request if ${url} ~= /^https?:\/\/(t\.me|telegram\.(?:me|dog))\/.+/ then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/tools/telegram/t.me_redirect.js?v=83f8d9f3", {${t.me_redirect}}) with tag="[Telegram]链接重定向", timeout=10
 
-[MITM]
+[MitM]
 hostname = t.me, telegram.me, telegram.dog

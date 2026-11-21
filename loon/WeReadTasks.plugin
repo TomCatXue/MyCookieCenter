@@ -4,8 +4,10 @@
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/weread.png
 #!tag = 微信读书,签到,自动化
+#!source = 3468eae567f3021d456dfe6ebb6b5ff32b81bf702ed599b6ee551e46e615df8a
+#!type = normal
 #!version = 1.1.0
-#!date = 2026-11-20 15:30
+#!date = 2026-11-21 14:40
 
 [Argument]
 capture = switch,false,tag=票据捕获,desc=打开微信读书「我」和「翻牌/限免」页面补齐完整票据，抓完建议关闭
@@ -29,7 +31,7 @@ request if ${url} ~= /^https?:\/\/(i\.)?weread\.qq\.com\/(flip-card-game|user\/|
 response if ${url} ~= /^https?:\/\/i\.weread\.qq\.com\/login/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/weread/weread_cookie.js?v=7a55ec4b") with enable=${capture}, tag="微信读书·登录回填", requires_body=true, img_url="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/weread.png"
 cron "5 23 * * *" then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/weread/weread_claim.js?v=a4dd2ca1") with enable=${claim}, timeout=180, tag="微信读书·阅读奖励", img_url="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/weread.png"
 cron "5 20 * * 2" then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/weread/weread_flip.js?v=983807c6") with enable=${flip}, timeout=180, tag="微信读书·翻牌抽奖", img_url="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/weread.png"
-cron "5 10 * * 5" then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/weread/weread_free.js?v=43a7eaf7") with enable=${free}, argument="helper=${helper}&minCount=${minCount}&maxCount=${maxCount}&minRating=${minRating}&preferCats=${preferCats}&excludeCats=${excludeCats}&excludeWords=${excludeWords}&diversify=${diversify}&fallbackLink=${fallbackLink}", timeout=300, tag="微信读书·限免入架", img_url="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/weread.png"
+cron "5 10 * * 5" then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/scripts/weread/weread_free.js?v=43a7eaf7", "helper=${helper}&minCount=${minCount}&maxCount=${maxCount}&minRating=${minRating}&preferCats=${preferCats}&excludeCats=${excludeCats}&excludeWords=${excludeWords}&diversify=${diversify}&fallbackLink=${fallbackLink}") with enable=${free}, timeout=300, tag="微信读书·限免入架", img_url="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/weread.png"
 
-[MITM]
+[MitM]
 hostname = weread.qq.com, i.weread.qq.com

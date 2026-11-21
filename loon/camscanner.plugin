@@ -4,8 +4,10 @@
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/camscanner.jpg
 #!tag = 扫描全能王,Cookie,签到
+#!source = 16c35bd1b46cecb5f3c6efc659e62910b407372e6ddeb3494f942f5d01990df4
+#!type = normal
 #!version = 1.6.1
-#!date = 2026-11-14 09:52
+#!date = 2026-11-21 14:40
 
 # =================== 独立开关 ===================
 
@@ -16,7 +18,7 @@ auto_renew = switch,true,tag=自动换票,desc=每天08:05用长效种子自动�
 
 # =================== MITM ===================
 
-[MITM]
+[MitM]
 hostname = api-cs.intsig.net
 
 # =================== 脚本规则 ===================
