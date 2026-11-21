@@ -75,9 +75,7 @@
     HideMyNewCall: false,
     HideMySpecialServices: false,
     HideBottomVideo: false,
-    HideBottomLingxiA: false,
-    HideBottomShop: false,
-    HideBottomLingxiB: false
+    HideBottomShop: false
   };
 
   function enabled(name) {
@@ -107,9 +105,7 @@
     !enabled("HideTopAI") &&
     !enabled("HideTopEnterprise") &&
     !enabled("HideBottomVideo") &&
-    !enabled("HideBottomLingxiA") &&
-    !enabled("HideBottomShop") &&
-    !enabled("HideBottomLingxiB")
+    !enabled("HideBottomShop")
   ) {
     $done({});
     return;
@@ -597,7 +593,6 @@
   // 首页 / 通信 / 我的 恒定保留，任何开关都不动，防止省份差异误伤
   var BOTTOM_RISK_IDS = { CT00033: true, CT00113: true, ZF10001: true };
   var BOTTOM_RISK_NAMES = ["首页", "通信", "通话", "通信顶标", "我的"];
-  var BOTTOM_LINGXI_ID = "qw2305190519";
 
   function bottomTitle(tab) {
     return String(tab && (tab.navigationTitle || tab.navigationName) || "");
@@ -635,38 +630,54 @@
       if (title === BOTTOM_RISK_NAMES[i]) return false;
     }
 
-    // 灵犀占位：同一个 id 可能同时占第 3、第 6 两个槽，也可能只占一个。
-    // 双占时按槽位精确匹配；只有一个时，A/B 任一开关都能清掉它，
-    // 否则用户开了开关却毫无反应（真机实测陕西就是单灵犀）。
-    if (navId === BOTTOM_LINGXI_ID) {
-      var iconType = String(tab && tab.iconType || "");
-      if (BOTTOM_LINGXI_COUNT >= 2) {
-        if (iconType === "6") return enabled("HideBottomLingxiB");
-        return enabled("HideBottomLingxiA");
-      }
-      return enabled("HideBottomLingxiA") || enabled("HideBottomLingxiB");
-    }
-
+    // 灵犀占位已下线：删除 tab 会让 iconType 断裂（1,2,5,6 中间空 3、4），
+    // 客户端按 1~6 全量遍历时越界闪退，服务端随后判异常并风控。不可再删。
     if (isBottomVideoTab(tab)) return enabled("HideBottomVideo");
     if (isBottomShopTab(tab)) return enabled("HideBottomShop");
     return false;
   }
 
-  var BOTTOM_LINGXI_COUNT = 0;
+  // ⚠️ 绝不可删元素。实测教训（2026-11-21 线上事故）：
+  // 删掉槽 3、4 的 tab 后，下发的 iconType 变成 [1,2,5,6]，
+  // 客户端按 1~6 全量下标遍历，取到缺失槽位即越界 → App 闪退
+  // → 服务端判定异常客户端 → 强制退出登录并拦截短信验证码。
+  // 所以只能把 tab 就地「软隐藏」：保留对象与 iconType，清空可点击目标。
+  function softHideBottomTab(tab) {
+    var title = String(tab && tab.navigationTitle || "");
+    var name = String(tab && tab.navigationName || "");
+
+    tab.navigationUrl = "";
+    tab.navigationType = "0";
+    tab.nativeFunc = "";
+    tab.nativeVersion = "";
+    tab.mobileFileUrl = "";
+    tab.filePath = "";
+    tab.lingxiFlag = "0";
+    tab.lingxiPicture = "";
+    tab.lingxiPictureGlobal = "";
+    tab.bubbleShow = "0";
+    tab.bubble = "0";
+    tab.bubbleText1 = "";
+    tab.bubbleText2 = "";
+    tab.bubbleText3 = "";
+    tab.bubbleText4 = "";
+    tab.bubbleText5 = "";
+    tab.imgSelected = "";
+    tab.imgUnSelected = "";
+    // 标题留空，避免底栏仍显示「移动爱购 / 视频」等文字
+    tab.navigationTitle = "";
+    tab.navigationName = "";
+  }
 
   function filterBottomList(list) {
-    // 先数清本省有几个灵犀占位：双占要按槽位精确删，单占则开关放宽
-    BOTTOM_LINGXI_COUNT = 0;
+    var changed = false;
     for (var i = 0; i < list.length; i++) {
-      if (String(list[i] && list[i].navigationId || "") === BOTTOM_LINGXI_ID) BOTTOM_LINGXI_COUNT += 1;
+      var tab = list[i];
+      if (!tab || !shouldHideBottomTab(tab)) continue;
+      softHideBottomTab(tab);
+      changed = true;
     }
-
-    var before = list.length;
-    var filtered = list.filter(function (tab) {
-      return !shouldHideBottomTab(tab);
-    });
-    if (filtered.length === before) return { list: list, changed: false };
-    return { list: filtered, changed: true };
+    return { list: list, changed: changed };
   }
 
   function filterBottomNavigation(payload) {
