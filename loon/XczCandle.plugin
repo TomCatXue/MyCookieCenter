@@ -1,12 +1,12 @@
 #!name = 西窗烛 · 会员解锁
-#!desc = 将西窗烛鉴权接口响应中的 Membership 标记由 false 改写为 true，解锁客户端本地会员分支。\n• 仅改写 lchttpapi.xczim.com 的响应体，零规则开销\n• 自动校验改写后仍为合法 JSON，异常时原报文放行\n• 已是会员、或字段结构变更时静默跳过，不报错\n说明：诗词库、AI 创作、离线下载等真实服务端资源仍按接口实际返回，本插件不伪造服务端权益。\n原作：ddgksf2013 / Cuttlefish 墨鱼手记，上游脚本已下架，本仓库为整合留存版。
+#!desc = 何当共剪西窗烛，却话巴山夜雨时。\n孤灯照影，长卷不设门扉；一灯如豆，可读千秋。\n· 玉轴牙签 · 尽在掌中\n· 清风明月 · 不费一钱\n· 灯花落处 · 原报安然\n诗心自得，卷帙皆开。\n原作 ddgksf2013 / 墨鱼手记，上游已佚，此为续灯之本。
 #!openUrl = https://apps.apple.com/cn/app/id912139104
 #!author = TomCatXue (整合) · ddgksf2013 (原作)
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/xcz.png
 #!tag = 西窗烛,会员解锁
 #!version = 1.0.0
-#!date = 2026-11-21 14:10
+#!date = 2026-11-21 14:14
 
 [Script]
 # 会员标记注入
