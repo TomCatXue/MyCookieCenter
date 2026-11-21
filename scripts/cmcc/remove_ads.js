@@ -73,7 +73,11 @@
     HideMyVideo: false,
     HideMyExclusiveServices: false,
     HideMyNewCall: false,
-    HideMySpecialServices: false
+    HideMySpecialServices: false,
+    HideBottomVideo: false,
+    HideBottomLingxiA: false,
+    HideBottomShop: false,
+    HideBottomLingxiB: false
   };
 
   function enabled(name) {
@@ -93,7 +97,7 @@
     return val === true || val === "true" || val === 1 || val === "1";
   }
 
-  var isNavigationRequest = /\/DN\/init\/getNavigation(?:\?|$)/.test(url);
+  var isNavigationRequest = /\/DN\/(?:init\/getNavigation|bottomNavigationService\/getNavigationInfo)(?:\?|$)/.test(url);
   if (
     isNavigationRequest &&
     !enabled("HideTopFamily") &&
@@ -101,7 +105,11 @@
     !enabled("HideTopPhone") &&
     !enabled("HideTopNearby") &&
     !enabled("HideTopAI") &&
-    !enabled("HideTopEnterprise")
+    !enabled("HideTopEnterprise") &&
+    !enabled("HideBottomVideo") &&
+    !enabled("HideBottomLingxiA") &&
+    !enabled("HideBottomShop") &&
+    !enabled("HideBottomLingxiB")
   ) {
     $done({});
     return;
@@ -573,6 +581,119 @@
     return false;
   }
 
+  // ==================== 底栏（TabBar）净化 ====================
+  // 底栏固定 6 槽，由 iconType 定位（1~6）。但各省内容与叫法差异极大，实测：
+  //   槽 1 首页 CT00033
+  //   槽 2 通信 CT00113 / 视频 CT00108 / 探索 CT00032 —— 真机上还有叫「娱乐」的
+  //   槽 3、6 灵犀占位 qw2305190519（同 id 出现两次）
+  //   槽 4 移动爱购 CT00038 / CT00111 / CT00112（有的省标题是「权益」）
+  //   槽 5 我的 ZF10001
+  // 因此判定顺序：先按 navigationId 认，id 认不出再按标题兜底，不依赖槽位。
+  var BOTTOM_SHOP_IDS = { CT00038: true, CT00111: true, CT00112: true };
+  // CT00108 = 视频；CT00032 = 探索；真机叫「娱乐」的也是这个 native 容器
+  var BOTTOM_VIDEO_IDS = { CT00108: true, CT00032: true };
+  var BOTTOM_VIDEO_NAMES = ["视频", "探索", "娱乐"];
+  var BOTTOM_SHOP_NAMES = ["移动爱购", "爱购", "权益"];
+  // 首页 / 通信 / 我的 恒定保留，任何开关都不动，防止省份差异误伤
+  var BOTTOM_RISK_IDS = { CT00033: true, CT00113: true, ZF10001: true };
+  var BOTTOM_RISK_NAMES = ["首页", "通信", "通话", "通信顶标", "我的"];
+  var BOTTOM_LINGXI_ID = "qw2305190519";
+
+  function bottomTitle(tab) {
+    return String(tab && (tab.navigationTitle || tab.navigationName) || "");
+  }
+
+  function isBottomVideoTab(tab) {
+    var navId = String(tab && tab.navigationId || "");
+    if (BOTTOM_VIDEO_IDS[navId]) return true;
+    if (BOTTOM_RISK_IDS[navId]) return false;
+    var title = bottomTitle(tab);
+    for (var i = 0; i < BOTTOM_VIDEO_NAMES.length; i++) {
+      if (title === BOTTOM_VIDEO_NAMES[i]) return true;
+    }
+    return false;
+  }
+
+  function isBottomShopTab(tab) {
+    var navId = String(tab && tab.navigationId || "");
+    if (BOTTOM_SHOP_IDS[navId]) return true;
+    if (BOTTOM_RISK_IDS[navId]) return false;
+    var title = bottomTitle(tab);
+    for (var i = 0; i < BOTTOM_SHOP_NAMES.length; i++) {
+      if (title === BOTTOM_SHOP_NAMES[i]) return true;
+    }
+    return false;
+  }
+
+  function shouldHideBottomTab(tab) {
+    var navId = String(tab && tab.navigationId || "");
+    var title = bottomTitle(tab);
+
+    // 首页 / 通信 / 我的 恒定保留，优先于一切开关
+    if (BOTTOM_RISK_IDS[navId]) return false;
+    for (var i = 0; i < BOTTOM_RISK_NAMES.length; i++) {
+      if (title === BOTTOM_RISK_NAMES[i]) return false;
+    }
+
+    // 灵犀占位：同一个 id 可能同时占第 3、第 6 两个槽，也可能只占一个。
+    // 双占时按槽位精确匹配；只有一个时，A/B 任一开关都能清掉它，
+    // 否则用户开了开关却毫无反应（真机实测陕西就是单灵犀）。
+    if (navId === BOTTOM_LINGXI_ID) {
+      var iconType = String(tab && tab.iconType || "");
+      if (BOTTOM_LINGXI_COUNT >= 2) {
+        if (iconType === "6") return enabled("HideBottomLingxiB");
+        return enabled("HideBottomLingxiA");
+      }
+      return enabled("HideBottomLingxiA") || enabled("HideBottomLingxiB");
+    }
+
+    if (isBottomVideoTab(tab)) return enabled("HideBottomVideo");
+    if (isBottomShopTab(tab)) return enabled("HideBottomShop");
+    return false;
+  }
+
+  var BOTTOM_LINGXI_COUNT = 0;
+
+  function filterBottomList(list) {
+    // 先数清本省有几个灵犀占位：双占要按槽位精确删，单占则开关放宽
+    BOTTOM_LINGXI_COUNT = 0;
+    for (var i = 0; i < list.length; i++) {
+      if (String(list[i] && list[i].navigationId || "") === BOTTOM_LINGXI_ID) BOTTOM_LINGXI_COUNT += 1;
+    }
+
+    var before = list.length;
+    var filtered = list.filter(function (tab) {
+      return !shouldHideBottomTab(tab);
+    });
+    if (filtered.length === before) return { list: list, changed: false };
+    return { list: filtered, changed: true };
+  }
+
+  function filterBottomNavigation(payload) {
+    var body = payload && payload.rspBody;
+    if (!body) return false;
+    var changed = false;
+
+    // 结构 A：bottomNavigationService/getNavigationInfo → configProvinceList[].navigationList
+    if (Array.isArray(body.configProvinceList)) {
+      body.configProvinceList.forEach(function (prov) {
+        if (!prov || !Array.isArray(prov.navigationList)) return;
+        var res = filterBottomList(prov.navigationList);
+        prov.navigationList = res.list;
+        if (res.changed) changed = true;
+      });
+    }
+
+    // 结构 B：init/getNavigation → bnavigationService.navigationList
+    if (body.bnavigationService && Array.isArray(body.bnavigationService.navigationList)) {
+      var res = filterBottomList(body.bnavigationService.navigationList);
+      body.bnavigationService.navigationList = res.list;
+      if (res.changed) changed = true;
+    }
+
+    return changed;
+  }
+
   function filterNavigation(payload) {
     var body = payload && payload.rspBody;
     if (!body) return false;
@@ -586,6 +707,8 @@
       });
       if (body.labelList.topTabList.length !== topCount) changed = true;
     }
+
+    if (filterBottomNavigation(payload)) changed = true;
 
     return changed;
   }
@@ -1383,7 +1506,7 @@
       changed = filterAggregationData(payload);
     } else if (/\/DH\/toast\/august\/getToast(?:\?|$)/.test(url)) {
       changed = filterToastNotifications(payload);
-    } else if (/\/DN\/init\/getNavigation(?:\?|$)/.test(url)) {
+    } else if (/\/DN\/(?:init\/getNavigation|bottomNavigationService\/getNavigationInfo)(?:\?|$)/.test(url)) {
       changed = filterNavigation(payload);
     } else if (/\/DN\/searchWord\/getSearchWordInfo(?:\?|$)/.test(url)) {
       changed = filterSearchWords(payload);
