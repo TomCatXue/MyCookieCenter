@@ -21,6 +21,7 @@
 | [**TestFlightRelay.plugin**](./TestFlightRelay.plugin) (v1.0.0) | **TestFlight 中转**：请求本地应答、多账号索引合并与详情缓存，Loon 原生适配 | 内置请求脚本 + 5 分钟会话刷新 |
 | [**Duolingo.plugin**](./Duolingo.plugin) (v2.0.3) | **订阅解锁**：三处响应注入 Gold 家庭订阅，解锁免广告 / 无限心 / AI 功能 (j4gm4g 原作) | 规则型，无需开关 |
 | [**MiguMusic.plugin**](./MiguMusic.plugin) (v1.0.0) | **去广告**：关闭开屏与运营广告、清空营销位、注入 no_ads 权益、拦截推广 SDK | 规则型，无需开关 |
+| [`XczCandle.plugin`](./XczCandle.plugin) (v1.0.0) | 西窗烛：会员标记注入，解锁客户端本地会员分支（ddgksf2013 原作，上游已下架留存版） | 规则型，无需开关 |
 
 ## 使用
 

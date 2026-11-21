@@ -10,3 +10,4 @@
 | [`wxread_enhance/`](./wxread_enhance/) | 去广告 · 去更新弹窗 | [`WeReadEnhance.plugin`](../../loon/WeReadEnhance.plugin) |
 | [`camscanner/`](./camscanner/) | 扫描全能王抓取 + 签到 | [`camscanner.plugin`](../../loon/camscanner.plugin) |
 | [`daidai/`](./daidai/) | 凭据捕获与呆呆面板自动同步 | [`DaiDaiPanel.plugin`](../../loon/DaiDaiPanel.plugin) |
+| [`xcz/`](./xcz/) | 西窗烛会员标记注入（ddgksf2013 原作留存版） | [`XczCandle.plugin`](../../loon/XczCandle.plugin) |
