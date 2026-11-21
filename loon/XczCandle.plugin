@@ -10,7 +10,7 @@
 
 [Script]
 # 会员标记注入
-http-response ^https?:\/\/lchttpapi\.xczim\.com\/ script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/xcz/xcz.js?v=1.0.0, requires-body=true, timeout=60, tag=西窗烛会员解锁
+http-response ^https?:\/\/lchttpapi\.xczim\.com\/ script-path=https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/xcz/xcz.js?v=555689a7, requires-body=true, timeout=60, tag=西窗烛会员解锁
 
 [MITM]
 hostname = lchttpapi.xczim.com
