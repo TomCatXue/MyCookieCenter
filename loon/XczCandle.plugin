@@ -1,12 +1,12 @@
 #!name = 西窗烛 · 会员解锁
-#!desc = 何当共剪西窗烛，却话巴山夜雨时。\n孤灯照影，长卷不设门扉；一灯如豆，可读千秋。\n· 玉轴牙签 · 尽在掌中\n· 清风明月 · 不费一钱\n· 灯花落处 · 原报安然\n诗心自得，卷帙皆开。\n原作 ddgksf2013 / 墨鱼手记，上游已佚，此为续灯之本。
+#!desc = 清风朗月不用一钱买。
 #!openUrl = https://apps.apple.com/cn/app/id912139104
 #!author = TomCatXue (整合) · ddgksf2013 (原作)
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/xcz.png
 #!tag = 西窗烛,会员解锁
 #!version = 1.0.0
-#!date = 2026-11-21 14:14
+#!date = 2026-11-21 14:16
 
 [Script]
 # 会员标记注入
