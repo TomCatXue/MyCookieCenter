@@ -1,5 +1,5 @@
 #!name = Pixiv · 漫画原位翻译
-#!desc = 让 Pixiv App 原生阅读器直接显示中文译文：不需要打开额外查看器、不需要离开软件。\n• 用 Loon 原生 URL Rewrite 把 pximg 图片请求改道到自建 Worker（不经过 JS 运行时，最稳）\n• Worker 侧调用视觉模型识别气泡、合成译文后回传图片\n• Pixiv 阅读器照常渲染，用户看到的就是汉化页\n• 翻译失败自动降级回原图，绝不影响正常阅读
+#!desc = 让 Pixiv App 原生阅读器直接显示中文译文：不需要打开额外查看器、不需要离开软件。\n• 用 Loon 原生 URL Rewrite 把 pximg 图片请求改道到自建 Worker\n• Worker 侧调用视觉模型识别气泡、合成译文后回传图片\n• Pixiv 阅读器照常渲染，用户看到的就是汉化页\n• 翻译失败自动降级回原图，绝不影响正常阅读
 #!author = TomCatXue
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/pixiv.png
@@ -7,24 +7,18 @@
 #!system = iOS,iPadOS
 #!date = 2026-11-22 23:59
 #!type = normal
-#!version = 0.3.0
-
-[Argument]
-WORKER_HOST = input,"pixiv.xuetom.top",tag=Worker 域名,desc=换域名时同步改下面的 URL Rewrite 目标
+#!version = 0.3.1
 
 [URL Rewrite]
 # ────────────────────────────────────────────────────────────
-# 把 pximg 的图片请求 host 换成 Worker，路径原样保留。
-# Worker 识别到 pximg 的路径特征就会自己抓原图并翻译。
+# 把 i.pximg.net 的图片请求整体转到 Worker。
 #
-# 为什么不走脚本：Loon 的 request 脚本里
-#   ① $done({url}) 改写无效 → 直接返回假 404
-#   ② $httpClient 在 MITM 内请求会被丢弃（timings 全 -1）
-# 原生 URL Rewrite 不经过 JS 运行时，最稳。
+# Surge/Loon 的替换式重写：左边正则，右边目标，$1/$2 是捕获组。
+# 注意：必须用空格分隔（不是 _ 也不是 ->）。
 #
-# 只改写漫画/插画大图路径，头像和封面放行原站。
+# 只改写漫画大图路径，头像和封面放行原站。
 # ────────────────────────────────────────────────────────────
-^https:\/\/i\.pximg\.net\/(c\/\d+x\d+[^\/]*\/)?(img-master|img-original)\/ _ https://pixiv.xuetom.top/
+^https?:\/\/i\.pximg\.net\/(c\/[0-9]+x[0-9]+[^\/]*\/)?(img-master|img-original)\/(.*)$ https://pixiv.xuetom.top/$1$2/$3
 
 [MitM]
 hostname = i.pximg.net, pixiv.xuetom.top
