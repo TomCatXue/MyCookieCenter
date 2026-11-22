@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.wrangler/
+*.log
+sim-*.png
+sim*.mjs
+vtest.mjs
