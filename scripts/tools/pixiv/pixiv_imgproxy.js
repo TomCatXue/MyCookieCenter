@@ -19,7 +19,7 @@
 
   // ── 内置默认值（Loon 没传 argument 时兜底）─────────────────
   var DEFAULTS = {
-    WORKER_HOST: "pixiv-imgproxy.xuetom43b.workers.dev",
+    WORKER_HOST: "pixiv.xuetom.top",
     TARGET_LANG: "zh-CN",
     PASSTHROUGH: "true",
     TRANSLATE_ALL: "false"

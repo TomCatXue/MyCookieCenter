@@ -3,6 +3,12 @@ main = "src/index.js"
 compatibility_date = "2026-11-01"
 compatibility_flags = ["nodejs_compat"]
 
+# 自定义域名：workers.dev 在国内和机场被大面积拉黑，必须绑自己的域名。
+# custom_domain = true 时 Cloudflare 会自动创建 DNS 记录和 SSL 证书。
+routes = [
+  { pattern = "pixiv.xuetom.top", custom_domain = true }
+]
+
 # 图片翻译缓存：同一个 (图片URL + 引擎 + 目标语言 + 样式版本) 只处理一次
 # 创建方式： npx wrangler kv namespace create TRANSLATE_CACHE
 # 把输出里的 id 填到下面
