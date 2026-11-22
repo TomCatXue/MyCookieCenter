@@ -21,7 +21,7 @@
   var DEFAULTS = {
     WORKER_HOST: "pixiv.xuetom.top",
     TARGET_LANG: "zh-CN",
-    PASSTHROUGH: "true",
+    PASSTHROUGH: "false",
     TRANSLATE_ALL: "false"
   };
 

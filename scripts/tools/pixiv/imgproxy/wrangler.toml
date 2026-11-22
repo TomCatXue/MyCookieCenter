@@ -20,10 +20,10 @@ id = "9e9c5d9716194706a5219820ec4a2009"
 # ── 运行模式 ────────────────────────────────────────────────
 # 1 = 只透传原图（验证阶段：确认 Pixiv 接不接受代理返回的图）
 # 0 = 完整翻译链路
-PASSTHROUGH_ONLY = "1"
+PASSTHROUGH_ONLY = "0"
 
 # 打开后 Worker 日志会打印每次透传的图片信息，排查用
-LOG_PASSTHROUGH = "1"
+LOG_PASSTHROUGH = "0"
 
 # ── 视觉引擎 ────────────────────────────────────────────────
 # gemini / openai / custom（custom 适合 DeepSeek-VL、Qwen-VL 等 OpenAI 兼容端点）
