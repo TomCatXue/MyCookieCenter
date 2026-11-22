@@ -1,23 +1,25 @@
 /**
- * Pixiv 漫画原位翻译 · Loon 请求改写脚本
+ * Pixiv 漫画原位翻译 · Loon 请求脚本
  * ---------------------------------------------------------------
- * 把 Pixiv App 对 i.pximg.net 的图片请求，改写到自建图片翻译 Worker。
+ * 把 Pixiv App 对 i.pximg.net 的图片请求，转给自建翻译 Worker 处理，
+ * 再把 Worker 返回的图片直接交回给 Pixiv 阅读器。
  *
- *   原始: GET https://i.pximg.net/c/540x540_70/img-master/.../123456_p0_master1200.jpg
- *   改写: GET https://<worker>/img?src=<原URL编码>&lang=zh-CN
- *   Worker 抓原图 → 视觉模型 → 合成译文 → 返回图片
+ *   原始: GET https://i.pximg.net/c/600x1200_90_webp/img-master/.../xxx_p0_master1200.jpg
+ *   处理: 脚本内部请求 https://<worker>/img?src=<原URL编码>&lang=zh-CN
+ *   返回: 把 Worker 的图片字节原样回给 App
  *
- * Loon 的 $argument 是个对象，键名就是插件 [Argument] 里的变量名。
- *   WORKER_HOST   input   域名
- *   TARGET_LANG   input   目标语言
- *   PASSTHROUGH   switch  true/false
- *   TRANSLATE_ALL switch  true/false
+ * ⚠️ 关键：Loon 的 request 脚本**不支持 $done({ url }) 改写 URL**。
+ *    那样写会被当成无效参数，Loon 直接返回 404（timings 里 dns/connect/ssl 全是 -1）。
+ *    正确做法是在脚本里自己发请求，再用 $done 把响应返给 App。
+ *
+ * 配置来源：
+ *   1. Loon 插件 [Argument] 的 $argument（对象形态）
+ *   2. 下面的 DEFAULTS
  */
 
 (function () {
   "use strict";
 
-  // ── 内置默认值（Loon 没传 argument 时兜底）─────────────────
   var DEFAULTS = {
     WORKER_HOST: "pixiv.xuetom.top",
     TARGET_LANG: "zh-CN",
@@ -25,18 +27,13 @@
     TRANSLATE_ALL: "false"
   };
 
-  /**
-   * 从 $argument 取配置。
-   * Loon 的 switch 类型会给 "true"/"false" 字符串或 true/false 布尔值，
-   * 这里统一成小写字符串，后面用 === "true" 判断。
-   */
+  /** 从 $argument 取值，兼容对象/字符串/布尔三种形态 */
   function pick(key) {
     var v;
     try {
       if (typeof $argument !== "undefined" && $argument) {
         if (typeof $argument === "object") v = $argument[key];
         else if (typeof $argument === "string") {
-          // 某些版本会给 "k1=v1&k2=v2" 形式，兼容一下
           var m = $argument.match(new RegExp("(?:^|[&,])" + key + "=([^&,]*)"));
           if (m) v = m[1];
         }
@@ -53,7 +50,7 @@
   var isPassthrough = pick("PASSTHROUGH").toLowerCase() === "true";
   var isTranslateAll = pick("TRANSLATE_ALL").toLowerCase() === "true";
 
-  // 没配域名 → 原样放行，绝不影响正常看图
+  // 没配域名 → 放行原请求
   if (!host || host.indexOf("REPLACE") >= 0) {
     $done({});
     return;
@@ -72,15 +69,12 @@
     return;
   }
 
-  // ── 判断这张图要不要走 Worker ──────────────────────────────
-  // 头像、封面缩略图、UI 图标走翻译是白白烧钱又拖慢列表加载。
-  // 默认只处理漫画/插画大图路径。
+  // 只翻漫画/插画大图。头像、封面、小图标放行原图。
   if (!isTranslateAll && !isArtworkImage(url)) {
     $done({});
     return;
   }
 
-  // ── 拼 Worker 请求并改写 ───────────────────────────────────
   var target =
     "https://" +
     host +
@@ -90,32 +84,58 @@
     encodeURIComponent(lang) +
     (isPassthrough ? "&pt=1" : "&pt=0");
 
-  $done({ url: target });
+  // ── 请求 Worker，拿到图片后直接返回给 App ────────────────────
+  $httpClient.get(
+    {
+      url: target,
+      timeout: 120,
+      "binary-mode": true
+    },
+    function (err, resp, data) {
+      if (err || !resp || resp.status !== 200 || !data) {
+        // 失败就放行原图，绝不让阅读器白屏
+        $done({});
+        return;
+      }
+
+      var headers = (resp && resp.headers) || {};
+      var ctype = headers["Content-Type"] || headers["content-type"] || "image/jpeg";
+
+      var body = data;
+      // 统一成 base64。Loon 不同版本对 Uint8Array / ArrayBuffer / string 处理不一致，
+      // 用 body 传 base64 最稳。
+      var b64 = toBase64(body);
+      if (!b64) {
+        $done({});
+        return;
+      }
+
+      var outHeaders = {
+        "Content-Type": ctype,
+        "Cache-Control": "public, max-age=604800"
+      };
+
+      $done({
+        status: 200,
+        headers: outHeaders,
+        body: b64,
+        bodyBase64: true,     // 部分版本认这个字段
+        response: {
+          status: 200,
+          headers: outHeaders,
+          body: b64,
+          bodyBase64: true
+        }
+      });
+    }
+  );
 
   // ── helpers ───────────────────────────────────────────────
   function isArtworkImage(u) {
-    // 只处理真正需要翻译的漫画/插画大图。
-    //
-    // 会命中的典型路径：
-    //   /c/600x1200_90_webp/img-master/img/.../xxx_p0_master1200.jpg   阅读器大图
-    //   /img-master/img/.../xxx_p0_master1200.jpg                      原版大图
-    //   /img-original/img/.../xxx_p0.jpg                               原图
-    //
-    // 要排除的：
-    //   /c/540x540_10_webp/img-master/.../xxx_p0_square1200.jpg        方形列表封面
-    //   /c/360x360_.../...                                             小尺寸缩略图
-    //   /user-profile/...                                              头像
-    //   /custom-thumb/...                                              自定义缩略图
-
     if (/\/user-profile\//i.test(u)) return false;
     if (/\/custom-thumb\//i.test(u)) return false;
-
-    // 文件名后缀判断：square 是方形封面，不是正文页
     if (/_square\d*\./i.test(u)) return false;
 
-    // /c/宽x高.../ 的缩放规格：宽高都 < 300 的当纯缩略图跳过。
-    // 注意 540x540_70 这种框里放的是 master1200 大图（列表预览用），
-    // 用户实际看得到，要翻译。只有 _square 那种才是封面。
     var m = u.match(/\/c\/(\d+)x(\d+)/i);
     if (m) {
       var w = parseInt(m[1], 10);
@@ -123,10 +143,56 @@
       if (w < 300 || h < 300) return false;
     }
 
-    // 只认大图路径
     if (/\/img-master\//i.test(u)) return true;
     if (/\/img-original\//i.test(u)) return true;
-
     return false;
+  }
+
+  /** 把各种二进制形态统一转成 base64 字符串 */
+  function toBase64(data) {
+    try {
+      if (typeof data === "string") {
+        // 已经是 base64（Loon binary-mode 有时直接给 base64）
+        if (/^[A-Za-z0-9+/=\r\n]+$/.test(data) && data.length > 100) return data;
+        // 是二进制字符串，逐字节转
+        var out = "";
+        for (var i = 0; i < data.length; i++) {
+          out += String.fromCharCode(data.charCodeAt(i) & 0xff);
+        }
+        return btoaSafe(out);
+      }
+      if (data instanceof ArrayBuffer) return btoaSafe(bufToStr(new Uint8Array(data)));
+      if (ArrayBuffer.isView(data)) return btoaSafe(bufToStr(new Uint8Array(data.buffer, data.byteOffset, data.byteLength)));
+      if (Array.isArray(data)) return btoaSafe(bufToStr(new Uint8Array(data)));
+    } catch (e) { /* ignore */ }
+    return "";
+  }
+
+  function bufToStr(u8) {
+    var s = "";
+    var CHUNK = 0x8000;
+    for (var i = 0; i < u8.length; i += CHUNK) {
+      s += String.fromCharCode.apply(null, u8.subarray(i, i + CHUNK));
+    }
+    return s;
+  }
+
+  function btoaSafe(str) {
+    try {
+      if (typeof btoa === "function") return btoa(str);
+    } catch (e) { /* ignore */ }
+    // 手写 base64，防止某些运行时没有 btoa
+    var chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    var out = "";
+    for (var i = 0; i < str.length; i += 3) {
+      var a = str.charCodeAt(i) & 0xff;
+      var b = i + 1 < str.length ? str.charCodeAt(i + 1) & 0xff : 0;
+      var c = i + 2 < str.length ? str.charCodeAt(i + 2) & 0xff : 0;
+      out += chars[a >> 2];
+      out += chars[((a & 3) << 4) | (b >> 4)];
+      out += i + 1 < str.length ? chars[((b & 15) << 2) | (c >> 6)] : "=";
+      out += i + 2 < str.length ? chars[c & 63] : "=";
+    }
+    return out;
   }
 })();

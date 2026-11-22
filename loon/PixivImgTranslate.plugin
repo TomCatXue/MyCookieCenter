@@ -1,5 +1,5 @@
 #!name = Pixiv · 漫画原位翻译
-#!desc = 让 Pixiv App 原生阅读器直接显示中文译文：不需要打开额外查看器、不需要离开软件。\n• 拦截 i.pximg.net 图片请求，转到自建翻译 Worker\n• Worker 侧调用视觉模型识别气泡、合成译文后回传图片\n• Pixiv 阅读器照常渲染，用户看到的就是汉化页\n• 翻译失败自动降级回原图，绝不影响正常阅读
+#!desc = 让 Pixiv App 原生阅读器直接显示中文译文：不需要打开额外查看器、不需要离开软件。\n• 拦截 i.pximg.net 图片请求，转给自建翻译 Worker\n• Worker 侧调用视觉模型识别气泡、合成译文后回传图片\n• Pixiv 阅读器照常渲染，用户看到的就是汉化页\n• 翻译失败自动放行原图，绝不影响正常阅读
 #!author = TomCatXue
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
 #!icon = https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/main/icons/pixiv.png
@@ -7,7 +7,7 @@
 #!system = iOS,iPadOS
 #!date = 2026-11-22 23:59
 #!type = normal
-#!version = 0.1.1
+#!version = 0.2.0
 
 [Argument]
 WORKER_HOST = input,"pixiv.xuetom.top",tag=Worker 域名,desc=你的图片翻译 Worker 域名，不含 https:// 和路径
@@ -16,9 +16,10 @@ PASSTHROUGH = switch,false,tag=透传模式,desc=开启时只透传原图（排�
 TRANSLATE_ALL = switch,false,tag=翻译全部图片,desc=开启会连封面头像一起翻（更费钱更慢），一般保持关闭
 
 [Script]
-# 图片请求改写：把 i.pximg.net 的图片请求转到翻译 Worker。
-# 用 request 阶段脚本动态拼接 src 参数（原图完整 URL 要编码进查询串）。
-request if ${url} ~= /^https:\/\/i\.pximg\.net\/(?:c\/|img-master\/|img-original\/|custom-thumb\/)/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/pixiv/pixiv_imgproxy.js?v=54cd6705", {${WORKER_HOST}, ${TARGET_LANG}, ${PASSTHROUGH}, ${TRANSLATE_ALL}}) with tag="Pixiv.漫画原位翻译", timeout=20
+# 图片请求：脚本自己请求 Worker，拿到图片后直接返回给 App。
+# 注意：Loon 的 request 脚本不支持 $done({ url }) 改写 URL，
+# 那样写会被当成无效参数，Loon 直接返回 404。
+request if ${url} ~= /^https:\/\/i\.pximg\.net\//i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/pixiv/pixiv_imgproxy.js?v=d64dd8e0", {${WORKER_HOST}, ${TARGET_LANG}, ${PASSTHROUGH}, ${TRANSLATE_ALL}}) with tag="Pixiv.漫画原位翻译", timeout=120
 
 [MitM]
 hostname = i.pximg.net
