@@ -1,10 +1,10 @@
 /*
 --------------------------------------------------------------------------------
 @Name: Pixiv 全局增强翻译 (Pixiverse Enhanced)
-@Version: 4.5.8
+@Version: 4.5.12
 @Desc: Pixiv 全页面日文深度汉化 · AI 视觉多模态漫翻 · 仿 Biliverse 内置设置中心
 @Author: TomCatXue
-@Date: 2026-10-06
+@Date: 2026-11-22 09:35
 --------------------------------------------------------------------------------
 架构说明：
   1. 全页面 JSON 汉化：拦截 recommended/ranking/detail/comments/user/spotlight 等端点；
@@ -1030,8 +1030,8 @@ const SF_TRANSLATE_SVG = `
 const INJECT_CSS = `
 #px-fab {
   position: fixed;
-  right: 12px;
-  bottom: 150px;
+  right: 10px;
+  bottom: 147px;
   z-index: 2147483647;
   width: 48px;
   height: 48px;
