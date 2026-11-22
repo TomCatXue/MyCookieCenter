@@ -94,13 +94,39 @@
 
   // ── helpers ───────────────────────────────────────────────
   function isArtworkImage(u) {
-    // 漫画大图典型路径：
-    //   /img-master/img/.../xxx_p0_master1200.jpg
-    //   /img-original/img/.../xxx_p0.jpg
-    //   /c/1200x1200/img-master/.../xxx_p0_master1200.jpg
+    // 只处理真正需要翻译的漫画/插画大图。
+    //
+    // 会命中的典型路径：
+    //   /c/600x1200_90_webp/img-master/img/.../xxx_p0_master1200.jpg   阅读器大图
+    //   /img-master/img/.../xxx_p0_master1200.jpg                      原版大图
+    //   /img-original/img/.../xxx_p0.jpg                               原图
+    //
+    // 要排除的：
+    //   /c/540x540_10_webp/img-master/.../xxx_p0_square1200.jpg        方形列表封面
+    //   /c/360x360_.../...                                             小尺寸缩略图
+    //   /user-profile/...                                              头像
+    //   /custom-thumb/...                                              自定义缩略图
+
+    if (/\/user-profile\//i.test(u)) return false;
+    if (/\/custom-thumb\//i.test(u)) return false;
+
+    // 文件名后缀判断：square 是方形封面，不是正文页
+    if (/_square\d*\./i.test(u)) return false;
+
+    // /c/宽x高.../ 的缩放规格：宽高都 < 300 的当纯缩略图跳过。
+    // 注意 540x540_70 这种框里放的是 master1200 大图（列表预览用），
+    // 用户实际看得到，要翻译。只有 _square 那种才是封面。
+    var m = u.match(/\/c\/(\d+)x(\d+)/i);
+    if (m) {
+      var w = parseInt(m[1], 10);
+      var h = parseInt(m[2], 10);
+      if (w < 300 || h < 300) return false;
+    }
+
+    // 只认大图路径
     if (/\/img-master\//i.test(u)) return true;
     if (/\/img-original\//i.test(u)) return true;
-    if (/\/c\/\d+x\d+.*img-master/i.test(u)) return true;
+
     return false;
   }
 })();

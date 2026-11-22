@@ -18,7 +18,7 @@ TRANSLATE_ALL = switch,false,tag=翻译全部图片,desc=开启会连封面头�
 [Script]
 # 图片请求改写：把 i.pximg.net 的图片请求转到翻译 Worker。
 # 用 request 阶段脚本动态拼接 src 参数（原图完整 URL 要编码进查询串）。
-request if ${url} ~= /^https:\/\/i\.pximg\.net\/(?:c\/|img-master\/|img-original\/|custom-thumb\/)/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/pixiv/pixiv_imgproxy.js?v=b5f789f4", {${WORKER_HOST}, ${TARGET_LANG}, ${PASSTHROUGH}, ${TRANSLATE_ALL}}) with tag="Pixiv.漫画原位翻译", timeout=20
+request if ${url} ~= /^https:\/\/i\.pximg\.net\/(?:c\/|img-master\/|img-original\/|custom-thumb\/)/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/pixiv/pixiv_imgproxy.js?v=71830ebb", {${WORKER_HOST}, ${TARGET_LANG}, ${PASSTHROUGH}, ${TRANSLATE_ALL}}) with tag="Pixiv.漫画原位翻译", timeout=20
 
 [MitM]
 hostname = i.pximg.net
