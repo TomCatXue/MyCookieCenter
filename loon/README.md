@@ -14,7 +14,7 @@
 | [`LoonMonitor.plugin`](./LoonMonitor.plugin) (v1.5.0) | 为 iOS 桌面小组件提供运行状态与流量数据 | 内置总开关 |
 | [`camscanner.plugin`](./camscanner.plugin) (v1.6.1) | 扫描全能王：抓取 + 每日签到 | `cookie_capture` `sign_in` |
 | [`PixivAdBlock.plugin`](./PixivAdBlock.plugin) (v1.0.1) | Pixiv：小说广告过滤、图片镜像与 Premium 属性注入 (chaoscard 原作) | 规则型，无需开关 |
-| [`PixivImgTranslate.plugin`](./PixivImgTranslate.plugin) (v0.2.0) | **Pixiv 原位漫翻**：拦截 `i.pximg.net` 图片请求转到自建 Worker，OCR 识别气泡后把译文合成进图片。原生阅读器直接显示中文，不离开软件 | `WORKER_HOST` `TARGET_LANG` `PASSTHROUGH` |
+| [`PixivImgTranslate.plugin`](./PixivImgTranslate.plugin) (v0.3.0) | **Pixiv 原位漫翻**：拦截 `i.pximg.net` 图片请求转到自建 Worker，OCR 识别气泡后把译文合成进图片。原生阅读器直接显示中文，不离开软件 | `WORKER_HOST` `TARGET_LANG` `PASSTHROUGH` |
 | [`PSBC.plugin`](./PSBC.plugin) (v1.0.0) | 邮储银行：屏蔽开屏广告、摇一摇与静态资源拦截 (chaoscard 原作) | 规则型，无需开关 |
 | [`Telegram.plugin`](./Telegram.plugin) (v1.1.0) | Telegram 增强：优质 IP 调度防转圈、外部 t.me 链接跳转客户端 (chaoscard 原作) | `t.me_redirect` 客户端选择 |
 | [**YouTube_Ad.plugin**](./YouTube_Ad.plugin) (v1.1.1) | **去广告**：广告 / 短片按钮 / 商品 / 竖屏直播尽除；高码率、通勤模式、画中画、字幕机翻俱备 | `autoHd` `jumpAhead` `onTheGo` `translation_enabled` 等 11 项精细开关 |

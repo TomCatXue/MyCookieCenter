@@ -24,6 +24,10 @@ const UA_DESKTOP =
 
 const PXIMG_HOST_RE = /^https:\/\/i\.pximg\.net\//;
 
+// pximg 的图片路径特征（用于透明代理模式识别）
+const PXIMG_PATH_RE =
+  /^\/(?:c\/\d+x\d+[^/]*\/)?(?:img-master|img-original|custom-thumb|user-profile)\//;
+
 // 字体在 isolate 内只加载一次
 let fontCache = null;
 
@@ -42,6 +46,16 @@ export default {
         });
       }
       if (url.pathname === "/img") return await handleImage(request, env, ctx);
+
+      // ── 透明代理模式 ────────────────────────────────────────
+      // Loon 的 [URL Rewrite] 把 i.pximg.net 的 host 换成我们，
+      // 路径原样保留。这样完全不经过 JS 运行时，绕开脚本超时/丢弃问题。
+      //   原: GET https://i.pximg.net/c/600x1200_90_webp/img-master/.../x_p0_master1200.jpg
+      //   到: GET https://pixiv.xuetom.top/c/600x1200_90_webp/img-master/.../x_p0_master1200.jpg
+      //   还需一个标记区分（见 X-PXIMg-Host 或 lang 参数）
+      if (PXIMG_PATH_RE.test(url.pathname)) {
+        return await handleTransparent(request, url, env, ctx);
+      }
 
       // 诊断端点：返回一张 1x1 的小图。用来验证 Loon 脚本的 $httpClient
       // 二进制处理链路是否正常（不涉及翻译，不消耗 API 额度）。
@@ -78,6 +92,48 @@ function keyFor(env) {
   if (e === "gemini") return env.GEMINI_KEY;
   if (e === "openai") return env.OPENAI_KEY;
   return env.CUSTOM_KEY;
+}
+
+/**
+ * 透明代理模式：路径和查询串原样来自 Loon 的 [URL Rewrite]。
+ * 我们自己还原出 i.pximg.net 的原始 URL，然后走同一条翻译链路。
+ *
+ * 语言从查询串 lang 取（可选），没有就用默认。
+ * 模式用查询串 pt 控制（可选），没有就用全局。
+ */
+async function handleTransparent(request, url, env, ctx) {
+  const original = new URL("https://i.pximg.net" + url.pathname + url.search);
+  // 把 lang / pt 从查询串剥掉（它们是我们的控制参数，不属于 pximg）
+  const lang = url.searchParams.get("lang") || env.DEFAULT_TARGET_LANG || "zh-CN";
+  const ptParam = url.searchParams.get("pt");
+  original.searchParams.delete("lang");
+  original.searchParams.delete("pt");
+
+  const src = original.toString();
+  const passthrough =
+    ptParam === "1" ? true : ptParam === "0" ? false : env.PASSTHROUGH_ONLY === "1";
+
+  const upstream = await fetch(src, {
+    headers: {
+      Referer: "https://www.pixiv.net/",
+      "User-Agent": UA_DESKTOP,
+      Accept: "image/avif,image/webp,image/jpeg,image/png,*/*",
+    },
+    cf: { cacheEverything: true, cacheTtl: 86400 },
+  });
+
+  if (!upstream.ok) {
+    return json({ ok: false, error: "upstream " + upstream.status, src }, 502);
+  }
+
+  const bytes = new Uint8Array(await upstream.arrayBuffer());
+  const contentType = upstream.headers.get("content-type") || "image/jpeg";
+
+  if (passthrough) {
+    return imageResponse(bytes, contentType, { maxAge: 86400, extra: { "X-Pixiv-Translate": "passthrough" } });
+  }
+
+  return translateImage({ src, bytes, contentType, lang, env, ctx });
 }
 
 async function handleImage(request, env, ctx) {
