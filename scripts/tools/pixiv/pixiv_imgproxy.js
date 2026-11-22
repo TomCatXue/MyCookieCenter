@@ -8,9 +8,11 @@
  *   处理: 脚本内部请求 https://<worker>/img?src=<原URL编码>&lang=zh-CN
  *   返回: 把 Worker 的图片字节原样回给 App
  *
- * ⚠️ 关键：Loon 的 request 脚本**不支持 $done({ url }) 改写 URL**。
- *    那样写会被当成无效参数，Loon 直接返回 404（timings 里 dns/connect/ssl 全是 -1）。
- *    正确做法是在脚本里自己发请求，再用 $done 把响应返给 App。
+ * 两个关键点（都踩过坑）：
+ *   1. Loon 的 request 脚本**不支持 $done({ url }) 改写 URL**。
+ *      那样写会被当成无效参数，Loon 直接返回 404（timings 里 dns/connect/ssl 全是 -1）。
+ *   2. 返回二进制必须传 **ArrayBuffer**，不是 base64 字符串。
+ *      写法参考项目里 txvideo 的 binaryResult：{ body: ArrayBuffer, headers }。
  *
  * 配置来源：
  *   1. Loon 插件 [Argument] 的 $argument（对象形态）
@@ -27,13 +29,27 @@
     TRANSLATE_ALL: "false"
   };
 
-  /** 从 $argument 取值，兼容对象/字符串/布尔三种形态 */
+  // 诊断开关：改成 true 后，失败原因会用系统通知弹出来
+  var DEBUG = false;
+
+  function report(msg) {
+    if (!DEBUG) return;
+    try {
+      $notification.post("Pixiv 漫翻诊断", "", String(msg).slice(0, 300));
+    } catch (e) { /* ignore */ }
+    try {
+      console.log("[PixivImgTranslate] " + msg);
+    } catch (e) { /* ignore */ }
+  }
+
+  /** 从 $argument 取值，兼容对象 / 字符串 / 布尔三种形态 */
   function pick(key) {
     var v;
     try {
       if (typeof $argument !== "undefined" && $argument) {
-        if (typeof $argument === "object") v = $argument[key];
-        else if (typeof $argument === "string") {
+        if (typeof $argument === "object") {
+          v = $argument[key];
+        } else if (typeof $argument === "string") {
           var m = $argument.match(new RegExp("(?:^|[&,])" + key + "=([^&,]*)"));
           if (m) v = m[1];
         }
@@ -92,20 +108,36 @@
       "binary-mode": true
     },
     function (err, resp, data) {
-      if (err || !resp || resp.status !== 200 || !data) {
-        // 失败就放行原图，绝不让阅读器白屏
+      if (err) {
+        report("请求失败: " + (err.message || err));
+        $done({});
+        return;
+      }
+      if (!resp) {
+        report("无响应对象");
+        $done({});
+        return;
+      }
+      if (resp.status !== 200) {
+        report("Worker 状态 " + resp.status);
+        $done({});
+        return;
+      }
+      if (!data) {
+        report("响应体为空");
         $done({});
         return;
       }
 
-      var headers = (resp && resp.headers) || {};
+      var headers = resp.headers || {};
       var ctype = headers["Content-Type"] || headers["content-type"] || "image/jpeg";
+      // 去掉 charset 之类的参数，图片只需要 mime
+      ctype = String(ctype).split(";")[0].trim() || "image/jpeg";
 
-      var body = data;
-      // 统一成 base64。Loon 不同版本对 Uint8Array / ArrayBuffer / string 处理不一致，
-      // 用 body 传 base64 最稳。
-      var b64 = toBase64(body);
-      if (!b64) {
+      // ⚠️ 必须转成 ArrayBuffer，Loon 只认这个
+      var buf = toArrayBuffer(data);
+      if (!buf) {
+        report("二进制转换失败，data 类型: " + Object.prototype.toString.call(data));
         $done({});
         return;
       }
@@ -118,19 +150,18 @@
       $done({
         status: 200,
         headers: outHeaders,
-        body: b64,
-        bodyBase64: true,     // 部分版本认这个字段
+        body: buf,
         response: {
           status: 200,
           headers: outHeaders,
-          body: b64,
-          bodyBase64: true
+          body: buf
         }
       });
     }
   );
 
   // ── helpers ───────────────────────────────────────────────
+
   function isArtworkImage(u) {
     if (/\/user-profile\//i.test(u)) return false;
     if (/\/custom-thumb\//i.test(u)) return false;
@@ -148,51 +179,79 @@
     return false;
   }
 
-  /** 把各种二进制形态统一转成 base64 字符串 */
-  function toBase64(data) {
+  /**
+   * 把 $httpClient 返回的各种形态统一转成 ArrayBuffer。
+   * binary-mode 可能给：base64 字符串 / 原始二进制字符串 /
+   * Uint8Array / ArrayBuffer / number[]，都要兼容。
+   */
+  function toArrayBuffer(data) {
     try {
-      if (typeof data === "string") {
-        // 已经是 base64（Loon binary-mode 有时直接给 base64）
-        if (/^[A-Za-z0-9+/=\r\n]+$/.test(data) && data.length > 100) return data;
-        // 是二进制字符串，逐字节转
-        var out = "";
-        for (var i = 0; i < data.length; i++) {
-          out += String.fromCharCode(data.charCodeAt(i) & 0xff);
-        }
-        return btoaSafe(out);
+      if (!data) return null;
+
+      // ArrayBuffer
+      if (data instanceof ArrayBuffer) return data;
+
+      // TypedArray（Uint8Array 等）
+      if (ArrayBuffer.isView(data)) {
+        return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
       }
-      if (data instanceof ArrayBuffer) return btoaSafe(bufToStr(new Uint8Array(data)));
-      if (ArrayBuffer.isView(data)) return btoaSafe(bufToStr(new Uint8Array(data.buffer, data.byteOffset, data.byteLength)));
-      if (Array.isArray(data)) return btoaSafe(bufToStr(new Uint8Array(data)));
+
+      // 普通数组
+      if (Array.isArray(data)) return new Uint8Array(data).buffer;
+
+      // 字符串：可能是 base64，也可能是原始二进制串
+      if (typeof data === "string") {
+        if (!data.length) return null;
+
+        var stripped = data.replace(/[\r\n\s]/g, "");
+        var looksBase64 = /^[A-Za-z0-9+/=]+$/.test(stripped) && stripped.length % 4 === 0;
+
+        if (looksBase64) {
+          var bin = atobSafe(stripped);
+          if (bin) {
+            var u8 = new Uint8Array(bin.length);
+            for (var i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i) & 0xff;
+            return u8.buffer;
+          }
+        }
+
+        // 当作原始二进制字符串
+        var out = new Uint8Array(data.length);
+        for (var j = 0; j < data.length; j++) out[j] = data.charCodeAt(j) & 0xff;
+        return out.buffer;
+      }
     } catch (e) { /* ignore */ }
-    return "";
+    return null;
   }
 
-  function bufToStr(u8) {
-    var s = "";
-    var CHUNK = 0x8000;
-    for (var i = 0; i < u8.length; i += CHUNK) {
-      s += String.fromCharCode.apply(null, u8.subarray(i, i + CHUNK));
-    }
-    return s;
-  }
-
-  function btoaSafe(str) {
+  function atobSafe(str) {
     try {
-      if (typeof btoa === "function") return btoa(str);
+      if (typeof atob === "function") return atob(str);
     } catch (e) { /* ignore */ }
-    // 手写 base64，防止某些运行时没有 btoa
+
+    // 手写 base64 解码兜底
     var chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    var out = "";
-    for (var i = 0; i < str.length; i += 3) {
-      var a = str.charCodeAt(i) & 0xff;
-      var b = i + 1 < str.length ? str.charCodeAt(i + 1) & 0xff : 0;
-      var c = i + 2 < str.length ? str.charCodeAt(i + 2) & 0xff : 0;
-      out += chars[a >> 2];
-      out += chars[((a & 3) << 4) | (b >> 4)];
-      out += i + 1 < str.length ? chars[((b & 15) << 2) | (c >> 6)] : "=";
-      out += i + 2 < str.length ? chars[c & 63] : "=";
+    var lookup = {};
+    for (var i = 0; i < chars.length; i++) lookup[chars[i]] = i;
+
+    var buf = [];
+    var bits = 0;
+    var acc = 0;
+    for (var k = 0; k < str.length; k++) {
+      var c = str[k];
+      if (c === "=") break;
+      var v = lookup[c];
+      if (v === undefined) continue;
+      acc = (acc << 6) | v;
+      bits += 6;
+      if (bits >= 8) {
+        bits -= 8;
+        buf.push((acc >> bits) & 0xff);
+      }
     }
-    return out;
+    if (!buf.length) return "";
+    var s = "";
+    for (var n = 0; n < buf.length; n++) s += String.fromCharCode(buf[n]);
+    return s;
   }
 })();

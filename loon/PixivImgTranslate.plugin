@@ -19,7 +19,7 @@ TRANSLATE_ALL = switch,false,tag=翻译全部图片,desc=开启会连封面头�
 # 图片请求：脚本自己请求 Worker，拿到图片后直接返回给 App。
 # 注意：Loon 的 request 脚本不支持 $done({ url }) 改写 URL，
 # 那样写会被当成无效参数，Loon 直接返回 404。
-request if ${url} ~= /^https:\/\/i\.pximg\.net\//i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/pixiv/pixiv_imgproxy.js?v=d64dd8e0", {${WORKER_HOST}, ${TARGET_LANG}, ${PASSTHROUGH}, ${TRANSLATE_ALL}}) with tag="Pixiv.漫画原位翻译", timeout=120
+request if ${url} ~= /^https:\/\/i\.pximg\.net\//i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/pixiv/pixiv_imgproxy.js?v=192b741e", {${WORKER_HOST}, ${TARGET_LANG}, ${PASSTHROUGH}, ${TRANSLATE_ALL}}) with tag="Pixiv.漫画原位翻译", timeout=120
 
 [MitM]
 hostname = i.pximg.net
