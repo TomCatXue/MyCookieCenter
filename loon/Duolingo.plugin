@@ -10,7 +10,7 @@
 #!system = iOS,iPadOS
 #!loon_version = 3.5.1(983)
 #!version = 2.2.0
-#!date = 2026-11-23 14:02
+#!date = 2026-11-23 14:10
 
 [Argument]
 xp_boost = switch, false, tag = 经验加倍, desc = 练习时获得双倍经验，按倍数设置生效

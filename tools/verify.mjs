@@ -34,6 +34,18 @@ const DANGLING_SWITCH_WHITELIST = {};
 const DATE_FRESHNESS_SKIP_PLUGINS = ['ChinaMobileRenew.plugin'];
 
 /**
+ * 「#!date 新鲜度」允许的时间落后容差（分钟）。
+ *
+ * 存在原因是流程本身而非疏漏：#!date 由人工写在提交之前，而 git 给同一次提交
+ * 里的所有文件打的是同一个提交时间戳。于是「改脚本 → 写插件 date → 提交」这个
+ * 正常顺序里，只要插件 date 和脚本落在同一个提交，插件 date 必然比脚本时间戳早
+ * 几十秒到几分钟。设成 5 分钟可以容忍这种正常误差，同时仍能拦住「改了脚本但完全
+ * 忘了动插件 date」这种真的过期。
+ */
+const DATE_FRESHNESS_TOLERANCE_MINUTES = 5;
+const DATE_FRESHNESS_TOLERANCE_MS = DATE_FRESHNESS_TOLERANCE_MINUTES * 60 * 1000;
+
+/**
  * 视为「实际规则行」的行首关键字。
  * 只有这些行里出现的 ${开关名} 才算接线，注释行与 [Argument] 段本身都不算。
  */
@@ -669,6 +681,23 @@ function formatLocalNow() {
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
 }
 
+/** 把 `YYYY-MM-DD HH:mm` 解析成本地时间毫秒数，格式非法返回 null */
+function parseMinuteStamp(value) {
+  const match = /^(\d{4})-(\d{1,2})-(\d{1,2})\s+(\d{1,2}):(\d{2})$/.exec(String(value || '').trim());
+  if (!match) return null;
+  const [, year, month, day, hour, minute] = match;
+  const time = new Date(
+    Number(year),
+    Number(month) - 1,
+    Number(day),
+    Number(hour),
+    Number(minute),
+    0,
+    0,
+  ).getTime();
+  return Number.isFinite(time) ? time : null;
+}
+
 function checkPluginDateFreshness(plugins) {
   const failures = [];
 
@@ -710,8 +739,25 @@ function checkPluginDateFreshness(plugins) {
     if (!times.length) continue; // 脚本尚未提交，无从比较
 
     const latest = times.sort().pop();
-    if (latest > pluginDate) {
-      failures.push(`${plugin.name}  插件 date=${pluginDate}，脚本最新改动=${latest}`);
+    const pluginTime = parseMinuteStamp(pluginDate);
+    const latestTime = parseMinuteStamp(latest);
+
+    // 无法解析时间格式时退回字符串比较，避免静默放过
+    if (pluginTime === null || latestTime === null) {
+      if (latest > pluginDate) {
+        failures.push(`${plugin.name}  插件 date=${pluginDate}，脚本最新改动=${latest}`);
+      }
+      continue;
+    }
+
+    // 容忍 N 分钟内的落后。
+    // #!date 是人工写在提交之前的，而 git 给同一次提交里所有文件打的是同一个
+    // 提交时间戳 —— 只要在同一次提交里同时改了插件和脚本，插件 date 必然比脚本
+    // 的时间戳早几分钟。这不是真的「插件没更新」，所以按容差放行。
+    if (latestTime - pluginTime > DATE_FRESHNESS_TOLERANCE_MS) {
+      failures.push(
+        `${plugin.name}  插件 date=${pluginDate}，脚本最新改动=${latest}（超出 ${DATE_FRESHNESS_TOLERANCE_MINUTES} 分钟容差）`,
+      );
     }
   }
 
