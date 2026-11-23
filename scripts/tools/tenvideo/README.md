@@ -4,14 +4,84 @@
 
 配套插件：[`TencentVideoCheckin.plugin`](../../../loon/TencentVideoCheckin.plugin)
 
-## 两个开关
+## 四个开关
 
-| 开关 | 默认 | 作用 |
-| :--- | :---: | :--- |
-| `capture` | 开 | 抓取 Cookie。打开腾讯视频 → 我的 → 点头像下的「视频VIP」进会员中心即可 |
-| `checkin` | 开 | 每日 00:10 自动续期 + 签到领 V力值 |
+| 开关 | 默认 | 时间 | 作用 |
+| :--- | :---: | :--- | :--- |
+| `capture` | 开 | 实时 | 抓取 Cookie。打开腾讯视频 → 我的 → 点头像下的「视频VIP」进会员中心即可 |
+| `checkin` | 开 | 00:10 | 自动续期 + 签到领 V力值 |
+| `lottery` | 开 | 00:20 | 自动抽奖，中奖推送 CDKey 与兑换链接 |
+| `coupon` | 开 | 00:25 | 每日试领福利券（电影票 / 美团券包），有货就领 |
 
-两个开关互相独立：抓完 Cookie 后可以关掉 `capture`（续期不依赖 MITM），只留 `checkin` 跑定时。
+互相独立：抓完 Cookie 后可以关掉 `capture`（续期不依赖 MITM），其余三个各跑各的定时。
+
+## 防风控
+
+签到和抽奖脚本都带 **15~30 秒随机延迟**，在发第一个业务请求前 `await` 一次：
+
+```js
+function randomDelay() {
+    const sec = 15 + Math.floor(Math.random() * 16); // 15..30
+    return new Promise((r) => setTimeout(r, sec * 1000));
+}
+```
+
+- 避免每天同一秒打同一接口，减少时间维度的风控特征
+- **只加在 cron 路径上**，抓取（`request` 阶段）不加 —— 否则会卡住 App 的请求
+- 同一脚本内多次请求不重复延迟，只延迟一次
+
+## 抽奖（V力值首抽）
+
+依据 2026-11-23 的真机 HAR 逆向：
+
+| 动作 | 请求 |
+| :--- | :--- |
+| 抽奖 | `GET activity.video.qq.com/fcgi-bin/asyn_activity?platform=7&type=100143&option=100&act_id=<活动>&module_id=<奖池>` |
+| 查资格 | `option=104` |
+| 中奖返回 | `{ lotter_result:1, lotter_ext:"恭喜你，中奖了！", prize_list:[{ lotter_name, cdkey, lotter_url_h5 }] }` |
+| 已抽过 | `{ ret:-904, msg:"很抱歉，您已经抽了没有资格再抽." }` |
+
+**关键点：**
+
+- `act_id` = `trr69dwle61dwisptr12gj12ja`（「新积分抽奖」活动）
+- 每次抽奖只针对**一个** `module_id`（奖池），所以脚本逐个试已知奖池
+- 抽中过的奖池会记住（`tenvideo_lottery_pool`），下次优先试它
+- `ret:-904` = 该池今天已抽过 → 自动换下一个池
+- 中奖会推送**完整 CDKey + 兑换链接**，直接点就能兑
+
+## 领券
+
+HAR 里还翻出两个 `type=100160` 的领券活动：
+
+| 活动 ID | 名称 | 到期 |
+| :--- | :--- | :--- |
+| `tr607p8587ii7zp53eog20y565` | 嘿影电影票福利 | 2026-12-31 |
+| `z4lpthi9h219lifagkksheez25` | 138元美团券包 | 2026-12-31 |
+
+动作分工：
+
+- `option=101` → 查状态，看 `data.has_right` / `data.left_times`
+- `option=100` → 真正领取
+
+**脚本先查状态、有资格才发领取请求**，避免每天两次无用请求。
+
+> ⚠️ 手上没有「领取成功」的样本（抓包时两个券都已领完），
+> 所以成功判定做成了保守策略：`ret===0` 且 `msg` 不含失败关键词就算领到，
+> 同时把完整响应对到 Loon 日志里。第一次真领到时看日志确认字段名。
+
+## 其他扫过但没做的
+
+| 接口 | 为什么不做 |
+| :--- | :--- |
+| `credit_mall/cgi/getShelfTaskList` | 返回 `task_list:[]`，你的账号没有积分任务 |
+| `CscoreWelfareSystem/GetHomePageAggregate` | 公益项目展示，纯信息展示无签到动作 |
+| `DAGCommGateway/Do`（welfare_channel） | 会员福利页跳转，本身不发奖 |
+| `RecvService/RecvState` | 东呈酒店福利，活动已过期（2025-12-31） |
+| `comm_cgi`（get_cscore / bindphone / scoll） | 查询类与手机号绑定，无签到 |
+| `film/x/magic-act/{7dhue0q…,106965}` | 一个是展示页，一个已过期 |
+
+> ⚠️ 活动 ID 和奖池 ID 是活动期间的有效值。活动换期后会变，
+> 届时需要重新抓一次 HAR 更新 `ACT_ID` 和 `POOLS` 常量。
 
 ## 为什么能从 App 直接抓
 
@@ -46,7 +116,26 @@ App 里不同请求带的 cookie 不一样。某个只带 `vqq_vusession` 的请
 
 **本版**：增量合并。旧 cookie 打底，新请求的非空字段覆盖，空字段不删旧值。
 
-### 坑 2：字段名写死 QQ 那套
+### 坑 2：手机号登录的续期令牌叫 `v_vurefresh`，不叫 `*_refresh_token`
+
+**这是「有 cookie 却一直报没有 refresh_token」的根因。**
+
+腾讯视频三套登录方式的字段完全不同：
+
+| 登录方式 | 用户 ID | 会话 | 续期令牌 |
+| :--- | :--- | :--- | :--- |
+| QQ | `vqq_vuserid` | `vqq_vusession` | `vqq_refresh_token` |
+| 微信 | `vuserid` | `vusession` | `refresh_token` / `v_t_refresh_token` |
+| **手机号** | `v_vuserid` | `v_vusession` | **`v_vurefresh`** ← 不在任何 `*_refresh_token` 里 |
+
+上游只列了前两种的字段名。手机号登录账号的 `v_vurefresh` 是 118 字符的长令牌，
+前端 `vplus.min.js` 里它和 `v_vusession` 归在同一组：
+`["v_main_login","v_vuserid","v_vusession","v_vurefresh",...]`
+—— 确认它就是续期令牌。
+
+**本版**：别名表补上 `v_vurefresh` / `vurefresh`，手机号登录现在能正常续期。
+
+### 坑 3：字段名写死 QQ 那套
 
 ```js
 cookie = setCookieVal(cookie, "vqq_vusession", newVusession);
@@ -57,7 +146,7 @@ cookie = setCookieVal(cookie, "v_vusession", newVusession); // 微信登录才�
 
 **本版**：QQ（`vqq_*`）和微信（`v_*`）两套都认，写回时只写原本存在的那个字段。
 
-### 坑 3：刷新令牌只看 body，漏掉 Set-Cookie
+### 坑 4：刷新令牌只看 body，漏掉 Set-Cookie
 
 服务端把滚动后的令牌放 `Set-Cookie` 时，上游会漏掉 → 令牌不滚 → 过一阵失效。
 
@@ -95,6 +184,7 @@ cookie = setCookieVal(cookie, "v_vusession", newVusession); // 微信登录才�
 | 文件 | 说明 |
 | :--- | :--- |
 | `tenvideo.js` | 抓取 + 续期 + 签到三合一（靠 `$request` 是否存在区分阶段） |
+| `tenvideo.lottery.js` | V力值抽奖（查资格 → 抽 → 推送 CDKey） |
 
 ## 使用
 

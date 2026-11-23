@@ -75,12 +75,16 @@ const RENEW_RE = /^https:\/\/pbaccess\.video\.qq\.com\/(trpc\.anywhere_door\.acc
 
 $.messages = [];
 
-// 字段别名:QQ 登录是 vqq_* 前缀,微信登录是不带前缀的那套
+// 三套字段命名并存:
+//   QQ 登录    → vqq_vuserid  / vqq_vusession  / vqq_refresh_token
+//   微信登录   → vuserid      / vusession      / refresh_token  (或 v_t_*)
+//   手机号登录 → v_vuserid    / v_vusession    / v_vurefresh    ★ 之前漏了这行
+// 手机号登录的续期令牌叫 v_vurefresh 而不是 *_refresh_token,这是「有 cookie 却续不了期」的根因。
 const ALIAS = {
-    vuid: ["vqq_vuserid", "vuserid", "v_vuserid"],
-    vusession: ["vqq_vusession", "vusession", "v_vusession"],
-    refresh: ["vqq_refresh_token", "refresh_token", "v_t_refresh_token"],
-    login: ["main_login"],
+    vuid: ["vqq_vuserid", "v_vuserid", "vuserid"],
+    vusession: ["vqq_vusession", "v_vusession", "vusession"],
+    refresh: ["vqq_refresh_token", "v_vurefresh", "vurefresh", "refresh_token", "v_t_refresh_token"],
+    login: ["main_login", "v_main_login"],
 };
 
 // ============ Cookie 工具 ============
@@ -335,12 +339,21 @@ function applyRenew(cookie, resp, newSess, newRefresh) {
 
 // ============ 签到 ============
 
+// 15~30 秒随机延迟:避免每天同一秒打同一接口,降低风控特征
+function randomDelay() {
+    const sec = 15 + Math.floor(Math.random() * 16); // 15..30
+    $.log(`[防风控] 随机延迟 ${sec} 秒后开始`);
+    return new Promise((r) => setTimeout(r, sec * 1000));
+}
+
 async function checkin() {
     let cookie = $.getdata(K.cookie);
     if (!cookie) {
         saveStatus("none", "未抓取 Cookie");
         throw new Error(`[${SCRIPT_VERSION}] 未配置 Cookie,进腾讯视频 App 会员中心抓一次`);
     }
+
+    await randomDelay();
 
     // 1) 先续期
     const renewed = await renewSession(cookie);
