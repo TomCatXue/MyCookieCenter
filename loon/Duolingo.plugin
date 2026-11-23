@@ -1,5 +1,5 @@
 #!name = 多邻国 𝕏
-#!desc = 多邻国会员功能解锁（Gold 家庭套餐）
+#!desc = 解锁 Gold 家庭订阅，免广告 / 无限心 / AI 功能，另附经验加倍与关卡增强
 #!openUrl = https://apps.apple.com/app/id570060128
 #!author = j4gm4g (原作) / TomCatXue (修复)
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
@@ -7,13 +7,25 @@
 #!tag = 多邻国,Duolingo,会员,解锁
 #!source = 268d0596b1943dfdcc84c4fd909f22968f5c6067121d3e91d9c80a9735387f5b, 3088c39a6416eaf46fb19871977c787e416666a531eab54747b48c46fc453c49
 #!type = normal
-#!version = 2.0.3
-#!date = 2026-11-21 14:40
+#!system = iOS,iPadOS
+#!loon_version = 3.5.1(983)
+#!version = 2.2.0
+#!date = 2026-11-23 14:02
+
+[Argument]
+xp_boost = switch, false, tag = 经验加倍, desc = 练习时获得双倍经验，按倍数设置生效
+multiplier = select, "2", "3", tag = 经验倍数, desc = 开启经验加倍后的倍数
+unlock_all = switch, false, tag = 解锁全部关卡, desc = 把当前课程里锁定的关卡改为可进入
+max_flags = switch, false, tag = Max 权益标记, desc = 额外注入 Max / 视频通话标记，服务端不放行时点击会提示失败
+timer_switch = switch, false, tag = 限时挑战时长, desc = 开启后改写限时挑战的初始倒计时
+timer_mins = input, "60", tag = 挑战时长(分钟), desc = 单局限时挑战的倒计时，能设多大由服务端判定
+instant_clear = switch, false, tag = 直接通关, desc = 清空关卡题目池跳过作答，部分关卡与故事不适用
 
 [Script]
-response if ${url} ~= /^https?:\/\/(?:ios-api-[^.]+|api[^.]+)\.duolingo\.[a-z.]+\/.*\/users\/.*\?fields=subscriberLevel/ then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/duolingo/duolingo.level.js?v=5dc76fcb") with tag="订购等级", timeout=60, requires_body=true
-response if ${url} ~= /^https?:\/\/(?:ios-api-[^.]+|api[^.]+)\.duolingo\.[a-z.]+\/.*\/users\/.*\/(?:available-features|advertisable-features).*$/ then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/duolingo/duolingo.features.js?v=cc30c397") with tag="订购配置", timeout=60, requires_body=true
-response if ${url} ~= /^https?:\/\/(?:ios-api-[^.]+|api[^.]+)\.duolingo\.[a-z.]+\/\d{4}-\d{1,2}-\d{1,2}\/batch/ then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/duolingo/duolingo.batch.js?v=5f0305d2") with tag="订购信息", timeout=60, requires_body=true
+response if ${url} ~= /^https?:\/\/(?:ios-api-[a-z0-9-]+|api\d+)\.duolingo\.(?:com|cn)\/(?:\d{4}-\d{1,2}-\d{1,2}\/batch|.*\/users\/[^/?#]+(?:[?#]|$))/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/duolingo/duolingo.batch.js?v=eda1febf", {${xp_boost}, ${multiplier}, ${unlock_all}, ${max_flags}}) with tag="订阅注入", timeout=60, requires_body=true
+response if ${url} ~= /^https?:\/\/(?:ios-api-[a-z0-9-]+|api\d+)\.duolingo\.(?:com|cn)\/.*\/(?:available-features|advertisable-features)/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/duolingo/duolingo.features.js?v=59781f39") with tag="功能清单", timeout=60, requires_body=true
+response if ${url} ~= /^https?:\/\/(?:ios-api-[a-z0-9-]+|api\d+)\.duolingo\.(?:com|cn)\/.*\/live-ops-challenges/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/duolingo/duolingo.timer.js?v=960d2424", {${timer_mins}}) with enable=${timer_switch}, tag="限时挑战时长", timeout=60, requires_body=true
+response if ${url} ~= /^https?:\/\/(?:ios-api-[a-z0-9-]+|api\d+|stories)\.duolingo\.(?:com|cn)\/(?:.*\/sessions|api2\/stories)/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/duolingo/duolingo.clear.js?v=9623a37f") with enable=${instant_clear}, tag="直接通关", timeout=60, requires_body=true
 
 [MitM]
-hostname = ios-api-*.duolingo.*, api*.duolingo.*
+hostname = ios-api-*.duolingo.com, ios-api-*.duolingo.cn, api*.duolingo.com, api*.duolingo.cn, stories.duolingo.com, stories.duolingo.cn
