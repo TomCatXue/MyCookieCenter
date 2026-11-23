@@ -1,10 +1,10 @@
 /**
- * 多邻国 Duolingo 订阅注入与玩法增强（Loon 响应脚本）
+ * 多邻国 Duolingo 订阅解锁（Loon 响应脚本）
  *
  * 作用范围（一条规则，两种响应形状）
  *   1. /<date>/batch 聚合响应：逐个识别 responses[] 里的用户对象再注入
  *   2. /users/<id> 单用户响应：
- *      - 完整用户对象 → 注入订阅 + 玩法
+ *      - 完整用户对象 → 注入 Gold 订阅
  *      - 轻量响应（只有 subscriberLevel 等少数字段）→ 只改等级，不塞订阅结构
  *
  * 设计要点
@@ -12,14 +12,13 @@
  *      把 Gold 堆成一长串。
  *   2. 缓存：子响应 status 为 304、或 etag 命中且无 body 时原样放行。
  *   3. 遍历：不假设用户对象在 responses[0]，逐条按特征识别。
- *   4. 玩法：经验加倍、解锁全部关卡、Max 权益标记，全部由插件开关控制，
- *      默认全关，开箱即用与 v2.0.3 行为一致。
- *   5. 认不出形状就原样放行，绝不用假对象覆盖服务端响应。
+ *   4. 认不出形状就原样放行，绝不用假对象覆盖服务端响应。
+ *   5. 无任何开关，装上即生效。
  *
  * 真机实测：subscriberLevel 必须是 "GOLD"，SUPER / PREMIUM 只改 UI 不解锁。
  */
 
-const SCRIPT_VERSION = '2.1.1';
+const SCRIPT_VERSION = '3.0.0';
 
 /** Gold 年订阅商品号（真机实测可用） */
 const PRODUCT_ID = 'com.duolingo.DuolingoMobile.subscription.Gold.TwelveMonth.25Q2WB7D.Trial7.240';
@@ -27,41 +26,6 @@ const PRODUCT_ID = 'com.duolingo.DuolingoMobile.subscription.Gold.TwelveMonth.25
 const EXPIRY_SECONDS = 10 * 365 * 24 * 3600;
 /** 已存在这些 id 的 shopItem 视为已订阅，不重复注入 */
 const SUBSCRIPTION_ITEM_IDS = ['gold_subscription'];
-const XP_BOOST_ITEM_ID = 'xp_boost_stackable';
-
-// ---------------------------------------------------------------------------
-// 参数
-// ---------------------------------------------------------------------------
-
-function readArgs() {
-  const raw = typeof $argument !== 'undefined' ? $argument : null;
-  if (!raw) return {};
-  // 插件里写成 {${a}, ${b}} 时拿到对象；写成字符串时按 a=1&b=2 解析
-  if (typeof raw === 'object') return raw;
-  const out = {};
-  String(raw)
-    .split('&')
-    .forEach((pair) => {
-      if (!pair) return;
-      const index = pair.indexOf('=');
-      if (index === -1) return;
-      out[pair.slice(0, index).trim()] = pair.slice(index + 1).trim();
-    });
-  return out;
-}
-
-function isOn(value) {
-  if (value === true || value === 1) return true;
-  const text = String(value === null || value === undefined ? '' : value)
-    .trim()
-    .toLowerCase();
-  return text === 'true' || text === '1' || text === 'on' || text === 'yes';
-}
-
-function toInt(value, fallback) {
-  const parsed = parseInt(String(value === null || value === undefined ? '' : value), 10);
-  return Number.isFinite(parsed) ? parsed : fallback;
-}
 
 // ---------------------------------------------------------------------------
 // 订阅注入
@@ -123,7 +87,7 @@ function buildSubscriptionConfig(now) {
   };
 }
 
-function applySubscription(user, now, args) {
+function applySubscription(user, now) {
   let changed = false;
 
   if (!Array.isArray(user.shopItems)) {
@@ -153,14 +117,18 @@ function applySubscription(user, now, args) {
   if (!user.trackingProperties || typeof user.trackingProperties !== 'object') {
     user.trackingProperties = {};
   }
-  if (user.trackingProperties.has_item_gold_subscription !== true) {
-    user.trackingProperties.has_item_gold_subscription = true;
-    changed = true;
-  }
-  if (user.trackingProperties.has_item_premium_subscription !== true) {
-    user.trackingProperties.has_item_premium_subscription = true;
-    changed = true;
-  }
+  [
+    'has_item_gold_subscription',
+    'has_item_premium_subscription',
+    'has_item_immersive_subscription',
+    'has_item_live_subscription',
+    'has_item_max_subscription',
+  ].forEach((key) => {
+    if (user.trackingProperties[key] !== true) {
+      user.trackingProperties[key] = true;
+      changed = true;
+    }
+  });
   if (user.trackingProperties.monetizable_status !== 'free_trial_owner_max') {
     user.trackingProperties.monetizable_status = 'free_trial_owner_max';
     changed = true;
@@ -184,68 +152,6 @@ function applySubscription(user, now, args) {
     changed = true;
   }
 
-  // Max 权益标记：让客户端进入 Max 分支（视频通话等）。默认关闭，
-  // 因为这些能力仍需服务端放行，标记打开后失败是「点了报错」而非静默降级。
-  if (isOn(args.max_flags)) {
-    ['has_item_immersive_subscription', 'has_item_live_subscription', 'has_item_max_subscription'].forEach(
-      (key) => {
-        if (user.trackingProperties[key] !== true) {
-          user.trackingProperties[key] = true;
-          changed = true;
-        }
-      },
-    );
-  }
-
-  return changed;
-}
-
-// ---------------------------------------------------------------------------
-// 玩法：经验加倍 / 解锁全部关卡
-// ---------------------------------------------------------------------------
-
-function applyXpBoost(user, now, args) {
-  if (!isOn(args.xp_boost)) return false;
-  const multiplier = Math.max(1, toInt(args.multiplier, 2));
-  if (!Array.isArray(user.shopItems)) user.shopItems = [];
-
-  // 字段与上游实测可用的实现保持一致，不额外塞客户端可能不认识的键
-  const existing = user.shopItems.find((item) => item && item.id === XP_BOOST_ITEM_ID);
-  if (existing) {
-    existing.purchaseDate = now;
-    existing.expectedExpirationDate = now + 3600;
-    existing.xpBoostMultiplier = multiplier;
-    return true;
-  }
-
-  user.shopItems.push({
-    id: XP_BOOST_ITEM_ID,
-    purchaseDate: now,
-    expectedExpirationDate: now + 3600,
-    purchasePrice: 0,
-    xpBoostMultiplier: multiplier,
-  });
-  return true;
-}
-
-function applyUnlockAll(user, args) {
-  if (!isOn(args.unlock_all)) return false;
-  const course = user.currentCourse;
-  if (!course || !Array.isArray(course.pathSectioned)) return false;
-
-  let changed = false;
-  course.pathSectioned.forEach((section) => {
-    if (!section || !Array.isArray(section.units)) return;
-    section.units.forEach((unit) => {
-      if (!unit || !Array.isArray(unit.levels)) return;
-      unit.levels.forEach((level) => {
-        if (level && level.state === 'locked') {
-          level.state = 'active';
-          changed = true;
-        }
-      });
-    });
-  });
   return changed;
 }
 
@@ -274,18 +180,13 @@ function isLightUser(value) {
   return !isFullUser(value);
 }
 
-function patchUser(user, now, args) {
+function patchUser(user, now) {
   if (isLightUser(user)) {
     if (user.subscriberLevel === 'GOLD') return false;
     user.subscriberLevel = 'GOLD';
     return true;
   }
-
-  let changed = false;
-  if (applySubscription(user, now, args)) changed = true;
-  if (applyXpBoost(user, now, args)) changed = true;
-  if (applyUnlockAll(user, args)) changed = true;
-  return changed;
+  return applySubscription(user, now);
 }
 
 /** 子响应是否应该跳过（缓存命中 / 空 body） */
@@ -301,7 +202,7 @@ function shouldSkipEntry(entry) {
  * 修补 batch 聚合响应或单用户响应。
  * 返回 true 表示内容有改动，需要回写 body。
  */
-function patchPayload(payload, now, args) {
+function patchPayload(payload, now) {
   if (!payload || typeof payload !== 'object') return false;
 
   if (Array.isArray(payload.responses)) {
@@ -320,7 +221,7 @@ function patchPayload(payload, now, args) {
       }
       if (!isFullUser(inner) && !isLightUser(inner)) return;
 
-      if (patchUser(inner, now, args)) {
+      if (patchUser(inner, now)) {
         entry.body = wasString ? JSON.stringify(inner) : inner;
         changed = true;
       }
@@ -329,7 +230,7 @@ function patchPayload(payload, now, args) {
   }
 
   if (!isFullUser(payload) && !isLightUser(payload)) return false;
-  return patchUser(payload, now, args);
+  return patchUser(payload, now);
 }
 
 try {
@@ -337,9 +238,8 @@ try {
     $done({});
   } else {
     const now = Math.floor(Date.now() / 1000);
-    const args = readArgs();
     const payload = JSON.parse($response.body);
-    if (patchPayload(payload, now, args)) {
+    if (patchPayload(payload, now)) {
       $done({ body: JSON.stringify(payload) });
     } else {
       $done({});
