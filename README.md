@@ -47,6 +47,8 @@ Loon 负责无感捕获与即时同步，呆呆面板 / 青龙面板负责脱机
 
 > `camscanner.plugin` 与 `DaiDaiPanel.plugin` 含相同抓取规则，只保留一个即可。
 
+> **腾讯视频签到**：App 会员中心直接抓 Cookie（`v_vurefresh` 让手机号登录也能续期），00:10 签到、00:20 抽奖、00:25 领券，四个开关独立，均带 15~30 秒随机延迟防风控。详见 [`scripts/tools/tenvideo/`](./scripts/tools/tenvideo/)。
+
 > **命名规范：** 青龙任务名使用 App 名；秒杀任务固定为 `电信秒杀`。Loon 插件名使用简短 App 名，功能细节写入描述。
 
 ## 青龙任务
