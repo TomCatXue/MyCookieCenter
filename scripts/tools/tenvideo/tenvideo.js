@@ -35,9 +35,11 @@ const $ = new Env("腾讯视频");
 const ARG = typeof $argument === "object" && $argument ? $argument : {};
 const argOn = (v, key) => v === true || v === "true" || $.getdata(key) === "true";
 
-// 两个开关:抓取 / 签到。不传参数时默认都开,老配置不改也能直接跑。
+// 四个开关:抓取 / 签到 / 抽奖 / 领券。不传参数时默认都开,老配置不改也能直接跑。
 const CAPTURE_ON = ARG.capture === undefined ? true : argOn(ARG.capture, "tenvideo_capture");
 const CHECKIN_ON = ARG.checkin === undefined ? true : argOn(ARG.checkin, "tenvideo_checkin");
+const LOTTERY_ON = ARG.lottery === undefined ? true : argOn(ARG.lottery, "tenvideo_lottery");
+const COUPON_ON = ARG.coupon === undefined ? true : argOn(ARG.coupon, "tenvideo_coupon");
 
 // 补签入口:请求 http://1.1.1.1/checkin/tenvideo 时现跑一次签到,跑完把本脚本的签到状态作为响应返回
 const CHECKIN_RUN = typeof $request !== "undefined" && /^http:\/\/1\.1\.1\.1\/checkin\//.test($request.url);
@@ -58,6 +60,8 @@ const K = {
     renewTs: "tenvideo_renew_ts", // 上次续期成功时间
     renewVia: "tenvideo_renew_via", // 上次续期走的通道
     capVia: "tenvideo_cap_via", // 上次抓取来源(排障用)
+    lotteryPool: "tenvideo_lottery_pool", // 上次抽中的奖池,下次优先试
+    lotteryStatus: "tenvideo_lottery_status", // 最近一次抽奖结果
 };
 
 // ---------- 接口 ----------
@@ -72,6 +76,22 @@ const UA =
 // App / 会员中心 WebView 带登录态的请求都在这些域上
 const CAP_HOST_RE = /^https:\/\/(vip|pbaccess|access|film|m)\.video\.qq\.com\//i;
 const RENEW_RE = /^https:\/\/pbaccess\.video\.qq\.com\/(trpc\.anywhere_door\.account\.Account\/Refresh|trpc\.video_account_login\.web_login_trpc\.WebLoginTrpc\/NewRefresh)/i;
+
+// ---------- 抽奖 / 领券 ----------
+// activity.video.qq.com/fcgi-bin/asyn_activity
+//   抽奖  type=100143 option=100  → { lotter_result:1, prize_list:[{lotter_name,cdkey,lotter_url_h5}] }
+//   查资格 type=100143 option=104  → ret=0 success / ret=-904 无资格
+//   领券  type=100160 option=100  → { receive_result, msg }
+//   券状态 type=100160 option=101  → { data:{has_right,left_times,status} }
+const ACT_API = "https://activity.video.qq.com/fcgi-bin/asyn_activity";
+const LOTTERY_ACT = "trr69dwle61dwisptr12gj12ja"; // 新积分抽奖
+const LOTTERY_POOLS = ["43kwa67scker73ia85gjq8ch11", "xh94kpfpi2xoiljhxiu3epss4g"];
+const COUPONS = [
+    { act: "tr607p8587ii7zp53eog20y565", module: "gopzyc36eow5c4a7ed8z8szll9", name: "嘿影电影票福利" },
+    { act: "z4lpthi9h219lifagkksheez25", module: "zjp5wau2y18riskxwek98fdcqg", name: "138元美团券包" },
+];
+const ACT_UA =
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 27_0_1 like Mac OS X) AppleWebKit/537.51.1 (KHTML, like Gecko) Mobile/11A465 QQLiveBrowser/9.04.75 AppType/UN WebKitCore/WKWebView iOS cellPhone/iPhone 16e AppBuild/25247";
 
 $.messages = [];
 
@@ -346,14 +366,131 @@ function randomDelay() {
     return new Promise((r) => setTimeout(r, sec * 1000));
 }
 
+// ---------- 活动接口(抽奖/领券共用) ----------
+
+function actReq(url, act, cookie) {
+    return new Promise((resolve) => {
+        $.get(
+            {
+                url,
+                headers: {
+                    Cookie: cookie,
+                    accept: "application/json, text/plain, */*",
+                    "accept-language": "zh-CN,zh;q=0.9",
+                    origin: "https://film.video.qq.com",
+                    referer: `https://film.video.qq.com/magic-act/${act}/index_index.html`,
+                    "User-Agent": ACT_UA,
+                },
+            },
+            (err, resp, data) => {
+                if (err) {
+                    $.log(`[ERROR] 活动接口: ${$.toStr(err)}`);
+                    return resolve(null);
+                }
+                try {
+                    resolve(typeof data === "string" ? JSON.parse(data) : data);
+                } catch {
+                    $.log(`[ERROR] 活动接口解析失败: ${String(data).slice(0, 120)}`);
+                    resolve(null);
+                }
+            }
+        );
+    });
+}
+
+function actUrl({ act, type, option, module, ptag, aid }) {
+    const q = [
+        "platform=7",
+        `type=${type}`,
+        `option=${option}`,
+        `act_id=${act}`,
+        `module_id=${module}`,
+        `ptag=${ptag || ""}`,
+        "is_prepublish=",
+        `aid=${aid || "V0%2524%25248%253A900027"}`,
+        "otype=xjson",
+        `_ts=${Date.now()}`,
+    ];
+    return `${ACT_API}?${q.join("&")}`;
+}
+
+function poolOrder() {
+    const last = $.getdata(K.lotteryPool);
+    const list = LOTTERY_POOLS.slice();
+    if (last && list.includes(last)) list.splice(list.indexOf(last), 1);
+    return last ? [last].concat(list) : list;
+}
+
+// 抽奖。返回 { ok, text } —— ok=true 表示中奖，text 是通知正文
+async function doLottery(cookie) {
+    for (const pool of poolOrder()) {
+        const chk = await actReq(actUrl({ act: LOTTERY_ACT, type: 100143, option: 104, module: pool }), LOTTERY_ACT, cookie);
+        if (!chk || chk.ret !== 0 || chk.msg !== "success") {
+            $.log(`[抽奖资格] ${pool.slice(0, 10)}… ${chk ? chk.ret + " " + (chk.msg || "") : "无响应"}`);
+            continue;
+        }
+
+        const res = await actReq(actUrl({ act: LOTTERY_ACT, type: 100143, option: 100, module: pool }), LOTTERY_ACT, cookie);
+        if (res && res.lotter_result === 1) {
+            const p = (res.prize_list && res.prize_list[0]) || {};
+            $.setdata(pool, K.lotteryPool);
+            $.setdata(JSON.stringify({ ok: true, prize: p.lotter_name || "", cdkey: p.cdkey || "", t: Date.now() }), K.lotteryStatus);
+            const lines = [`🎉 抽奖中奖：${p.lotter_name || res.lotter_ext || "奖品"}`];
+            if (p.cdkey) lines.push(`   CDKey：${p.cdkey}`);
+            if (p.lotter_url_h5) lines.push(`   兑换：${p.lotter_url_h5}`);
+            return { ok: true, text: lines.join("\n") };
+        }
+        $.log(`[抽奖] ${pool.slice(0, 10)}… ${res ? res.ret + " " + (res.msg || "") : "无响应"}`);
+        // -904 = 该池今天没资格了，换下一个；其它错误也继续试
+    }
+    return { ok: false, text: "🎲 抽奖：今日已抽完" };
+}
+
+// 领券。返回 { got: 成功条数, text }
+async function doCoupons(cookie) {
+    const got = [];
+    for (const c of COUPONS) {
+        // 1) 先查状态，没货就不浪费一次领取请求
+        const st = await actReq(actUrl({ act: c.act, type: 100160, option: 101, module: c.module, ptag: "channel.rightmodule", aid: "V0%2524%25248%253A2003" }), c.act, cookie);
+        const d = (st && st.data) || {};
+        $.log(`[券状态] ${c.name} has_right=${d.has_right} left=${d.left_times} status=${d.status} msg=${(st && st.msg) || ""}`);
+
+        if (!st || st.ret !== 0 || !d.has_right) continue;
+
+        // 2) 有资格才领
+        const res = await actReq(actUrl({ act: c.act, type: 100160, option: 100, module: c.module, ptag: "channel.rightmodule", aid: "V0%2524%25248%253A2003" }), c.act, cookie);
+        const msg = (res && res.msg) || "";
+        // ⚠️ 没抓到过成功样本，所以不硬卡 receive_result 的具体值：
+        //    ret=0 且 msg 不含失败关键词，就算领到；同时把原始响应写进日志便于核对。
+        const failed = /不满足|无领取资格|已领完|领完|失败|错误|不存在|未开始|已结束/.test(msg);
+        const okReceive = res && res.ret === 0 && !failed;
+        $.log(`[领取] ${c.name} ret=${res && res.ret} receive_result=${res && res.receive_result} msg=${msg}`);
+        if (!okReceive) $.log(`[领取原始] ${res ? JSON.stringify(res).slice(0, 300) : "无响应"}`);
+
+        if (okReceive) {
+            got.push(`🎫 领券：${c.name} 成功`);
+            // 券码/券名：字段名不确定，把 result 里能找到的都试一遍
+            const list = (res.receive_list && res.receive_list.length ? res.receive_list : res.receive_result_list) || [];
+            for (const it of list) {
+                const code = it.cdkey || it.code || it.property_code || "";
+                const nm = it.property_name || it.name || it.title || "";
+                if (nm) got.push(`   ${nm}`);
+                if (code) got.push(`   券码：${code}`);
+            }
+            if (!list.length) got.push(`   （详见 Loon 日志「领取」一行）`);
+        } else if (/已领完|领完|总量/.test(msg)) {
+            $.log(`[领取] ${c.name} 已被领完，明天再试`);
+        }
+    }
+    return { got: got.length, text: got.join("\n") };
+}
+
 async function checkin() {
     let cookie = $.getdata(K.cookie);
     if (!cookie) {
         saveStatus("none", "未抓取 Cookie");
         throw new Error(`[${SCRIPT_VERSION}] 未配置 Cookie,进腾讯视频 App 会员中心抓一次`);
     }
-
-    await randomDelay();
 
     // 1) 先续期
     const renewed = await renewSession(cookie);
@@ -380,20 +517,20 @@ async function checkin() {
     const res = await req("GET", CHECKIN_URL, cookie, null);
     $.log(`[响应] ${res ? JSON.stringify(res).slice(0, 200) : "无响应"}`);
     const tag = `[${SCRIPT_VERSION}]`;
-    const head = renewMsg ? renewMsg + "\n" : "";
     if (res && res.ret === 0 && res.check_in_score != null) {
         saveStatus("ok", `签到成功 +${res.check_in_score} V力值`);
-        $.messages.push(head + `✅ 签到成功,获得 ${res.check_in_score} V力值`);
-    } else if (res && (res.ret === -2002 || /已签|already|has check in/i.test(res.err_msg || ""))) {
-        saveStatus("ok", "今日已签到");
-        $.messages.push(head + "✨ 今日已签到（之前签过了）");
-    } else if (res && /not login|登录|token|auth|-1009|-10001/i.test(JSON.stringify(res))) {
-        saveStatus("cookie", "签到鉴权失败");
-        $.messages.push(`${tag} ❌ 签到鉴权失败: ${JSON.stringify(res).slice(0, 160)}`);
-    } else {
-        saveStatus("fail", `签到失败: ${res ? JSON.stringify(res) : "无响应"}`);
-        $.messages.push(`${tag} ❌ 签到失败: ${res ? JSON.stringify(res).slice(0, 160) : "无响应"}`);
+        return { ok: true, text: renewMsg, line: `✅ 签到成功，获得 ${res.check_in_score} V力值` };
     }
+    if (res && (res.ret === -2002 || /已签|already|has check in/i.test(res.err_msg || ""))) {
+        saveStatus("ok", "今日已签到");
+        return { ok: true, text: renewMsg, line: "✨ 今日已签到（之前签过了）" };
+    }
+    if (res && /not login|登录|token|auth|-1009|-10001/i.test(JSON.stringify(res))) {
+        saveStatus("cookie", "签到鉴权失败");
+        return { ok: false, text: renewMsg, line: `❌ 签到鉴权失败: ${JSON.stringify(res).slice(0, 160)}` };
+    }
+    saveStatus("fail", `签到失败: ${res ? JSON.stringify(res) : "无响应"}`);
+    return { ok: false, text: renewMsg, line: `❌ 签到失败: ${res ? JSON.stringify(res).slice(0, 160) : "无响应"}` };
 }
 
 // ============ 请求 ============
@@ -471,22 +608,67 @@ if (typeof $request !== "undefined" && !CHECKIN_RUN) {
     $.done();
 } else {
     (async () => {
-        if (!CHECKIN_ON) {
-            $.log("[签到] 开关关闭,跳过");
+        // 所有开关都关掉：什么都不做，也不弹通知
+        if (!CHECKIN_ON && !LOTTERY_ON && !COUPON_ON) {
+            $.log("[全部] 签到/抽奖/领券开关都关闭，跳过");
             return;
         }
-        await checkin();
+
+        // 随机延迟只做一次，三个任务共用（避免每个任务各延迟一遍）
+        await randomDelay();
+
+        // 依次跑完三个任务，结果先攒着，最后合并成一条通知
+        const done = []; // 成功项（一行一条）
+        const fails = []; // 失败项
+        let head = ""; // 续期状态，放在通知首行
+
+        if (CHECKIN_ON) {
+            const r = await checkin();
+            head = r.text || "";
+            if (r.ok) done.push(r.line);
+            else fails.push(r.line);
+        }
+
+        if (LOTTERY_ON) {
+            const cookie = $.getdata(K.cookie);
+            if (!cookie) {
+                fails.push("❌ 抽奖：未配置 Cookie");
+            } else {
+                // 中奖和"今日已抽完"都算正常结果，不算失败
+                const r = await doLottery(cookie);
+                done.push(r.text);
+            }
+        }
+
+        if (COUPON_ON) {
+            const cookie = $.getdata(K.cookie);
+            if (!cookie) {
+                fails.push("❌ 领券：未配置 Cookie");
+            } else {
+                const r = await doCoupons(cookie);
+                if (r.got) done.push(r.text);
+                else $.log("[领券] 今日无券可领");
+            }
+        }
+
+        // 输出策略（按需求）：全部成功才合并成一条；有失败就单独发失败
+        if (fails.length) {
+            // 有失败：标题简明，正文按"失败在前、成功在后"排列
+            const title = fails.length === 1 ? "❌ 腾讯视频 · 有任务失败" : `❌ 腾讯视频 · ${fails.length} 项失败`;
+            notify(title, fails.concat(done).join("\n"));
+        } else if (done.length) {
+            // 全部成功：一条通知，首行是续期状态，其余逐项列出
+            const body = (head ? [head] : []).concat(done).join("\n");
+            notify("✅ 腾讯视频 · 每日任务完成", body);
+        } else {
+            $.log("[全部] 三个任务都没有可汇报的内容");
+        }
     })()
         .catch((e) => {
-            $.messages.push(e.message || String(e));
             $.logErr(e);
+            notify("❌ 腾讯视频任务异常", e.message || String(e));
         })
-        .finally(() => {
-            if ($.messages.length) {
-                notify($.messages[0], $.messages.slice(1).join("\n"));
-            }
-            $.done();
-        });
+        .finally(() => $.done());
 }
 
 // 记录本次结果,供「签到汇总」:ok 正常 / cookie 需重新抓取 / fail 其他失败 / none 未使用

@@ -1,5 +1,5 @@
-#!name = 腾讯视频 · 抓取与签到
-#!desc = 在「腾讯视频」App 里进会员中心即可抓 Cookie（不用浏览器/小程序）；每日自动续期签到领 V力值，并自动抽奖与领券（中奖推送 CDKey）。四个开关可独立启停，均带 15~30 秒随机延迟防风控。
+#!name = 腾讯视频 · 抓取与每日任务
+#!desc = 在「腾讯视频」App 里进会员中心即可抓 Cookie（不用浏览器/小程序）；每天一次跑完 续期+签到 → 抽奖 → 领券，全部成功合并成一条通知，有失败则单独提醒。四个开关独立，带 15~30 秒随机延迟防风控。
 #!openUrl = https://apps.apple.com/app/id458318329
 #!author = WowYiJiu (原作) / MaYIHEI (上游) / TomCatXue
 #!homepage = https://github.com/TomCatXue/MyCookieCenter
@@ -7,8 +7,8 @@
 #!system = iOS,iPadOS
 #!type = normal
 #!source = 9b63ff41c1898de5348a820565e2e3c61efa9a29099152c0891ed5c702e3b687
-#!version = 1.2.1
-#!date = 2026-11-23 15:13
+#!version = 1.3.0
+#!date = 2026-11-23 18:10
 #!loon_version = 3.5.1(983)
 #!tag = 腾讯视频,签到,V力值,抽奖,领券,Cookie
 
@@ -16,28 +16,23 @@
 
 [Argument]
 capture = switch, true, tag = 抓取Cookie, desc = 打开腾讯视频进会员中心抓 Cookie，抓到后可关掉
-checkin = switch, true, tag = 每日签到, desc = 每天 00:10 自动续期并签到领 V力值
-lottery = switch, true, tag = V力值抽奖, desc = 每天 00:20 自动抽一次，中奖推送 CDKey 与兑换链接
-coupon = switch, true, tag = 每日领券, desc = 每天试领电影票 / 美团券包等福利券，有货就领
+checkin = switch, true, tag = 每日签到, desc = 每次任务先续期再签到领 V力值
+lottery = switch, true, tag = V力值抽奖, desc = 每次任务自动抽一次，中奖推送 CDKey 与兑换链接
+coupon = switch, true, tag = 每日领券, desc = 每次任务试领电影票 / 美团券包等福利券，有货就领
 
 # =================== 脚本规则 ===================
 
 [Script]
 # 抓取 Cookie：App 会员中心 WebView 的请求都带登录态，命中即增量合并保存
 # 覆盖 vip（会员中心任务列表）、pbaccess、access、film、m 五个域
-request if ${url} ~= /^https:\/\/(vip|pbaccess|access|film|m)\.video\.qq\.com\//i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/tenvideo/tenvideo.js?v=6e643fc1", {${capture}, ${checkin}}) with enable=${capture}, tag="腾讯视频 Cookie", img_url="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/tencent_video.png"
+request if ${url} ~= /^https:\/\/(vip|pbaccess|access|film|m)\.video\.qq\.com\//i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/tenvideo/tenvideo.js?v=e4f66ef0", {${capture}, ${checkin}, ${lottery}, ${coupon}}) with enable=${capture}, tag="腾讯视频 Cookie", img_url="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/tencent_video.png"
 
 # 续期收割：App 自己调续期接口时，把滚动后的 vusession / vurefresh / Set-Cookie 收下来
-response if ${url} ~= /^https:\/\/pbaccess\.video\.qq\.com\/(trpc\.anywhere_door\.account\.Account\/Refresh|trpc\.video_account_login\.web_login_trpc\.WebLoginTrpc\/NewRefresh)/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/tenvideo/tenvideo.js?v=6e643fc1", {${capture}, ${checkin}}) with enable=${capture}, tag="腾讯视频 续期收割", requires_body=true
+response if ${url} ~= /^https:\/\/pbaccess\.video\.qq\.com\/(trpc\.anywhere_door\.account\.Account\/Refresh|trpc\.video_account_login\.web_login_trpc\.WebLoginTrpc\/NewRefresh)/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/tenvideo/tenvideo.js?v=e4f66ef0", {${capture}, ${checkin}, ${lottery}, ${coupon}}) with enable=${capture}, tag="腾讯视频 续期收割", requires_body=true
 
-# 每日签到：00:10 先续期再签到（vusession 只有 2 小时寿命）
-cron "10 0 * * *" then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/tenvideo/tenvideo.js?v=6e643fc1", {${capture}, ${checkin}}) with enable=${checkin}, tag="腾讯视频签到", img_url="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/tencent_video.png"
-
-# V力值抽奖：00:20 起跑，脚本内自带 15~30 秒随机延迟防风控
-cron "20 0 * * *" then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/tenvideo/tenvideo.lottery.js?v=7bfd3379", {${lottery}, ${coupon}}) with enable=${lottery}, tag="腾讯视频抽奖", img_url="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/tencent_video.png"
-
-# 每日领券：00:25 起跑（电影票 / 美团券包等，有货才领）
-cron "25 0 * * *" then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/tenvideo/tenvideo.lottery.js?v=7bfd3379", {${lottery}, ${coupon}}) with enable=${coupon}, tag="腾讯视频领券", img_url="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/tencent_video.png"
+# 每日任务：00:10 起跑，一个进程里依次跑完 续期+签到 → 抽奖 → 领券，最后只发一条通知
+# 脚本内自带 15~30 秒随机延迟（只延迟一次，三个任务共用）
+cron "10 0 * * *" then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/tenvideo/tenvideo.js?v=e4f66ef0", {${capture}, ${checkin}, ${lottery}, ${coupon}}) with tag="腾讯视频每日任务", img_url="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/tencent_video.png"
 
 # =================== MITM ===================
 
