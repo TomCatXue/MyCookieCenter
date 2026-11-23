@@ -39,9 +39,6 @@ const argOn = (v, key) => v === true || v === "true" || $.getdata(key) === "true
 const CAPTURE_ON = ARG.capture === undefined ? true : argOn(ARG.capture, "tenvideo_capture");
 const CHECKIN_ON = ARG.checkin === undefined ? true : argOn(ARG.checkin, "tenvideo_checkin");
 
-// 签到合集开启「统一通知」时不单独弹通知,结果由签到汇总统一发送
-$.merge = ARG.merge === true;
-
 // 补签入口:请求 http://1.1.1.1/checkin/tenvideo 时现跑一次签到,跑完把本脚本的签到状态作为响应返回
 const CHECKIN_RUN = typeof $request !== "undefined" && /^http:\/\/1\.1\.1\.1\/checkin\//.test($request.url);
 if (CHECKIN_RUN) {
@@ -280,6 +277,12 @@ async function renewSession(cookie) {
     const sess = pick(cookie, "vusession").value;
     const rt = pick(cookie, "refresh").value;
     $.log(`[检测] 版本=${SCRIPT_VERSION} vuid=${vuid || "空"} vusession=${sess ? "有" : "无"} refresh_token=${rt ? "有" : "无"} 登录=${pick(cookie, "login").value || "?"}`);
+    // 没有 refresh_token 时,把实际存在的字段名打出来,便于定位是哪种登录方式
+    if (!rt) {
+        const names = [...parseCookie(cookie).keys()];
+        const interesting = names.filter((n) => /session|refresh|token|userid|openid|login|vuser/i.test(n));
+        $.log(`[字段] 共 ${names.length} 个,与登录相关的: ${interesting.join(", ") || "无"}`);
+    }
 
     // 通道 A:App 账号网关
     if (rt) {
@@ -349,6 +352,10 @@ async function checkin() {
     } else if (!pick(cookie, "vusession").value) {
         saveStatus("cookie", "续期失败且无可用会话");
         throw new Error(`[${SCRIPT_VERSION}] 续期失败,且 cookie 里没有 vusession\n👉 进腾讯视频 App 会员中心重新抓一次`);
+    } else if (!pick(cookie, "refresh").value) {
+        // 手机号登录等没有 refresh_token 的账号,本来就没什么可续的,
+        // 直接用抓到的 vusession 签到 —— 不报"失败",只提示一下
+        $.log("[续期] 该账号无 refresh_token,直接用现有 vusession 签到");
     } else {
         $.messages.push("⚠️ 续期失败,用旧 vusession 直接试签到");
     }
@@ -432,10 +439,9 @@ function debug(content, title = "debug") {
     $.log(`[debug:${title}] ${briefOf(o)}`);
 }
 
-// 通知统一出口:merge 模式只打日志
+// 通知统一出口
 function notify(subtitle, body) {
     $.log(`[通知] ${subtitle}${body ? " · " + body : ""}`);
-    if ($.merge) return;
     $.msg($.name, subtitle, body || "");
 }
 

@@ -17,20 +17,19 @@
 [Argument]
 capture = switch, true, tag = 抓取Cookie, desc = 打开腾讯视频进会员中心抓 Cookie，抓到后可关掉
 checkin = switch, true, tag = 每日签到, desc = 每天 00:10 自动续期并签到领 V力值
-merge = switch, false, tag = 通知合并, desc = 与签到合集一起用时打开，不单独弹通知
 
 # =================== 脚本规则 ===================
 
 [Script]
 # 抓取 Cookie：App 会员中心 WebView 的请求都带登录态，命中即增量合并保存
 # 覆盖 vip（会员中心任务列表）、pbaccess、access、film、m 五个域
-request if ${url} ~= /^https:\/\/(vip|pbaccess|access|film|m)\.video\.qq\.com\//i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/tenvideo/tenvideo.js?v=16497edc", {${capture}, ${checkin}, ${merge}}) with enable=${capture}, tag="腾讯视频 Cookie", img_url="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/tencent_video.png"
+request if ${url} ~= /^https:\/\/(vip|pbaccess|access|film|m)\.video\.qq\.com\//i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/tenvideo/tenvideo.js?v=3cfccc6d", {${capture}, ${checkin}}) with enable=${capture}, tag="腾讯视频 Cookie", img_url="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/tencent_video.png"
 
 # 续期收割：App 自己调续期接口时，把滚动后的 vusession / vurefresh / Set-Cookie 收下来
-response if ${url} ~= /^https:\/\/pbaccess\.video\.qq\.com\/(trpc\.anywhere_door\.account\.Account\/Refresh|trpc\.video_account_login\.web_login_trpc\.WebLoginTrpc\/NewRefresh)/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/tenvideo/tenvideo.js?v=16497edc", {${capture}, ${checkin}, ${merge}}) with enable=${capture}, tag="腾讯视频 续期收割", requires_body=true
+response if ${url} ~= /^https:\/\/pbaccess\.video\.qq\.com\/(trpc\.anywhere_door\.account\.Account\/Refresh|trpc\.video_account_login\.web_login_trpc\.WebLoginTrpc\/NewRefresh)/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/tenvideo/tenvideo.js?v=3cfccc6d", {${capture}, ${checkin}}) with enable=${capture}, tag="腾讯视频 续期收割", requires_body=true
 
 # 每日签到：00:10 先续期再签到（vusession 只有 2 小时寿命）
-cron "10 0 * * *" then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/tenvideo/tenvideo.js?v=16497edc", {${capture}, ${checkin}, ${merge}}) with enable=${checkin}, tag="腾讯视频签到", img_url="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/tencent_video.png"
+cron "10 0 * * *" then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/tenvideo/tenvideo.js?v=3cfccc6d", {${capture}, ${checkin}}) with enable=${checkin}, tag="腾讯视频签到", img_url="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/tencent_video.png"
 
 # =================== MITM ===================
 
