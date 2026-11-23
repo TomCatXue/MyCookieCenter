@@ -297,7 +297,7 @@ async function renewSession(cookie) {
         if (rf && d.vusession) {
             const out = applyRenew(cookie, rf, d.vusession, d.vurefresh || d.refresh_token);
             $.log(`[续期A] 成功 vusession 长度=${String(d.vusession).length} 令牌滚动=${d.vurefresh || d.refresh_token ? "是" : "否"}`);
-            return { cookie: out, via: "app" };
+            return { cookie: out, via: "app", rolled: !!(d.vurefresh || d.refresh_token) };
         }
         $.log(`[续期A] 失败: ${rf ? briefOf(rf) : "无响应"}`);
     } else {
@@ -315,7 +315,7 @@ async function renewSession(cookie) {
         if (rf && d.vusession) {
             const out = applyRenew(mergeCookie(webCookie, cookie), rf, d.vusession, d.refresh_token);
             $.log(`[续期B] 成功 vusession 长度=${String(d.vusession).length}`);
-            return { cookie: out, via: "web" };
+            return { cookie: out, via: "web", rolled: !!d.refresh_token };
         }
         $.log(`[续期B] 失败: ${rf ? briefOf(rf) : "无响应"}`);
     } else {
@@ -357,32 +357,36 @@ async function checkin() {
 
     // 1) 先续期
     const renewed = await renewSession(cookie);
+    let renewMsg = "";
     if (renewed) {
         cookie = renewed.cookie;
         $.setdata(cookie, K.cookie);
         $.setdata(String(Date.now()), K.renewTs);
         $.setdata(renewed.via, K.renewVia);
+        // 续期结果要出现在通知里 —— 这是判断"还能撑多久"的唯一依据
+        renewMsg = renewed.rolled ? `🔑 续期成功（${renewed.via === "app" ? "App" : "网页"}通道，令牌已滚动）` : `🔑 续期成功（${renewed.via === "app" ? "App" : "网页"}通道，令牌未滚动）`;
     } else if (!pick(cookie, "vusession").value) {
         saveStatus("cookie", "续期失败且无可用会话");
         throw new Error(`[${SCRIPT_VERSION}] 续期失败,且 cookie 里没有 vusession\n👉 进腾讯视频 App 会员中心重新抓一次`);
     } else if (!pick(cookie, "refresh").value) {
-        // 手机号登录等没有 refresh_token 的账号,本来就没什么可续的,
-        // 直接用抓到的 vusession 签到 —— 不报"失败",只提示一下
-        $.log("[续期] 该账号无 refresh_token,直接用现有 vusession 签到");
+        // 没有续期令牌的账号,本来就没什么可续的,直接用抓到的会话签到
+        $.log("[续期] 该账号无续期令牌,直接用现有 vusession 签到");
+        renewMsg = "⚠️ 无续期令牌，用现有会话签到（过期需重抓）";
     } else {
-        $.messages.push("⚠️ 续期失败,用旧 vusession 直接试签到");
+        renewMsg = "⚠️ 续期失败，用旧会话试签到";
     }
 
     // 2) CheckIn
     const res = await req("GET", CHECKIN_URL, cookie, null);
     $.log(`[响应] ${res ? JSON.stringify(res).slice(0, 200) : "无响应"}`);
     const tag = `[${SCRIPT_VERSION}]`;
+    const head = renewMsg ? renewMsg + "\n" : "";
     if (res && res.ret === 0 && res.check_in_score != null) {
         saveStatus("ok", `签到成功 +${res.check_in_score} V力值`);
-        $.messages.push(`✅ 签到成功,获得 ${res.check_in_score} V力值`);
-    } else if (res && (res.ret === -2002 || /已签|already/i.test(res.err_msg || ""))) {
+        $.messages.push(head + `✅ 签到成功,获得 ${res.check_in_score} V力值`);
+    } else if (res && (res.ret === -2002 || /已签|already|has check in/i.test(res.err_msg || ""))) {
         saveStatus("ok", "今日已签到");
-        $.messages.push("✨ 今日已签到");
+        $.messages.push(head + "✨ 今日已签到（之前签过了）");
     } else if (res && /not login|登录|token|auth|-1009|-10001/i.test(JSON.stringify(res))) {
         saveStatus("cookie", "签到鉴权失败");
         $.messages.push(`${tag} ❌ 签到鉴权失败: ${JSON.stringify(res).slice(0, 160)}`);

@@ -7,8 +7,8 @@
 #!system = iOS,iPadOS
 #!type = normal
 #!source = 9b63ff41c1898de5348a820565e2e3c61efa9a29099152c0891ed5c702e3b687
-#!version = 1.2.0
-#!date = 2026-11-23 15:06
+#!version = 1.2.1
+#!date = 2026-11-23 15:13
 #!loon_version = 3.5.1(983)
 #!tag = 腾讯视频,签到,V力值,抽奖,领券,Cookie
 
@@ -25,13 +25,13 @@ coupon = switch, true, tag = 每日领券, desc = 每天试领电影票 / 美团
 [Script]
 # 抓取 Cookie：App 会员中心 WebView 的请求都带登录态，命中即增量合并保存
 # 覆盖 vip（会员中心任务列表）、pbaccess、access、film、m 五个域
-request if ${url} ~= /^https:\/\/(vip|pbaccess|access|film|m)\.video\.qq\.com\//i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/tenvideo/tenvideo.js?v=56a24b15", {${capture}, ${checkin}}) with enable=${capture}, tag="腾讯视频 Cookie", img_url="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/tencent_video.png"
+request if ${url} ~= /^https:\/\/(vip|pbaccess|access|film|m)\.video\.qq\.com\//i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/tenvideo/tenvideo.js?v=6e643fc1", {${capture}, ${checkin}}) with enable=${capture}, tag="腾讯视频 Cookie", img_url="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/tencent_video.png"
 
 # 续期收割：App 自己调续期接口时，把滚动后的 vusession / vurefresh / Set-Cookie 收下来
-response if ${url} ~= /^https:\/\/pbaccess\.video\.qq\.com\/(trpc\.anywhere_door\.account\.Account\/Refresh|trpc\.video_account_login\.web_login_trpc\.WebLoginTrpc\/NewRefresh)/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/tenvideo/tenvideo.js?v=56a24b15", {${capture}, ${checkin}}) with enable=${capture}, tag="腾讯视频 续期收割", requires_body=true
+response if ${url} ~= /^https:\/\/pbaccess\.video\.qq\.com\/(trpc\.anywhere_door\.account\.Account\/Refresh|trpc\.video_account_login\.web_login_trpc\.WebLoginTrpc\/NewRefresh)/i then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/tenvideo/tenvideo.js?v=6e643fc1", {${capture}, ${checkin}}) with enable=${capture}, tag="腾讯视频 续期收割", requires_body=true
 
 # 每日签到：00:10 先续期再签到（vusession 只有 2 小时寿命）
-cron "10 0 * * *" then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/tenvideo/tenvideo.js?v=56a24b15", {${capture}, ${checkin}}) with enable=${checkin}, tag="腾讯视频签到", img_url="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/tencent_video.png"
+cron "10 0 * * *" then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/tenvideo/tenvideo.js?v=6e643fc1", {${capture}, ${checkin}}) with enable=${checkin}, tag="腾讯视频签到", img_url="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/tencent_video.png"
 
 # V力值抽奖：00:20 起跑，脚本内自带 15~30 秒随机延迟防风控
 cron "20 0 * * *" then script("https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/scripts/tools/tenvideo/tenvideo.lottery.js?v=7bfd3379", {${lottery}, ${coupon}}) with enable=${lottery}, tag="腾讯视频抽奖", img_url="https://raw.githubusercontent.com/TomCatXue/MyCookieCenter/refs/heads/main/icons/tencent_video.png"
