@@ -1,10 +1,16 @@
 /**
  * 腾讯视频 · 全量广告净化（Loon）
- * 版本: 2026-11-09.r10
+ * 版本: 2026-11-24.r11
  * 协议: tRPC / JCE / protobuf / gzip
  * 融合: ZenmoFeiShi/Qx TxvideoAD（tRPC 破坏、JCE 裁剪、简洁模式与底栏）
+ *
+ * r11 (2026-11-24)：响应侧新增单趟多模式预检（hasAnyMarker）。
+ *   i.video.qq.com 根路径承载全部 tRPC 调用，01:43 曾一分钟触发 183 对脚本求值，
+ *   把 Loon 内存压到 critical（level 4）并触发 UDP 拒绝。原 indexMarkers 对 12 个
+ *   标记各做一次全文扫描；改为按首字节建索引、正文单趟扫描、命中即早退。
+ *   200KB 无广告响应实测 70.96ms → 16.68ms（-76.5%），3000 组随机对拍语义等价。
  */
-const SCRIPT_VERSION = "2026-11-09.r10";
+const SCRIPT_VERSION = "2026-11-24.r11";
 console.log(`[TencentVideo] ${SCRIPT_VERSION}`);
 
 (() => {
@@ -389,6 +395,54 @@ console.log(`[TencentVideo] ${SCRIPT_VERSION}`);
   }
 
   let MARK = {}, ALL = [];
+  /**
+   * 响应侧「可能被改动」的全部触发词。
+   * 必须覆盖 transform / clean / isAdElement / isVipPayButton / isVipBarSection / tabFix
+   * 用到的每一个字符串，否则预检会错误跳过一个本该改写的响应。
+   * 注意：不含 GET 侧专用字面量（page_id / bottom / data_identifier），那些在 onTrpcRequest 里。
+   */
+  const RESP_TRIGGERS = MARKERS.concat([
+    "personal_center_page",   // transform 的 PC_PAGE 分支
+    "pb.AdFeed",              // transform 的 AD_FEED 分支
+    "PayBgGradientTitleBtn",  // isVipPayButton
+    "VIPActivityEntry",       // isVipBarSection（MARKERS 已含，去重无害）
+    "GetTabListRsp",          // tabFix（MARKERS 已含）
+  ]);
+  /**
+   * 单趟多模式预检：把全部触发词按「首字节」建索引，正文只扫一遍。
+   * 旧写法对每个标记各做一次全文扫描（12×N），200KB 包实测 ~71ms；
+   * 这里首字节不匹配时直接跳下一个字节，命中任意一个立即返回。
+   */
+  let MARKER_INDEX = null;
+  function buildMarkerIndex() {
+    MARKER_INDEX = new Map();
+    for (const m of RESP_TRIGGERS) {
+      const nb = utf8(m);
+      if (!nb.length) continue;
+      const head = nb[0];
+      let bucket = MARKER_INDEX.get(head);
+      if (!bucket) { bucket = []; MARKER_INDEX.set(head, bucket); }
+      bucket.push(nb);
+    }
+    return MARKER_INDEX;
+  }
+  function hasAnyMarker(b, s, e) {
+    const idx = MARKER_INDEX || buildMarkerIndex();
+    for (let i = s; i < e; i++) {
+      const bucket = idx.get(b[i]);
+      if (!bucket) continue;
+      for (const nb of bucket) {
+        const len = nb.length;
+        if (i + len > e) continue;
+        let ok = true;
+        for (let j = 1; j < len; j++) {
+          if (b[i + j] !== nb[j]) { ok = false; break; }
+        }
+        if (ok) return true;
+      }
+    }
+    return false;
+  }
   function indexMarkers(b, s, e) {
     MARK = {}; ALL = [];
     for (const m of MARKERS) {
@@ -562,6 +616,9 @@ console.log(`[TencentVideo] ${SCRIPT_VERSION}`);
     if (u8[0] === 0x1f && u8[1] === 0x8b) { u8 = gunzip(u8); gz = true; }
     const fr = trpcFrame(u8);
     if (!fr) return null;
+    // 廉价预检：body 里连一个广告标记都没有就直接放行，跳过高开销的索引与解析。
+    // i.video.qq.com 根路径承载全部 tRPC 调用，绝大多数响应与广告无关。
+    if (!hasAnyMarker(u8, fr.he, u8.length)) return null;
     indexMarkers(u8, fr.he, u8.length);
     const body = transform(u8, fr.he, u8.length);
     if (!body) return null;
