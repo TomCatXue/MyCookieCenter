@@ -7,14 +7,18 @@
 #!tag = 咪咕音乐,去广告
 #!source = 79f4f9364bd20e27b98b0317603a576f2c2c62db030cd6540b5dff17aba706f2, bd1ef4f10dd98099abf3699f7ebe8013c6589793cad179d4f9817930e6527421
 #!type = normal
-#!version = 1.0.0
-#!date = 2026-11-21 14:40
+#!version = 1.0.1
+#!date = 2026-11-26 00:08
 
 [Rule]
 # 广告 SDK 与营销埋点域名直接拦截 (零脚本开销)
 DOMAIN, ggx07.miguvideo.com, REJECT
 DOMAIN-SUFFIX, volces.com, REJECT
-DOMAIN-SUFFIX, zijieapi.com, REJECT
+# zijieapi.com 是字节系通用 API 网关，不能整域拦截：
+#   tnc*.zijieapi.com   → 字节系 App 的 CDN 调度，拦了会让抖音/头条等选节点异常
+#   keyhub.zijieapi.com → 密钥服务
+# 只拦广告 SDK 的埋点上报子域
+DOMAIN, mon.zijieapi.com, REJECT
 DOMAIN, ggc.cmvideo.cn, REJECT
 DOMAIN, report.migufun.com, REJECT
 DOMAIN, betagame.migufun.com, REJECT
