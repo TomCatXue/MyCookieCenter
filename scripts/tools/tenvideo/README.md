@@ -41,7 +41,7 @@
 
 ## 防风控
 
-签到和抽奖脚本都带 **15~30 秒随机延迟**，在发第一个业务请求前 `await` 一次：
+签到和抽奖脚本都带 **3~8 秒随机延迟**，在发第一个业务请求前 `await` 一次：
 
 ```js
 function randomDelay() {
@@ -217,7 +217,7 @@ cookie = setCookieVal(cookie, "v_vusession", newVusession); // 微信登录才�
 1. 装 `TencentVideoCheckin.plugin`，四个开关默认都开
 2. 打开腾讯视频 → 我的 → 点「视频VIP」进会员中心
 3. 收到 `✅ Cookie 获取成功` 后可关掉 `capture` 开关
-4. 其余三个保持开启，每天 00:10 一次跑完全部任务，只弹一条通知
+4. 其余三个保持开启，每天 00:02 一次跑完全部任务，只弹一条通知
 
 ## 验证
 

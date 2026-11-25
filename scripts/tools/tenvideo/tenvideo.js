@@ -26,7 +26,7 @@
  * [Script]
  * request  if ${url} ~= /^https:\/\/(vip|pbaccess|access|film)\.video\.qq\.com\//i then script("https://raw.githubusercontent.com/MaYIHEI/paperclip/refs/heads/main/app/tenvideo/tenvideo.js") with tag="腾讯视频 Cookie", img_url="https://raw.githubusercontent.com/MaYIHEI/pin/refs/heads/main/app/tenvideo.png", requires_body=true
  * response if ${url} ~= /^https:\/\/pbaccess\.video\.qq\.com\/(trpc\.anywhere_door\.account\.Account\/Refresh|trpc\.video_account_login\.web_login_trpc\.WebLoginTrpc\/NewRefresh)/i then script("https://raw.githubusercontent.com/MaYIHEI/paperclip/refs/heads/main/app/tenvideo/tenvideo.js") with tag="腾讯视频 续期收割", requires_body=true
- * cron "10 0 * * *" then script("https://raw.githubusercontent.com/MaYIHEI/paperclip/refs/heads/main/app/tenvideo/tenvideo.js") with tag="腾讯视频签到", img_url="https://raw.githubusercontent.com/MaYIHEI/pin/refs/heads/main/app/tenvideo.png"
+ * cron "2 0 * * *" then script("https://raw.githubusercontent.com/MaYIHEI/paperclip/refs/heads/main/app/tenvideo/tenvideo.js") with tag="腾讯视频签到", img_url="https://raw.githubusercontent.com/MaYIHEI/pin/refs/heads/main/app/tenvideo.png"
  */
 
 const $ = new Env("腾讯视频");
@@ -48,7 +48,7 @@ if (CHECKIN_RUN) {
     $.done = () => end({ response: { status: 200, headers: { "Content-Type": "application/json; charset=utf-8" }, body: $.getdata("tenvideo_status") || "{}" } });
 }
 
-const SCRIPT_VERSION = "2026-11-26.r4";
+const SCRIPT_VERSION = "2026-11-26.r5";
 $.log(`[INFO] 脚本版本 ${SCRIPT_VERSION}  抓取=${CAPTURE_ON ? "开" : "关"} 签到=${CHECKIN_ON ? "开" : "关"}`);
 
 // ---------- 存储键 ----------
@@ -359,9 +359,12 @@ function applyRenew(cookie, resp, newSess, newRefresh) {
 
 // ============ 签到 ============
 
-// 15~30 秒随机延迟:避免每天同一秒打同一接口,降低风控特征
+// 3~8 秒随机延迟:避免每天同一秒打同一接口,同时为抢券留出时间
 function randomDelay() {
-    const sec = 15 + Math.floor(Math.random() * 16); // 15..30
+    // 原为 15~30 秒。cron 已提前到 00:02，若再延迟 30 秒就退回到
+    // 抢券不利的位置（券通常 00:10 前就被扫空）。
+    // 缩到 3~8 秒：既避开整点 00:00:00 的尖峰，又能抢在大部分人前面。
+    const sec = 3 + Math.floor(Math.random() * 6); // 3..8
     $.log(`[防风控] 随机延迟 ${sec} 秒后开始`);
     return new Promise((r) => setTimeout(r, sec * 1000));
 }
