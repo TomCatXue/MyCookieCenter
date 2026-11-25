@@ -48,7 +48,7 @@ if (CHECKIN_RUN) {
     $.done = () => end({ response: { status: 200, headers: { "Content-Type": "application/json; charset=utf-8" }, body: $.getdata("tenvideo_status") || "{}" } });
 }
 
-const SCRIPT_VERSION = "2026-11-23.r2";
+const SCRIPT_VERSION = "2026-11-26.r3";
 $.log(`[INFO] 脚本版本 ${SCRIPT_VERSION}  抓取=${CAPTURE_ON ? "开" : "关"} 签到=${CHECKIN_ON ? "开" : "关"}`);
 
 // ---------- 存储键 ----------
@@ -423,10 +423,14 @@ function poolOrder() {
 
 // 抽奖。返回 { ok, text } —— ok=true 表示中奖，text 是通知正文
 async function doLottery(cookie) {
+    let authFail = false;
     for (const pool of poolOrder()) {
         const chk = await actReq(actUrl({ act: LOTTERY_ACT, type: 100143, option: 104, module: pool }), LOTTERY_ACT, cookie);
         if (!chk || chk.ret !== 0 || chk.msg !== "success") {
-            $.log(`[抽奖资格] ${pool.slice(0, 10)}… ${chk ? chk.ret + " " + (chk.msg || "") : "无响应"}`);
+            const m = (chk && chk.msg) || "";
+            $.log(`[抽奖资格] ${pool.slice(0, 10)}… ${chk ? chk.ret + " " + m : "无响应"}`);
+            // 同领券：活动域返回未登录时不能当成"今天抽完"
+            if ((chk && chk.ret === -102) || /未登录|not\s*login|请登录/i.test(m)) authFail = true;
             continue;
         }
 
@@ -443,18 +447,32 @@ async function doLottery(cookie) {
         $.log(`[抽奖] ${pool.slice(0, 10)}… ${res ? res.ret + " " + (res.msg || "") : "无响应"}`);
         // -904 = 该池今天没资格了，换下一个；其它错误也继续试
     }
+    if (authFail) {
+        return {
+            ok: false,
+            authFail: true,
+            text: "❌ 抽奖：活动接口不认登录态（用户未登录）\n   👉 进腾讯视频会员中心重新抓一次 Cookie",
+        };
+    }
     return { ok: false, text: "🎲 抽奖：今日已抽完" };
 }
 
-// 领券。返回 { got: 成功条数, text }
+// 领券。返回 { got: 成功条数, text, authFail?: true }
 async function doCoupons(cookie) {
     const got = [];
+    let authFail = false;
     for (const c of COUPONS) {
         // 1) 先查状态，没货就不浪费一次领取请求
         const st = await actReq(actUrl({ act: c.act, type: 100160, option: 101, module: c.module, ptag: "channel.rightmodule", aid: "V0%2524%25248%253A2003" }), c.act, cookie);
         const d = (st && st.data) || {};
-        $.log(`[券状态] ${c.name} has_right=${d.has_right} left=${d.left_times} status=${d.status} msg=${(st && st.msg) || ""}`);
+        const stMsg = (st && st.msg) || "";
+        $.log(`[券状态] ${c.name} has_right=${d.has_right} left=${d.left_times} status=${d.status} msg=${stMsg}`);
 
+        // 活动接口不认 Cookie 时要单独标出来。ret=-102 / "用户未登录" 是典型值，
+        // 只出现在活动域（activity.video.qq.com）上，签到域正常。
+        if ((st && st.ret === -102) || /未登录|not\s*login|请登录/i.test(stMsg)) {
+            authFail = true;
+        }
         if (!st || st.ret !== 0 || !d.has_right) continue;
 
         // 2) 有资格才领
@@ -481,6 +499,13 @@ async function doCoupons(cookie) {
         } else if (/已领完|领完|总量/.test(msg)) {
             $.log(`[领取] ${c.name} 已被领完，明天再试`);
         }
+    }
+    if (authFail && !got.length) {
+        return {
+            got: 0,
+            authFail: true,
+            text: "❌ 领券：活动接口不认登录态（用户未登录）\n   签到域正常，仅 activity.video.qq.com 拒绝\n   👉 进腾讯视频会员中心重新抓一次 Cookie",
+        };
     }
     return { got: got.length, text: got.join("\n") };
 }
@@ -634,9 +659,11 @@ if (typeof $request !== "undefined" && !CHECKIN_RUN) {
             if (!cookie) {
                 fails.push("❌ 抽奖：未配置 Cookie");
             } else {
-                // 中奖和"今日已抽完"都算正常结果，不算失败
+                // 中奖和"今日已抽完"都算正常结果，不算失败；
+                // 但活动域未登录必须报出来，否则会被误当成"今天抽完了"
                 const r = await doLottery(cookie);
-                done.push(r.text);
+                if (r.authFail) fails.push(r.text);
+                else done.push(r.text);
             }
         }
 
@@ -646,8 +673,13 @@ if (typeof $request !== "undefined" && !CHECKIN_RUN) {
                 fails.push("❌ 领券：未配置 Cookie");
             } else {
                 const r = await doCoupons(cookie);
+                // 三种结果都必须进通知，否则用户只能看到"任务完成"却不知道券没领到。
+                //   got  > 0        → 真领到了
+                //   authFail        → 活动接口不认登录态（必须报出来，这是需要人工处理的）
+                //   其它            → 今天确实没券，也算正常
                 if (r.got) done.push(r.text);
-                else $.log("[领券] 今日无券可领");
+                else if (r.authFail) fails.push(r.text);
+                else done.push("🎫 领券：今日无券可领");
             }
         }
 
