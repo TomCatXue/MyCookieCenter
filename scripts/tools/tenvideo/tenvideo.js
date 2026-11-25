@@ -48,7 +48,7 @@ if (CHECKIN_RUN) {
     $.done = () => end({ response: { status: 200, headers: { "Content-Type": "application/json; charset=utf-8" }, body: $.getdata("tenvideo_status") || "{}" } });
 }
 
-const SCRIPT_VERSION = "2026-11-26.r3";
+const SCRIPT_VERSION = "2026-11-26.r4";
 $.log(`[INFO] 脚本版本 ${SCRIPT_VERSION}  抓取=${CAPTURE_ON ? "开" : "关"} 签到=${CHECKIN_ON ? "开" : "关"}`);
 
 // ---------- 存储键 ----------
@@ -461,6 +461,7 @@ async function doLottery(cookie) {
 async function doCoupons(cookie) {
     const got = [];
     let authFail = false;
+    const reasons = []; // 每张券没领到的真实原因，拼进通知
     for (const c of COUPONS) {
         // 1) 先查状态，没货就不浪费一次领取请求
         const st = await actReq(actUrl({ act: c.act, type: 100160, option: 101, module: c.module, ptag: "channel.rightmodule", aid: "V0%2524%25248%253A2003" }), c.act, cookie);
@@ -473,7 +474,16 @@ async function doCoupons(cookie) {
         if ((st && st.ret === -102) || /未登录|not\s*login|请登录/i.test(stMsg)) {
             authFail = true;
         }
-        if (!st || st.ret !== 0 || !d.has_right) continue;
+        if (!st || st.ret !== 0 || !d.has_right) {
+            // 区分三种「没领到」：
+            //   已领完 / 总量领完 → 库存被抢光，明天早来或换券
+            //   has_right=0 且无库存文案 → 账号今天没资格（可能已领过）
+            //   其它 → 原样带出服务端文案，别丢信息
+            if (/领完|领光了|已被领完|总量/.test(stMsg)) reasons.push(`${c.name}：已被抢光`);
+            else if (d.has_right === 0 && !stMsg) reasons.push(`${c.name}：今日无资格`);
+            else if (stMsg && !/success/i.test(stMsg)) reasons.push(`${c.name}：${stMsg}`);
+            continue;
+        }
 
         // 2) 有资格才领
         const res = await actReq(actUrl({ act: c.act, type: 100160, option: 100, module: c.module, ptag: "channel.rightmodule", aid: "V0%2524%25248%253A2003" }), c.act, cookie);
@@ -506,6 +516,12 @@ async function doCoupons(cookie) {
             authFail: true,
             text: "❌ 领券：活动接口不认登录态（用户未登录）\n   签到域正常，仅 activity.video.qq.com 拒绝\n   👉 进腾讯视频会员中心重新抓一次 Cookie",
         };
+    }
+    if (!got.length) {
+        // 没领到也要说清楚为什么，否则「今日无券可领」等于什么都没讲。
+        // 领完 / 抢光是最常见情况，提示用户早点来而不是以为脚本坏了。
+        const detail = reasons.length ? "\n   " + reasons.join("\n   ") : "";
+        return { got: 0, text: `🎫 领券：今日无券可领${detail}` };
     }
     return { got: got.length, text: got.join("\n") };
 }

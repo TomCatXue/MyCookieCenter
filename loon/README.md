@@ -18,7 +18,7 @@
 | [`Telegram.plugin`](./Telegram.plugin) (v1.1.0) | Telegram 增强：优质 IP 调度防转圈、外部 t.me 链接跳转客户端 (chaoscard 原作) | `t.me_redirect` 客户端选择 |
 | [**YouTube_Ad.plugin**](./YouTube_Ad.plugin) (v1.1.1) | **去广告**：广告 / 短片按钮 / 商品 / 竖屏直播尽除；高码率、通勤模式、画中画、字幕机翻俱备 | `autoHd` `jumpAhead` `onTheGo` `translation_enabled` 等 11 项精细开关 |
 | [**TencentVideo.plugin**](./TencentVideo.plugin) (v1.0.12) | **全量净化**：开屏 / 前贴 / 中插 / 暂停 / 后贴 / 激励 / VIP 营销尽数移除 | `HideShortDrama` `HideVipTab` `HideGoods` 三个底栏开关；VIP 会员底栏已关闭 |
-| [**TencentVideoCheckin.plugin**](./TencentVideoCheckin.plugin) (v1.3.1) | **抓取与每日任务**：App 内进会员中心直接抓 Cookie（免小程序/浏览器），自动续期后每日签到领 V力值，并自动抽奖与领券（推送 CDKey） | `capture` `checkin` `lottery` `coupon` 四个独立开关 |
+| [**TencentVideoCheckin.plugin**](./TencentVideoCheckin.plugin) (v1.3.2) | **抓取与每日任务**：App 内进会员中心直接抓 Cookie（免小程序/浏览器），自动续期后每日签到领 V力值，并自动抽奖与领券（推送 CDKey） | `capture` `checkin` `lottery` `coupon` 四个独立开关 |
 | [**TestFlightRelay.plugin**](./TestFlightRelay.plugin) (v1.0.0) | **TestFlight 中转**：请求本地应答、多账号索引合并与详情缓存，Loon 原生适配 | 内置请求脚本 + 5 分钟会话刷新 |
 | [**Duolingo.plugin**](./Duolingo.plugin) (v3.0.0) | **订阅解锁**：注入 Gold 家庭订阅，解锁免广告 / 无限心 / AI 功能 (j4gm4g 原作) | 规则型，无需开关 |
 | [**MiguMusic.plugin**](./MiguMusic.plugin) (v1.0.1) | **去广告**：关闭开屏与运营广告、清空营销位、注入 no_ads 权益、拦截推广 SDK | 规则型，无需开关 |
