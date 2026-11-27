@@ -120,7 +120,8 @@ https://vip.video.qq.com/rpc/trpc.new_task_system.task_system.TaskSystem/ReadTas
 上游 `2026-10-28.r3` 把抓取正则收窄成了 `^https://pbaccess\.video\.qq\.com/`，
 而 App 的会员中心不走 `pbaccess`（只有小程序走），所以只能靠微信小程序抓。
 
-本版把范围放宽到 `vip | pbaccess | access | film | m` 五个域，App 直接抓。
+本版把范围放宽到 `vip | pbaccess | access | film | m | activity` 六个域，App 直接抓。
+补 `activity.video.qq.com` 是为了让活动页（magic-act）的请求也能顺带抓到网页形态凭据。
 
 ## 自动续期的三个坑（已修）
 
@@ -185,6 +186,60 @@ cookie = setCookieVal(cookie, "v_vusession", newVusession); // 微信登录才�
 
 另外，App 自己调续期接口时，`response` 规则会把滚动后的令牌顺手收下来（`capture` 开关控制）。
 
+## 活动域（抽奖 / 领券）的凭据形态
+
+**这是「签到正常、抽奖领券报未登录」的根因。**
+
+同一份登录态在腾讯视频里有两套字段名，分别给两类后端用：
+
+| 后端 | 谁在用 | 字段 |
+| :--- | :--- | :--- |
+| trpc 网关 | 签到 `TaskSystem/CheckIn`、续期 `Account/Refresh` | `v_vuserid` / `v_vusession` / `v_vurefresh`（`vqq_*` 是 QQ 登录那套） |
+| fcgi 老接口 | 活动域 `activity.video.qq.com/fcgi-bin/asyn_activity` | `vuserid` / `vusession` / `openid` / `main_login` |
+
+依据是活动页自己的登录库
+[`login.min.js`](https://film.video.qq.com/lib/midcache/@tencent-vft-core-login/stable/login.min.js)：
+
+```js
+// getMainCookie → 写回网页形态
+a.main_login = i; a.vuserid = r; a.vusession = o;
+// getCookie("phone") → 读网页形态
+n.phone = { openid: t.openid, vuserid: t.vuserid, vusession: t.vusession, main_login: "phone" }
+// Na 映射表：vuserid 三选一（v_vuserid / vqq_vuserid / vuserid），其余同理
+```
+
+App 抓下来的是 trpc 形态，原样发给活动域 → 它读不到 `vusession` → 一律 `ret:-102 未登录`。
+
+**本版处理**：`webCookieOf()` 只对活动域请求做投影——在原有 cookie 上补写
+`vuserid` / `vusession` / `openid` / `access_token` / `appid` / `main_login`，
+**只补不删**。签到域继续用原始形态，互不影响。
+
+同时 `webCredBrief()` 会在日志里打一行凭据体检，再出现问题时一眼能看出缺哪个字段：
+
+```
+[活动凭据] 抽奖 vuserid=有 vusession=有 openid=无 main_login=phone
+```
+
+> `openid` 对手机号/微信登录、部分活动是必需的。如果体检显示 `openid=无` 且仍报未登录，
+> 进腾讯视频会员中心重新抓一次（抓取域已经补上 `activity.video.qq.com`，在活动页停留也能抓到）。
+
+## 续期是所有任务共享的第一步
+
+之前续期写在 `checkin()` 里面，于是：
+
+- 签到开着 → 顺手续期，抽奖领券沾光
+- 只开抽奖/领券、关掉签到 → **根本不刷新会话**，活动域拿到过期 `vusession`，每天都报未登录
+
+本版把续期抽成 `ensureSession()`，在三个任务之前统一跑一次，返回续期后的 cookie 给所有任务复用。
+通知首行的「🔑 续期成功」也是从这里出来的。
+
+| 情况 | 行为 |
+| :--- | :--- |
+| 续期成功 | 落库 + 通知首行显示通道与是否滚动 |
+| 无 `refresh_token` 但有 `vusession` | 提示「无续期令牌」，用现有会话继续执行 |
+| 续期失败但有旧 `vusession` | 提示「用旧会话试执行」，继续跑 |
+| 续期失败且无 `vusession` | **直接中止**，发一条说明原因的通知，不再跑任何业务请求 |
+
 ## 续期的边界
 
 | 令牌 | 寿命 | 是否需要人工 |
@@ -221,10 +276,22 @@ cookie = setCookieVal(cookie, "v_vusession", newVusession); // 微信登录才�
 
 ## 验证
 
-脚本本地用 Loon 运行时模拟器跑了两组用例：
+`node --test tests/tenvideo.test.mjs`（13 条，`tests/tenvideo.harness.mjs` 提供 Loon 运行时沙箱。
+`tests/` 按仓库约定不入公开仓库，需在本地自建这两个文件才能跑）：
 
-- **两开关**：开关独立生效、全关静默、不传参数默认开
-- **回归（18 条）**：五域抓取、增量合并不冲 RT、无凭证不覆盖、续期双通道、响应收割、微信字段兼容、字段名不串
+| 用例 | 断言 |
+| :--- | :--- |
+| 续期只跑一次 | 三个任务共用同一份 cookie，通知首行是续期状态 |
+| 关掉签到仍续期 | `Refresh` 调 1 次、`CheckIn` 调 0 次、活动请求带的是新会话 |
+| 活动域凭据形态 | 含 `vuserid` / `vusession` / `openid` / `main_login`，且原字段（`v_vurefresh`、`pgv_pvid`）一个不丢 |
+| 签到域不被污染 | 签到请求的 Cookie 与落库值完全一致 |
+| 无 Cookie | 零请求，直接发提示 |
+| 无续期令牌 | 不调续期接口，提示后继续执行 |
+| 续期失败且无会话 | 中止，不跑任何业务请求 |
+| 活动域未登录 | 报失败并点明是活动接口，不静默吞掉 |
+| 开关全关 | 零请求零通知 |
+| 抓取覆盖 activity 域 | 能落库并记下来源域 |
+| 无凭据不覆盖 / 增量合并 / 响应收割 | 均保持原有行为 |
 
 > ⚠️ 未验证项：真机 Loon 上 App 会员中心 WebView 能否解密。
 > WebView 一般走系统网络栈能被 Loon 接管，但若腾讯对 `vip.video.qq.com` 做了 pinning 就会失败。

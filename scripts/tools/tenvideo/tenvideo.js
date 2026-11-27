@@ -6,7 +6,17 @@
  *
  * @Author: @WowYiJiu
  * @Modifier: MaYIHEI <https://github.com/MaYIHEI/paperclip>
- * @Updated: 2026-11-23  (App 直抓 + Cookie 合并 + 续期双通道)
+ * @Updated: 2026-11-27  (活动域凭据形态 + 续期抽成共享前置步骤)
+ *
+ * ===== 2026-11-27.r6：修「签到正常，抽奖/领券报未登录」 =====
+ * 1) 活动域凭据形态：trpc 用 v_vusession，fcgi 老接口（asyn_activity）读的是
+ *    vuserid / vusession / openid / main_login。原来把 App 抓的 trpc 形态原样发过去，
+ *    服务端读不到 vusession，一律 ret:-102。现在 webCookieOf() 只对活动域请求做投影，
+ *    只补不删，签到域不受影响。
+ * 2) 续期抽成 ensureSession()：原来续期写在 checkin() 里，关掉签到就完全不刷新会话，
+ *    抽奖/领券必然用过期的 vusession。现在三个任务共享一次续期结果。
+ * 3) 抓取域补 activity.video.qq.com；ALIAS 补 openid / access_token / appid。
+ * 4) 新增 [活动凭据] 日志行，一眼看出到底缺哪个字段。
  *
  * ===== 相对 2026-10-28.r3 的改动 =====
  * 1) App 直抓:抓取正则从「只认 pbaccess」放宽到 vip / pbaccess / access / film。
@@ -48,7 +58,7 @@ if (CHECKIN_RUN) {
     $.done = () => end({ response: { status: 200, headers: { "Content-Type": "application/json; charset=utf-8" }, body: $.getdata("tenvideo_status") || "{}" } });
 }
 
-const SCRIPT_VERSION = "2026-11-26.r5";
+const SCRIPT_VERSION = "2026-11-27.r6";
 $.log(`[INFO] 脚本版本 ${SCRIPT_VERSION}  抓取=${CAPTURE_ON ? "开" : "关"} 签到=${CHECKIN_ON ? "开" : "关"}`);
 
 // ---------- 存储键 ----------
@@ -74,7 +84,7 @@ const UA =
     "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
 
 // App / 会员中心 WebView 带登录态的请求都在这些域上
-const CAP_HOST_RE = /^https:\/\/(vip|pbaccess|access|film|m)\.video\.qq\.com\//i;
+const CAP_HOST_RE = /^https:\/\/(vip|pbaccess|access|film|m|activity)\.video\.qq\.com\//i;
 const RENEW_RE = /^https:\/\/pbaccess\.video\.qq\.com\/(trpc\.anywhere_door\.account\.Account\/Refresh|trpc\.video_account_login\.web_login_trpc\.WebLoginTrpc\/NewRefresh)/i;
 
 // ---------- 抽奖 / 领券 ----------
@@ -105,6 +115,10 @@ const ALIAS = {
     vusession: ["vqq_vusession", "v_vusession", "vusession"],
     refresh: ["vqq_refresh_token", "v_vurefresh", "vurefresh", "refresh_token", "v_t_refresh_token"],
     login: ["main_login", "v_main_login"],
+    // 活动域（fcgi）要的是网页形态凭据，openid 缺了手机号/微信登录一样过不了鉴权
+    openid: ["openid", "v_t_openid", "vqq_openid"],
+    accessToken: ["access_token", "v_t_access_token", "vqq_access_token"],
+    appid: ["appid", "v_t_appid", "vqq_appid"],
 };
 
 // ============ Cookie 工具 ============
@@ -164,6 +178,40 @@ function mergeCookie(oldCookie, newCookie) {
     const map = parseCookie(oldCookie);
     for (const [k, v] of parseCookie(newCookie)) if (v) map.set(k, v);
     return serializeCookie(map);
+}
+
+// App 侧存的是 trpc 形态（v_vusession / vqq_vusession），活动页（film/activity 的
+// H5 + fcgi 老接口）读的是网页形态（vuserid / vusession / openid / main_login）。
+// 两套字段名不互通，所以给活动域发请求时把新形态投影成网页形态——
+// 原有字段全部保留，只补不删，服务端多余字段会忽略。
+// 依据：film.video.qq.com/lib/midcache/@tencent-vft-core-login/stable/login.min.js
+//   getMainCookie → a.main_login = type; a.vuserid = r; a.vusession = o;
+//   getCookie("phone") → {openid, vuserid, vusession, main_login:"phone"}
+//   Na 映射表：v_vuserid/vqq_vuserid/vuserid 三选一，其余同理
+function webCookieOf(cookie) {
+    const map = parseCookie(cookie || "");
+    const put = (name, val) => {
+        if (val) map.set(name, val);
+    };
+    const uid = pick(cookie, "vuid").value;
+    const sess = pick(cookie, "vusession").value;
+    const openid = pick(cookie, "openid").value;
+    const token = pick(cookie, "accessToken").value;
+    const appid = pick(cookie, "appid").value;
+    const login = pick(cookie, "login").value;
+    put("vuserid", uid);
+    put("vusession", sess);
+    put("openid", openid);
+    put("access_token", token);
+    put("appid", appid);
+    put("main_login", login);
+    return serializeCookie(map);
+}
+
+// 活动域凭据体检:一眼看出到底缺哪个字段,免得又回到「不知道为什么未登录」
+function webCredBrief(cookie) {
+    const g = (k) => (pick(cookie, k).value ? "有" : "无");
+    return `vuserid=${g("vuid")} vusession=${g("vusession")} openid=${g("openid")} main_login=${pick(cookie, "login").value || "?"}`;
 }
 
 // 至少有一个登录凭证才算「有效抓取」,否则不许覆盖旧 cookie
@@ -377,7 +425,7 @@ function actReq(url, act, cookie) {
             {
                 url,
                 headers: {
-                    Cookie: cookie,
+                    Cookie: webCookieOf(cookie),
                     accept: "application/json, text/plain, */*",
                     "accept-language": "zh-CN,zh;q=0.9",
                     origin: "https://film.video.qq.com",
@@ -426,6 +474,7 @@ function poolOrder() {
 
 // 抽奖。返回 { ok, text } —— ok=true 表示中奖，text 是通知正文
 async function doLottery(cookie) {
+    $.log(`[活动凭据] 抽奖 ${webCredBrief(cookie)}`);
     let authFail = false;
     for (const pool of poolOrder()) {
         const chk = await actReq(actUrl({ act: LOTTERY_ACT, type: 100143, option: 104, module: pool }), LOTTERY_ACT, cookie);
@@ -462,6 +511,7 @@ async function doLottery(cookie) {
 
 // 领券。返回 { got: 成功条数, text, authFail?: true }
 async function doCoupons(cookie) {
+    $.log(`[活动凭据] 领券 ${webCredBrief(cookie)}`);
     const got = [];
     let authFail = false;
     const reasons = []; // 每张券没领到的真实原因，拼进通知
@@ -529,38 +579,38 @@ async function doCoupons(cookie) {
     return { got: got.length, text: got.join("\n") };
 }
 
-async function checkin() {
-    let cookie = $.getdata(K.cookie);
-    if (!cookie) {
-        saveStatus("none", "未抓取 Cookie");
-        throw new Error(`[${SCRIPT_VERSION}] 未配置 Cookie,进腾讯视频 App 会员中心抓一次`);
-    }
+// 续期是所有任务共享的第一步。
+// 之前续期写在 checkin() 里，导致「只开抽奖/领券、关掉签到」时根本不刷新会话，
+// 活动域必然拿到一个过期的 vusession → 每次都报未登录。
+// 现在抽到外面跑一次，返回续期后的 cookie 和一行展示文案。
+async function ensureSession() {
+    const cookie = $.getdata(K.cookie);
+    if (!cookie) return { cookie: "", msg: "", fatal: "未配置 Cookie,进腾讯视频 App 会员中心抓一次" };
 
-    // 1) 先续期
     const renewed = await renewSession(cookie);
-    let renewMsg = "";
     if (renewed) {
-        cookie = renewed.cookie;
-        $.setdata(cookie, K.cookie);
+        $.setdata(renewed.cookie, K.cookie);
         $.setdata(String(Date.now()), K.renewTs);
         $.setdata(renewed.via, K.renewVia);
         // 续期结果要出现在通知里 —— 这是判断"还能撑多久"的唯一依据
-        renewMsg = renewed.rolled ? `🔑 续期成功（${renewed.via === "app" ? "App" : "网页"}通道，令牌已滚动）` : `🔑 续期成功（${renewed.via === "app" ? "App" : "网页"}通道，令牌未滚动）`;
-    } else if (!pick(cookie, "vusession").value) {
-        saveStatus("cookie", "续期失败且无可用会话");
-        throw new Error(`[${SCRIPT_VERSION}] 续期失败,且 cookie 里没有 vusession\n👉 进腾讯视频 App 会员中心重新抓一次`);
-    } else if (!pick(cookie, "refresh").value) {
-        // 没有续期令牌的账号,本来就没什么可续的,直接用抓到的会话签到
-        $.log("[续期] 该账号无续期令牌,直接用现有 vusession 签到");
-        renewMsg = "⚠️ 无续期令牌，用现有会话签到（过期需重抓）";
-    } else {
-        renewMsg = "⚠️ 续期失败，用旧会话试签到";
+        const via = renewed.via === "app" ? "App" : "网页";
+        const msg = renewed.rolled ? `🔑 续期成功（${via}通道，令牌已滚动）` : `🔑 续期成功（${via}通道，令牌未滚动）`;
+        return { cookie: renewed.cookie, msg, fatal: "" };
     }
+    if (!pick(cookie, "vusession").value) {
+        return { cookie, msg: "", fatal: "续期失败,且 cookie 里没有 vusession\n👉 进腾讯视频 App 会员中心重新抓一次" };
+    }
+    if (!pick(cookie, "refresh").value) {
+        $.log("[续期] 该账号无续期令牌,直接用现有 vusession");
+        return { cookie, msg: "⚠️ 无续期令牌，用现有会话执行（过期需重抓）", fatal: "" };
+    }
+    return { cookie, msg: "⚠️ 续期失败，用旧会话试执行", fatal: "" };
+}
 
-    // 2) CheckIn
+// cookie 由 ensureSession 传进来（已续期）；renewMsg 是展示文案，由调用方拼通知
+async function checkin(cookie, renewMsg) {
     const res = await req("GET", CHECKIN_URL, cookie, null);
     $.log(`[响应] ${res ? JSON.stringify(res).slice(0, 200) : "无响应"}`);
-    const tag = `[${SCRIPT_VERSION}]`;
     if (res && res.ret === 0 && res.check_in_score != null) {
         saveStatus("ok", `签到成功 +${res.check_in_score} V力值`);
         return { ok: true, text: renewMsg, line: `✅ 签到成功，获得 ${res.check_in_score} V力值` };
@@ -664,42 +714,43 @@ if (typeof $request !== "undefined" && !CHECKIN_RUN) {
         // 依次跑完三个任务，结果先攒着，最后合并成一条通知
         const done = []; // 成功项（一行一条）
         const fails = []; // 失败项
-        let head = ""; // 续期状态，放在通知首行
+
+        // 续期只做一次，三个任务共用同一份 cookie。
+        // 抽奖/领券即便关掉签到也要有新鲜 vusession，否则活动域必然未登录。
+        const sess = await ensureSession();
+        const head = sess.msg || ""; // 续期状态，放在通知首行
+        const cookie = sess.cookie;
+
+        if (sess.fatal) {
+            // 连会话都没有，后面任何任务都不可能成功，直接一次性说清
+            notify(`❌ 腾讯视频 · 无法执行`, sess.fatal);
+            $.log(`[全部] 凭据不可用: ${sess.fatal}`);
+            return;
+        }
 
         if (CHECKIN_ON) {
-            const r = await checkin();
-            head = r.text || "";
+            const r = await checkin(cookie, head);
             if (r.ok) done.push(r.line);
             else fails.push(r.line);
         }
 
         if (LOTTERY_ON) {
-            const cookie = $.getdata(K.cookie);
-            if (!cookie) {
-                fails.push("❌ 抽奖：未配置 Cookie");
-            } else {
-                // 中奖和"今日已抽完"都算正常结果，不算失败；
-                // 但活动域未登录必须报出来，否则会被误当成"今天抽完了"
-                const r = await doLottery(cookie);
-                if (r.authFail) fails.push(r.text);
-                else done.push(r.text);
-            }
+            // 中奖和"今日已抽完"都算正常结果，不算失败；
+            // 但活动域未登录必须报出来，否则会被误当成"今天抽完了"
+            const r = await doLottery(cookie);
+            if (r.authFail) fails.push(r.text);
+            else done.push(r.text);
         }
 
         if (COUPON_ON) {
-            const cookie = $.getdata(K.cookie);
-            if (!cookie) {
-                fails.push("❌ 领券：未配置 Cookie");
-            } else {
-                const r = await doCoupons(cookie);
-                // 三种结果都必须进通知，否则用户只能看到"任务完成"却不知道券没领到。
-                //   got  > 0        → 真领到了
-                //   authFail        → 活动接口不认登录态（必须报出来，这是需要人工处理的）
-                //   其它            → 今天确实没券，也算正常
-                if (r.got) done.push(r.text);
-                else if (r.authFail) fails.push(r.text);
-                else done.push("🎫 领券：今日无券可领");
-            }
+            const r = await doCoupons(cookie);
+            // 三种结果都必须进通知，否则用户只能看到"任务完成"却不知道券没领到。
+            //   got  > 0        → 真领到了
+            //   authFail        → 活动接口不认登录态（必须报出来，这是需要人工处理的）
+            //   其它            → 今天确实没券，也算正常
+            if (r.got) done.push(r.text);
+            else if (r.authFail) fails.push(r.text);
+            else done.push("🎫 领券：今日无券可领");
         }
 
         // 输出策略（按需求）：全部成功才合并成一条；有失败就单独发失败
