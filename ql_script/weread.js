@@ -79,6 +79,15 @@ const CONFIG = {
     // 11. 【限免优选人数上限】：0 = 不限制。设为 15000 可避开烂大街畅销书，专挑小众高分书
     FREE_MAX_COUNT: 0,
 
+    // 13. 【限免优选排除分类】一级分类黑名单，逗号分隔。匹配「分类-子类」的第一段。
+    //     默认排掉历史与古籍方向：这些书在书库里占比高（实测 60%）、且多以套装/史料汇编形式出现，
+    //     领了也很少真去读。想恢复就把对应项删掉。
+    FREE_EXCLUDE_CATS: "历史,哲学宗教",
+
+    // 14. 【限免优选两本都取最高分】true = 第 2 本也按分数选，不再强制换分类
+    //     false = 旧行为（第 2 本强制换一级分类）。想「两本都是最好那本类型」就设 true。
+    FREE_SAME_CAT_ALLOWED: true,
+
     // 12. 【评分补齐预算】：每周最多真发多少次 /book/info。只对「缓存未命中」的书计数。
     //     缓存全部命中时不消耗预算，所以平时不受影响；缓存整体过期那周可防 170+ 本全查（约 70 秒）。
     //     超预算的书直接判不合格，不会用 0 分去污染排序。
@@ -1559,11 +1568,36 @@ async function runFreeTask(auth, helperAuth) {
     let freeMode = (process.env.WEREAD_FREE_MODE || process.env.FREE_PREFER_MODE || CONFIG.FREE_PREFER_MODE || "balanced").toLowerCase().trim();
     let excludeRaw = (process.env.WEREAD_EXCLUDE_KEYWORDS || process.env.FREE_EXCLUDE_KEYWORDS || CONFIG.FREE_EXCLUDE_KEYWORDS || "").trim();
     let excludeKws = excludeRaw ? excludeRaw.split(/[,|，\s]+/).filter(Boolean) : [];
+    let excludeCatsRaw = String(process.env.WEREAD_EXCLUDE_CATS || CONFIG.FREE_EXCLUDE_CATS || "").trim();
+    let excludeCats = excludeCatsRaw ? excludeCatsRaw.split(/[,|，\s]+/).filter(Boolean) : [];
+    // 两本是否允许同分类（true = 第 2 本也按分数选，不再强制换类）
+    let sameCatAllowed = String(
+        process.env.WEREAD_SAME_CAT_ALLOWED !== undefined
+            ? process.env.WEREAD_SAME_CAT_ALLOWED
+            : CONFIG.FREE_SAME_CAT_ALLOWED
+    ).toLowerCase() === "true";
+
+    // 一级分类（"历史-中国古代" -> "历史"）
+    const majorOf = (b) => String((b && b.cat) || "").split("-")[0];
 
     // 预筛：先用「不依赖评分」的条件砍掉必被淘汰的书，再对剩下的补评分。
     // 170 本通常能砍到几十本，配合 RATING_BUDGET 把最坏情况耗时压下来。
     // 安全约束：分类未知（cat 为空）的书一律保留；砍完一本不剩则回退全量。
     let ratingPool = rawCandidates;
+    if (excludeCats.length > 0) {
+        // 只排除「有分类信息且命中黑名单」的书；分类未知的保留，等补完评分再判
+        let kept = ratingPool.filter(b => {
+            let m = majorOf(b);
+            if (!m) return true;
+            return excludeCats.indexOf(m) === -1;
+        });
+        if (kept.length > 0) {
+            $.log(`[WeRead] ✂️ 预筛（排除分类 ${excludeCats.join("/")}）: ${ratingPool.length} -> ${kept.length} 本`);
+            ratingPool = kept;
+        } else {
+            $.log(`[WeRead] ⚠️ 排除分类后一本不剩，自动回退全量候选（请检查 WEREAD_EXCLUDE_CATS 是否写错）`);
+        }
+    }
     if (excludeKws.length > 0) {
         let kept = ratingPool.filter(b => !excludeKws.some(kw => String(b.title || "").includes(kw)));
         if (kept.length > 0) {
@@ -1596,6 +1630,13 @@ async function runFreeTask(auth, helperAuth) {
 
         // 人数上限（防止全是烂大街畅销书，0 = 不限制）
         if (MAX_COUNT > 0 && count > MAX_COUNT) return -1;
+
+        // 排除分类（补完评分后分类可能才补全，所以这里也要判一次）。
+        // 分类未知的不排除，避免把信息缺失的书误杀。
+        if (excludeCats.length > 0) {
+            let m = majorOf(b);
+            if (m && excludeCats.indexOf(m) !== -1) return -1;
+        }
 
         // 主排序：人数对数（跨越 3 个数量级，必须取对数才不会被单本压死）
         // 次排序：好评率（±约 100 分影响，不足以颠倒人数量级）
@@ -1661,11 +1702,20 @@ async function runFreeTask(auth, helperAuth) {
     if (candidates.length > 0) {
         pickList.push(candidates[0]);
         if (needCount > 1) {
-            let c1 = (candidates[0].cat || "").split("-")[0];
-            let alt = candidates.slice(1).find(c => (c.cat || "").split("-")[0] !== c1);
-            let second = alt || candidates[1];
+            let second = null;
+            if (sameCatAllowed) {
+                // 两本都按分数取最优（不强制换分类）
+                second = candidates[1];
+            } else {
+                // 旧行为：第 2 本尽量换一级分类
+                let c1 = majorOf(candidates[0]);
+                second = candidates.slice(1).find(c => majorOf(c) !== c1) || candidates[1];
+            }
             if (second) pickList.push(second);
         }
+    }
+    if (pickList.length > 1) {
+        $.log(`[WeRead] 🎯 本次目标（${sameCatAllowed ? "两本同分类允许，均按最高分" : "第2本强制换分类"}）`);
     }
 
     let targetBooks = pickList;
