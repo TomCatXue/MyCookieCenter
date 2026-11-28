@@ -77,7 +77,12 @@ const CONFIG = {
     FREE_MIN_RATING: 850,
 
     // 11. 【限免优选人数上限】：0 = 不限制。设为 15000 可避开烂大街畅销书，专挑小众高分书
-    FREE_MAX_COUNT: 0
+    FREE_MAX_COUNT: 0,
+
+    // 12. 【评分补齐预算】：每周最多真发多少次 /book/info。只对「缓存未命中」的书计数。
+    //     缓存全部命中时不消耗预算，所以平时不受影响；缓存整体过期那周可防 170+ 本全查（约 70 秒）。
+    //     超预算的书直接判不合格，不会用 0 分去污染排序。
+    FREE_RATING_BUDGET: 40
 };
 
 // ================================================================================
@@ -1470,9 +1475,25 @@ async function runFreeTask(auth, helperAuth) {
     }
 
     // 补齐评分元数据（/free/library/list 不含评分，需逐本查 /book/info）
+    // 预算上限：只在「需要真发请求」的书上计数，缓存命中的不算，不占额度。
+    // 目的是防止缓存整体过期那一周把 170+ 本全查一遍（约 70 秒）。
+    const RATING_BUDGET = Number(process.env.WEREAD_RATING_BUDGET || CONFIG.FREE_RATING_BUDGET || 40);
     async function enrichRatings(list, authRef) {
         let filled = 0;
-        for (let b of list) {
+        let fetched = 0;
+        let pendingWrites = [];
+
+        // 预算有限时必须挑「更可能合格」的先查，否则前 40 本全是杂书就白花额度。
+        // 用「价格 + 分类」做不依赖评分的粗排：定价高的通常更值得看，有分类的比无分类的信息完整。
+        // 注意：只是调整补评分的先后顺序，不改变最终排序权重。
+        let ordered = list.slice().sort((a, b) => {
+          const pa = Number(a.price || 0), pb = Number(b.price || 0);
+          if (pb !== pa) return pb - pa;
+          const ca = a.cat ? 1 : 0, cb = b.cat ? 1 : 0;
+          return cb - ca;
+        });
+
+        for (let b of ordered) {
             // 已经有评分就跳过
             if (b.newRating > 0 && b.newRatingCount > 0) continue;
             // 本地缓存命中（7 天）
@@ -1491,6 +1512,11 @@ async function runFreeTask(auth, helperAuth) {
                     }
                 } catch (e) { }
             }
+            if (fetched >= RATING_BUDGET) {
+                b._skip_no_budget = true;
+                continue;
+            }
+            fetched++;
             try {
                 let r = await get(API + `/book/info?bookId=${b.bookId}`, getHeaders(authRef));
                 if (r.status === 401 || r.status === 499) {
@@ -1506,36 +1532,53 @@ async function runFreeTask(auth, helperAuth) {
                         if (o.price) b.price = Number(o.price);
                         let cats = (o.categories || []).map(c => c.title || "").filter(Boolean);
                         b.cat = cats[0] || b.cat || "";
-                        $.setdata(JSON.stringify({ ts: Date.now(), rating: b.newRating, count: b.newRatingCount, title: b.ratingTitle, cat: b.cat || "" }), ck);
+                        // 批量攒着写，$persistentStore/file 每次写都有开销，集中写省很多
+                        pendingWrites.push({
+                            ck: ck,
+                            val: JSON.stringify({ ts: Date.now(), rating: b.newRating, count: b.newRatingCount, title: b.ratingTitle, cat: b.cat || "" })
+                        });
+                        if (pendingWrites.length >= 10) {
+                            pendingWrites.forEach(p => { try { $.setdata(p.val, p.ck); } catch (e) { } });
+                            pendingWrites = [];
+                        }
                         filled++;
                     }
                 }
             } catch (e) { }
             await new Promise(res => setTimeout(res, 110));
         }
-        $.log(`[WeRead] 📊 评分补齐完成：${filled}/${list.length} 本`);
+        // 收尾：剩下没写的一并落盘
+        pendingWrites.forEach(p => { try { $.setdata(p.val, p.ck); } catch (e) { } });
+        pendingWrites = [];
+        let skipped = list.filter(x => x._skip_no_budget).length;
+        $.log(`[WeRead] 📊 评分补齐完成：${filled}/${list.length} 本（实际请求 ${fetched} 次，预算 ${RATING_BUDGET}` + (skipped > 0 ? `，${skipped} 本超预算未查` : "") + `）`);
         return authRef;
     }
 
-    auth = await enrichRatings(rawCandidates, auth);
-
-    // 智能优选偏好与关键词过滤配置
+    // 智能优选偏好与关键词过滤配置（必须在补评分之前读，预筛要用）
     let freeMode = (process.env.WEREAD_FREE_MODE || process.env.FREE_PREFER_MODE || CONFIG.FREE_PREFER_MODE || "balanced").toLowerCase().trim();
     let excludeRaw = (process.env.WEREAD_EXCLUDE_KEYWORDS || process.env.FREE_EXCLUDE_KEYWORDS || CONFIG.FREE_EXCLUDE_KEYWORDS || "").trim();
     let excludeKws = excludeRaw ? excludeRaw.split(/[,|，\s]+/).filter(Boolean) : [];
 
-    let candidates = rawCandidates;
+    // 预筛：先用「不依赖评分」的条件砍掉必被淘汰的书，再对剩下的补评分。
+    // 170 本通常能砍到几十本，配合 RATING_BUDGET 把最坏情况耗时压下来。
+    // 安全约束：分类未知（cat 为空）的书一律保留；砍完一本不剩则回退全量。
+    let ratingPool = rawCandidates;
     if (excludeKws.length > 0) {
-        let filtered = rawCandidates.filter(b => !excludeKws.some(kw => b.title.includes(kw)));
-        if (filtered.length >= needCount) {
-            candidates = filtered;
-            $.log(`[WeRead] 🔍 已启用关键词过滤 [${excludeKws.join("|")}]，过滤后候选池剩余 ${candidates.length} 本`);
-        } else if (filtered.length > 0) {
-            candidates = filtered;
-            $.log(`[WeRead] 🔍 关键词过滤后剩余 ${candidates.length} 本，优先在该集合中选择`);
-        } else {
-            $.log(`[WeRead] ⚠️ 关键词过滤后无可用新书，自动回退全量候选池`);
+        let kept = ratingPool.filter(b => !excludeKws.some(kw => String(b.title || "").includes(kw)));
+        if (kept.length > 0) {
+            $.log(`[WeRead] ✂️ 预筛（关键词）: ${ratingPool.length} -> ${kept.length} 本`);
+            ratingPool = kept;
         }
+    }
+
+    auth = await enrichRatings(ratingPool, auth);
+
+    // 参与打分/领取的必须与补过评分的池子一致（否则漏补的书会被当 0 分污染排序）。
+    // ratingPool 已经做过「关键词预筛 + 一本不剩则回退」的保护，这里直接沿用即可。
+    let candidates = ratingPool;
+    if (excludeKws.length > 0) {
+        $.log(`[WeRead] 🔍 已启用关键词过滤 [${excludeKws.join("|")}]，候选池 ${candidates.length} 本（预筛阶段已生效）`);
     }
 
     // 口碑门槛（供打分函数与后续排序/日志共用）
@@ -1567,7 +1610,10 @@ async function runFreeTask(auth, helperAuth) {
     }
 
     // 先剔除不合格（返回 -1）的书
-    let scored = candidates.map(c => ({ c, s: calculateBookPriorityScore(c, freeMode) })).filter(x => x.s >= 0);
+    // _skip_no_budget 的书没有真实评分，直接判不合格，避免用 0 分去参与排序
+    let scored = candidates
+        .map(c => ({ c, s: c._skip_no_budget ? -1 : calculateBookPriorityScore(c, freeMode) }))
+        .filter(x => x.s >= 0);
     if (scored.length === 0) {
         $.log(`[WeRead] ⚠️ 全部候选均未达到门槛 (人数>=${MIN_COUNT} 且 好评>=${MIN_RATING}%)，本周放弃领取，不浪费名额`);
         result.success = true;
@@ -1578,7 +1624,19 @@ async function runFreeTask(auth, helperAuth) {
     scored.sort((a, b) => b.s - a.s);
     candidates = scored.map(x => x.c);
 
-    let modeDesc = freeMode === "price" ? "最贵白嫖优先" : (freeMode === "hot" ? "热门畅销优先" : "智能综合口碑优先");
+    // 文案必须如实反映实际生效的打分分支，别再不实地写「热门畅销优先」。
+    // 2026-11-15 重写打分逻辑时 hot 分支被并入 balanced（都是人数主排序），
+    // 但文案没跟着改，导致切到 hot 时日志显示「热门畅销优先」、实际跑的是 balanced。
+    let modeDesc;
+    if (freeMode === "price") {
+        modeDesc = "最贵白嫖优先（价格主排序，人数/好评仅作细调）";
+    } else if (freeMode === "hot") {
+        modeDesc = "hot 已并入综合模式（人数主排序）";
+    } else if (freeMode === "balanced" || !freeMode) {
+        modeDesc = "智能综合口碑优先（人数对数主排序，好评率次排序）";
+    } else {
+        modeDesc = `未知模式「${freeMode}」，按综合模式执行（人数主排序）`;
+    }
     $.log(`[WeRead] 📚 智能优选候选池（模式: ${modeDesc}，已排除已购/在架，前 3 本）：`);
     candidates.slice(0, 3).forEach((c, idx) => {
         let ratingTag = "";
@@ -1629,16 +1687,12 @@ async function runFreeTask(auth, helperAuth) {
             if (u && u.vid) usedHelperMap.set(String(u.vid), u.bookTitle || "已领图书");
         });
 
-        // 智能兼容旧缓存：若旧缓存未记录 usedHelpers，但已有已领图书（如《大而不倒》），按顺序推断前 N 个小号已消耗
+        // 若旧缓存只记录了已领图书、没记录是哪个小号领的，只提示不推断。
+        // 以前这里按 helperList 顺序硬猜前 N 个小号已消耗，会把还有额度的小号误判成用完、
+        // 直接跳过（2026-11-27 实测：9359 被猜成已助力《格里格外》，实际没用到它）。
+        // 现在一律先当作「未消耗」去试，真用完的话官方会返回 -2057，代价只是一次请求。
         if (usedHelperMap.size === 0 && cachedAddedBooks.length > 0) {
-            for (let i = 0; i < Math.min(cachedAddedBooks.length, helperList.length); i++) {
-                let hVid = String(helperList[i].vid || helperList[i].wrVid || "");
-                if (hVid) {
-                    let bookName = cachedAddedBooks[i] || `第${i + 1}本已领图书`;
-                    usedHelperMap.set(hVid, bookName);
-                    cachedUsedHelpers.push({ vid: hVid, bookTitle: bookName, time: Date.now() });
-                }
-            }
+            $.log(`[WeRead] ℹ️ 缓存只记录了已领图书 ${cachedAddedBooks.join("、")}，但未记录是哪个小号助力，一并按未消耗处理逐个尝试`);
         }
 
         let availableHelpers = [];
@@ -1779,16 +1833,26 @@ async function runFreeTask(auth, helperAuth) {
                     }
 
                     // 多候选图书智能回退 (Fallback)：
-                    // 官方返回 -2057 或其他异常可能仅是当前单本书名额已抢空，允许该小号尝试下一本候选书
+                    // -2057 更可能是「这本书的助力名额被抢空了」（发起者=小号，其名额归零官方给的是别的码），
+                    // 所以不该限制只换 1 本，而是把这个小号能试的候选全部试完。
+                    // 以前限制 failCount<2，导致 2026-11-27 那一轮只试了 2 本就直接放弃小号。
                     if (!curHelper.failCount) curHelper.failCount = 0;
                     curHelper.failCount++;
+                    if (!curHelper.triedBookIds) curHelper.triedBookIds = new Set();
+                    curHelper.triedBookIds.add(String(b.bookId));
 
-                    if (curHelper.failCount < 2 && (candidateIdx + 1) < candidates.length) {
-                        candidateIdx++;
+                    // 找下一本「这个小号还没试过的」候选
+                    let nextIdx = -1;
+                    for (let k = candidateIdx + 1; k < candidates.length; k++) {
+                        if (!curHelper.triedBookIds.has(String(candidates[k].bookId))) { nextIdx = k; break; }
+                    }
+
+                    if (nextIdx >= 0) {
+                        candidateIdx = nextIdx;
                         let nextBook = candidates[candidateIdx];
-                        $.log(`[WeRead] 🔄 小号 [${maskH}] 助力《${b.title}》受阻，自动回退尝试候选池下一本《${nextBook.title}》...`);
+                        $.log(`[WeRead] 🔄 小号 [${maskH}] 助力《${b.title}》受阻(${fullErrMsg})，换候选池下一本《${nextBook.title}》(已试 ${curHelper.failCount} 本)...`);
                     } else {
-                        $.log(`[WeRead] ⚠️ 小号 [${maskH}] 连续助力受阻(返回 ${fullErrMsg})：该小号本周可能已助力过其他好友、或账号未在真机微信登录活跃`);
+                        $.log(`[WeRead] ⚠️ 小号 [${maskH}] 已试完 ${curHelper.failCount} 本候选全部受阻(最后返回 ${fullErrMsg})：该小号本周配额可能已耗尽，或未在真机微信登录活跃`);
                         helperIdx++;
                         candidateIdx++;
                     }
